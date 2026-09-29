@@ -9,7 +9,12 @@ from types import SimpleNamespace
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSection
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.concat_util import ConcatUtil, make_app_metadata_sections, save_abr_metadata_debug_json
+from tts_audiobook_tool.concat_util import (
+    ConcatRenderResult,
+    ConcatUtil,
+    make_app_metadata_sections,
+    save_abr_metadata_debug_json,
+)
 from tts_audiobook_tool.constants import ABR_VERSION
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -309,7 +314,7 @@ class TestAppMetadata(unittest.TestCase):
 
             with patch("tts_audiobook_tool.concat_util.ProjectTextIOUtil.load_raw_text", return_value="raw"), \
                  patch.object(ConcatUtil, "make_phrases_and_paths", return_value=phrases_and_paths), \
-                 patch.object(ConcatUtil, "concatenate_sound_segments", return_value=[1.0, 2.0, 3.0, 4.0]), \
+                 patch.object(ConcatUtil, "concatenate_sound_segments", return_value=ConcatRenderResult(durations=[1.0, 2.0, 3.0, 4.0])), \
                  patch("tts_audiobook_tool.concat_util.make_app_metadata_sections", return_value=sections), \
                  patch("tts_audiobook_tool.concat_util.m4b_chapter_util.make_metadata", return_value="meta") as make_metadata_mock, \
                  patch("tts_audiobook_tool.concat_util.m4b_chapter_util.make_copy_with_metadata", return_value="") as make_copy_mock, \

@@ -5,7 +5,6 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types import Sound, Word
 from tts_audiobook_tool.app_types.validation_findings import ValidationFindings, ValidationInvalidReason
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 
 
@@ -20,7 +19,6 @@ class ValidationResult(ABC):
     """
 
     sound: Sound
-    intra_sample_silence_trims: list[SilenceGapTrim] = field(default_factory=list, kw_only=True)
     generated_start_trim_time: float | None = field(default=None, kw_only=True)
     generated_end_trim_time: float | None = field(default=None, kw_only=True)
     generated_trim_original_duration: float | None = field(default=None, kw_only=True)
@@ -37,18 +35,6 @@ class ValidationResult(ABC):
     def get_ui_message(self) -> str:
         """ User-facing description, including color code formatting """
         ...
-
-    def get_intra_sample_silence_ui_message(self) -> str:
-        if not self.intra_sample_silence_trims:
-            return ""
-
-        parts = [
-            f"{item.original_duration:.1f}->{item.new_duration:.1f}"
-            for item in self.intra_sample_silence_trims
-        ]
-        total_removed = sum(item.removed_duration for item in self.intra_sample_silence_trims)
-        parts.append(f"{total_removed:.2}s total")
-        return f"{COL_DEFAULT}Trimmed excess silence gaps: {COL_DIM}{', '.join(parts)}"
 
     def get_generated_trim_ui_message(self) -> str:
         start_time = self.generated_start_trim_time
@@ -85,7 +71,6 @@ class ValidationResult(ABC):
             self.get_possible_truncation_ui_message(),
             self.get_generated_trim_ui_message(),
             self.get_trailing_token_noise_trim_ui_message(),
-            self.get_intra_sample_silence_ui_message(),
         ]
         extras = [item for item in extras if item]
         if extras:
@@ -192,7 +177,11 @@ class ExcessiveDurationResult(TranscriptResult):
         if any(sum(char.isdigit() for char in word) >= 3 for word in words):
             return False
 
-        threshold = 1.5 + len(words) * 0.75
+        threshold = (
+            EXCESSIVE_DURATION_BASE_SECONDS
+            + len(words) * EXCESSIVE_DURATION_PER_WORD_SECONDS
+            + EXCESSIVE_DURATION_GAP_ALLOWANCE_SECONDS
+        )
         return sound_duration > threshold
 
     @property

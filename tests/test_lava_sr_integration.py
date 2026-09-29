@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 from tts_audiobook_tool.app_types import ExportType, NormalizationType, Sound
-from tts_audiobook_tool.concat_util import ConcatUtil
+from tts_audiobook_tool.concat_util import ConcatRenderResult, ConcatUtil
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project import Project
@@ -94,6 +94,8 @@ def _make_minimal_concat_state() -> State:
         reason_pauses=SimpleNamespace(),
         phrase_groups=[],
         markers=set(),
+        limit_silence_gaps=False,
+        limit_silence_gaps_duration=1.0,
         has_multiple_book_sections=lambda: False,
     )
     return cast(
@@ -108,9 +110,9 @@ def _make_minimal_concat_state() -> State:
 def test_concat_unloads_lava_sr_before_normalization() -> None:
     events: list[str] = []
 
-    def concatenate(*args: object, **kwargs: object) -> list[float]:
+    def concatenate(*args: object, **kwargs: object) -> ConcatRenderResult:
         events.append("upsampling finished")
-        return []
+        return ConcatRenderResult(durations=[])
 
     def unload() -> str:
         events.append("LavaSR unloaded")

@@ -9,7 +9,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
-from tts_audiobook_tool.sound.silence_util import SilenceUtil
+from tts_audiobook_tool.sound.silence_util import SilenceGapTrim, SilenceUtil
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.reason_pauses import ReasonPauses
 from tts_audiobook_tool.util import *
@@ -275,18 +275,35 @@ class SoundPipeline:
         return sound
 
     @staticmethod
+    def limit_silence_gaps_with_trims(
+        sound: Sound,
+        enabled: bool = False,
+        max_gap_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
+    ) -> tuple[Sound, list[SilenceGapTrim]]:
+        """
+        Same as limit_silence_gaps_if_enabled, but also returns a record of every
+        gap that was shortened, so callers can remap timings that were measured
+        against the un-cut audio.
+        """
+        if not enabled:
+            return sound, []
+
+        new_sound, trims = SilenceUtil.limit_silence_gaps(sound, max_gap_duration)
+        if abs(new_sound.duration - sound.duration) > 0.01:
+            return new_sound, trims
+        return sound, []
+
+    @staticmethod
     def limit_silence_gaps_if_enabled(
         sound: Sound,
         enabled: bool = False,
         max_gap_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
     ) -> Sound:
-        if not enabled:
-            return sound
-
-        new_sound, _ = SilenceUtil.limit_silence_gaps(sound, max_gap_duration)
-        if abs(new_sound.duration - sound.duration) > 0.01:
-            return new_sound
-        return sound
+        return SoundPipeline.limit_silence_gaps_with_trims(
+            sound,
+            enabled=enabled,
+            max_gap_duration=max_gap_duration,
+        )[0]
 
     @staticmethod
     def apply_lava_sr_upsampling(sound: Sound) -> Sound | str:

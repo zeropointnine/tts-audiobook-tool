@@ -27,8 +27,9 @@ def make_words(*items: str) -> list[Word]:
 
 
 def test_sus_duration_threshold_is_strictly_greater_than_calculated_limit() -> None:
-    assert not ExcessiveDurationResult.is_excessively_long("alpha beta gamma", "en", 3.75)
-    assert ExcessiveDurationResult.is_excessively_long("alpha beta gamma", "en", 3.76)
+    # 1.5 base + 3 words * 0.75 + 2.0 gap allowance = 5.75
+    assert not ExcessiveDurationResult.is_excessively_long("alpha beta gamma", "en", 5.75)
+    assert ExcessiveDurationResult.is_excessively_long("alpha beta gamma", "en", 5.76)
 
 
 def test_sus_duration_allows_source_text_with_long_numbers() -> None:
@@ -37,7 +38,8 @@ def test_sus_duration_allows_source_text_with_long_numbers() -> None:
 
 def test_validate_returns_sus_duration_after_music_check_when_transcript_duration_is_too_long() -> None:
     words = make_words("hello", "world")
-    sound = make_sound(3.01)
+    # Threshold: 1.5 + 2 words * 0.75 + 2.0 gap allowance = 5.0
+    sound = make_sound(5.01)
 
     with patch("tts_audiobook_tool.validator.ModelManager.has_yamnet_detector", return_value=False), \
             patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):

@@ -91,16 +91,6 @@ class ConcatMenu:
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label(
-                        "Pauses between segments",
-                        state.project.reason_pauses.menu_label,
-                    ),
-                    lambda _, __: ConcatMenu.reason_pauses_menu(state),
-                )
-            )
-
-            items.append(
-                MenuItem(
                     lambda _: make_menu_label("Reader uses phrase subdivisions", state.project.subdivide_phrases),
                     lambda _, __: ConcatMenu.subdivide_menu(state)
                 )
@@ -116,11 +106,29 @@ class ConcatMenu:
             items.append(
                 MenuItem(
                     lambda _: make_menu_label(
+                        "Pauses between segments",
+                        state.project.reason_pauses.menu_label,
+                    ),
+                    lambda _, __: ConcatMenu.reason_pauses_menu(state),
+                    superlabel="Post-processing options"
+                )
+            )
+
+            items.append(
+                MenuItem(
+                    make_limit_silence_gaps_label,
+                    lambda _, __: ConcatMenu.limit_silence_gaps_menu(state)
+                )
+            )
+
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label(
                         label="Loudness normalization",
                         value=state.project.normalization_type.value.label,
                     ),
                     lambda _, __: ConcatMenu.normalization_menu(state),
-                    superlabel="Post-processing options"
+                    superlabel=" ", superlabel_no_blank_line=True # yes rly
                 )
             )
 
@@ -237,6 +245,70 @@ class ConcatMenu:
             default_value=PROJECT_DEFAULT_HIGH_SHELF_EQ,
             on_select=on_select,
             subheading=HIGH_SHELF_SUBHEADING
+        )
+
+    @staticmethod
+    def limit_silence_gaps_menu(state: State) -> None:
+
+        def make_enabled_label(_: State) -> str:
+            value = state.project.limit_silence_gaps
+            value_str = "True" if value else "False"
+            label = f"Enabled: {COL_ACCENT}{value_str}"
+            if value == PROJECT_DEFAULT_LIMIT_SILENCE_GAPS:
+                label += f" {COL_DIM}(default)"
+            return label
+
+        def make_items(_: State) -> list[MenuItem]:
+            items = []
+
+            # Enabled
+            items.append(
+                MenuItem(
+                    make_enabled_label,
+                    lambda _, __: ConcatMenu._limit_silence_gaps_enabled_menu(state),
+                )
+            )
+            # Gap duration threshold
+            items.append(
+                MenuUtil.make_number_item(
+                    state=state,
+                    attr="limit_silence_gaps_duration",
+                    base_label="Gap duration threshold",
+                    default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
+                    is_minus_one_default=False,
+                    num_decimals=2,
+                    prompt="Enter gap duration threshold (seconds):",
+                    min_value=SILENCE_GAP_DURATION_MIN,
+                    max_value=SILENCE_GAP_DURATION_MAX,
+                )
+            )
+            return items
+
+        MenuUtil.menu(
+            state=state,
+            heading="Limit silence gaps",
+            items=make_items,
+            subheading=LIMIT_SILENCE_GAPS_SUBHEADING,
+            breadcrumb="Limit silence gaps",
+        )
+
+    @staticmethod
+    def _limit_silence_gaps_enabled_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.limit_silence_gaps = value
+            state.project.save()
+            print_feedback(f"Limit silence gaps set to: {value}")
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Limit silence gaps",
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.limit_silence_gaps,
+            default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS,
+            on_select=on_select,
+            breadcrumb="Limit silence gaps > Enabled",
         )
 
     @staticmethod
@@ -372,6 +444,10 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
     high_shelf = state.project.get_high_shelf()
     if high_shelf != HighShelfEq.DISABLED:
         lines.append(f"- Treble uplift: {high_shelf.id.capitalize()}")
+    if state.project.limit_silence_gaps:
+        lines.append(
+            f"- Limit silence gaps: True {state.project.limit_silence_gaps_duration:.2f}s"
+        )
     return lines
 
 
@@ -480,6 +556,17 @@ def ask_output_indices(infos: list[OutputRangeInfo]) -> list[int] | None:
 
 chromium_info = get_chromium_info()
 
+def make_limit_silence_gaps_label(state: State) -> str:
+    if state.project.limit_silence_gaps:
+        value = f"True {state.project.limit_silence_gaps_duration:.2f}s"
+    else:
+        value = "False"
+    return make_menu_label(
+        label="Limit silence gaps",
+        value=value,
+        default=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
+    )
+
 LOUDNORM_SUBHEADING = \
 """Applies a final pass after concatenation to standardize overall loudness and
 control peaks. Choose Stronger for a louder, more consistent presentation on
@@ -515,6 +602,21 @@ May be useful for lower-fidelity TTS models.
 
 This setting also applies to:
 Realtime playback, LLM voice chat, and stand-alone server
+"""
+
+LIMIT_SILENCE_GAPS_SUBHEADING = \
+"""Limits instances of silence within sound segment from extending beyond
+a certain duration.
+
+Larger values can be used to prevent long pauses (eg, 1-2 seconds).
+
+Small values can be used to influence pacing and prosody (eg, 0.0-0.3 seconds).
+(Consider using \"Text segmentation strategy: Sentence.\" in that case)
+
+Applied when creating the audiobook file, so re-creating it with a different
+threshold re-cuts the existing audio rather than regenerating it.
+
+This setting also applies to realtime playback, voice chat, stand-alone server.
 """
 
 REASON_PAUSES_SUBHEADING = \

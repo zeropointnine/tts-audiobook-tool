@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from datetime import datetime
 import json
 import os
@@ -24,7 +25,7 @@ from tts_audiobook_tool.sound import m4b_chapter_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.reason_pauses import ReasonPauses
-from tts_audiobook_tool.sound.silence_util import SilenceUtil
+from tts_audiobook_tool.sound.silence_util import GapTrimMap, SilenceUtil
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.app_support.interrupts import Interrupts
@@ -36,6 +37,7 @@ from tts_audiobook_tool.app_types.app_metadata import (
     count_app_metadata_text_segment_leaves,
 )
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.constants_config import PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup
 from tts_audiobook_tool.app_support import app_text
@@ -43,6 +45,38 @@ from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
 from tts_audiobook_tool.text_util import make_terminal_hyperlink
 from tts_audiobook_tool.util import *
+
+
+@dataclass
+class ConcatRenderResult:
+    """
+    What ConcatUtil.concatenate_sound_segments() produces.
+
+    durations is aligned with phrases_and_paths (0.0 for groups without
+    generated audio) and includes each segment's trailing pause or break effect.
+
+    gap_trim_maps is aligned the same way and holds, for every segment whose
+    internal silence gaps were shortened, the map from the un-cut rendered
+    segment to the cut one (None where nothing was cut). STT word timings are
+    recorded against the un-cut saved audio, so subdivision has to push them
+    through this map.
+    """
+
+    durations: list[float]
+    gap_trim_maps: list[GapTrimMap | None] = field(default_factory=list)
+
+    @property
+    def gap_trim_count(self) -> int:
+        return sum(len(gap_map.trims) for gap_map in self.gap_trim_maps if gap_map)
+
+    @property
+    def gap_removed_duration(self) -> float:
+        return sum(
+            sum(trim.removed_duration for trim in gap_map.trims)
+            for gap_map in self.gap_trim_maps
+            if gap_map
+        )
+
 
 class ConcatUtil:
 
@@ -289,7 +323,9 @@ class ConcatUtil:
                 section_start_indices=section_start_indices,
                 start_group_index=index_start,
                 aac_bitrate=state.prefs.aac_bitrate,
-                use_upsampler=use_upsampler
+                use_upsampler=use_upsampler,
+                limit_silence_gaps=state.project.limit_silence_gaps,
+                limit_silence_gaps_duration=state.project.limit_silence_gaps_duration,
             )
         finally:
             # LavaSR lives in the model worker. Always explicitly unload it at
@@ -307,7 +343,8 @@ class ConcatUtil:
             delete_intermediate_files()
             return "", result
         else:
-            durations = result
+            durations = result.durations
+            gap_trim_maps = result.gap_trim_maps
             last_path = concat_path
 
         # [2] Loudness-normalized file
@@ -361,7 +398,8 @@ class ConcatUtil:
                 phrase_groups=state.project.phrase_groups,
                 sound_paths=file_paths,
                 sound_durations=durations,
-                bookmark_indices=bookmark_indices
+                bookmark_indices=bookmark_indices,
+                gap_trim_maps=gap_trim_maps,
             )
         sections = make_app_metadata_sections(
             project=state.project,
@@ -453,8 +491,10 @@ class ConcatUtil:
         section_start_indices: list[int] | None = None,
         start_group_index: int = 0,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
-        use_upsampler: bool = False
-    ) -> list[float] | str:
+        use_upsampler: bool = False,
+        limit_silence_gaps: bool = False,
+        limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
+    ) -> ConcatRenderResult | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
         Adds silence or sound effect between adjacent segments based on phrase "reason".
@@ -468,8 +508,15 @@ class ConcatUtil:
         :param aac_bitrate:
             Only relevant if dest_path suffix is .m4a/.m4b; ignored otherwise.
             Must be a valid AAC bitrate string like "128k".
+        :param limit_silence_gaps:
+            Shorten silence gaps inside each rendered segment. Done here rather
+            than at generation time so re-concatenating saved audio with a
+            different threshold doesn't need a regeneration pass.
+        :param limit_silence_gaps_duration:
+            Maximum duration of an internal silence gap, in seconds.
 
-        Returns list of float durations of each added segment to be used for app metadata .
+        Returns a ConcatRenderResult: the duration of each added segment (for app
+        metadata) plus the gap-cut maps needed to remap STT word timings.
 
         On error, returns error string
         """
@@ -479,6 +526,7 @@ class ConcatUtil:
         # even though each segment is flushed one iteration late (the look-ahead
         # buffer holds a segment until the next one is rendered).
         durations: list[float] = [0.0] * len(phrases_and_paths)
+        gap_trim_maps: list[GapTrimMap | None] = [None] * len(phrases_and_paths)
 
         to_aac_not_flac = dest_path.lower().endswith(tuple(AAC_SUFFIXES))
         process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac, aac_bitrate)
@@ -598,6 +646,18 @@ class ConcatUtil:
 
             curr_sound = result
 
+            # Over-long internal silence gaps are cut here rather than at
+            # generation time, so re-concatenating saved audio with a different
+            # threshold re-cuts it without regenerating. Word timings were
+            # recorded against the un-cut audio, hence the map.
+            curr_sound, gap_trims = SoundPipeline.limit_silence_gaps_with_trims(
+                curr_sound,
+                enabled=limit_silence_gaps,
+                max_gap_duration=limit_silence_gaps_duration,
+            )
+            if gap_trims:
+                gap_trim_maps[i] = GapTrimMap(result.duration, gap_trims)
+
             if Interrupts().did_interrupt:
                 Interrupts().clear()
                 ConcatUtil.close_ffmpeg_stream(process)
@@ -622,9 +682,19 @@ class ConcatUtil:
             printt()
         printt()
 
+        gap_trim_count = sum(len(gap_map.trims) for gap_map in gap_trim_maps if gap_map)
+        if gap_trim_count and print_progress:
+            removed = sum(
+                sum(trim.removed_duration for trim in gap_map.trims)
+                for gap_map in gap_trim_maps
+                if gap_map
+            )
+            printt(f"Limited silence gaps: {gap_trim_count} gaps, {removed:.2f}s removed")
+            printt()
+
         Interrupts().clear()
         ConcatUtil.close_ffmpeg_stream(process)
-        return durations
+        return ConcatRenderResult(durations=durations, gap_trim_maps=gap_trim_maps)
 
     @staticmethod
     def init_ffmpeg_stream(
@@ -764,7 +834,8 @@ def make_subdivided_timed_phrases(
         phrase_groups: list[PhraseGroup],
         sound_paths: list[str],
         sound_durations: list[float],
-        bookmark_indices: list[int]
+        bookmark_indices: list[int],
+        gap_trim_maps: list[GapTrimMap | None] | None = None,
     ) -> tuple[list[AppMetadataTextSegment], list[int], list[int]]:
     """
     Break timed PhraseGroups into their constituent phrases. Valid forced-alignment
@@ -772,7 +843,10 @@ def make_subdivided_timed_phrases(
     are likewise emitted as nested lists of zero-timed constituent phrases so the
     browser player can render them as no-audio segment groups.
 
-    The first four arguments are parallel lists.
+    The first four arguments are parallel lists. gap_trim_maps, if given, is
+    parallel to them too and carries the gap-cut map of each segment, recorded
+    while concatenating: sidecar word timings are measured against the un-cut
+    audio, so they are mapped through it before being used as offsets.
 
     Returns updated timed_phrases, flattened-leaf bookmark indices, and the
     flattened-leaf starting index corresponding to each original PhraseGroup.
@@ -780,6 +854,9 @@ def make_subdivided_timed_phrases(
 
     if not (len(timed_phrases) == len(phrase_groups) == len(sound_paths) == len(sound_durations)):
         raise ValueError("lists must have same lengths")
+
+    if gap_trim_maps is not None and len(gap_trim_maps) != len(timed_phrases):
+        raise ValueError("gap_trim_maps must have the same length as the other parallel lists")
 
     new_timed_phrases: list[AppMetadataTextSegment] = []
     new_bookmark_indices: list[int] = []
@@ -833,15 +910,25 @@ def make_subdivided_timed_phrases(
         subdivided_timed_phrases = parse_result
 
         # Finally, do subdivision action.
+        gap_trim_map = gap_trim_maps[i] if gap_trim_maps is not None else None
+
+        def map_segment_time(time: float) -> float:
+            return time if gap_trim_map is None else gap_trim_map.map_time(time)
+
         updated_subdivisions: list[TimedPhrase] = []
         offset = original_timed_phrase.time_start
+        previous_mapped_time_end = 0.0
         for subdivided_index, item in enumerate(subdivided_timed_phrases):
             if subdivided_index == 0:
                 add_to_new_bookmark_indices("first-subdivision", item.presentable_text)
                 time_start = offset
             else:
-                time_start = offset + subdivided_timed_phrases[subdivided_index - 1].time_end
-            time_end = offset + item.time_end
+                time_start = offset + previous_mapped_time_end
+            time_end = offset + map_segment_time(item.time_end)
+            # map_time() is monotonic, but a word inside a removed gap clamps
+            # onto the previous leaf, so keep the leaves non-decreasing anyway.
+            time_end = max(time_end, time_start)
+            previous_mapped_time_end = time_end - offset
             updated_subdivisions.append(TimedPhrase(item.text, time_start, time_end))
 
         # Set the last item's time_end using the duration of the source audio clip

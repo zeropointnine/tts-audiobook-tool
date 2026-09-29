@@ -31,6 +31,14 @@ FFMPEG_COMMAND = "ffmpeg"
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
 VALIDATION_UNSUPPORTED_LANGUAGES = ["zh", "ja", "ko"]
 
+# Excessive-duration validation threshold: base + per-word, plus a flat allowance
+# for internal silence gaps. Saved sound segments are no longer gap-limited at
+# generation time (that happens when concatenating), so a segment's duration can
+# legitimately include gaps this validation step never sees cut.
+EXCESSIVE_DURATION_BASE_SECONDS = 1.5
+EXCESSIVE_DURATION_PER_WORD_SECONDS = 0.75
+EXCESSIVE_DURATION_GAP_ALLOWANCE_SECONDS = 2.0
+
 # App's samplerate for final outputs (post-processed sound segments, sound output stream, etc).
 APP_SAMPLE_RATE = 48000
 

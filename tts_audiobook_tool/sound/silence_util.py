@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import librosa
@@ -9,12 +10,92 @@ from tts_audiobook_tool.sound.sound_util import SoundUtil
 
 @dataclass
 class SilenceGapTrim:
-    original_duration: float
-    new_duration: float
+    """
+    One intra-sample silence gap that SilenceUtil.limit_silence_gaps() shortened.
+
+    All positions are in the coordinate space of the sound that was passed in:
+    original_start/original_end is the detected silence, and new_start/new_end is
+    the slice of it that was kept. The kept slice is empty (new_start == new_end)
+    when the whole gap was removed.
+    """
+
+    original_start: float
+    original_end: float
+    new_start: float
+    new_end: float
+
+    @property
+    def original_duration(self) -> float:
+        return self.original_end - self.original_start
+
+    @property
+    def new_duration(self) -> float:
+        return self.new_end - self.new_start
 
     @property
     def removed_duration(self) -> float:
         return max(self.original_duration - self.new_duration, 0.0)
+
+
+class GapTrimMap:
+    """
+    Maps a time in the pre-gap-limiting sound to the corresponding time in the
+    post-gap-limiting sound.
+
+    Built from the SilenceGapTrim records of one limit_silence_gaps() call, so
+    word timings recorded against the un-limited audio (the STT sidecar) can be
+    re-expressed against audio that was cut at concat time.
+
+    map_time() is monotonic non-decreasing, map_time(0) == 0, and
+    map_time(original_duration) == new_duration. A time that lands inside a
+    removed region clamps to the end of the kept piece that precedes it.
+    """
+
+    def __init__(self, original_duration: float, trims: Sequence[SilenceGapTrim] | None = None):
+        self.original_duration = original_duration
+        self.trims = sorted(trims or [], key=lambda trim: trim.original_start)
+        total_removed = sum(trim.removed_duration for trim in self.trims)
+        self.new_duration = max(original_duration - total_removed, 0.0)
+
+    @staticmethod
+    def identity(original_duration: float) -> "GapTrimMap":
+        return GapTrimMap(original_duration)
+
+    @property
+    def is_identity(self) -> bool:
+        return not self.trims
+
+    def map_time(self, time: float) -> float:
+        """
+        Map one time from the pre-limiting to the post-limiting coordinate space.
+        """
+        if time <= 0.0:
+            return 0.0
+
+        removed_before = 0.0
+
+        for trim in self.trims:
+            if time <= trim.original_start:
+                break
+
+            if time >= trim.original_end:
+                removed_before += trim.removed_duration
+                continue
+
+            # Inside this gap: clamp to the end of the preceding kept piece, or
+            # shift by the audio removed before and within this gap.
+            head_removed = trim.new_start - trim.original_start
+
+            if time <= trim.new_start:
+                mapped = trim.original_start - removed_before
+            elif time >= trim.new_end:
+                mapped = trim.new_end - removed_before - head_removed
+            else:
+                mapped = time - removed_before - head_removed
+
+            return min(max(mapped, 0.0), self.new_duration)
+
+        return min(time - removed_before, self.new_duration)
 
 class SilenceUtil:
 
@@ -294,21 +375,21 @@ class SilenceUtil:
             # Trim or keep the silence
             silence_duration = s_end - s_start
             if silence_duration > max_silence_seconds:
+                mid = (s_start + s_end) / 2.0
                 if max_silence_seconds == 0:
-                    trims.append(SilenceGapTrim(
-                        original_duration=silence_duration,
-                        new_duration=0.0,
-                    ))
                     # Remove all silence - don't add any silence piece
-                    pass
+                    new_start = mid
+                    new_end = mid
                 else:
-                    mid = (s_start + s_end) / 2.0
                     new_start = mid - max_silence_seconds / 2.0
                     new_end = mid + max_silence_seconds / 2.0
-                    trims.append(SilenceGapTrim(
-                        original_duration=silence_duration,
-                        new_duration=max_silence_seconds,
-                    ))
+                trims.append(SilenceGapTrim(
+                    original_start=s_start,
+                    original_end=s_end,
+                    new_start=new_start,
+                    new_end=new_end,
+                ))
+                if new_end > new_start:
                     pieces.append(SoundUtil.trim(sound, new_start, new_end))
             else:
                 pieces.append(SoundUtil.trim(sound, s_start, s_end))

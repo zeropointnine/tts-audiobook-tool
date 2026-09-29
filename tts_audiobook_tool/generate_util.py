@@ -31,7 +31,6 @@ from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.app_types.segment_transcript_data import SegmentTranscriptData
-from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -44,7 +43,6 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, SkippedResult, ExcessiveDurationResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
-from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
 from tts_audiobook_tool.transcriber import Transcriber
 
 
@@ -686,11 +684,10 @@ class GenerateUtil:
                 results.append(err)
                 continue
 
-            sound, gap_trims, start_trim_time, end_trim_time, original_duration, token_noise_trim_time, voice_tag = gen_result
+            sound, start_trim_time, end_trim_time, original_duration, token_noise_trim_time, voice_tag = gen_result
 
             if skip_reason:
                 validation_result = SkippedResult(sound=sound, message=skip_reason)
-                validation_result.intra_sample_silence_trims = gap_trims
                 validation_result.generated_start_trim_time = start_trim_time
                 validation_result.generated_end_trim_time = end_trim_time
                 validation_result.generated_trim_original_duration = original_duration
@@ -714,7 +711,6 @@ class GenerateUtil:
             validation_result = Validator.validate(
                 sound, text, transcribed_words, project.language_code, strictness=project.strictness
             )
-            validation_result.intra_sample_silence_trims = gap_trims
             validation_result.generated_start_trim_time = start_trim_time
             validation_result.generated_end_trim_time = end_trim_time
             validation_result.generated_trim_original_duration = original_duration
@@ -750,7 +746,7 @@ class GenerateUtil:
             print_generation_request: bool = False,
             print_params: bool = False,
             voice_selection_index: int | None = None
-        ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None, str] | str | TtsModelError]:
+        ) -> list[tuple[Sound, float | None, float | None, float, float | None, str] | str | TtsModelError]:
         """
         Core audio generation function.
 
@@ -825,7 +821,7 @@ class GenerateUtil:
 
         sounds = [result] if isinstance(result, Sound) else result
 
-        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None, str] | str | TtsModelError] = [] # TODO: Revisit
+        results: list[tuple[Sound, float | None, float | None, float, float | None, str] | str | TtsModelError] = [] # TODO: Revisit
 
         for i, sound in enumerate(sounds):
 
@@ -864,23 +860,17 @@ class GenerateUtil:
                         if save_debug_files:
                             GenerateUtil.save_debug_sound(project, indices[i], "post_token_noise_trim", sound, is_realtime=is_realtime)
 
-                # Limit internal silence gaps (done before STT transcription so timestamps match)
-                if sound.data.size > 0 and project.limit_silence_gaps:
-                    # Save debug sound before gap limiting
-                    if save_debug_files:
-                        GenerateUtil.save_debug_sound(project, indices[i], "pre_gap_limit", sound, is_realtime=is_realtime)
-                    sound, gap_trims = SilenceUtil.limit_silence_gaps(sound, project.limit_silence_gaps_duration)
-                    # Save debug sound after gap limiting
-                    if save_debug_files:
-                        GenerateUtil.save_debug_sound(project, indices[i], "post_gap_limit", sound, is_realtime=is_realtime)
-                else:
-                    gap_trims = []
+                # Internal silence gap limiting is not done here: it happens when
+                # concatenating, so re-concatenating saved audio with a different
+                # threshold doesn't need a regeneration pass. Saved audio is
+                # therefore un-cut, which is also what STT timestamps are recorded
+                # against.
 
                 if sound.data.size == 0:
                     result = "Model output is silence, discarding"
                     Tts.clear_continuation()
                 else:
-                    result = (sound, gap_trims, start_trim_time, end_trim_time, original_duration, token_noise_trim_time, voice_tag)
+                    result = (sound, start_trim_time, end_trim_time, original_duration, token_noise_trim_time, voice_tag)
 
             results.append(result)
             Tts.clear_continuation_if_reason(phrase_groups[indices[i]].last_reason)

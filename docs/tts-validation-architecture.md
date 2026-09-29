@@ -133,9 +133,10 @@ Still in `GenerateUtil.generate()`, the raw model output is cleaned up before an
 
 - silence is trimmed at the ends and the audio is peak-normalized via `SoundPipeline.apply_generate_post_processing_with_info()` (`tts_audiobook_tool/sound/sound_pipeline.py`)
 - model-specific short trailing token-like artifacts may be trimmed via `SoundExtraUtil.trim_trailing_token_noise()`
-- internal silence gaps may be limited via `SilenceUtil.limit_silence_gaps()` (`tts_audiobook_tool/sound/silence_util.py`)
 
 These steps are done before transcription so that Whisper word timestamps match the final saved audio.
+
+Internal silence gap limiting is deliberately **not** part of this step. It is applied when the audiobook file is created, in `ConcatUtil.concatenate_sound_segments()` (`tts_audiobook_tool/concat_util.py`), so the saved segment and its sidecar word timings always describe the un-limited audio. Concat records each cut as a `GapTrimMap` (`tts_audiobook_tool/sound/silence_util.py`) and remaps sidecar word timings through it when writing subdivision metadata, so re-creating the file with a different threshold re-cuts the existing audio instead of regenerating it.
 
 This ordering is important: Whisper sees the **post-processed** audio, not the raw model output.
 
@@ -222,7 +223,7 @@ Inside `Validator.validate()`:
 3. `Validator.get_word_error_fail()` computes normalized word errors, the normalized source word count, and the failure threshold.
 4. If a YAMNet music detector model is loaded (`ModelManager.has_yamnet_detector()`), music detection runs and may override the result with `MusicFailResult`.
 5. A `WordErrorResult` is created (carrying the errors, truncation flag, and invalid-reason in a shared `ValidationFindings` object).
-6. If the word-error result passes, the audio duration is checked via `ExcessiveDurationResult.is_excessively_long()`; suspiciously long audio is returned as an `ExcessiveDurationResult` instead.
+6. If the word-error result passes, the audio duration is checked via `ExcessiveDurationResult.is_excessively_long()`; suspiciously long audio is returned as an `ExcessiveDurationResult` instead. The threshold is a base of `EXCESSIVE_DURATION_BASE_SECONDS` plus `EXCESSIVE_DURATION_PER_WORD_SECONDS` per normalized source word, plus a flat `EXCESSIVE_DURATION_GAP_ALLOWANCE_SECONDS` (constants in `tts_audiobook_tool/constants.py`). The gap allowance exists because long internal silences are no longer trimmed during generation — they are limited later, at concat time — so the word-error check is the primary defense against rambling audio.
 7. The validator optionally attempts to derive a `TrimmedResult` if the transcript semantically matches a trimmed subrange of the audio. Trimming is suppressed when the truncation diagnostic is positive, and is discarded if it would remove 0.1s or less.
 
 So the word-error comparison is the core analysis step, but it is not always the final returned result.
@@ -661,7 +662,7 @@ For one generated segment, the practical comparison flow is:
 1. Start with `PhraseGroup` source text.
 2. Flatten it into the TTS prompt.
 3. Generate audio.
-4. Post-process audio (silence-end trim/normalization, optional trailing token-noise trim, optional internal silence gap limiting).
+4. Post-process audio (silence-end trim/normalization, optional trailing token-noise trim).
 5. If STT is disabled or the language is unsupported, record a `SkippedResult` and stop.
 6. Transcribe audio with Whisper into timestamped words.
 7. Flatten Whisper words into transcript text.

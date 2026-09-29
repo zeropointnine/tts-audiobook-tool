@@ -687,6 +687,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
+**2026-09-29**
+
+- Moved **`Limit silence gaps`** from `Generate` to `Concat`. Long internal silences are now cut while creating the audiobook file instead of during generation, so re-creating the file with a different gap threshold re-cuts the saved audio rather than regenerating it. Saved word timings are remapped to match the cut audio.
+
 **2026-09-27**
 
 - Expanded menu for the "enhance-an-audiobook" feature.

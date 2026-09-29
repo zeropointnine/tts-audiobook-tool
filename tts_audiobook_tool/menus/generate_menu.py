@@ -127,14 +127,6 @@ class GenerateMenu:
                 )
             )
 
-            # Limit silence gaps
-            items.append(
-                MenuItem(
-                    make_limit_silence_gaps_label, lambda _, __: GenerateMenu.limit_silence_gaps_menu(state),
-                    superlabel="Post-processing"
-                )
-            )
-
             return items
 
         MenuUtil.menu(state, heading_maker, items_maker, breadcrumb="Generate")
@@ -176,70 +168,6 @@ class GenerateMenu:
                 continue
             if isinstance(editor_result, EditorClosed):
                 return
-
-    @staticmethod
-    def limit_silence_gaps_menu(state: State) -> None:
-
-        def make_enabled_label(_: State) -> str:
-            value = state.project.limit_silence_gaps
-            value_str = "True" if value else "False"
-            label = f"Enabled: {COL_ACCENT}{value_str}"
-            if value == PROJECT_DEFAULT_LIMIT_SILENCE_GAPS:
-                label += f" {COL_DIM}(default)"
-            return label
-
-        def make_items(_: State) -> list[MenuItem]:
-            items = []
-
-            # Enabled
-            items.append(
-                MenuItem(
-                    make_enabled_label,
-                    lambda _, __: GenerateMenu._limit_silence_gaps_enabled_menu(state),
-                )
-            )
-            # Gap duration threshold
-            items.append(
-                MenuUtil.make_number_item(
-                    state=state,
-                    attr="limit_silence_gaps_duration",
-                    base_label="Gap duration threshold",
-                    default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
-                    is_minus_one_default=False,
-                    num_decimals=2,
-                    prompt="Enter gap duration threshold (seconds):",
-                    min_value=SILENCE_GAP_DURATION_MIN,
-                    max_value=SILENCE_GAP_DURATION_MAX,
-                )
-            )
-            return items
-
-        MenuUtil.menu(
-            state=state,
-            heading="Limit silence gaps",
-            items=make_items,
-            subheading=LIMIT_SILENCE_GAPS_MENU_SUBHEADING,
-            breadcrumb="Limit silence gaps",
-        )
-
-    @staticmethod
-    def _limit_silence_gaps_enabled_menu(state: State) -> None:
-
-        def on_select(value: bool) -> None:
-            state.project.limit_silence_gaps = value
-            state.project.save()
-            print_feedback(f"Limit silence gaps set to: {value}")
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text="Limit silence gaps",
-            labels=["True", "False"],
-            values=[True, False],
-            current_value=state.project.limit_silence_gaps,
-            default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS,
-            on_select=on_select,
-            breadcrumb="Limit silence gaps > Enabled",
-        )
 
     @staticmethod
     def gen_auto_concat_menu(state: State) -> None:
@@ -324,17 +252,6 @@ def make_retries_label(state: State) -> str:
     return make_menu_label(
         label="Max retries",
         value=state.project.max_retries
-    )
-
-def make_limit_silence_gaps_label(state: State) -> str:
-    if state.project.limit_silence_gaps:
-        value = f"True {state.project.limit_silence_gaps_duration:.2f}s"
-    else:
-        value = "False"
-    return make_menu_label(
-        label="Limit silence gaps",
-        value=value,
-        default=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     )
 
 def make_gen_auto_concat_label(state: State) -> str:
@@ -511,16 +428,4 @@ RETRIES_DESC = \
 """This is the max number of retries an audio generation will be attempted
 when speech-to-text validation fails due to too many word errors.
 Higher values have diminishing returns.
-"""
-
-LIMIT_SILENCE_GAPS_MENU_SUBHEADING = \
-"""Limits instances of silence within sound segment from extending beyond
-a certain duration.
-
-Larger values can be used to prevent long pauses (eg, 1-2 seconds).
-
-Small values can be used to influence pacing and prosody (eg, 0.0-0.3 seconds).
-(Consider using \"Text segmentation strategy: Sentence.\" in that case)
-
-This setting also applies to realtime playback, voice chat, stand-alone server.
 """

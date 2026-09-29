@@ -13,6 +13,7 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.menus import concat_menu
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.menus.menu_util import get_string_from
+from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
@@ -68,10 +69,17 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "- Treble uplift: Stronger"
     )
 
+    project.limit_silence_gaps = True
+    project.limit_silence_gaps_duration = 0.35
+    assert concat_menu.make_enabled_option_confirmation_lines(state)[-1] == (
+        "- Limit silence gaps: True 0.35s"
+    )
+
     project.normalization_type = NormalizationType.DISABLED
     project.use_upsampler = False
     project.use_break_sound_effect = False
     project.high_shelf = HighShelfEq.DISABLED.id
+    project.limit_silence_gaps = False
 
     assert concat_menu.make_enabled_option_confirmation_lines(state) == []
 
@@ -193,6 +201,48 @@ def test_concat_menu_always_shows_generative_upsampling() -> None:
 
     labels = [get_string_from(state, item.label) for item in items]
     assert any(label.startswith("Generative upsampling") for label in labels)
+
+
+def test_concat_menu_offers_limit_silence_gaps() -> None:
+    project = Project.model_validate({"limit_silence_gaps": True, "limit_silence_gaps_duration": 0.4})
+    state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
+
+    with patch("tts_audiobook_tool.menus.concat_menu.MenuUtil.menu") as menu, patch(
+        "tts_audiobook_tool.menus.concat_menu.ProjectUtil.get_latest_concat_files",
+        return_value=[],
+    ), patch.object(LavaSrUtil, "has_lava_sr", return_value=False):
+        ConcatMenu.menu(state)
+        items = menu.call_args.args[2](state)
+
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+    assert "Limit silence gaps (currently: True 0.40s)" in labels
+
+    project.limit_silence_gaps = False
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+    assert "Limit silence gaps (currently: False)" in labels
+
+
+def test_limit_silence_gaps_menu_writes_project_setting() -> None:
+    project = Project.model_validate({"limit_silence_gaps": False})
+    state = cast(State, SimpleNamespace(project=project))
+
+    with patch.object(concat_menu.MenuUtil, "menu") as menu, patch.object(
+        concat_menu.MenuUtil, "options_menu"
+    ) as options_menu, patch.object(Project, "save") as save, patch.object(
+        concat_menu, "print_feedback"
+    ):
+        ConcatMenu.limit_silence_gaps_menu(state)
+        subheading = menu.call_args.kwargs["subheading"]
+        items = menu.call_args.kwargs["items"](state)
+        items[0].handler(state, None)  # "Enabled"
+        options_menu.call_args.kwargs["on_select"](True)
+
+    assert project.limit_silence_gaps
+    save.assert_called_once()
+    assert "realtime playback" in subheading
+    assert strip_ansi_codes(get_string_from(state, items[1].label)).startswith(
+        "Gap duration threshold (currently: 1.00 default)"
+    )
 
 
 def test_concat_menu_prevents_enabling_unavailable_lava_sr() -> None:

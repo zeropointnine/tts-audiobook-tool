@@ -65,7 +65,7 @@ def test_generate_menu_replaces_legacy_generation_entries(monkeypatch):
     first_label = items[0].label
     assert callable(first_label)
     assert strip_ansi_codes(first_label(state)) == "Start (0 lines queued)"
-    assert len(items) == 6
+    assert len(items) == 5
 
 
 def test_generate_menu_start_label_shows_queued_line_ranges(monkeypatch):

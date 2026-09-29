@@ -6,9 +6,15 @@ import pytest
 from tts_audiobook_tool.app_types import HighShelfEq, Sound
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
-from tts_audiobook_tool.concat_util import ConcatUtil, make_stem, make_subdivided_timed_phrases
+from tts_audiobook_tool.concat_util import (
+    ConcatRenderResult,
+    ConcatUtil,
+    make_stem,
+    make_subdivided_timed_phrases,
+)
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
+from tts_audiobook_tool.sound.silence_util import GapTrimMap, SilenceGapTrim
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 
 
@@ -158,7 +164,7 @@ def test_concatenate_does_not_append_break_effect_to_final_segment(reason: Reaso
             print_progress=False,
         )
 
-    assert result == [sound.duration]
+    assert result.durations == [sound.duration]
     append_mock.assert_called_once_with(
         sound,
         reason=reason,
@@ -442,3 +448,98 @@ class TestVoiceTagSummary:
             )
 
         assert "[none]" in stem
+# ---------------------------------------------------------------------------
+# Silence gap limiting (applied at concat time, not generation time)
+# ---------------------------------------------------------------------------
+
+GAP_SR = 16_000
+
+
+def make_gap_sound() -> Sound:
+    """ Tone, 1.0s of silence, tone """
+    tone = (np.sin(2 * np.pi * 440 * np.arange(int(GAP_SR * 0.5)) / GAP_SR) * 0.5).astype(np.float32)
+    silence = np.zeros(int(GAP_SR * 1.0), dtype=np.float32)
+    return Sound(np.concatenate([tone, silence, tone]), GAP_SR)
+
+
+def concatenate_gap_sound(limit_silence_gaps: bool) -> object:
+    sound = make_gap_sound()
+    phrase = Phrase("Gap phrase.", Reason.SENTENCE)
+
+    with patch.object(ConcatUtil, "init_ffmpeg_stream", return_value=MagicMock()), \
+         patch.object(ConcatUtil, "close_ffmpeg_stream"), \
+         patch.object(ConcatUtil, "add_audio_to_ffmpeg_stream"), \
+         patch.object(ConcatUtil, "PSEUDO_SILENCE_COMPENSATION_ENABLED", False), \
+         patch.object(SoundPipeline, "make_concat_rendered_sound_segment", return_value=sound), \
+         patch.object(SoundPipeline, "append_pause_or_section_effect", side_effect=lambda sound_in, **kwargs: sound_in):
+        return ConcatUtil.concatenate_sound_segments(
+            dest_path="output.flac",
+            phrases_and_paths=[(phrase, "segment.flac")],
+            use_break_sound_effect=False,
+            high_shelf=HighShelfEq.DISABLED,
+            reason_pauses=ReasonPauseTypes.NORMAL.value,
+            print_progress=False,
+            limit_silence_gaps=limit_silence_gaps,
+            limit_silence_gaps_duration=0.2,
+        )
+
+
+def test_concatenate_without_gap_limiting_keeps_duration_and_no_maps() -> None:
+    sound = make_gap_sound()
+    result = concatenate_gap_sound(limit_silence_gaps=False)
+    assert isinstance(result, ConcatRenderResult)
+    assert result.durations == [sound.duration]
+    assert result.gap_trim_maps == [None]
+    assert result.gap_trim_count == 0
+
+
+def test_concatenate_with_gap_limiting_cuts_audio_and_records_map() -> None:
+    sound = make_gap_sound()
+    result = concatenate_gap_sound(limit_silence_gaps=True)
+    assert isinstance(result, ConcatRenderResult)
+
+    gap_map = result.gap_trim_maps[0]
+    assert gap_map is not None
+    assert result.gap_trim_count == 1
+    assert result.gap_removed_duration == pytest.approx(0.8, abs=0.08)
+
+    # The written duration is the cut one, and the map agrees with it.
+    assert result.durations[0] < sound.duration
+    assert result.durations[0] == pytest.approx(sound.duration - 0.8, abs=0.08)
+    assert gap_map.new_duration == pytest.approx(result.durations[0], abs=0.01)
+
+    # A word timing after the cut maps earlier than it was.
+    assert gap_map.map_time(sound.duration - 0.1) < sound.duration - 0.1
+
+
+def test_subdivided_metadata_maps_word_timings_through_gap_cut() -> None:
+    group = PhraseGroup([
+        Phrase("First phrase, ", Reason.PHRASE),
+        Phrase("second phrase.", Reason.SENTENCE),
+    ])
+    timed_groups = [TimedPhrase(group.text, 0.0, 3.0)]
+    sidecar_path = MagicMock()
+    sidecar_path.exists.return_value = True
+    sidecar_segments = [
+        TimedPhrase("First phrase, ", 0.0, 1.0),
+        TimedPhrase("second phrase.", 2.0, 3.0),
+    ]
+    # A 1.0s gap (1.0s-2.0s) cut down to 0.2s: everything after shifts 0.8s earlier.
+    gap_map = GapTrimMap(3.0, [SilenceGapTrim(1.0, 2.0, 1.0, 1.2)])
+
+    with patch("tts_audiobook_tool.concat_util.get_segment_stt_info_path", return_value=sidecar_path), \
+         patch("tts_audiobook_tool.concat_util.SegmentTranscriptUtil.load_timed_phrases", return_value=sidecar_segments):
+        segments, _, _ = make_subdivided_timed_phrases(
+            timed_phrases=timed_groups,
+            phrase_groups=[group],
+            sound_paths=["generated.flac"],
+            sound_durations=[2.5],
+            bookmark_indices=[0],
+            gap_trim_maps=[gap_map],
+        )
+
+    assert [segment.text for segment in segments[0]] == ["First phrase, ", "second phrase."]
+    assert segments[0][0].time_end == pytest.approx(1.0)
+    assert segments[0][1].time_start == pytest.approx(1.0)
+    # Tail is clamped to the (cut) segment duration.
+    assert segments[0][-1].time_end == 2.5
