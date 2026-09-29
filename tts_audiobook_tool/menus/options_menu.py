@@ -301,7 +301,11 @@ class OptionsMenu:
     def make_sgl_omni_type_label(state: State) -> str:
         value = state.prefs.sgl_omni_type
         if value is None:
-            return "auto-detect"
+            # Annotate auto-detect with the model it currently resolves to
+            detected = Tts.get_type()
+            if detected == TtsModelType.NONE:
+                return "auto-detect"
+            return f"auto-detect - {detected.value.ui['proper_name']}"
         return value.value.ui["proper_name"]
 
     @staticmethod

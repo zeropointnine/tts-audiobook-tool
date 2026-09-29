@@ -38,6 +38,7 @@ from tts_audiobook_tool.model_worker_protocol import (
 )
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from project_settings_test_support import get_setting, set_setting
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
@@ -977,7 +978,7 @@ def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(L, "d", lambda *_: None)
     project = Project(dir_path=str(tmp_path))
     assert project.save() == ""
-    project.vibevoice_lora_target = "vibevoice-community/unsaved-adapter"
+    set_setting(project, "vibevoice_lora_target", "vibevoice-community/unsaved-adapter")
     state = SimpleNamespace(
         project=project,
         prefs=Prefs(project_dir=str(tmp_path), stt_variant=SttVariant.DISABLED),
@@ -1008,7 +1009,7 @@ def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
     assert len(commands) == 1
     command = commands[0]
     assert isinstance(command, InspectTtsCommand)
-    assert command.model_params["vibevoice_lora_path"] == project.vibevoice_lora_target
+    assert command.model_params["vibevoice_lora_path"] == get_setting(project, "vibevoice_lora_target")
     assert command.warm_models is False
     assert command.warm_stt is False
 

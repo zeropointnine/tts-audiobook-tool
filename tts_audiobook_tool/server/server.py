@@ -39,7 +39,6 @@ from tts_audiobook_tool.tts import Tts
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
-    from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 
 
 @dataclass
@@ -50,12 +49,12 @@ class PromptItem:
     is_prompt_start: bool = False
 
 
-def get_blocking_issues_error(project: Project, instance: TtsBaseModel | None) -> str:
+def get_blocking_issues_error(project: Project, instance: object | None) -> str:
     """
     Returns user-facing error text if the TTS model has blocking issues that
     prevent inference, else empty string.
     """
-    issues = Tts.get_class().get_blocking_issues(project, instance)
+    issues = Tts.get_model_support().get_blocking_issues(project, instance)
     if not issues:
         return ""
     return "TTS model is not ready for inference:\n" + format_issues(issues, verbose=True)
@@ -349,7 +348,7 @@ class Server:
         phrase_group: PhraseGroup,
         generation_id: int,
     ) -> bool:
-        sample_rate = Tts.get_class().get_output_sample_rate(self._project)
+        sample_rate = Tts.get_model_support().get_output_sample_rate(self._project)
         stream_started_at = time.monotonic()
         self.log_tts_inference_start(mode="streaming", text=prompt_text)
         first_audio_callback_registered = False

@@ -59,13 +59,13 @@ class PocketBaseModel(TtsBaseModel):
 
     @classmethod
     def get_primary_voice_value(cls, project: Project) -> str:
-        return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET) or project.pocket_predefined_voice
+        return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET) or project.get_model_setting('pocket', 'predefined_voice')
 
     @classmethod
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        model_code = project.pocket_model_code or PocketBaseModel.DEFAULT_LANGUAGE
+        model_code = project.get_model_setting('pocket', 'model_code') or PocketBaseModel.DEFAULT_LANGUAGE
         return f"{cls.INFO.ui['proper_name']} {COL_DIM}({model_code})"
 
     @classmethod
@@ -79,7 +79,7 @@ class PocketBaseModel(TtsBaseModel):
                 errors.append(ReadinessIssue("ungated model", verbose_ui_message))
                 return errors # don't bother adding any other errors at this point
 
-        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET) and not project.pocket_predefined_voice:
+        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET) and not project.get_model_setting('pocket', 'predefined_voice'):
             errors.append(ReadinessIssue("voice clone", "Setting a voice clone file or predefined voice is required"))
 
         return errors

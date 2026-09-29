@@ -133,7 +133,7 @@ class ConcatMenu:
             )
 
             label = make_menu_label(label="Generative upsampling", value=state.project.use_upsampler)
-            if Tts.get_class().get_output_sample_rate(state.project) >= 44_100 and state.project.use_upsampler:
+            if Tts.get_model_support().get_output_sample_rate(state.project) >= 44_100 and state.project.use_upsampler:
                 label += f"{COL_ERROR}*"
             items.append(
                 MenuItem(
@@ -272,7 +272,7 @@ class ConcatMenu:
             items.append(
                 MenuUtil.make_number_item(
                     state=state,
-                    attr="limit_silence_gaps_duration",
+                    target="limit_silence_gaps_duration",
                     base_label="Gap duration threshold",
                     default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
                     is_minus_one_default=False,
@@ -332,7 +332,7 @@ class ConcatMenu:
             subheading = UPSAMPLE_SUBHEADING
             link = text_util.make_terminal_hyperlink(LAVA_SR_PROJECT_URL, "LavaSR")
             subheading = subheading.replace("%1", link)
-            sample_rate = Tts.get_class().get_output_sample_rate(state.project)
+            sample_rate = Tts.get_model_support().get_output_sample_rate(state.project)
             if sample_rate >= 44_100:
                 subheading += (
                     "\n"

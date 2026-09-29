@@ -69,25 +69,25 @@ class IndexTts2Model(IndexTts2BaseModel):
         else:
             voice_path = ""
 
-        if project.indextts2_emo_voice_file_name:
-            emo_voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, project.indextts2_emo_voice_file_name)
+        if project.get_model_setting('indextts2', 'emo_voice'):
+            emo_voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, project.get_model_setting('indextts2', 'emo_voice'))
         else:
             emo_voice_path = ""
 
-        seed = -1 if force_random_seed else project.indextts2_seed
+        seed = -1 if force_random_seed else project.get_model_setting('indextts2', 'seed')
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
 
-        temperature = project.indextts2_temperature
+        temperature = project.get_model_setting('indextts2', 'temperature')
         if temperature == -1:
             temperature = IndexTts2BaseModel.DEFAULT_TEMPERATURE
-        emo_alpha = project.indextts2_emo_alpha
+        emo_alpha = project.get_model_setting('indextts2', 'emo_alpha')
         if emo_alpha == -1:
             emo_alpha = IndexTts2BaseModel.DEFAULT_EMO_VOICE_ALPHA
-        top_p = project.indextts2_top_p
+        top_p = project.get_model_setting('indextts2', 'top_p')
         if top_p == -1:
             top_p = IndexTts2BaseModel.DEFAULT_TOP_P
-        top_k = project.indextts2_top_k
+        top_k = project.get_model_setting('indextts2', 'top_k')
         if top_k == -1:
             top_k = IndexTts2BaseModel.DEFAULT_TOP_K
 
@@ -97,7 +97,7 @@ class IndexTts2Model(IndexTts2BaseModel):
             temperature=temperature,
             emo_alpha=emo_alpha,
             emo_voice_path=emo_voice_path,
-            emo_vector=project.indextts2_emo_vector,
+            emo_vector=project.get_model_setting('indextts2', 'emo_vector'),
             top_p=top_p,
             top_k=top_k,
             seed=seed,

@@ -72,18 +72,17 @@ COL_INPUT = Ansi.hex("aaaaaa")
 
 
 # ---------------------------------------------------------------------------
-# Import TtsModelType directly — its deps are all stdlib (enum, functools,
-# typing), so this is safe without installing the app package.
+# Import the lightweight model catalog directly without the full app startup.
 # ---------------------------------------------------------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
-# Build the list of (module_test, proper_name) from the enum, skipping NONE
+# Build the list of (module_test, proper_name) from the catalog, skipping NONE.
 QUALIFIED_MODELS: list[tuple[str, str]] = []
-for member in TtsModelType:
-    if member.name == "NONE":
+for member in TtsModelType.all():
+    if member == TtsModelType.NONE:
         continue
     QUALIFIED_MODELS.append((member.value.local_module_test, member.value.ui["proper_name"]))
 

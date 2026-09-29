@@ -20,6 +20,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from project_settings_test_support import get_setting
 
 
 class TestProjectBookIntegration(unittest.TestCase):
@@ -145,10 +146,11 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
-        self.assertEqual(payload["moss_delay_top_p"], 0.72)
-        self.assertEqual(payload["moss_delay_top_k"], 37)
-        self.assertEqual(payload["moss_local_top_p"], 0.82)
-        self.assertEqual(payload["moss_local_top_k"], 47)
+        parameters = payload["model_settings"]["shared"]["moss"]["parameters"]
+        self.assertEqual(parameters["delay_top_p"], 0.72)
+        self.assertEqual(parameters["delay_top_k"], 37)
+        self.assertEqual(parameters["local_top_p"], 0.82)
+        self.assertEqual(parameters["local_top_k"], 47)
 
     def test_project_to_dict_includes_qwen3_server_concurrent_requests(self):
         project = Project.model_validate({
@@ -157,7 +159,8 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
-        self.assertEqual(payload["qwen3_server_concurrent_requests"], 3)
+        orchestration = payload["model_settings"]["models"]["server_qwen3tts"]["orchestration"]
+        self.assertEqual(orchestration["concurrent_requests"], 3)
 
     def test_project_model_validate_normalizes_legacy_voice_strings_to_lists(self):
         project = Project.model_validate({
@@ -167,10 +170,10 @@ class TestProjectBookIntegration(unittest.TestCase):
             "glm_voice_text": "glm text",
         })
 
-        self.assertEqual(project.fish_s1_voice_file_name, ["sample_s1.flac"])
-        self.assertEqual(project.fish_s1_voice_transcript, ["sample text"])
-        self.assertEqual(project.glm_voice_file_name, ["sample_glm.flac"])
-        self.assertEqual(project.glm_voice_transcript, ["glm text"])
+        self.assertEqual(get_setting(project, "fish_s1_voice_file_name"), ["sample_s1.flac"])
+        self.assertEqual(get_setting(project, "fish_s1_voice_transcript"), ["sample text"])
+        self.assertEqual(get_setting(project, "glm_voice_file_name"), ["sample_glm.flac"])
+        self.assertEqual(get_setting(project, "glm_voice_transcript"), ["glm text"])
 
     def test_project_model_validate_preserves_voice_lists_and_filters_invalid_items(self):
         project = Project.model_validate({
@@ -178,8 +181,8 @@ class TestProjectBookIntegration(unittest.TestCase):
             "moss_voice_transcript": ["one", None, "two"],
         })
 
-        self.assertEqual(project.moss_voice_file_name, ["one.flac", "two.flac"])
-        self.assertEqual(project.moss_voice_transcript, ["one", "two"])
+        self.assertEqual(get_setting(project, "moss_voice_file_name"), ["one.flac", "two.flac"])
+        self.assertEqual(get_setting(project, "moss_voice_transcript"), ["one", "two"])
 
     def test_project_model_validate_collects_warnings_only_with_explicit_context(self):
         warnings: list[str] = []
@@ -368,17 +371,23 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
-        self.assertEqual(payload["qwen3_voice_file_name"], "one.flac")
-        self.assertEqual(payload["qwen3_voice_transcript"], "one")
-        self.assertEqual(payload["fish_s2_voice_file_name"], ["one.flac", "two.flac"])
-        self.assertEqual(payload["fish_s2_voice_transcript"], ["one", "two"])
+        # Version 3 keeps one reference object per voice sample for both the
+        # single-item and multi-item cases; a lone item is never collapsed.
+        shared = payload["model_settings"]["shared"]
+        self.assertEqual(shared["qwen3"]["voice_references"], [
+            {"file_name": "one.flac", "transcript": "one"},
+        ])
+        self.assertEqual(shared["fish_s2"]["voice_references"], [
+            {"file_name": "one.flac", "transcript": "one"},
+            {"file_name": "two.flac", "transcript": "two"},
+        ])
 
     def test_project_normalizes_qwen3_server_concurrent_requests(self):
         project = Project.model_validate({
             "qwen3_server_concurrent_requests": 0,
         })
 
-        self.assertEqual(project.qwen3_server_concurrent_requests, 1)
+        self.assertEqual(get_setting(project, "qwen3_server_concurrent_requests"), 1)
 
     def test_project_to_dict_includes_higgs_v3_voice_generation_settings(self):
         project = Project.model_validate({
@@ -390,24 +399,25 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
-        self.assertEqual(payload["higgs_v3_temperature"], 0.43)
-        self.assertEqual(payload["higgs_v3_top_p"], 0.87)
-        self.assertEqual(payload["higgs_v3_top_k"], 42)
-        self.assertEqual(payload["higgs_v3_seed"], 12345)
+        parameters = payload["model_settings"]["models"]["server_higgs_v3"]["parameters"]
+        self.assertEqual(parameters["temperature"], 0.43)
+        self.assertEqual(parameters["top_p"], 0.87)
+        self.assertEqual(parameters["top_k"], 42)
+        self.assertEqual(parameters["seed"], 12345)
 
     def test_project_model_validate_normalizes_higgs_v3_seed(self):
         project = Project.model_validate({
             "higgs_v3_seed": 12345.0,
         })
 
-        self.assertEqual(project.higgs_v3_seed, 12345)
+        self.assertEqual(get_setting(project, "higgs_v3_seed"), 12345)
 
     def test_project_model_validate_rejects_invalid_higgs_v3_seed(self):
         project = Project.model_validate({
             "higgs_v3_seed": -2,
         })
 
-        self.assertEqual(project.higgs_v3_seed, -1)
+        self.assertEqual(get_setting(project, "higgs_v3_seed"), -1)
 
     def test_project_transfer_field_set_matches_serialized_project_settings(self):
         self.assertEqual(ProjectTransferUtil.get_missing_project_settings_transfer_fields(Project), [])
@@ -418,8 +428,8 @@ class TestProjectBookIntegration(unittest.TestCase):
             "moss_top_k": 37.0,
         })
 
-        self.assertEqual(project.moss_delay_top_p, 0.72)
-        self.assertEqual(project.moss_delay_top_k, 37)
+        self.assertEqual(get_setting(project, "moss_delay_top_p"), 0.72)
+        self.assertEqual(get_setting(project, "moss_delay_top_k"), 37)
 
     def test_project_to_dict_includes_moss_target(self):
         target = "OpenMOSS-Team/MOSS-TTS-Local-Transformer"
@@ -429,7 +439,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
-        self.assertEqual(payload["moss_target"], target)
+        self.assertEqual(payload["model_settings"]["models"]["moss"]["parameters"]["target"], target)
 
     def test_project_model_validate_normalizes_moss_audio_top_p_and_top_k(self):
         project = Project.model_validate({
@@ -439,10 +449,10 @@ class TestProjectBookIntegration(unittest.TestCase):
             "moss_local_top_k": 47.0,
         })
 
-        self.assertEqual(project.moss_delay_top_p, 0.72)
-        self.assertEqual(project.moss_delay_top_k, 37)
-        self.assertEqual(project.moss_local_top_p, 0.82)
-        self.assertEqual(project.moss_local_top_k, 47)
+        self.assertEqual(get_setting(project, "moss_delay_top_p"), 0.72)
+        self.assertEqual(get_setting(project, "moss_delay_top_k"), 37)
+        self.assertEqual(get_setting(project, "moss_local_top_p"), 0.82)
+        self.assertEqual(get_setting(project, "moss_local_top_k"), 47)
 
     def test_project_model_validate_accepts_moss_audio_top_k_minimum(self):
         moss_delay_top_k_min = MossConfigs.DELAY.value.audio_top_k_min
@@ -452,8 +462,8 @@ class TestProjectBookIntegration(unittest.TestCase):
             "moss_local_top_k": moss_local_top_k_min,
         })
 
-        self.assertEqual(project.moss_delay_top_k, moss_delay_top_k_min)
-        self.assertEqual(project.moss_local_top_k, moss_local_top_k_min)
+        self.assertEqual(get_setting(project, "moss_delay_top_k"), moss_delay_top_k_min)
+        self.assertEqual(get_setting(project, "moss_local_top_k"), moss_local_top_k_min)
 
     def test_project_model_validate_rejects_moss_audio_top_k_below_minimum(self):
         moss_delay_top_k_min = MossConfigs.DELAY.value.audio_top_k_min
@@ -463,8 +473,8 @@ class TestProjectBookIntegration(unittest.TestCase):
             "moss_local_top_k": moss_local_top_k_min - 1,
         })
 
-        self.assertEqual(project.moss_delay_top_k, -1)
-        self.assertEqual(project.moss_local_top_k, -1)
+        self.assertEqual(get_setting(project, "moss_delay_top_k"), -1)
+        self.assertEqual(get_setting(project, "moss_local_top_k"), -1)
 
     def test_project_model_validate_preserves_moss_audio_top_k_default_sentinel(self):
         project = Project.model_validate({
@@ -472,8 +482,8 @@ class TestProjectBookIntegration(unittest.TestCase):
             "moss_local_top_k": -1,
         })
 
-        self.assertEqual(project.moss_delay_top_k, -1)
-        self.assertEqual(project.moss_local_top_k, -1)
+        self.assertEqual(get_setting(project, "moss_delay_top_k"), -1)
+        self.assertEqual(get_setting(project, "moss_local_top_k"), -1)
 
     def test_phrase_groups_setter_preserves_canonical_book_segmentation_settings(self):
         canonical_settings = BookSegmentationSettings(

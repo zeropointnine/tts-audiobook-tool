@@ -304,7 +304,7 @@ def _patch_tts_for_streaming(monkeypatch, sample_rate: int, generate_side_effect
     fake_tts_class = SimpleNamespace(
         get_output_sample_rate=lambda project, instance=None: sample_rate
     )
-    monkeypatch.setattr(Tts, "get_class", staticmethod(lambda: fake_tts_class))
+    monkeypatch.setattr(Tts, "get_model_support", staticmethod(lambda: fake_tts_class))
     monkeypatch.setattr(ModelWorker, "synthesize_chat_blocking", fake_synthesize)
     return spies
 
@@ -313,7 +313,7 @@ def test_streaming_tts_reports_sample_rate_mismatch(monkeypatch) -> None:
     fake_tts_class = SimpleNamespace(
         get_output_sample_rate=lambda project, instance=None: 48000
     )
-    monkeypatch.setattr(Tts, "get_class", staticmethod(lambda: fake_tts_class))
+    monkeypatch.setattr(Tts, "get_model_support", staticmethod(lambda: fake_tts_class))
     project = Project.model_validate({})
 
     stream_range, saved_sound, error = (

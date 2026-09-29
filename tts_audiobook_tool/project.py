@@ -2,25 +2,17 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, field_validator, model_validator
 
 from tts_audiobook_tool.app_support import path_norm
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
-from tts_audiobook_tool.tts_models.dots_base_model import (
-    DotsBaseModel,
-    DotsCompileMode,
-)
-from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
-from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
-from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
-from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+from tts_audiobook_tool.project_support.model_settings import ModelSettings, REGISTRY
 from tts_audiobook_tool.reason_pauses import ReasonPauses, ReasonPauseTypes
 from tts_audiobook_tool.util import *
 
@@ -36,6 +28,8 @@ class Project(BaseModel):
     Project spec versions:
     - version 1: project text stored inline in `project.json`
     - version 2: project text stored externally in `project_text.json`
+    - version 3: model-specific settings stored in model-keyed `model_settings`
+      objects; version-2 flat fields are converted on load
 
     On save, `version` is always normalized to `CURRENT_PROJECT_VERSION`.
     """
@@ -103,6 +97,27 @@ class Project(BaseModel):
     dir_path: str = ""
     version: int = PROJECT_SPEC_VERSION
     current_model_type: TtsModelType = TtsModelType.NONE
+    model_settings: ModelSettings = Field(default_factory=ModelSettings)
+
+    @field_validator("model_settings", mode="before")
+    @classmethod
+    def _reconcile_model_settings(cls, value: Any) -> ModelSettings:
+        """Validate and prune supplied objects; retain whole unknown objects."""
+        if isinstance(value, ModelSettings):
+            return value
+        return REGISTRY.reconcile(value)
+
+    def get_model_setting(self, model_id: str, name: str) -> Any:
+        """Read a declared setting; absent overrides follow the declared default."""
+        return REGISTRY.resolve(self.model_settings, REGISTRY.get(model_id, name))
+
+    def set_model_setting(self, model_id: str, name: str, value: Any, *, reset: bool = False) -> None:
+        """Write (or remove) a declared override in this project's store."""
+        binding = REGISTRY.get(model_id, name)
+        if reset or (binding.has_sentinel and value == binding.sentinel):
+            REGISTRY.assign(self.model_settings, binding, value, reset=True)
+        else:
+            REGISTRY.assign(self.model_settings, binding, value)
 
     language_code: str = PROJECT_DEFAULT_LANGUAGE
 
@@ -142,149 +157,6 @@ class Project(BaseModel):
     # Placeholder attribute used when no TTS model exists
     none_voice_file_name: str = "" 
 
-    auk_voice_file_name: list[str] = Field(default_factory=list)
-    auk_voice_transcript: list[str] = Field(default_factory=list)
-    auk_server_concurrent_requests: int = 1
-    auk_speed: float = 1.0
-    auk_seed: int = -1
-
-    chatterbox_type: ChatterboxType = list(ChatterboxType)[0]
-    chatterbox_voice_file_name: list[str] = Field(default_factory=list)
-    chatterbox_temperature: float = -1
-    chatterbox_cfg: float = -1
-    chatterbox_exaggeration: float = -1
-    chatterbox_top_p: float = -1
-    chatterbox_turbo_top_k: int = -1
-    chatterbox_ml_v2_repetition_penalty: float = -1
-    chatterbox_ml_v3_repetition_penalty: float = -1
-    chatterbox_turbo_repetition_penalty: float = -1
-    chatterbox_seed: int = -1
-
-    dots_target: str = ""
-    dots_voice_file_name: list[str] = Field(default_factory=list)
-    dots_voice_transcript: list[str] = Field(default_factory=list)
-    dots_seed: int = DotsBaseModel.SEED_DEFAULT
-    dots_speaker_scale: float = -1
-    dots_num_steps_soar: int = -1
-    dots_num_steps_mf: int = -1
-    dots_guidance_scale: float = -1
-    dots_compile: bool = DotsCompileMode.default().enabled
-
-    fish_s1_voice_file_name: list[str] = Field(default_factory=list)
-    fish_s1_voice_transcript: list[str] = Field(default_factory=list, alias="fish_s1_voice_text")
-    fish_s1_compile_enabled: bool = FishS1BaseModel.DEFAULT_COMPILE_ENABLED
-    fish_s1_temperature: float = -1
-    fish_s1_top_p: float = -1  # rem, s1 lib api has no top_k option (but s2 lib does)
-    fish_s1_repetition_penalty: float = -1
-    fish_s1_seed: int = -1
-
-    fish_s2_voice_file_name: list[str] = Field(default_factory=list)
-    fish_s2_voice_transcript: list[str] = Field(default_factory=list)
-    fish_s2_rolling_cont: int = 0
-    fish_s2_compile_enabled: bool = FishS2BaseModel.DEFAULT_COMPILE_ENABLED
-    fish_s2_temperature: float = -1
-    fish_s2_top_p: float = -1
-    fish_s2_top_k: int = -1
-    fish_s2_seed: int = -1
-
-    fish_s2_server_concurrent_requests: int = 1
-
-    higgs_voice_file_name: list[str] = Field(default_factory=list)
-    higgs_voice_transcript: list[str] = Field(default_factory=list, alias="higgs_voice_text")
-    higgs_temperature: float = -1
-    higgs_top_k: int = -1
-    higgs_top_p: float = -1
-    higgs_seed: int = -1
-
-    higgs_v3_voice_file_name: list[str] = Field(default_factory=list)
-    higgs_v3_voice_transcript: list[str] = Field(default_factory=list)
-    higgs_v3_temperature: float = -1
-    higgs_v3_top_p: float = -1
-    higgs_v3_top_k: int = -1
-    higgs_v3_batch_size: int = 1
-    higgs_v3_seed: int = -1
-
-    vibevoice_voice_file_name: list[str] = Field(default_factory=list)
-    vibevoice_target: str = ""
-    vibevoice_lora_target: str = Field(default="", alias="vibevoice_lora_path")
-    vibevoice_cfg: float = -1
-    vibevoice_steps: int = -1
-    vibevoice_batch_size: int = 1
-    vibevoice_seed: int = -1
-
-    indextts2_temperature: float = -1
-    indextts2_use_fp16: bool = IndexTts2BaseModel.DEFAULT_USE_FP16
-    indextts2_voice_file_name: list[str] = Field(default_factory=list)
-    indextts2_emo_alpha: float = -1
-    indextts2_emo_voice_file_name: str = ""
-    indextts2_emo_vector: list[float] = Field(default_factory=list)
-    indextts2_top_p: float = -1
-    indextts2_top_k: int = -1
-    indextts2_seed: int = -1
-
-    glm_voice_file_name: list[str] = Field(default_factory=list)
-    glm_voice_transcript: list[str] = Field(default_factory=list, alias="glm_voice_text")
-    glm_sr: int = GlmBaseModel.SAMPLE_RATES[0]
-    glm_seed: int = -1
-
-    mira_voice_file_name: list[str] = Field(default_factory=list)
-    mira_temperature: float = -1
-    mira_top_p: float = -1
-    mira_top_k: int = -1
-    mira_repetition_penalty: float = -1
-    mira_batch_size: int = 1
-    mira_seed: int = -1
-
-    moss_voice_file_name: list[str] = Field(default_factory=list)
-    moss_voice_transcript: list[str] = Field(default_factory=list)
-    moss_target: str = ""
-    moss_rolling_cont: int = 0
-    moss_delay_temperature: float = -1
-    moss_delay_top_p: float = -1
-    moss_delay_top_k: int = -1
-    moss_local_temperature: float = -1
-    moss_local_top_p: float = -1
-    moss_local_top_k: int = -1
-    moss_batch_size: int = 1
-    moss_seed: int = -1
-
-    qwen3_target: str = ""
-    qwen3_model_type: str = ""
-    qwen3_voice_file_name: list[str] = Field(default_factory=list)
-    qwen3_voice_transcript: list[str] = Field(default_factory=list)
-    qwen3_rolling_cont: int = 0
-    qwen3_speaker_id: str = ""
-    qwen3_instructions: str = ""
-    qwen3_batch_size: int = 1
-    qwen3_temperature: float = -1
-    qwen3_top_k: int = -1
-    qwen3_top_p: float = -1
-    qwen3_repetition_penalty: float = -1
-    qwen3_seed: int = -1
-
-    qwen3_server_concurrent_requests: int = 1
-
-    zonos2_server_voice_file_name: list[str] = Field(default_factory=list)
-    zonos2_server_concurrent_requests: int = 1
-    zonos2_top_k: int = -1
-    zonos2_temperature: float = -1
-    zonos2_repetition_penalty: float = -1
-
-    pocket_voice_file_name: list[str] = Field(default_factory=list)
-    pocket_predefined_voice: str = ""
-    pocket_model_code: str = ""
-    pocket_temperature: float = -1
-    pocket_seed: int = -1
-
-    omnivoice_voice_file_name: list[str] = Field(default_factory=list)
-    omnivoice_voice_transcript: list[str] = Field(default_factory=list)
-    omnivoice_target: str = ""
-    omnivoice_instruct: str = ""
-    omnivoice_cfg: float = -1
-    omnivoice_speed: float = -1
-    omnivoice_num_step: int = -1
-    omnivoice_seed: int = -1
-
     def model_post_init(self, __context: Any) -> None:
         # A `dir_path` written by another operating system's path grammar is not
         # a directory here. Creating it anyway would litter the working
@@ -300,8 +172,8 @@ class Project(BaseModel):
         from tts_audiobook_tool.project_support.project_sound_segments import ProjectSoundSegments
         self._sound_segments = ProjectSoundSegments(self)
 
-        if self.pocket_voice_file_name and self.pocket_predefined_voice:
-            self.pocket_predefined_voice = ""
+        if self.get_model_setting("pocket", "file_name") and self.get_model_setting("pocket", "predefined_voice"):
+            self.set_model_setting("pocket", "predefined_voice", "", reset=True)
 
     @property
     def markers(self) -> set[int]:

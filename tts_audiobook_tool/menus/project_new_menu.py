@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import *
@@ -8,6 +9,8 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -96,6 +99,8 @@ class ProjectNewMenu:
         cancels a path prompt, which ends with print_feedback("Cancelled") instead.
         """
         did_cancel = False
+        dest_prepared = False
+        dest_path = ""
         try:
             dest_dir = ask.ask_dir_path(
                 console_message=(
@@ -133,8 +138,9 @@ class ProjectNewMenu:
                     printt()
                     return False
 
-                printt(f"{COL_ERROR}{ABR_OLD_VERSION_MESSAGE}")
-                printt()
+                parse_result = AppMetadata.get_from_json_string(raw_meta)
+                detail = parse_result if isinstance(parse_result, str) else 'Could not read ABR metadata'
+                ask.ask_error(f"Invalid ABR metadata: {detail}")
                 return False
 
             project_snapshot = app_meta.project_snapshot
@@ -143,30 +149,55 @@ class ProjectNewMenu:
                 printt()
                 return False
 
-            err = state.make_and_set_new_project(dest_dir)
+            try:
+                snapshot_project = ProjectTransferUtil.validate_abr_snapshot(project_snapshot)
+            except Exception as exc:
+                ask.ask_error(f"Invalid ABR project snapshot: {make_error_string(exc)}")
+                return False
+
+            err = State.prepare_new_project_directory(dest_dir)
             if err:
                 ask.ask_error(err)
                 return False
+            dest_path = str(Path(dest_dir).expanduser())
+            dest_prepared = True
 
-            snapshot_project = ProjectTransferUtil.make_project_from_snapshot(
-                state.project.dir_path,
-                project_snapshot
-            )
-            ProjectTransferUtil.apply_project_settings(state.project, snapshot_project)
-
+            # Build, save, and reload the new project before changing either
+            # the selected project or the persisted preference. A failed import
+            # must not silently replace the project the user was working on.
+            new_project = Project(dir_path=dest_path)
+            ProjectTransferUtil.apply_project_settings(new_project, snapshot_project)
             source_dir = ProjectTransferUtil.get_snapshot_source_dir(project_snapshot, abr_path)
+            missing_paths = []
+            if source_dir:
+                missing_paths = ProjectTransferUtil.copy_supporting_project_files(
+                    new_project,
+                    source_dir,
+                    ProjectTransferUtil.make_supporting_project_file_names(snapshot_project),
+                    strict_copy_errors=True,
+                )
+            # With no source directory, never search the process's current
+            # directory for coincidentally named project files.
+            err = new_project.save(stamp_runtime_model=False)
+            if err:
+                raise ValueError(err)
+            loaded_project = ProjectLoadUtil.load_using_dir_path(dest_path)
+            if isinstance(loaded_project, str):
+                raise ValueError(loaded_project)
 
-            missing_paths = ProjectTransferUtil.copy_supporting_project_files(
-                state.project,
-                source_dir,
-                ProjectTransferUtil.make_supporting_project_file_names(snapshot_project)
-            )
-
-            # Keeps the model that produced the ABR file as the project's
-            # "last used" model, so State.project's setter registers the
-            # model mismatch on the reload below.
-            state.project.save(stamp_runtime_model=False)
-            state.set_existing_project(state.project.dir_path)
+            previous_dir = state.prefs.project_dir
+            state.prefs.project_dir = dest_path
+            err = state.prefs.save()
+            if err:
+                state.prefs.project_dir = previous_dir
+                raise ValueError(err)
+            # Keeps the ABR's originating model for the mismatch hint.
+            try:
+                state.project = loaded_project
+            except Exception:
+                state.prefs.project_dir = previous_dir
+                state.prefs.save()
+                raise
 
             print_feedback("Project directory set:", state.project.dir_path)
 
@@ -180,7 +211,10 @@ class ProjectNewMenu:
             hints.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
             return True
         except Exception as e:
-            ask.ask_error(make_error_string(e))
+            detail = make_error_string(e)
+            if dest_prepared:
+                detail += f"\nThe previous project remains selected. Partial files may remain at {dest_path}."
+            ask.ask_error(detail)
             return False
         finally:
             if did_cancel:
@@ -212,11 +246,11 @@ class ProjectNewMenu:
         """
         source_dir = ProjectTransferUtil.get_snapshot_source_dir_display(project_snapshot)
         if not source_dir:
-            return
-
-        printt(f"{COL_DIM}The settings in this audio file came from a project at {source_dir},")
-        printt("which is not a project directory on this computer. The settings were")
-        printt("imported, but supporting files such as voice samples must be copied")
+            printt(f"{COL_DIM}No source project directory was found for this ABR file.")
+        else:
+            printt(f"{COL_DIM}The settings in this audio file came from a project at {source_dir},")
+            printt("which is not a project directory on this computer.")
+        printt("The settings were imported, but supporting files such as voice samples must be copied")
         printt(f"into the new project directory by hand.{COL_DEFAULT}")
         printt()
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, ClassVar
 
 from textual.app import ComposeResult
+from textual.binding import Binding, BindingType
 
 from tts_audiobook_tool import ask, text_util, util
 from tts_audiobook_tool import app_support
@@ -139,6 +140,10 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
     """Full-screen generation session: header, divider, live worker log."""
 
     CSS = worker_app_css("generation-divider")
+    BINDINGS: ClassVar[list[BindingType]] = [
+        *WorkerTextualApp.BINDINGS,
+        Binding("c", "toggle_auto_concat", show=False, priority=True),
+    ]
 
     DIVIDER_ID: ClassVar[str] = "generation-divider"
     OUTPUT_SHELL_ID: ClassVar[str] = "generation-output-shell"
@@ -160,6 +165,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         self.transcript = transcript
         self.progress = GenerationProgress(0, len(indices), len(indices))
         self.stats: GenerationStats | None = None
+        self._auto_concat_changed = False
         # Called once the worker job reaches a terminal result, before the
         # summary's ENTER wait. Releases the caller's system-sleep lock so an
         # idle machine is not held awake while the user reads the summary.
@@ -396,6 +402,24 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             eta_seconds=self.progress.eta_seconds,
         )
         header.update_hotkey(self.prompt_mode)
+        header.update_auto_concat(self.state.project.gen_auto_concat)
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "toggle_auto_concat" and self.find_active:
+            return False
+        return super().check_action(action, parameters)
+
+    def action_toggle_auto_concat(self) -> None:
+        project = self.state.project
+        previous = project.gen_auto_concat
+        project.gen_auto_concat = not previous
+        error = project.save()
+        if error:
+            project.gen_auto_concat = previous
+            self.notify(f"Couldn't save concatenate setting: {error}", severity="error")
+        else:
+            self._auto_concat_changed = True
+        self._update_header()
 
     def action_cancel_or_reset(self) -> None:
         super().action_cancel_or_reset()
@@ -446,6 +470,16 @@ def _reconcile_generation_result(state: State, result: GenerationModalResult) ->
     save_error = ProjectUtil.persist_range_without_generated_items(state.project)
     if save_error:
         ask.ask_error(save_error)
+
+
+def _persist_auto_concat_after_worker(app: GenerationApp) -> None:
+    # The worker loaded its own project before the toggle and may have saved
+    # its stale setting when updating the generation range. Re-save the main
+    # project's reconciled state after the worker has stopped.
+    if app._auto_concat_changed:
+        error = app.state.project.save()
+        if error:
+            ask.ask_error(f"Couldn't save concatenate setting: {error}")
 
 
 def _run_generation_console(
@@ -654,6 +688,7 @@ def run_generation_app(
             )
             sleep_lock.release()
             _reconcile_generation_result(state, result)
+            _persist_auto_concat_after_worker(app)
             _present_console_result(state, result, transcript, is_regen)
             return result
         if result is None:
@@ -663,6 +698,7 @@ def run_generation_app(
                 "Generation interface closed without a result",
             )
         _reconcile_generation_result(state, result)
+        _persist_auto_concat_after_worker(app)
         if result.status == GenerationTerminalStatus.FAILED and app.terminal_result is None:
             sleep_lock.release()
             _present_console_result(state, result, transcript, is_regen)

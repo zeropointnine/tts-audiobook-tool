@@ -165,7 +165,7 @@ class GlmModel(GlmBaseModel):
         voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
         if not voice_path:
             return "Voice clone path is required"
-        seed = -1 if force_random_seed else project.glm_seed
+        seed = -1 if force_random_seed else project.get_model_setting('glm', 'seed')
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
 

@@ -174,11 +174,11 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         else:
             voice_path = ""
 
-        cfg_scale = VibeVoiceBaseModel.CFG_DEFAULT if project.vibevoice_cfg == -1 else project.vibevoice_cfg
+        cfg_scale = VibeVoiceBaseModel.CFG_DEFAULT if project.get_model_setting('vibevoice', 'cfg') == -1 else project.get_model_setting('vibevoice', 'cfg')
 
-        num_steps = VibeVoiceBaseModel.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
+        num_steps = VibeVoiceBaseModel.DEFAULT_NUM_STEPS if project.get_model_setting('vibevoice', 'steps') == -1 else project.get_model_setting('vibevoice', 'steps')
 
-        seed = -1 if force_random_seed else project.vibevoice_seed
+        seed = -1 if force_random_seed else project.get_model_setting('vibevoice', 'seed')
         if seed <= -1:
             seed = random.randrange(0, SEED_MAX)
 

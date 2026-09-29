@@ -36,7 +36,7 @@ class IndexTts2BaseModel(TtsBaseModel):
         if errors:
             return errors
 
-        err = cls.get_missing_voice_file_issue(project, "indextts2_emo_voice_file_name")
+        err = cls.get_missing_voice_file_issue(project)
         if err:
             errors.append(err)
 
@@ -47,7 +47,7 @@ class IndexTts2BaseModel(TtsBaseModel):
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
         s = cls.INFO.ui.get("proper_name") or ""
-        s += f" {COL_DIM}(fp16: {project.indextts2_use_fp16})"
+        s += f" {COL_DIM}(fp16: {project.get_model_setting('indextts2', 'use_fp16')})"
         return s
 
     @classmethod
@@ -61,7 +61,7 @@ class IndexTts2BaseModel(TtsBaseModel):
         value = display_info.value
 
         if ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.INDEXTTS2):
-            if project.indextts2_emo_vector or project.indextts2_emo_voice_file_name:
+            if project.get_model_setting('indextts2', 'emo_vector') or project.get_model_setting('indextts2', 'emo_voice'):
                 value += " + emotion"
 
         return display_info._replace(value=value)

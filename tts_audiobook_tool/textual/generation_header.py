@@ -42,11 +42,11 @@ def _cancel_pending_prompt() -> str:
 
 
 class GenerationHeader(Vertical):
-    """Top header for the generation screen: a three-row layout of five sub-widgets.
+    """Top header for the generation screen: a three-row layout of six sub-widgets.
 
     - row 1: title (left), memory usage (right)
     - row 2: phase status (left), processed/elapsed stats (right)
-    - row 3: full-width hotkey prompt
+    - row 3: hotkey prompt (left), auto-concatenation setting (right)
 
     Each ``update_*`` method renders exactly one sub-widget so the app can
     refresh them independently. ``update_memory_text`` builds its string from
@@ -76,8 +76,7 @@ class GenerationHeader(Vertical):
         width: auto;
     }
     .generation-header-hotkey {
-        height: 1;
-        width: 100%;
+        width: 1fr;
     }
     """
 
@@ -121,11 +120,17 @@ class GenerationHeader(Vertical):
                 classes="generation-header-right",
                 id="generation-stats",
             )
-        yield Static(
-            Text.from_ansi(_PROMPT_BY_MODE["default"]),
-            classes="generation-header-hotkey",
-            id="generation-hotkey",
-        )
+        with Horizontal(classes="generation-header-row"):
+            yield Static(
+                Text.from_ansi(_PROMPT_BY_MODE["default"]),
+                classes="generation-header-hotkey",
+                id="generation-hotkey",
+            )
+            yield Static(
+                "",
+                classes="generation-header-right",
+                id="generation-auto-concat",
+            )
 
     def update_memory_text(self) -> None:
         """Render memory info text on the right side of row 1.
@@ -165,8 +170,16 @@ class GenerationHeader(Vertical):
         self.query_one("#generation-stats", Static).update(stats)
 
     def update_hotkey(self, mode: PromptMode) -> None:
-        """Render the full-width hotkey prompt line for the given mode (ANSI colors allowed)."""
+        """Render the left-hand prompt on the third row (ANSI colors allowed)."""
         text = _cancel_pending_prompt() if mode == "cancel_pending" else _PROMPT_BY_MODE[mode]
         self.query_one(
             "#generation-hotkey", Static
         ).update(Text.from_ansi(text))
+
+    def update_auto_concat(self, enabled: bool) -> None:
+        """Render the current auto-concatenation setting on the right of row 3."""
+        self.query_one("#generation-auto-concat", Static).update(
+            Text.from_ansi(
+                f"[{COL_ACCENT}C{COL_DEFAULT}] Concatenate when finished: {enabled}"
+            )
+        )

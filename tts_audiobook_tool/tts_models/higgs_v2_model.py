@@ -157,22 +157,22 @@ class HiggsV2Model(HiggsV2BaseModel):
             voice_path = ""
             voice_transcript = ""
 
-        if project.higgs_temperature == -1:
+        if project.get_model_setting('higgs_v2', 'temperature') == -1:
             temperature = HiggsV2BaseModel.DEFAULT_TEMPERATURE
         else:
-            temperature = project.higgs_temperature
+            temperature = project.get_model_setting('higgs_v2', 'temperature')
 
-        if project.higgs_top_k == -1:
+        if project.get_model_setting('higgs_v2', 'top_k') == -1:
             top_k = HiggsV2BaseModel.DEFAULT_TOP_K
         else:
-            top_k = project.higgs_top_k
+            top_k = project.get_model_setting('higgs_v2', 'top_k')
 
-        if project.higgs_top_p == -1:
+        if project.get_model_setting('higgs_v2', 'top_p') == -1:
             top_p = HiggsV2BaseModel.DEFAULT_TOP_P
         else:
-            top_p = project.higgs_top_p
+            top_p = project.get_model_setting('higgs_v2', 'top_p')
 
-        seed = -1 if force_random_seed else project.higgs_seed
+        seed = -1 if force_random_seed else project.get_model_setting('higgs_v2', 'seed')
         if seed == -1:
             seed = random.randint(1, sys.maxsize)
 

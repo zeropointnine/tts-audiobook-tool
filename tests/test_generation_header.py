@@ -184,6 +184,25 @@ def test_update_hotkey_auto_continue_announces_concatenation() -> None:
     run(exercise())
 
 
+def test_auto_concat_appears_on_right_of_third_row() -> None:
+    async def exercise() -> None:
+        async with HeaderTestApp().run_test(size=(100, 20)) as pilot:
+            await pilot.pause()
+            header = pilot.app.query_one(GenerationHeader)
+            header.update_auto_concat(True)
+            hotkey = header.query_one("#generation-hotkey", Static)
+            setting = header.query_one("#generation-auto-concat", Static)
+            assert str(setting.render()) == "[C] Concatenate when finished: True"
+            assert setting.region.y == hotkey.region.y
+            assert setting.region.x > hotkey.region.x
+            assert setting.region.right == header.content_region.right
+
+            header.update_auto_concat(False)
+            assert str(setting.render()) == "[C] Concatenate when finished: False"
+
+    run(exercise())
+
+
 def test_update_hotkey_renders_mode_as_ansi() -> None:
     async def exercise() -> None:
         async with HeaderTestApp().run_test() as pilot:

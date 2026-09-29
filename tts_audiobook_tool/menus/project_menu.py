@@ -123,7 +123,7 @@ def on_language(state: State, __: MenuItem) -> None:
     required_model_languages = []
 
     # Chatterbox Multilingual special case
-    if Tts.get_type() == TtsModelType.CHATTERBOX and state.project.chatterbox_type.is_multilingual:
+    if Tts.get_type() == TtsModelType.CHATTERBOX and state.project.get_model_setting('chatterbox', 'type').is_multilingual:
         inspection, error = ModelWorker.inspect_tts_blocking(state)
         if error or inspection is None:
             ask.ask_error(error or "Couldn't inspect Chatterbox model")

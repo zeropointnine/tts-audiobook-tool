@@ -4,6 +4,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.constants import SEED_MAX as APP_SEED_MAX
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import COL_DIM, ellipsize_path_for_menu
@@ -105,21 +106,21 @@ class DotsBaseModel(TtsBaseModel):
         return cls.resolve_target(target) == cls.MF_REPO_ID
 
     @classmethod
-    def get_num_steps_config(cls, target: str) -> tuple[str, str, int, int, int]:
+    def get_num_steps_config(cls, target: str) -> tuple[SettingRef, str, int, int, int]:
         """
         Returns the num-steps setting that applies to the given target, as
-        (project attr, variant label, default, min, max)
+        (setting ref, variant label, default, min, max)
         """
         if cls.is_meanflow_target(target):
             return (
-                "dots_num_steps_mf",
+                SettingRef("dots", "num_steps_mf"),
                 "mf",
                 cls.NUM_STEPS_MF_DEFAULT,
                 cls.NUM_STEPS_MF_MIN,
                 cls.NUM_STEPS_MF_MAX,
             )
         return (
-            "dots_num_steps_soar",
+            SettingRef("dots", "num_steps_soar"),
             "soar",
             cls.NUM_STEPS_SOAR_DEFAULT,
             cls.NUM_STEPS_SOAR_MIN,
@@ -128,8 +129,8 @@ class DotsBaseModel(TtsBaseModel):
 
     @classmethod
     def resolve_num_steps(cls, project: Project) -> int:
-        attr, _, default, _, _ = cls.get_num_steps_config(project.dots_target)
-        value: int = getattr(project, attr)
+        ref, _, default, _, _ = cls.get_num_steps_config(project.get_model_setting('dots', 'target'))
+        value: int = project.get_model_setting(ref.model_id, ref.name)
         return default if value == -1 else value
 
     @classmethod
@@ -158,7 +159,7 @@ class DotsBaseModel(TtsBaseModel):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        target = cls.resolve_target(project.dots_target)
+        target = cls.resolve_target(project.get_model_setting('dots', 'target'))
         target = ellipsize_path_for_menu(target.removeprefix("dots-studio/"))
         return f"{cls.INFO.ui['proper_name']} {COL_DIM}({target})"
 

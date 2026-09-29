@@ -300,25 +300,25 @@ class FishS2Model(FishS2BaseModel):
         else:
             self.clear_voice_clone()
 
-        if project.fish_s2_temperature == -1:
+        if project.get_model_setting('fish_s2', 'temperature') == -1:
             temperature = FishS2BaseModel.TEMPERATURE_DEFAULT
         else:
-            temperature = project.fish_s2_temperature
+            temperature = project.get_model_setting('fish_s2', 'temperature')
 
-        if project.fish_s2_top_p == -1:
+        if project.get_model_setting('fish_s2', 'top_p') == -1:
             top_p = FishS2BaseModel.TOP_P_DEFAULT
         else:
-            top_p = project.fish_s2_top_p
+            top_p = project.get_model_setting('fish_s2', 'top_p')
 
-        if project.fish_s2_top_k == -1:
+        if project.get_model_setting('fish_s2', 'top_k') == -1:
             top_k = FishS2BaseModel.TOP_K_DEFAULT
         else:
-            top_k = project.fish_s2_top_k
+            top_k = project.get_model_setting('fish_s2', 'top_k')
 
-        seed = -1 if force_random_seed else project.fish_s2_seed
+        seed = -1 if force_random_seed else project.get_model_setting('fish_s2', 'seed')
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        rolling_continuation_max_segments = project.fish_s2_rolling_cont
+        rolling_continuation_max_segments = project.get_model_setting('fish_s2', 'rolling_cont')
 
         result = self.generate(
             prompt=prompt,

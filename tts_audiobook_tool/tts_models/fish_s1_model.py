@@ -198,22 +198,22 @@ class FishS1Model(FishS1BaseModel):
             self.clear_voice_clone()
 
 
-        if project.fish_s1_temperature == -1:
+        if project.get_model_setting('fish_s1', 'temperature') == -1:
             temperature = FishS1BaseModel.DEFAULT_TEMPERATURE
         else:
-            temperature = project.fish_s1_temperature
+            temperature = project.get_model_setting('fish_s1', 'temperature')
 
-        if project.fish_s1_top_p == -1:
+        if project.get_model_setting('fish_s1', 'top_p') == -1:
             top_p = FishS1BaseModel.DEFAULT_TOP_P
         else:
-            top_p = project.fish_s1_top_p
+            top_p = project.get_model_setting('fish_s1', 'top_p')
 
-        if project.fish_s1_repetition_penalty == -1:
+        if project.get_model_setting('fish_s1', 'repetition_penalty') == -1:
             repetition_penalty = FishS1BaseModel.DEFAULT_REPETITION_PENALTY
         else:
-            repetition_penalty = project.fish_s1_repetition_penalty
+            repetition_penalty = project.get_model_setting('fish_s1', 'repetition_penalty')
 
-        seed = -1 if force_random_seed else project.fish_s1_seed
+        seed = -1 if force_random_seed else project.get_model_setting('fish_s1', 'seed')
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
 

@@ -8,6 +8,7 @@ from tts_audiobook_tool.menus.menu_status import _make_stt_text
 from tts_audiobook_tool.menus.menu_status import MenuStatus
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from project_settings_test_support import set_setting
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool import text_util
@@ -45,10 +46,10 @@ def test_menu_status_print_block_supports_voice_display_info(capsys):
     try:
         Tts._type = TtsModelType.OMNIVOICE
         state = make_state()
-        state.project.omnivoice_voice_file_name = [
+        set_setting(state.project, "omnivoice_voice_file_name", [
             "zzz belle 24a 19s_omnivoice.flac",
             "zzz belle 24b 20s_omnivoice.flac",
-        ]
+        ])
 
         MenuStatus.print_block(state)
 
@@ -138,8 +139,8 @@ def test_dependent_voice_display_info_overrides_propagate_none(monkeypatch):
 
 def test_qwen_custom_voice_status_uses_project_speaker_without_instance():
     project = Project(dir_path="")
-    project.qwen3_model_type = "custom_voice"
-    project.qwen3_speaker_id = "Ryan"
+    set_setting(project, "qwen3_model_type", "custom_voice")
+    set_setting(project, "qwen3_speaker_id", "Ryan")
 
     display_info = Qwen3BaseModel.get_voice_display_info(project, None)
 
@@ -151,9 +152,9 @@ def test_qwen_custom_voice_status_uses_project_speaker_without_instance():
 
 def test_qwen_custom_voice_status_includes_instructions_with_valid_speaker():
     project = Project(dir_path="")
-    project.qwen3_model_type = "custom_voice"
-    project.qwen3_speaker_id = "Ryan"
-    project.qwen3_instructions = "Speak warmly"
+    set_setting(project, "qwen3_model_type", "custom_voice")
+    set_setting(project, "qwen3_speaker_id", "Ryan")
+    set_setting(project, "qwen3_instructions", "Speak warmly")
 
     display_info = Qwen3BaseModel.get_voice_display_info(project, None)
 
@@ -163,7 +164,7 @@ def test_qwen_custom_voice_status_includes_instructions_with_valid_speaker():
 
 def test_qwen_custom_voice_status_requires_speaker_without_instance():
     project = Project(dir_path="")
-    project.qwen3_model_type = "custom_voice"
+    set_setting(project, "qwen3_model_type", "custom_voice")
 
     display_info = Qwen3BaseModel.get_voice_display_info(project, None)
 

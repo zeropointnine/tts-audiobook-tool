@@ -1,3 +1,4 @@
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
@@ -28,7 +29,7 @@ class VoiceMiraMenu:
 
             item = VoiceMenuShared.make_temperature_item(
                 state=state,
-                attr="mira_temperature",
+                target=SettingRef("mira", "temperature"),
                 default_value=MiraBaseModel.TEMPERATURE_DEFAULT,
                 min_value=MiraBaseModel.TEMPERATURE_MIN,
                 max_value=MiraBaseModel.TEMPERATURE_MAX
@@ -38,26 +39,26 @@ class VoiceMiraMenu:
 
             item = VoiceMenuShared.make_top_p_item(
                 state=state,
-                attr="mira_top_p",
+                target=SettingRef("mira", "top_p"),
                 default_value=MiraBaseModel.TOP_P_DEFAULT
             )
             items.append(item)
 
             item = VoiceMenuShared.make_top_k_item(
                 state=state,
-                attr="mira_top_k",
+                target=SettingRef("mira", "top_k"),
                 default_value=MiraBaseModel.TOP_K_DEFAULT
             )
             items.append(item)
 
             item = VoiceMenuShared.make_repetition_penalty_item(
                 state=state,
-                attr="mira_repetition_penalty",
+                target=SettingRef("mira", "repetition_penalty"),
                 default_value=MiraBaseModel.REPETITION_PENALTY_DEFAULT
             )
             items.append(item)
 
-            items.append(VoiceMenuShared.make_seed_item(state, "mira_seed", add_batch_warning=True))
+            items.append(VoiceMenuShared.make_seed_item(state, SettingRef("mira", "seed"), add_batch_warning=True))
             return items
         
         VoiceMenuShared.menu_wrapper(state, make_items)

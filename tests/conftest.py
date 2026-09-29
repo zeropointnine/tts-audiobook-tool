@@ -12,6 +12,27 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 @pytest.fixture(autouse=True)
+def stop_project_directory_watchers(monkeypatch):
+    """Release each test's project observers instead of exhausting inotify."""
+    from tts_audiobook_tool.project_support.project_sound_segments import ProjectSoundSegments
+
+    original_init = ProjectSoundSegments.__init__
+    observers = []
+
+    def tracked_init(self, project):
+        original_init(self, project)
+        if self.observer.is_alive():
+            observers.append(self.observer)
+
+    monkeypatch.setattr(ProjectSoundSegments, "__init__", tracked_init)
+    yield
+    for observer in observers:
+        observer.stop()
+    for observer in observers:
+        observer.join(timeout=2)
+
+
+@pytest.fixture(autouse=True)
 def initialize_app_logger():
     """Ensure ``L.logger`` exists.
 
@@ -86,6 +107,14 @@ def initialize_tts_type_for_tests():
     original_mode = getattr(Tts, "_backend_mode", None)
     Tts._backend_mode = Tts._probe_backend_mode()
 
+    # Production calls init_local_model_type() at startup, which finalizes the
+    # catalog and marks it initialized. Tests that drive menus or the worker
+    # would otherwise have ModelWorker.start() re-probe the venv and overwrite
+    # the model type the test just chose.
+    had_catalog = hasattr(Tts, "_catalog_initialized")
+    original_catalog = getattr(Tts, "_catalog_initialized", False)
+    Tts._catalog_initialized = True
+
     try:
         yield
     finally:
@@ -98,3 +127,8 @@ def initialize_tts_type_for_tests():
             setattr(Tts, "_backend_mode", original_mode)
         elif hasattr(Tts, "_backend_mode"):
             delattr(Tts, "_backend_mode")
+
+        if had_catalog:
+            setattr(Tts, "_catalog_initialized", original_catalog)
+        else:
+            setattr(Tts, "_catalog_initialized", original_catalog)

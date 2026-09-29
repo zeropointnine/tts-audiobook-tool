@@ -5,34 +5,29 @@ from importlib import metadata
 from importlib import util
 import os
 import threading
-from typing import Callable
+from typing import Callable, cast
 
 from tts_audiobook_tool.app_types import DeviceType, StreamChunkCallback, StreamEndCallback, VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Reason
 
-from tts_audiobook_tool.tts_models.auk_server_base_model import AuKServerBaseModel
-from tts_audiobook_tool.tts_models.auk_server_model import AuKBaseServerModel, AuKFlashServerModel
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.dots_base_model import DotsBaseModel
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
-from tts_audiobook_tool.tts_models.fish_s2_server_base_model import FishS2ServerBaseModel
-from tts_audiobook_tool.tts_models.higgs_v3_server_base_model import HiggsV3ServerBaseModel
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
-from tts_audiobook_tool.tts_models.moss_server_base_model import MossServerBaseModel
-from tts_audiobook_tool.tts_models.moss_server_model import MossDelayServerModel, MossLocalServerModel
 from tts_audiobook_tool.tts_models.none_base_model import NoneBaseModel
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
-from tts_audiobook_tool.tts_models.qwen3_server_base_model import Qwen3ServerBaseModel
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelSpec, TtsModelType
+from tts_audiobook_tool.tts_models.sgl_omni_configured import SglOmniBackendAdapter, ConfiguredModelSupport
+from tts_audiobook_tool.tts_models.sgl_omni_definition import SglOmniModelDefinition
+from tts_audiobook_tool.tts_models.model_support import ModelSupport
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
-from tts_audiobook_tool.tts_models.zonos2_server_base_model import Zonos2ServerBaseModel
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
@@ -42,6 +37,7 @@ from tts_audiobook_tool.model_runtime import (
     current_role,
     require_model_owner,
 )
+from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -60,27 +56,23 @@ class Tts:
 
     _type: TtsModelType
 
-    _auk_server: AuKServerBaseModel | None = None
-    _auk_flash_server: AuKServerBaseModel | None = None
     _chatterbox: ChatterboxBaseModel | None = None
     _dots: DotsBaseModel | None = None
     _fish_s1: FishS1BaseModel | None = None
     _fish_s2: FishS2BaseModel | None = None
-    _fish_s2_server: FishS2ServerBaseModel | None = None
     _glm: GlmBaseModel | None = None
     _higgs_v2: HiggsV2BaseModel | None = None
-    _higgs_v3: HiggsV3ServerBaseModel | None = None
+    _configured_runtime: SglOmniBackendAdapter | None = None
+    _configured_definitions: dict[str, SglOmniModelDefinition] = {}
+    _config_fingerprint: str = ""
+    _catalog_initialized: bool = False
     _indextts2: IndexTts2BaseModel | None = None
     _mira: MiraBaseModel | None = None
     _moss: MossBaseModel | None = None
-    _moss_delay_server: MossServerBaseModel | None = None
-    _moss_local_server: MossServerBaseModel | None = None
     _omnivoice: OmniVoiceBaseModel | None = None
     _pocket: PocketBaseModel | None = None
     _qwen3: Qwen3BaseModel | None = None
-    _qwen3tts_server: Qwen3ServerBaseModel | None = None
     _vibevoice: VibeVoiceBaseModel | None = None
-    _zonos2_server: Zonos2ServerBaseModel | None = None
 
     _sgl_omni_type: TtsModelType | None = None
 
@@ -113,8 +105,7 @@ class Tts:
     @staticmethod
     def get_voice_value_count(project) -> int:
         """Number of configured voice samples for the active TTS model type."""
-        info = Tts.get_info()
-        if not info.voice_target_attr:
+        if REGISTRY.voice_binding(Tts.get_type().id) is None:
             return 0
 
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -122,15 +113,14 @@ class Tts:
 
     @staticmethod
     def get_voice_tag_for_selection_index(project, voice_selection_index: int) -> str:
-        info = Tts.get_info()
-        if not info.voice_target_attr:
-            return Tts.get_class().get_voice_tag(project)
+        if REGISTRY.voice_binding(Tts.get_type().id) is None:
+            return Tts.get_model_support().get_voice_tag(project)
 
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
         voice_value = ProjectVoiceUtil.current_voice_value(project, Tts.get_type(), voice_selection_index)
         if not voice_value:
-            return Tts.get_class().get_voice_tag(project)
-        return Tts.get_class().get_voice_tag_for_value(voice_value)
+            return Tts.get_model_support().get_voice_tag(project)
+        return Tts.get_model_support().get_voice_tag_for_value(voice_value)
 
     @staticmethod
     def get_best_supported_device_type(model_type: TtsModelType) -> DeviceType:
@@ -167,6 +157,29 @@ class Tts:
         SGL-Omni mode, 0 or 1 in local mode).
         """
         Tts._backend_mode = Tts._probe_backend_mode()
+        # Startup/reinitialization must not retain an adapter or a stale
+        # definition if the next configuration fails validation.
+        Tts._configured_runtime = None
+        Tts._configured_definitions = {}
+        Tts._config_fingerprint = ""
+        TtsModelType.reset_catalog()
+        # Configured storage declarations are rebuilt from scratch on every
+        # (re)initialization, so local runs never keep them.
+        REGISTRY.reset_to_builtins()
+        # The configured JSON definitions are the sole SGL-Omni server
+        # implementation; local mode never opens the JSON file.
+        if Tts._backend_mode == TtsBackendKind.SGL_OMNI:
+            from tts_audiobook_tool.tts_models.sgl_omni_definition import load_definitions
+            definitions = load_definitions()
+            for definition in definitions.models.values():
+                if definition.spec.id in TtsModelType._builtin_specs:
+                    TtsModelType.overlay_spec(definition.spec)
+                else:
+                    TtsModelType.register_spec(definition.spec)
+                REGISTRY.register_configured_model(definition)
+            Tts._configured_definitions = definitions.models
+            Tts._config_fingerprint = definitions.fingerprint
+        Tts._catalog_initialized = True
 
         if Tts._backend_mode == TtsBackendKind.SGL_OMNI:
             Tts._type = TtsModelType.NONE
@@ -174,7 +187,7 @@ class Tts:
 
         def get_matches() -> list[TtsModelType]:
             model_infos = []
-            for model_info in TtsModelType:
+            for model_info in TtsModelType.all():
                 exists = False
                 try:
                     module_test = model_info.value.local_module_test
@@ -302,19 +315,19 @@ class Tts:
         assert isinstance(project, Project)
 
         return {
-            "chatterbox_type": project.chatterbox_type,
-            "dots_target": project.dots_target,
-            "dots_compile": project.dots_compile,
-            "vibevoice_target": project.vibevoice_target,
-            "vibevoice_lora_path": project.vibevoice_lora_target,
-            "indextts2_use_fp16": project.indextts2_use_fp16,
-            "glm_sr": project.glm_sr,
-            "moss_target": project.moss_target,
-            "qwen3_target": project.qwen3_target,
-            "fish_s1_compile_enabled": project.fish_s1_compile_enabled,
-            "fish_s2_compile_enabled": project.fish_s2_compile_enabled,
-            "pocket_model_code": project.pocket_model_code,
-            "omnivoice_target": project.omnivoice_target,
+            "chatterbox_type": project.get_model_setting('chatterbox', 'type'),
+            "dots_target": project.get_model_setting('dots', 'target'),
+            "dots_compile": project.get_model_setting('dots', 'compile'),
+            "vibevoice_target": project.get_model_setting('vibevoice', 'target'),
+            "vibevoice_lora_path": project.get_model_setting('vibevoice', 'lora_target'),
+            "indextts2_use_fp16": project.get_model_setting('indextts2', 'use_fp16'),
+            "glm_sr": project.get_model_setting('glm', 'sr'),
+            "moss_target": project.get_model_setting('moss', 'target'),
+            "qwen3_target": project.get_model_setting('qwen3tts', 'target'),
+            "fish_s1_compile_enabled": project.get_model_setting('fish_s1', 'compile_enabled'),
+            "fish_s2_compile_enabled": project.get_model_setting('fish_s2', 'compile_enabled'),
+            "pocket_model_code": project.get_model_setting('pocket', 'model_code'),
+            "omnivoice_target": project.get_model_setting('omnivoice', 'target'),
         }
 
     @staticmethod
@@ -374,34 +387,43 @@ class Tts:
         return entry[0]
 
     @staticmethod
+    def get_configured_definition(tts_type: TtsModelType | None = None) -> SglOmniModelDefinition | None:
+        return Tts._configured_definitions.get((tts_type or Tts.get_type()).value.id)
+
+    @staticmethod
+    def get_model_support() -> ModelSupport:
+        return Tts.get_model_support_for_type(Tts.get_type())
+
+    @staticmethod
+    def get_model_support_for_type(tts_type: TtsModelType) -> ModelSupport:
+        definition = Tts.get_configured_definition(tts_type)
+        if definition is not None:
+            return ConfiguredModelSupport(definition)
+        # Legacy class methods expose the same support surface without a runtime.
+        return cast(ModelSupport, Tts.get_class_for_type(tts_type))
+
+    @staticmethod
     def get_info() -> TtsModelSpec:
-        return Tts.get_class().INFO
+        return Tts.get_type().value
 
     @staticmethod
     def instance_exists() -> bool:
         require_model_owner("TTS")
         items = [
-            Tts._auk_server,
-            Tts._auk_flash_server,
             Tts._chatterbox,
             Tts._dots,
             Tts._fish_s1,
             Tts._fish_s2,
-            Tts._fish_s2_server,
             Tts._glm,
             Tts._higgs_v2,
-            Tts._higgs_v3,
+            Tts._configured_runtime,
             Tts._indextts2,
             Tts._mira,
             Tts._moss,
-            Tts._moss_delay_server,
-            Tts._moss_local_server,
             Tts._omnivoice,
             Tts._pocket,
             Tts._qwen3,
-            Tts._qwen3tts_server,
             Tts._vibevoice,
-            Tts._zonos2_server,
         ]
         for item in items:
             if item is not None:
@@ -409,8 +431,14 @@ class Tts:
         return False
 
     @staticmethod
-    def get_instance() -> TtsBaseModel:
+    def get_instance() -> TtsBaseModel | SglOmniBackendAdapter:
         require_model_owner("TTS")
+        definition = Tts.get_configured_definition()
+        if definition is not None:
+            if Tts._configured_runtime is None:
+                from tts_audiobook_tool.tts_models.sgl_omni_configured import ConfiguredModelSupport
+                Tts._configured_runtime = SglOmniBackendAdapter(definition, ConfiguredModelSupport(definition))
+            return Tts._configured_runtime
         # Returns existing or newly instantiated instance
         entry = Tts._model_registry_entry(Tts._type)
         if entry is None or entry[1] is None:
@@ -511,29 +539,15 @@ class Tts:
         return Tts._MODEL_REGISTRY.get(tts_type)
 
     @staticmethod
-    def get_instance_if_exists() -> TtsBaseModel | None:
+    def get_instance_if_exists() -> TtsBaseModel | SglOmniBackendAdapter | None:
         require_model_owner("TTS")
+        if Tts.get_configured_definition() is not None:
+            return Tts._configured_runtime
         # Returns instance only if it already exists, else none
         entry = Tts._model_registry_entry(Tts._type)
         if entry is None or not entry[2]:
             return None
         return getattr(Tts, entry[2])
-
-    @staticmethod
-    def get_auk_server() -> AuKServerBaseModel:
-        require_model_owner("TTS")
-        if not Tts._auk_server:
-            Tts._auk_server = AuKBaseServerModel()
-            printt()
-        return Tts._auk_server
-
-    @staticmethod
-    def get_auk_flash_server() -> AuKServerBaseModel:
-        require_model_owner("TTS")
-        if not Tts._auk_flash_server:
-            Tts._auk_flash_server = AuKFlashServerModel()
-            printt()
-        return Tts._auk_flash_server
 
     @staticmethod
     def get_chatterbox() -> ChatterboxBaseModel:
@@ -612,15 +626,6 @@ class Tts:
         return Tts._fish_s2
 
     @staticmethod
-    def get_fish_s2_server() -> FishS2ServerBaseModel:
-        require_model_owner("TTS")
-        if not Tts._fish_s2_server:
-            from tts_audiobook_tool.tts_models.fish_s2_server_model import FishS2ServerModel
-            Tts._fish_s2_server = FishS2ServerModel()
-            printt()
-        return Tts._fish_s2_server
-
-    @staticmethod
     def get_glm() -> GlmBaseModel:
         require_model_owner("TTS")
         if not Tts._glm:
@@ -642,15 +647,6 @@ class Tts:
             printt()
 
         return Tts._higgs_v2
-
-    @staticmethod
-    def get_higgs_v3() -> HiggsV3ServerBaseModel:
-        require_model_owner("TTS")
-        if not Tts._higgs_v3:
-            from tts_audiobook_tool.tts_models.higgs_v3_server_model import HiggsV3ServerModel
-            Tts._higgs_v3 = HiggsV3ServerModel()
-            printt()
-        return Tts._higgs_v3
 
     @staticmethod
     def get_indextts2() -> IndexTts2BaseModel:
@@ -686,22 +682,6 @@ class Tts:
             Tts._moss = MossModel(device=device_type, model_target=target)
             printt()
         return Tts._moss
-
-    @staticmethod
-    def get_moss_delay_server() -> MossServerBaseModel:
-        require_model_owner("TTS")
-        if not Tts._moss_delay_server:
-            Tts._moss_delay_server = MossDelayServerModel()
-            printt()
-        return Tts._moss_delay_server
-
-    @staticmethod
-    def get_moss_local_server() -> MossServerBaseModel:
-        require_model_owner("TTS")
-        if not Tts._moss_local_server:
-            Tts._moss_local_server = MossLocalServerModel()
-            printt()
-        return Tts._moss_local_server
 
     @staticmethod
     def get_omnivoice() -> OmniVoiceBaseModel:
@@ -750,24 +730,6 @@ class Tts:
         return Tts._qwen3
 
     @staticmethod
-    def get_qwen3tts_server() -> Qwen3ServerBaseModel:
-        require_model_owner("TTS")
-        if not Tts._qwen3tts_server:
-            from tts_audiobook_tool.tts_models.qwen3_server_model import Qwen3ServerModel
-            Tts._qwen3tts_server = Qwen3ServerModel()
-            printt()
-        return Tts._qwen3tts_server
-
-    @staticmethod
-    def get_zonos2_server() -> Zonos2ServerBaseModel:
-        require_model_owner("TTS")
-        if not Tts._zonos2_server:
-            from tts_audiobook_tool.tts_models.zonos2_server_model import Zonos2ServerModel
-            Tts._zonos2_server = Zonos2ServerModel()
-            printt()
-        return Tts._zonos2_server
-
-    @staticmethod
     def get_vibevoice() -> VibeVoiceBaseModel:
         require_model_owner("TTS")
 
@@ -799,6 +761,7 @@ class Tts:
             # type's (there must be at most one live instance)
             for entry in Tts._MODEL_REGISTRY.values():
                 setattr(Tts, entry[2], None)
+            Tts._configured_runtime = None
         app_memory.gc_ram_vram()
 
     @staticmethod
@@ -890,25 +853,17 @@ class InstanceDisplayInfo:
 #    name of the Tts class attribute holding the live instance)
 # Built after the class body so the factory static methods are available.
 Tts._MODEL_REGISTRY = {
-    TtsModelType.AUK_SERVER: (AuKBaseServerModel, Tts.get_auk_server, "_auk_server"),
-    TtsModelType.AUK_FLASH_SERVER: (AuKFlashServerModel, Tts.get_auk_flash_server, "_auk_flash_server"),
     TtsModelType.CHATTERBOX: (ChatterboxBaseModel, Tts.get_chatterbox, "_chatterbox"),
     TtsModelType.DOTS: (DotsBaseModel, Tts.get_dots, "_dots"),
     TtsModelType.FISH_S1: (FishS1BaseModel, Tts.get_fish_s1, "_fish_s1"),
     TtsModelType.FISH_S2: (FishS2BaseModel, Tts.get_fish_s2, "_fish_s2"),
-    TtsModelType.FISH_S2_SERVER: (FishS2ServerBaseModel, Tts.get_fish_s2_server, "_fish_s2_server"),
     TtsModelType.GLM: (GlmBaseModel, Tts.get_glm, "_glm"),
     TtsModelType.HIGGS_V2: (HiggsV2BaseModel, Tts.get_higgs, "_higgs_v2"),
-    TtsModelType.HIGGS_V3_SERVER: (HiggsV3ServerBaseModel, Tts.get_higgs_v3, "_higgs_v3"),
     TtsModelType.INDEXTTS2: (IndexTts2BaseModel, Tts.get_indextts2, "_indextts2"),
     TtsModelType.MIRA: (MiraBaseModel, Tts.get_mira, "_mira"),
     TtsModelType.MOSS: (MossBaseModel, Tts.get_moss, "_moss"),
-    TtsModelType.MOSS_DELAY_SERVER: (MossDelayServerModel, Tts.get_moss_delay_server, "_moss_delay_server"),
-    TtsModelType.MOSS_LOCAL_SERVER: (MossLocalServerModel, Tts.get_moss_local_server, "_moss_local_server"),
     TtsModelType.OMNIVOICE: (OmniVoiceBaseModel, Tts.get_omnivoice, "_omnivoice"),
     TtsModelType.POCKET: (PocketBaseModel, Tts.get_pocket, "_pocket"),
     TtsModelType.QWEN3TTS: (Qwen3BaseModel, Tts.get_qwen3, "_qwen3"),
-    TtsModelType.QWEN3TTS_SERVER: (Qwen3ServerBaseModel, Tts.get_qwen3tts_server, "_qwen3tts_server"),
     TtsModelType.VIBEVOICE: (VibeVoiceBaseModel, Tts.get_vibevoice, "_vibevoice"),
-    TtsModelType.ZONOS2_SERVER: (Zonos2ServerBaseModel, Tts.get_zonos2_server, "_zonos2_server"),
 }

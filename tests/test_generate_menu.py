@@ -45,7 +45,7 @@ def capture_generate_menu(monkeypatch) -> tuple[State, list[MenuItem]]:
     monkeypatch.setattr(
         Tts,
         "get_type",
-        lambda: SimpleNamespace(value=SimpleNamespace(can_batch=False)),
+        lambda: SimpleNamespace(can_batch=lambda: False),
     )
 
     GenerateMenu.menu(state)
@@ -336,7 +336,7 @@ def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
     monkeypatch.setattr(
         generate_menu_module.Tts,
         "get_type",
-        lambda: SimpleNamespace(value=SimpleNamespace(can_batch=False)),
+        lambda: SimpleNamespace(can_batch=lambda: False),
     )
     monkeypatch.setattr(
         generate_menu_module.ProjectVoiceUtil,
@@ -474,7 +474,7 @@ def make_empty_queue_env(
     monkeypatch.setattr(
         generate_menu_module.Tts,
         "get_type",
-        lambda: SimpleNamespace(value=SimpleNamespace(can_batch=False)),
+        lambda: SimpleNamespace(can_batch=lambda: False),
     )
     monkeypatch.setattr(
         generate_menu_module.ProjectVoiceUtil,

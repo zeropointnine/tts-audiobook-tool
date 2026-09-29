@@ -1,3 +1,4 @@
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
@@ -18,7 +19,7 @@ class VoiceHiggsV2Menu:
              
             item = VoiceMenuShared.make_temperature_item(
                 state=state,
-                attr="higgs_temperature",
+                target=SettingRef("higgs_v2", "temperature"),
                 default_value=HiggsV2BaseModel.DEFAULT_TEMPERATURE,
                 min_value=0.01,
                 max_value=2.0
@@ -29,7 +30,7 @@ class VoiceHiggsV2Menu:
             items.append(
                 VoiceMenuShared.make_top_p_item(
                     state=state,
-                    attr="higgs_top_p",
+                    target=SettingRef("higgs_v2", "top_p"),
                     default_value=HiggsV2BaseModel.DEFAULT_TOP_P
                 )
             )
@@ -37,12 +38,12 @@ class VoiceHiggsV2Menu:
             items.append(
                 VoiceMenuShared.make_top_k_item(
                     state=state,
-                    attr="higgs_top_k",
+                    target=SettingRef("higgs_v2", "top_k"),
                     default_value=HiggsV2BaseModel.DEFAULT_TOP_K
                 )
             )
 
-            items.append(VoiceMenuShared.make_seed_item(state, "higgs_seed"))
+            items.append(VoiceMenuShared.make_seed_item(state, SettingRef("higgs_v2", "seed")))
             return items
         
         VoiceMenuShared.menu_wrapper(state, make_items)

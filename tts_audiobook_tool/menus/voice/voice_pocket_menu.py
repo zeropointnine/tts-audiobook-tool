@@ -1,3 +1,4 @@
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.model_worker import ModelWorker
@@ -15,7 +16,7 @@ class VoicePocketMenu:
     def menu(state: State) -> None:
 
         def make_language_label(_) -> str:
-            lang = state.project.pocket_model_code
+            lang = state.project.get_model_setting('pocket', 'model_code')
             if lang:
                 label = make_currently_string(lang)
             else:
@@ -24,7 +25,7 @@ class VoicePocketMenu:
 
         def make_voice_file_label(_: State) -> str:
             label = "Select voice clone sample"
-            if not state.project.pocket_voice_file_name and not state.project.pocket_predefined_voice:
+            if not state.project.get_model_setting('pocket', 'file_name') and not state.project.get_model_setting('pocket', 'predefined_voice'):
                 label += f" {COL_DIM}({COL_ERROR}voice clone or predefined voice required{COL_DIM})"
             else:
                 value = ProjectVoiceUtil.get_primary_voice_value(state.project, TtsModelType.POCKET)
@@ -34,7 +35,7 @@ class VoicePocketMenu:
             return label
 
         def make_predefined_voice_label(_: State) -> str:
-            name = state.project.pocket_predefined_voice
+            name = state.project.get_model_setting('pocket', 'predefined_voice')
             currently = make_currently_string(name) if name else ""
             return f"Select predefined voice {currently}".strip()
 
@@ -58,7 +59,7 @@ class VoicePocketMenu:
                 )
             )
 
-            if state.project.pocket_predefined_voice:
+            if state.project.get_model_setting('pocket', 'predefined_voice'):
                 items.append(
                     MenuItem(
                         "Clear predefined voice",
@@ -76,7 +77,7 @@ class VoicePocketMenu:
 
             item = VoiceMenuShared.make_temperature_item(
                 state=state,
-                attr="pocket_temperature",
+                target=SettingRef("pocket", "temperature"),
                 default_value=PocketBaseModel.DEFAULT_TEMPERATURE,
                 min_value=PocketBaseModel.TEMPERATURE_MIN,
                 max_value=PocketBaseModel.TEMPERATURE_MAX
@@ -84,7 +85,7 @@ class VoicePocketMenu:
             items.append(item)
 
             items.append(
-                VoiceMenuShared.make_seed_item(state, "pocket_seed")
+                VoiceMenuShared.make_seed_item(state, SettingRef("pocket", "seed"))
             )
 
             return items
@@ -97,14 +98,14 @@ def select_predefined_voice(state: State) -> None:
     voices = PocketBaseModel.PREDEFINED_VOICES
 
     current = (
-        state.project.pocket_predefined_voice
-        if not state.project.pocket_voice_file_name
+        state.project.get_model_setting('pocket', 'predefined_voice')
+        if not state.project.get_model_setting('pocket', 'file_name')
         else None
     ) or None
 
     def on_select(voice: str) -> None:
-        state.project.pocket_predefined_voice = voice
-        state.project.pocket_voice_file_name = []
+        state.project.set_model_setting('pocket', 'predefined_voice', voice)
+        state.project.set_model_setting('pocket', 'file_name', [])
         state.project.save()
 
     MenuUtil.options_menu(
@@ -118,7 +119,7 @@ def select_predefined_voice(state: State) -> None:
     )
 
 def clear_predefined_voice(state: State) -> None:
-    state.project.pocket_predefined_voice = ""
+    state.project.set_model_setting('pocket', 'predefined_voice', "")
     state.project.save()
     print_feedback("Cleared")
 
@@ -129,19 +130,19 @@ def ask_language(state: State) -> None:
 
     def on_select(lang: str) -> None:
 
-        previous = state.project.pocket_model_code
+        previous = state.project.get_model_setting('pocket', 'model_code')
         if lang == previous:
             return
 
         # Validation step arguably non-essential since we're using a controlled, hard-list, but yea
         printt(f"{COL_DIM_ITALICS}Validating... ")
         printt()
-        state.project.pocket_model_code = lang
+        state.project.set_model_setting('pocket', 'model_code', lang)
         state.project.save()
         _ = ModelWorker.clear_models_if_running_blocking()
         inspection, error = ModelWorker.inspect_tts_blocking(state)
         if error or inspection is None:
-            state.project.pocket_model_code = previous
+            state.project.set_model_setting('pocket', 'model_code', previous)
             state.project.save()
             _ = ModelWorker.clear_models_if_running_blocking()
             ask.ask_error(f"\n{error}")
@@ -154,7 +155,7 @@ def ask_language(state: State) -> None:
         labels=languages,
         values=languages,
         subheading="Ensure your voice clone audio language matches the model you select below\n",
-        current_value=state.project.pocket_model_code or default,
+        current_value=state.project.get_model_setting('pocket', 'model_code') or default,
         default_value=default,
         on_select=on_select,
     )
@@ -167,7 +168,7 @@ def on_voice_file(state: State, _) -> None:
 
 def validate_voice_file(state: State) -> None:
 
-    if state.project.pocket_voice_file_name:
+    if state.project.get_model_setting('pocket', 'file_name'):
 
         printt(f"{COL_DIM_ITALICS}Validating Pocket voice cloning access...")
         printt()

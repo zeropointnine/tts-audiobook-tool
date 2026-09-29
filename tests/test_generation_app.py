@@ -1,9 +1,10 @@
 import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
-from textual.widgets import Static
+from textual.widgets import Input, Static
 
 from tts_audiobook_tool import util
 from tts_audiobook_tool.constants import COL_ERROR
@@ -52,6 +53,149 @@ def run(coroutine) -> None:
 def make_state() -> State:
     project = SimpleNamespace(generate_range_string="all", gen_auto_concat=False)
     return cast(State, SimpleNamespace(project=project))
+
+
+def make_saving_state(tmp_path) -> State:
+    project_file = tmp_path / "project.json"
+    project = SimpleNamespace(
+        dir_path=str(tmp_path),
+        generate_range_string="all",
+        gen_auto_concat=False,
+    )
+
+    def save() -> str:
+        project_file.write_text(
+            json.dumps({
+                "generate_range_string": project.generate_range_string,
+                "gen_auto_concat": project.gen_auto_concat,
+            }),
+            encoding="utf-8",
+        )
+        return ""
+
+    project.save = save
+    project.save()
+    return cast(State, SimpleNamespace(
+        project=project,
+        prefs=SimpleNamespace(save_gen_log=False),
+    ))
+
+
+def test_generation_toggle_saves_and_refreshes_header(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(ModelWorker, "submit_generation", staticmethod(lambda **_: "job"))
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda **_: []))
+    state = make_saving_state(tmp_path)
+    app = GenerationApp(state, {0}, 1, False, GenerationTranscript("", enabled=False))
+    completed = GenerationModalResult(GenerationTerminalStatus.COMPLETED, "", "")
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            setting = app.query_one("#generation-auto-concat", Static)
+            assert str(setting.render()) == "[C] Concatenate when finished: False"
+            assert not app.should_auto_exit(completed)
+
+            await pilot.press("c")
+            assert state.project.gen_auto_concat is True
+            assert str(setting.render()) == "[C] Concatenate when finished: True"
+            assert json.loads((tmp_path / "project.json").read_text())["gen_auto_concat"] is True
+            assert app.should_auto_exit(completed)
+
+            await pilot.press("c")
+            assert state.project.gen_auto_concat is False
+            assert str(setting.render()) == "[C] Concatenate when finished: False"
+            assert json.loads((tmp_path / "project.json").read_text())["gen_auto_concat"] is False
+            assert not app.should_auto_exit(completed)
+
+    run(exercise())
+
+
+def test_generation_toggle_does_not_fire_in_find_or_on_save_failure(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(ModelWorker, "submit_generation", staticmethod(lambda **_: "job"))
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda **_: []))
+    state = make_saving_state(tmp_path)
+    app = GenerationApp(state, {0}, 1, False, GenerationTranscript("", enabled=False))
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            await pilot.press("ctrl+f")
+            await pilot.press("c")
+            assert app.query_one("#find-input", Input).value == "c"
+            assert state.project.gen_auto_concat is False
+            await pilot.press("escape")
+
+            state.project.save = lambda: "disk full"
+            await pilot.press("c")
+            assert state.project.gen_auto_concat is False
+            assert not app._auto_concat_changed
+            assert str(app.query_one("#generation-auto-concat", Static).render()) == (
+                "[C] Concatenate when finished: False"
+            )
+            assert json.loads((tmp_path / "project.json").read_text())["gen_auto_concat"] is False
+            assert any("disk full" in notice.message for notice in app._notifications)
+
+    run(exercise())
+
+
+def test_quick_generation_toggle_changes_setting_without_changing_return(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(ModelWorker, "submit_generation", staticmethod(lambda **_: "job"))
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda **_: []))
+    state = make_saving_state(tmp_path)
+    app = GenerationApp(state, {0}, 1, True, GenerationTranscript("", enabled=False))
+    completed = GenerationModalResult(GenerationTerminalStatus.COMPLETED, "", "")
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            assert app.should_auto_exit(completed)
+            await pilot.press("c")
+            assert state.project.gen_auto_concat is True
+            assert app.should_auto_exit(completed)
+            assert str(app.query_one("#generation-auto-concat", Static).render()) == (
+                "[C] Concatenate when finished: True"
+            )
+
+    run(exercise())
+
+
+def test_worker_end_resaves_toggled_setting_after_range_reconciliation(
+    monkeypatch, tmp_path
+) -> None:
+    state = make_saving_state(tmp_path)
+    project_file = tmp_path / "project.json"
+    result = GenerationModalResult(GenerationTerminalStatus.COMPLETED, "none", "")
+
+    def run_worker(app, **_kwargs):
+        # This test replaces Textual's run method, so there is no mounted UI.
+        app._update_header = lambda: None
+        app.action_toggle_auto_concat()
+        assert json.loads(project_file.read_text())["gen_auto_concat"] is True
+        # The worker's separate, earlier-loaded project copy overwrites the
+        # setting while saving its updated generation range.
+        project_file.write_text(json.dumps({
+            "generate_range_string": "none", "gen_auto_concat": False,
+        }), encoding="utf-8")
+        app.terminal_result = result
+        return result
+
+    def reconcile(worker_state, worker_result):
+        assert worker_result is result
+        worker_state.project.generate_range_string = worker_result.remaining_range_string
+
+    monkeypatch.setattr(ModelWorker, "start", staticmethod(lambda: ""))
+    monkeypatch.setattr(generation_app_module, "can_textual", lambda: True)
+    monkeypatch.setattr(GenerationApp, "run", run_worker)
+    monkeypatch.setattr(generation_app_module, "_reconcile_generation_result", reconcile)
+
+    assert run_generation_app(state, {0}, 1, False) is result
+    assert json.loads(project_file.read_text()) == {
+        "generate_range_string": "none", "gen_auto_concat": True,
+    }
 
 
 def test_console_line_assembler_handles_partial_lines_and_carriage_replacement() -> None:
@@ -531,8 +675,11 @@ def test_generation_app_waits_for_enter_after_terminal_summary(monkeypatch, tmp_
 
     async def exercise() -> None:
         async with app.run_test(size=(100, 24)) as pilot:
-            await pilot.pause(0.3)
-            assert app.terminal_result is not None
+            # Polling and the final-output settle timer can take longer than
+            # a fixed pause when the full suite is busy.
+            async with asyncio.timeout(5):
+                while app.terminal_result is None:
+                    await pilot.pause(0.05)
             assert app.terminal_result.status == GenerationTerminalStatus.COMPLETED
             assert app.return_value is None
             # The bottom prompt row was removed; the terminal phase now

@@ -1,14 +1,16 @@
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.generate_util import GenerateUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from generate_files_test_support import StubValidationResult, generate_files_mock_stack
+from project_settings_test_support import set_setting
 
 
 def make_phrase_group(num_words: int, voice_index: int) -> PhraseGroup:
@@ -32,15 +34,13 @@ def run_generate_files(
     phrase_groups = [make_phrase_group(num_words, voice) for voice in voice_indices]
     sound_segments = MagicMock()
     sound_segments.get_word_error_counts_in_generate_range.return_value = {}
-    project = SimpleNamespace(
-        max_retries=max_retries,
-        phrase_groups=phrase_groups,
-        sound_segments=sound_segments,
-        generate_range_string="all",
-        save=MagicMock(return_value=""),
-        voice_select_mode=voice_select_mode,
-        mira_voice_file_name=["voice-a.flac", "voice-b.flac"],
-    )
+    project = Project()
+    project.max_retries = max_retries
+    project.phrase_groups = phrase_groups
+    project._sound_segments = sound_segments
+    project.generate_range_string = "all"
+    project.voice_select_mode = voice_select_mode
+    set_setting(project, "mira_voice_file_name", ["voice-a.flac", "voice-b.flac"])
     state = cast(
         State,
         SimpleNamespace(
@@ -65,7 +65,7 @@ def run_generate_files(
 
     with generate_files_mock_stack(
         generate_and_validate_batch, model_type=TtsModelType.MIRA
-    ):
+    ), patch.object(Project, "save", return_value=""):
         did_interrupt = GenerateUtil.generate_files(
             state, set(range(len(voice_indices))), batch_size=batch_size, is_regen=False,
         )

@@ -227,15 +227,15 @@ def make_project(model_type: TtsModelType, voices: list[tuple[str, str, str]]):
     project = Project.model_validate({"dir_path": VOICE_DIR})
 
     if spec.voice_target_attr:
-        setattr(project, spec.voice_target_attr, [path for _, path, _ in voices])
+        project.set_model_setting(model_type.id, "file_name", [path for _, path, _ in voices])
     if spec.voice_transcript_attr:
-        setattr(project, spec.voice_transcript_attr, [transcript for _, _, transcript in voices])
+        project.set_model_setting(model_type.id, "transcript", [transcript for _, _, transcript in voices])
 
-    # MOSS's generate_using_project reads project.moss_target to pick the
+    # MOSS's generate_using_project reads the stored target to pick the
     # LOCAL vs DELAY hyperparams; it must agree with what got loaded
     if model_type == TtsModelType.MOSS:
         from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
-        project.moss_target = MossConfigs.get_default_repo_id()
+        project.set_model_setting("moss", "target", MossConfigs.get_default_repo_id())
 
     return project
 

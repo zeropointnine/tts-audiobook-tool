@@ -105,7 +105,7 @@ class MainMenu:
 
                 if (
                     Tts.get_type() == TtsModelType.CHATTERBOX
-                    and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL_V2
+                    and state.project.get_model_setting('chatterbox', 'type') == ChatterboxType.MULTILINGUAL_V2
                 ):
                     hints.show_hint_if_necessary(
                         state.prefs, HINT_CHATTERBOX_MULTILINGUAL_V3
@@ -135,7 +135,7 @@ class MainMenu:
 
 def get_heading_tts_text(state: State) -> str:
 
-    s = Tts.get_class().get_menu_text(state.project, None)
+    s = Tts.get_model_support().get_menu_text(state.project, None)
     if not Tts.is_sgl_mode():
         return s
     SglOmniUtil.update_model_id()

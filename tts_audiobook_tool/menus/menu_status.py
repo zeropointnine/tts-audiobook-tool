@@ -31,7 +31,7 @@ class MenuStatus:
             local_tts_text = _make_local_tts_text(state, worker_models)
             lines.append(("TTS model", local_tts_text))
 
-        voice_display_info = Tts.get_class().get_voice_display_info(
+        voice_display_info = Tts.get_model_support().get_voice_display_info(
             state.project, None
         )
         if voice_display_info is not None:
@@ -73,7 +73,7 @@ def _make_local_tts_text(
 
     from tts_audiobook_tool.tts import Tts
 
-    text = Tts.get_class().get_menu_text(state.project, None)
+    text = Tts.get_model_support().get_menu_text(state.project, None)
     if Tts.get_type() == TtsModelType.NONE:
         text = f"{COL_ERROR}{text}"
 

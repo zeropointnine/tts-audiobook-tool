@@ -334,12 +334,12 @@ class MossModel(MossBaseModel):
         else:
             voice_path = ""
 
-        target = project.moss_target
+        target = project.get_model_setting('moss', 'target')
         config = MossConfigs.get_by_target(target)
 
         temperature, audio_top_p, audio_top_k = self.get_generation_params(project, config)
 
-        seed = -1 if force_random_seed else project.moss_seed
+        seed = -1 if force_random_seed else project.get_model_setting('moss', 'seed')
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
         language = MossBaseModel.get_language_name(project.language_code) if project.language_code else ""
@@ -347,7 +347,7 @@ class MossModel(MossBaseModel):
         return self.generate(
             prompts=prompts,
             voice_path=voice_path,
-            rolling_continuation_max_segments=project.moss_rolling_cont,
+            rolling_continuation_max_segments=project.get_model_setting('moss', 'rolling_cont'),
             language=language,
             temperature=temperature,
             audio_top_p=audio_top_p,

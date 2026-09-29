@@ -24,13 +24,17 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
         'higgs_v3_voice_file_name': ['higgs-v3.flac'],
         'higgs_v3_voice_target': ['https://example.com/voice.flac'],
     })
-    project.pocket_voice_file_name = cast(Any, [
-        '',
-        123,
-        str(tmp_path / 'absolute.flac'),
-        'C:\\Users\\lee\\mybook\\voice\\narrator.flac',
-        'primary-c.flac',
-    ])
+    # A project object that never passed through the load funnel can still
+    # hold malformed entries; the collector must skip them rather than crash.
+    project.model_settings.models['pocket'] = cast(Any, {
+        'voice_references': [
+            {'file_name': ''},
+            {'file_name': 123},
+            {'file_name': str(tmp_path / 'absolute.flac')},
+            {'file_name': 'C:\\Users\\lee\\mybook\\voice\\narrator.flac'},
+            {'file_name': 'primary-c.flac'},
+        ],
+    })
 
     result = ProjectTransferUtil.make_supporting_project_file_names(project)
 

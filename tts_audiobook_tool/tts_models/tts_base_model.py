@@ -46,6 +46,11 @@ class TtsBaseModel(ABC):
     # The default cache still avoids repeated preparation for the current voice.
     RETAINS_MULTIPLE_VOICE_CLONES = False
 
+    @staticmethod
+    def _has_voice_binding(model_id: str) -> bool:
+        from tts_audiobook_tool.project_support.model_settings import REGISTRY
+        return REGISTRY.voice_binding(model_id) is not None
+
     # Optional persistent callback for streamed audio chunks
     stream_chunk_callback: StreamChunkCallback | None = None
     # Optional persistent callback invoked when a streaming generation finishes
@@ -389,7 +394,7 @@ class TtsBaseModel(ABC):
         # Default implementation is for model whose 'salient info' consists of voice clone only
 
         # Get voice filename
-        if not cls.INFO.voice_target_attr:
+        if not cls._has_voice_binding(cls.INFO.id):
             raise Exception("Logic error - must override this method")
         voice_file_name = cls.get_primary_voice_value(project)
         if not voice_file_name:
@@ -416,7 +421,7 @@ class TtsBaseModel(ABC):
         # consist of voice clone filenames only
 
         tts_model_spec = cls.INFO
-        if not tts_model_spec.voice_target_attr:
+        if not cls._has_voice_binding(tts_model_spec.id):
             raise Exception("Logic error - must override this method")
 
         status_prefix = "Voice clone"
@@ -449,14 +454,12 @@ class TtsBaseModel(ABC):
     def get_missing_voice_file_issue(
             cls,
             project: Project,
-            voice_file_name_attr: str | None = None,
     ) -> ReadinessIssue | None:
         """
         Returns a blocking issue if the given configured voice filename is non-empty
         but does not exist under the project directory.
         """
-        voice_file_name_attr = voice_file_name_attr or cls.INFO.voice_target_attr
-        if not voice_file_name_attr:
+        if not cls._has_voice_binding(cls.INFO.id):
             raise Exception("Logic error - must override this method")
 
         voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.get_by_id(cls.INFO.id))
@@ -496,7 +499,7 @@ class TtsBaseModel(ABC):
     @classmethod
     def _get_standard_voice_blocker(cls, project: Project) -> ReadinessIssue | None:
 
-        if not cls.INFO.voice_target_attr:
+        if not cls._has_voice_binding(cls.INFO.id):
             raise Exception("Logic error - must override this method")
 
         if cls.INFO.requires_voice and not cls.get_primary_voice_value(project):
@@ -512,7 +515,7 @@ class TtsBaseModel(ABC):
 
         if self.INFO.requires_voice:
             return ""
-        if not self.INFO.voice_target_attr:
+        if not self._has_voice_binding(self.INFO.id):
             return ""
 
         if self.get_primary_voice_value(project):

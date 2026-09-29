@@ -1,3 +1,4 @@
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -21,18 +22,18 @@ class VoiceFishS2Menu:
 
             items.append(
                 MenuItem(
-                    make_menu_label("Torch compile", state.project.fish_s2_compile_enabled),
+                    make_menu_label("Torch compile", state.project.get_model_setting('fish_s2', 'compile_enabled')),
                     lambda _, __: VoiceFishS2Menu.compile_menu(state),
                     superlabel=VOICE_ADVANCED_SUPERLABEL
                 )
             )
 
             item = MenuItem(
-                VoiceMenuShared.make_rolling_continuation_label(state.project.fish_s2_rolling_cont),
+                VoiceMenuShared.make_rolling_continuation_label(state.project.get_model_setting('fish_s2', 'rolling_cont')),
                 lambda _, __: VoiceMenuShared.ask_rolling_continuation(
-                    state=state, 
-                    attribute_name="fish_s2_rolling_cont", 
-                    max_value=FishS2BaseModel.ROLLING_CONTINUATION_MAX_LENGTH, 
+                    state=state,
+                    target=SettingRef("fish_s2", "rolling_cont"),
+                    max_value=FishS2BaseModel.ROLLING_CONTINUATION_MAX_LENGTH,
                     qualifier_line="Qwen3-TTS model must be of type \"base\", and batch size must be 1."
                 )
             )
@@ -40,7 +41,7 @@ class VoiceFishS2Menu:
 
             temperature_item = VoiceMenuShared.make_temperature_item(
                 state=state,
-                attr="fish_s2_temperature",
+                target=SettingRef("fish_s2", "temperature"),
                 default_value=FishS2BaseModel.TEMPERATURE_DEFAULT,
                 min_value=FishS2BaseModel.TEMPERATURE_MIN,
                 max_value=FishS2BaseModel.TEMPERATURE_MAX
@@ -50,7 +51,7 @@ class VoiceFishS2Menu:
             items.append(
                 VoiceMenuShared.make_top_p_item(
                     state=state,
-                    attr="fish_s2_top_p",
+                    target=SettingRef("fish_s2", "top_p"),
                     default_value=FishS2BaseModel.TOP_P_DEFAULT
                 )
             )
@@ -58,13 +59,13 @@ class VoiceFishS2Menu:
             items.append(
                 VoiceMenuShared.make_top_k_item(
                     state=state,
-                    attr="fish_s2_top_k",
+                    target=SettingRef("fish_s2", "top_k"),
                     default_value=FishS2BaseModel.TOP_K_DEFAULT
                 )
             )
 
             items.append(
-                VoiceMenuShared.make_seed_item(state, "fish_s2_seed")
+                VoiceMenuShared.make_seed_item(state, SettingRef("fish_s2", "seed"))
             )
 
             return items
@@ -75,19 +76,19 @@ class VoiceFishS2Menu:
     def compile_menu(state: State) -> None:
 
         def on_select(value: bool) -> None:
-            if state.project.fish_s2_compile_enabled != value:
-                state.project.fish_s2_compile_enabled = value
+            if state.project.get_model_setting('fish_s2', 'compile_enabled') != value:
+                state.project.set_model_setting('fish_s2', 'compile_enabled', value)
                 state.project.save()
                 # Sync static value
                 Tts.set_model_params_using_project(state.project)
-            print_feedback(f"Set to:", str(state.project.fish_s2_compile_enabled))
+            print_feedback(f"Set to:", str(state.project.get_model_setting('fish_s2', 'compile_enabled')))
 
         MenuUtil.options_menu(
             state=state,
             heading_text="Torch compile",
             labels=["True", "False"],
             values=[True, False],
-            current_value=state.project.fish_s2_compile_enabled,
+            current_value=state.project.get_model_setting('fish_s2', 'compile_enabled'),
             default_value=True,
             on_select=on_select
         )

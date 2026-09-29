@@ -1,3 +1,4 @@
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -21,14 +22,14 @@ class VoiceGlmMenu:
 
             items.append(
                 MenuItem(
-                    make_menu_label("Model samplerate", str(state.project.glm_sr) + "hz"),
+                    make_menu_label("Model samplerate", str(state.project.get_model_setting('glm', 'sr')) + "hz"),
                     lambda _, __: samplerate_menu(state),
                     superlabel = VOICE_ADVANCED_SUPERLABEL
                 )
             )
             
             items.append(
-                VoiceMenuShared.make_seed_item(state, "glm_seed")
+                VoiceMenuShared.make_seed_item(state, SettingRef("glm", "seed"))
             )
             
             return items
@@ -38,7 +39,7 @@ class VoiceGlmMenu:
 def samplerate_menu(state: State) -> None:
 
     def on_select(value: int) -> None:
-        state.project.glm_sr = value
+        state.project.set_model_setting('glm', 'sr', value)
         state.project.save()
         Tts.set_model_params_using_project(state.project)
         print_feedback(f"Model samplerate set to:", str(value))        
@@ -48,7 +49,7 @@ def samplerate_menu(state: State) -> None:
         heading_text="GLM model samplerate",
         labels=[str(item) + "hz" for item in GlmBaseModel.SAMPLE_RATES],
         values=GlmBaseModel.SAMPLE_RATES,
-        current_value=state.project.glm_sr,
+        current_value=state.project.get_model_setting('glm', 'sr'),
         default_value=GlmBaseModel.SAMPLE_RATES[0],
         on_select=on_select
     )

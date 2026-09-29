@@ -30,11 +30,11 @@ class OmniVoiceBaseModel(TtsBaseModel):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        if not project.omnivoice_target or project.omnivoice_target == OmniVoiceBaseModel.DEFAULT_REPO_ID:
+        if not project.get_model_setting('omnivoice', 'target') or project.get_model_setting('omnivoice', 'target') == OmniVoiceBaseModel.DEFAULT_REPO_ID:
             s = cls.INFO.ui.get("proper_name") or ""
         else:
             s = cls.INFO.ui.get("short_name") or ""
-            target = util.ellipsize_path_for_menu(project.omnivoice_target)
+            target = util.ellipsize_path_for_menu(project.get_model_setting('omnivoice', 'target'))
             s += f" {COL_DIM}({target})"
         return s
 

@@ -15,6 +15,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
 )
 from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.model_settings import REGISTRY, SettingRef
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -34,13 +35,14 @@ class VoiceMenuShared:
         """
         Simply delegates to the correct model-specific voice menu
         """
+        definition = Tts.get_configured_definition()
+        if definition is not None:
+            from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
+            VoiceConfiguredSglOmniMenu.menu(state, definition)
+            return
+        # Only local models reach the legacy per-model menus; SGL-Omni
+        # variants are always handled by the configured menu above.
         match Tts.get_type():
-            case TtsModelType.AUK_SERVER:
-                from tts_audiobook_tool.menus.voice import VoiceAuKServerMenu
-                VoiceAuKServerMenu.menu(state, TtsModelType.AUK_SERVER)
-            case TtsModelType.AUK_FLASH_SERVER:
-                from tts_audiobook_tool.menus.voice import VoiceAuKServerMenu
-                VoiceAuKServerMenu.menu(state, TtsModelType.AUK_FLASH_SERVER)
             case TtsModelType.CHATTERBOX:
                 from tts_audiobook_tool.menus.voice import VoiceChatterboxMenu
                 VoiceChatterboxMenu.menu(state)
@@ -53,18 +55,12 @@ class VoiceMenuShared:
             case TtsModelType.FISH_S2:
                 from tts_audiobook_tool.menus.voice import VoiceFishS2Menu
                 VoiceFishS2Menu.menu(state)
-            case TtsModelType.FISH_S2_SERVER:
-                from tts_audiobook_tool.menus.voice import VoiceFishS2ServerMenu
-                VoiceFishS2ServerMenu.menu(state)
             case TtsModelType.GLM:
                 from tts_audiobook_tool.menus.voice import VoiceGlmMenu
                 VoiceGlmMenu.menu(state)
             case TtsModelType.HIGGS_V2:
                 from tts_audiobook_tool.menus.voice import VoiceHiggsV2Menu
                 VoiceHiggsV2Menu.menu(state)
-            case TtsModelType.HIGGS_V3_SERVER:
-                from tts_audiobook_tool.menus.voice import VoiceHiggsV3Menu
-                VoiceHiggsV3Menu.menu(state)
             case TtsModelType.INDEXTTS2:
                 from tts_audiobook_tool.menus.voice import VoiceIndexTts2Menu
                 VoiceIndexTts2Menu.menu(state)
@@ -74,12 +70,6 @@ class VoiceMenuShared:
             case TtsModelType.MOSS:
                 from tts_audiobook_tool.menus.voice import VoiceMossMenu
                 VoiceMossMenu.menu(state)
-            case TtsModelType.MOSS_DELAY_SERVER:
-                from tts_audiobook_tool.menus.voice import VoiceMossServerMenu
-                VoiceMossServerMenu.menu(state, TtsModelType.MOSS_DELAY_SERVER)
-            case TtsModelType.MOSS_LOCAL_SERVER:
-                from tts_audiobook_tool.menus.voice import VoiceMossServerMenu
-                VoiceMossServerMenu.menu(state, TtsModelType.MOSS_LOCAL_SERVER)
             case TtsModelType.OMNIVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
                 VoiceOmniVoiceMenu.menu(state)
@@ -105,15 +95,9 @@ class VoiceMenuShared:
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state, inspection)
 
-            case TtsModelType.QWEN3TTS_SERVER:
-                from tts_audiobook_tool.menus.voice import VoiceQwen3ServerMenu
-                VoiceQwen3ServerMenu.menu(state)
             case TtsModelType.VIBEVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
                 VoiceVibeVoiceMenu.menu(state)
-            case TtsModelType.ZONOS2_SERVER:
-                from tts_audiobook_tool.menus.voice import VoiceZonos2ServerMenu
-                VoiceZonos2ServerMenu.menu(state)
             case _:
                 raise NotImplementedError(f"value: {Tts.get_type()}")
 
@@ -160,10 +144,10 @@ class VoiceMenuShared:
         Prints feedback on success or fail.
         """
 
-        if not tts_type.value.voice_target_attr:
+        if REGISTRY.voice_binding(tts_type.id) is None:
             raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
-        if tts_type.value.voice_transcript_attr:
+        if REGISTRY.transcript_binding(tts_type.id) is not None:
             hints.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
 
         if state.prefs.last_voice_dir and not os.path.exists(state.prefs.last_voice_dir):
@@ -202,7 +186,7 @@ class VoiceMenuShared:
         force_enter_prompt = False
 
         transcript = ""
-        if tts_type.value.voice_transcript_attr:
+        if REGISTRY.transcript_binding(tts_type.id) is not None:
 
             # [1] Get transcript from 'parallel text file' if possible
             transcript_path = Path(path).with_suffix(".txt")
@@ -539,106 +523,12 @@ class VoiceMenuShared:
 
         return MenuItem("Clear voice clone sample", on_clear_voice, data=info_item)
 
-    @staticmethod
-    def make_manual_voice_menu_items(
-        state: State,
-        tts_type: TtsModelType,
-        path_attribute: str,
-        transcript_attribute: str,
-        is_required: bool=False
-    ) -> tuple[MenuItem, MenuItem]:
-        """
-        Creates pair of MenuItems for voice path and voice transcript.
-        For use with SGL-Omni mode, for cases where the server API for the given TTS model
-        does NOT support handling data URI.
-        """
-
-        def make_path_label(_) -> str:
-
-            prefix = "Enter voice clone sample filepath"
-            value = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
-            value = value[0] if value else ""
-
-            if value:
-                value = ellipsize_path_for_menu(value)
-                value_prefix = "currently: "
-                color = COL_ACCENT
-            else:
-                if is_required:
-                    value = "required"
-                    value_prefix = ""
-                    color = COL_ERROR
-                else:
-                    value = "none"
-                    value_prefix = "currently: "
-                    color = COL_ERROR
-
-            return make_menu_label(prefix, value, value_prefix=value_prefix, color_code=color)
-
-        def ask_path() -> None:
-            s = (
-                "Enter voice clone reference audio path:\n"
-                f"{COL_DIM}This must be either a file path accessible from the\n"
-                f"running server environment or a URL"
-            )
-            ask.ask_string_and_save(state.project, s, path_attribute, "Voice clone sample path set:")
-
-        path_item = MenuItem(make_path_label, lambda _, __: ask_path())
-
-        # ---
-
-        def make_transcript_label(_) -> str:
-
-            prefix = "Enter voice clone sample transcript"
-            value = ProjectVoiceUtil.get_voice_transcript_values(state.project, tts_type)
-            value = value[0] if value else ""
-            has_path = bool(ProjectVoiceUtil.get_primary_voice_value(state.project, tts_type))
-
-            if value:
-                value = truncate_pretty(value, 40, content_color=COL_ACCENT)
-                value_prefix = "currently: "
-                color = COL_ACCENT
-            else:
-                if is_required or has_path:
-                    value = "required"
-                    value_prefix = ""
-                    color = COL_ERROR
-                else:
-                    value = "none"
-                    value_prefix = "currently: "
-                    color = COL_ERROR
-
-            return make_menu_label(prefix, value, value_prefix=value_prefix, color_code=color)
-
-
-            # prefix = "Enter voice clone sample transcript"
-            # value = getattr(state.project, transcript_attribute)
-            # has_path = bool( getattr(state.project, path_attribute) )
-
-            # if not value and has_path:
-            #     return f"{prefix} {COL_DIM}({COL_ERROR}required{COL_DIM})"
-
-            # label_value = truncate_pretty(value, 40) if value else "none"
-            # return make_menu_label(prefix, label_value)
-
-        def ask_transcript() -> None:
-            ask.ask_string_and_save(
-                state.project,
-                "Enter voice clone sample transcript:",
-                transcript_attribute,
-                "Voice clone sample transcript set:",
-            )
-
-        transcript_item = MenuItem(make_transcript_label, lambda _, __: ask_transcript())
-
-        return path_item, transcript_item
-
     # ---
 
     @staticmethod
     def ask_temperature(
             state: State,
-            attr: str,
+            target: str | SettingRef,
             prompt: str,
             min_value: float,
             max_value: float,
@@ -650,7 +540,7 @@ class VoiceMenuShared:
 
         ask.ask_number_and_save(
             state.project,
-            attr,
+            target,
             prompt,
             min_value,
             max_value,
@@ -663,7 +553,7 @@ class VoiceMenuShared:
     @staticmethod
     def make_temperature_item(
             state: State,
-            attr: str,
+            target: str | SettingRef,
             default_value: float,
             min_value: float,
             max_value: float,
@@ -676,7 +566,7 @@ class VoiceMenuShared:
         def on_item(_: State, __: MenuItem) -> None:
             VoiceMenuShared.ask_temperature(
                 state=state,
-                attr=attr,
+                target=target,
                 prompt=prompt,
                 min_value=min_value,
                 max_value=max_value,
@@ -686,7 +576,7 @@ class VoiceMenuShared:
 
         label = MenuUtil.make_number_label(
             project=state.project,
-            attr=attr,
+            target=target,
             base_label=base_label,
             default_value=default_value,
             is_minus_one_default=True,
@@ -698,7 +588,7 @@ class VoiceMenuShared:
     @staticmethod
     def make_top_k_item(
             state: State,
-            attr: str,
+            target: str | SettingRef,
             default_value: int,
             min_value: int=TOP_K_MIN_DEFAULT,
             max_value: int=TOP_K_MAX_DEFAULT
@@ -706,7 +596,7 @@ class VoiceMenuShared:
 
         return MenuUtil.make_number_item(
             state=state,
-            attr=attr,
+            target=target,
             base_label="Top_K",
             default_value=default_value,
             is_minus_one_default=True,
@@ -719,7 +609,7 @@ class VoiceMenuShared:
     @staticmethod
     def make_top_p_item(
             state: State,
-            attr: str,
+            target: str | SettingRef,
             default_value: float
     ) -> MenuItem:
 
@@ -728,7 +618,7 @@ class VoiceMenuShared:
 
         return MenuUtil.make_number_item(
             state=state,
-            attr=attr,
+            target=target,
             base_label="Top-P",
             default_value=default_value,
             is_minus_one_default=True,
@@ -741,7 +631,7 @@ class VoiceMenuShared:
     @staticmethod
     def make_repetition_penalty_item(
             state: State,
-            attr: str,
+            target: str | SettingRef,
             default_value: float,
             min_value = REPETITION_PENALTY_MIN_DEFAULT,
             max_value = REPETITION_PENALTY_MAX_DEFAULT
@@ -749,7 +639,7 @@ class VoiceMenuShared:
 
         return MenuUtil.make_number_item(
             state=state,
-            attr=attr,
+            target=target,
             base_label="Repetition penalty",
             default_value=default_value,
             is_minus_one_default=True,
@@ -762,7 +652,7 @@ class VoiceMenuShared:
     @staticmethod
     def make_seed_item(
             state: State,
-            attr: str,
+            target: str | SettingRef,
             prompt_override: str="",
             add_batch_warning: bool=False
     ) -> MenuItem:
@@ -781,7 +671,7 @@ class VoiceMenuShared:
         def on_item(_: State, __: MenuItem) -> None:
             ask.ask_number_and_save(
                 saveable=state.project,
-                attr=attr,
+                target=target,
                 prompt=prompt,
                 min_value=-1,
                 max_value=2**32-1,
@@ -791,9 +681,9 @@ class VoiceMenuShared:
                 print_range_info=False
             )
 
-        seed_value: int | None = getattr(state.project, attr, None)
+        seed_value: int | None = ask._get_saveable_attr(state.project, target)
         if seed_value is None:
-            raise ValueError(f"Attribute doesn't exist: {attr}")
+            raise ValueError(f"Attribute doesn't exist: {target}")
 
         suffix = str(seed_value) if seed_value != -1 else "random"
         label = make_menu_label("Seed", suffix)
@@ -911,7 +801,7 @@ class VoiceMenuShared:
         return "Rolling continuation " + make_currently_string(val)
 
     @staticmethod
-    def ask_rolling_continuation(state: State, attribute_name: str, max_value: int, qualifier_line: str="") -> None:
+    def ask_rolling_continuation(state: State, target: str | SettingRef, max_value: int, qualifier_line: str="") -> None:
         """
         :param qualifier_line: Should describe any prereqs (eg, batch size 1)
         """
@@ -925,7 +815,7 @@ class VoiceMenuShared:
             subheading=subheading
         )
         ask.ask_number_and_save(
-            state.project, attribute_name, "Enter value",
+            state.project, target, "Enter value",
             min_value=0, max_value=max_value, default_value=0,
             success_prefix="Rolling continuation num segments set to", is_int=True
         )

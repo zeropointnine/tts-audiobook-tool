@@ -18,6 +18,7 @@ from tts_audiobook_tool.concat_util import (
 )
 from tts_audiobook_tool.constants import ABR_VERSION
 from tts_audiobook_tool.project import Project
+from project_settings_test_support import get_setting, set_setting
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
 from tts_audiobook_tool.app_types import Book, BookSection
@@ -173,7 +174,7 @@ class TestAppMetadata(unittest.TestCase):
             project = ProjectTransferUtil.make_project_from_snapshot(tmp, snapshot)
 
             self.assertEqual(project.dir_path, tmp)
-            self.assertEqual(project.fish_s2_voice_file_name, ["narrator.flac", "voice/other.flac"])
+            self.assertEqual(get_setting(project, "fish_s2_voice_file_name"), ["narrator.flac", "voice/other.flac"])
             self.assertEqual(project.none_voice_file_name, "none.flac")
 
     def test_snapshot_dict_omits_machine_local_dir_path(self):
@@ -184,7 +185,7 @@ class TestAppMetadata(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             project = Project(dir_path=tmp)
-            project.fish_s2_voice_file_name = ["voice/narrator.flac"]
+            set_setting(project, "fish_s2_voice_file_name", ["voice/narrator.flac"])
 
             snapshot = ProjectSerializationUtil.to_snapshot_dict(project)
             project_json = ProjectSerializationUtil.to_project_json_dict(project)
@@ -194,7 +195,7 @@ class TestAppMetadata(unittest.TestCase):
             self.assertEqual(project_json["dir_path"], tmp)
 
             reloaded = ProjectTransferUtil.make_project_from_snapshot(tmp, snapshot)
-            self.assertEqual(reloaded.fish_s2_voice_file_name, ["voice/narrator.flac"])
+            self.assertEqual(get_setting(reloaded, "fish_s2_voice_file_name"), ["voice/narrator.flac"])
             self.assertEqual(reloaded.dir_path, tmp)
 
     def test_app_metadata_preserves_conversion_type_and_rejects_invalid_values(self):

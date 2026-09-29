@@ -11,6 +11,7 @@ import torch
 
 from tts_audiobook_tool.app_types import DeviceType, Sound
 from tts_audiobook_tool.project import Project
+from project_settings_test_support import set_setting
 from tts_audiobook_tool.tts_models.fish_s1_model import FishS1Model
 
 
@@ -57,8 +58,8 @@ def make_model() -> FishS1Model:
 
 def make_project(tmp_path, voice_file_name: str, transcript: str = "") -> Project:
     project = Project.model_validate({"dir_path": str(tmp_path)})
-    project.fish_s1_voice_file_name = [voice_file_name] if voice_file_name else []
-    project.fish_s1_voice_transcript = [transcript] if transcript else []
+    set_setting(project, "fish_s1_voice_file_name", [voice_file_name] if voice_file_name else [])
+    set_setting(project, "fish_s1_voice_transcript", [transcript] if transcript else [])
     return project
 
 
@@ -114,7 +115,7 @@ def test_fish_s1_rebuilds_on_transcript_and_file_change(tmp_path, monkeypatch):
     project = make_project(tmp_path, "voice.wav", "first transcript")
     assert isinstance(model.generate_using_project(project, ["one"]), list)
 
-    project.fish_s1_voice_transcript = ["second transcript"]
+    set_setting(project, "fish_s1_voice_transcript", ["second transcript"])
     assert isinstance(model.generate_using_project(project, ["two"]), list)
 
     # In-place modification: new valid content (longer clip => new size/mtime)

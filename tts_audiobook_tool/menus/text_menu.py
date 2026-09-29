@@ -468,13 +468,13 @@ def on_ask_max_size(state: State, _) -> None:
 
     printt("On text import, this is the maximum number of words to be used for a single text segment.")
 
-    reco = Tts.get_class().get_max_words_range_reco(state.project)
+    reco = Tts.get_model_support().get_max_words_range_reco(state.project)
     printt(f"Recommended range: {COL_ACCENT}{TtsModelType.recommended_range_string(reco)}")
     printt()
 
     ask.ask_number_and_save(
         state.project,
-        attr="max_words",
+        target="max_words",
         prompt="Enter max words per segment:",
         min_value=MAX_WORDS_PER_SEGMENT_MIN, max_value=MAX_WORDS_PER_SEGMENT_MAX,
         default_value=MAX_WORDS_PER_SEGMENT_DEFAULT,

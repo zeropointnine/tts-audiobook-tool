@@ -130,11 +130,11 @@ class ChatterboxModel(ChatterboxBaseModel):
         # Parameters common to both model types
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.CHATTERBOX, voice_selection_index)
 
-        temperature = ChatterboxModel._resolve_setting(project.chatterbox_temperature, ChatterboxBaseModel.DEFAULT_TEMPERATURE)
-        top_p = ChatterboxModel._resolve_setting(project.chatterbox_top_p, ChatterboxBaseModel.DEFAULT_TOP_P)
+        temperature = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox', 'temperature'), ChatterboxBaseModel.DEFAULT_TEMPERATURE)
+        top_p = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox', 'top_p'), ChatterboxBaseModel.DEFAULT_TOP_P)
         # Only consumed by the multilingual variant, but always passed
-        exaggeration = ChatterboxModel._resolve_setting(project.chatterbox_exaggeration, ChatterboxBaseModel.DEFAULT_EXAGGERATION)
-        cfg = ChatterboxModel._resolve_setting(project.chatterbox_cfg, ChatterboxBaseModel.DEFAULT_CFG)
+        exaggeration = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox', 'exaggeration'), ChatterboxBaseModel.DEFAULT_EXAGGERATION)
+        cfg = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox', 'cfg'), ChatterboxBaseModel.DEFAULT_CFG)
 
         # Note how each model has an independent repetition penalty value b/c the values behave differently on each
         language_id = ""
@@ -143,22 +143,22 @@ class ChatterboxModel(ChatterboxBaseModel):
         if self._model_type.is_multilingual:
             language_id = project.language_code
             ml_repetition_penalty = (
-                project.chatterbox_ml_v2_repetition_penalty
+                project.get_model_setting('chatterbox', 'ml_v2_repetition_penalty')
                 if self._model_type == ChatterboxType.MULTILINGUAL_V2
-                else project.chatterbox_ml_v3_repetition_penalty
+                else project.get_model_setting('chatterbox', 'ml_v3_repetition_penalty')
             )
             repetition_penalty = ChatterboxModel._resolve_setting(
                 ml_repetition_penalty,
                 ChatterboxBaseModel.default_repetition_penalty(self._model_type),
             )
         else:
-            turbo_top_k = None if project.chatterbox_turbo_top_k == -1 else project.chatterbox_turbo_top_k
+            turbo_top_k = None if project.get_model_setting('chatterbox', 'turbo_top_k') == -1 else project.get_model_setting('chatterbox', 'turbo_top_k')
             repetition_penalty = ChatterboxModel._resolve_setting(
-                project.chatterbox_turbo_repetition_penalty, ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
+                project.get_model_setting('chatterbox', 'turbo_repetition_penalty'), ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
             )
 
         # Randomize seed here so that generate() receives a concrete value
-        seed = -1 if force_random_seed else project.chatterbox_seed
+        seed = -1 if force_random_seed else project.get_model_setting('chatterbox', 'seed')
         if seed <= -1:
             seed = random.randrange(0, SEED_MAX)
 

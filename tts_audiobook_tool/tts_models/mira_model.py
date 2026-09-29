@@ -74,27 +74,27 @@ class MiraModel(MiraBaseModel):
         else:
             self.clear_voice_clone()
 
-        if project.mira_temperature == -1:
+        if project.get_model_setting('mira', 'temperature') == -1:
             temperature = MiraBaseModel.TEMPERATURE_DEFAULT
-        elif project.mira_temperature < MiraBaseModel.TEMPERATURE_MIN or project.mira_temperature > MiraBaseModel.TEMPERATURE_MAX:
+        elif project.get_model_setting('mira', 'temperature') < MiraBaseModel.TEMPERATURE_MIN or project.get_model_setting('mira', 'temperature') > MiraBaseModel.TEMPERATURE_MAX:
             temperature = MiraBaseModel.TEMPERATURE_DEFAULT
         else:
-            temperature = project.mira_temperature
+            temperature = project.get_model_setting('mira', 'temperature')
 
-        if project.mira_top_p == -1:
+        if project.get_model_setting('mira', 'top_p') == -1:
             top_p = MiraBaseModel.TOP_P_DEFAULT
         else:
-            top_p = project.mira_top_p
+            top_p = project.get_model_setting('mira', 'top_p')
 
-        if project.mira_top_k == -1:
+        if project.get_model_setting('mira', 'top_k') == -1:
             top_k = MiraBaseModel.TOP_K_DEFAULT
         else:
-            top_k = project.mira_top_k
+            top_k = project.get_model_setting('mira', 'top_k')
 
-        if project.mira_repetition_penalty == -1:
+        if project.get_model_setting('mira', 'repetition_penalty') == -1:
             repetition_penalty = MiraBaseModel.REPETITION_PENALTY_DEFAULT
         else:
-            repetition_penalty = project.mira_repetition_penalty
+            repetition_penalty = project.get_model_setting('mira', 'repetition_penalty')
 
         self.set_params(
             temperature=temperature, max_new_tokens=MiraBaseModel.MAX_NEW_TOKENS,
@@ -102,7 +102,7 @@ class MiraModel(MiraBaseModel):
         )
 
         assert(self.mira_tts is not None)
-        seed = -1 if force_random_seed else project.mira_seed
+        seed = -1 if force_random_seed else project.get_model_setting('mira', 'seed')
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
         app_support.set_seed(seed)

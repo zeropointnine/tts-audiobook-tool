@@ -132,7 +132,8 @@ def test_select_audio_notifies_when_parallel_output_already_exists(tmp_path: Pat
     assert len(shown) == 1
     hint, and_prompt = shown[0]
     assert and_prompt is True
-    assert "An enhanced audiobook already exists" in hint.heading
+    assert hint.heading == "FYI"
+    assert "An enhanced audiobook already exists" in hint.text
     assert str(artifacts.epub_output_path) in hint.heading + hint.text
     assert "review" in hint.text
 

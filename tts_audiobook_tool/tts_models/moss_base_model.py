@@ -81,13 +81,13 @@ class MossBaseModel(TtsBaseModel):
     def get_generation_params(project: Project, config: "MossConfigs") -> tuple[float, float, int]:
         """Resolve the saved-or-default sampling parameters for an architecture."""
         if config == MossConfigs.LOCAL:
-            temperature = project.moss_local_temperature
-            audio_top_p = project.moss_local_top_p
-            audio_top_k = project.moss_local_top_k
+            temperature = project.get_model_setting('moss', 'local_temperature')
+            audio_top_p = project.get_model_setting('moss', 'local_top_p')
+            audio_top_k = project.get_model_setting('moss', 'local_top_k')
         else:
-            temperature = project.moss_delay_temperature
-            audio_top_p = project.moss_delay_top_p
-            audio_top_k = project.moss_delay_top_k
+            temperature = project.get_model_setting('moss', 'delay_temperature')
+            audio_top_p = project.get_model_setting('moss', 'delay_top_p')
+            audio_top_k = project.get_model_setting('moss', 'delay_top_k')
 
         values = config.value
         return (
@@ -107,13 +107,13 @@ class MossBaseModel(TtsBaseModel):
             is_local = (instance.get_loaded_arch_type() == MossArchType.LOCAL)
             return is_local
 
-        return MossConfigs.get_by_target(project.moss_target) == MossConfigs.LOCAL
+        return MossConfigs.get_by_target(project.get_model_setting('moss', 'target')) == MossConfigs.LOCAL
 
     @classmethod
     def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
     ) -> list[ReadinessIssue]:
-        b = project.moss_batch_size > 1 and project.moss_rolling_cont > 0
+        b = project.get_model_setting('moss', 'batch_size') > 1 and project.get_model_setting('moss', 'rolling_cont') > 0
         if b:
             return [
                 ReadinessIssue(
@@ -132,13 +132,13 @@ class MossBaseModel(TtsBaseModel):
     def should_trim_trailing_token_noise(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> bool:
-        return MossConfigs.get_by_target(project.moss_target) == MossConfigs.LOCAL
+        return MossConfigs.get_by_target(project.get_model_setting('moss', 'target')) == MossConfigs.LOCAL
 
     @classmethod
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        s = project.moss_target or MossConfigs.get_default_repo_id()
+        s = project.get_model_setting('moss', 'target') or MossConfigs.get_default_repo_id()
         s = s.removeprefix("OpenMOSS-Team/")
         s = util.ellipsize_path_for_menu(s)
         return s
@@ -147,7 +147,7 @@ class MossBaseModel(TtsBaseModel):
     def get_output_sample_rate(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> int:
-        return MossConfigs.get_by_target(project.moss_target).value.output_sample_rate
+        return MossConfigs.get_by_target(project.get_model_setting('moss', 'target')).value.output_sample_rate
 
 # ---
 

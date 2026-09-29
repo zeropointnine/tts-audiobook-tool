@@ -131,7 +131,7 @@ class SglOmniUtil:
         return None
 
     @staticmethod
-    def generate(base_url: str, payload: dict, print: bool = False) -> Sound | str:
+    def generate(base_url: str, payload: dict, print: bool = False, fallback_sample_rate: int | None = None) -> Sound | str:
         """
         POSTs to sgl-omni sound generation endpoint (.../speech) and returns Sound or error string
         """
@@ -150,21 +150,22 @@ class SglOmniUtil:
 
                     content = response.read()
 
-            return SglOmniUtil.sound_from_encoded_audio(content)
+            return SglOmniUtil.sound_from_encoded_audio(content, fallback_sample_rate=fallback_sample_rate)
 
         except Exception as e:
             return make_error_string(e)
 
     @staticmethod
-    def generate_concurrent(endpoint: str, payloads: list[dict], print_request: bool = False) -> list[Sound] | str:
+    def generate_concurrent(endpoint: str, payloads: list[dict], print_request: bool = False, fallback_sample_rate: int | None = None) -> list[Sound] | str:
 
         if len(payloads) == 0:
             return []
 
         num_workers = len(payloads)
         executor = ThreadPoolExecutor(max_workers=num_workers)
+        extra = {"fallback_sample_rate": fallback_sample_rate} if fallback_sample_rate is not None else {}
         futures = {
-            executor.submit(SglOmniUtil.generate, endpoint, payload, print=print_request): index
+            executor.submit(SglOmniUtil.generate, endpoint, payload, print=print_request, **extra): index
             for index, payload in enumerate(payloads)
         }
         results: list[Sound | None] = [None] * len(payloads)
@@ -197,6 +198,7 @@ class SglOmniUtil:
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             should_print: bool = False,
+            fallback_sample_rate: int | None = None,
     ) -> Sound | str:
         """
         POSTs to sgl-omni sound generation endpoint (.../speech), consumes streaming audio chunks,
@@ -228,6 +230,7 @@ class SglOmniUtil:
                             response,
                             on_stream_chunk=on_stream_chunk,
                             on_stream_end=on_stream_end,
+                            **({"fallback_sample_rate": fallback_sample_rate} if fallback_sample_rate is not None else {}),
                         )
 
                     for line in response.iter_lines():
@@ -247,7 +250,7 @@ class SglOmniUtil:
                         if not audio_data:
                             continue
 
-                        sound = SglOmniUtil.sound_from_encoded_audio(base64.b64decode(audio_data))
+                        sound = SglOmniUtil.sound_from_encoded_audio(base64.b64decode(audio_data), fallback_sample_rate=fallback_sample_rate)
                         L.i(f"received streaming audio chunk: {sound.data.size} samples at {sound.sr} Hz")
                         sample_rate = sound.sr or sample_rate
                         chunks.append(sound.data)
@@ -262,7 +265,7 @@ class SglOmniUtil:
 
             return Sound(
                 np.concatenate(chunks),
-                sample_rate or TtsModelType.HIGGS_V3_SERVER.value.default_output_sample_rate,
+                sample_rate or fallback_sample_rate or TtsModelType.HIGGS_V3_SERVER.value.default_output_sample_rate,
             )
 
         except Exception as e:
@@ -273,11 +276,12 @@ class SglOmniUtil:
             response: httpx.Response,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            fallback_sample_rate: int | None = None,
     ) -> Sound | str:
         sample_rate = SglOmniUtil.get_int_header(
             response,
             ["x-sample-rate", "x-audio-sample-rate", "x-stream-sample-rate", "sample-rate"],
-            TtsModelType.QWEN3TTS_SERVER.value.default_output_sample_rate,
+            fallback_sample_rate or TtsModelType.QWEN3TTS_SERVER.value.default_output_sample_rate,
         )
         channels = SglOmniUtil.get_int_header(
             response,
@@ -349,7 +353,7 @@ class SglOmniUtil:
             raise httpx.HTTPStatusError(message, request=response.request, response=response)
 
     @staticmethod
-    def sound_from_encoded_audio(content: bytes) -> Sound:
+    def sound_from_encoded_audio(content: bytes, fallback_sample_rate: int | None = None) -> Sound:
         data, sample_rate = soundfile.read(
             BytesIO(content),
             dtype="float32",
@@ -362,12 +366,12 @@ class SglOmniUtil:
         sr = int(sample_rate)
         if not sr:
             from tts_audiobook_tool.tts import Tts
-            sr = Tts.get_type().value.default_output_sample_rate
-            L.i(f"Samplerate unknown, falling back to TtsModelType value {sr}")
+            sr = fallback_sample_rate or Tts.get_type().value.default_output_sample_rate
+            L.i(f"Samplerate unknown, falling back to configured/default value {sr}")
 
         return Sound(
             data,
-            sr or TtsModelType.HIGGS_V3_SERVER.value.default_output_sample_rate,
+            sr or fallback_sample_rate or TtsModelType.HIGGS_V3_SERVER.value.default_output_sample_rate,
         )
 
 # ---

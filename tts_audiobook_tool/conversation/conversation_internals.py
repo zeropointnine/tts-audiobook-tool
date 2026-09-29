@@ -57,7 +57,7 @@ class ConversationStreamingTts:
             (None, None, error_string) on failure.
         """
         project = state.project
-        sample_rate = Tts.get_class().get_output_sample_rate(project)
+        sample_rate = Tts.get_model_support().get_output_sample_rate(project)
         if sound_stream.sample_rate != sample_rate:
             return (
                 None,
@@ -646,7 +646,7 @@ class _ResponseEngine:
     def make_chat_file_name(self) -> str:
         timestamp = SoundSegmentUtil.make_timestamp_string()
         model = Tts.get_info().file_tag
-        voice = Tts.get_class().get_voice_tag(self.project)
+        voice = Tts.get_model_support().get_voice_tag(self.project)
         text = " " + app_text.sanitize_for_filename(self.render_response_text()[:50])
         return f"[{timestamp}] [chat] [{model}] [{voice}]{text}.flac"
 

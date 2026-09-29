@@ -16,6 +16,8 @@ from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import APP_SAMPLE_RATE, PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.model_settings import REGISTRY
+from project_settings_test_support import get_setting, set_setting
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.tts import Tts
@@ -75,15 +77,15 @@ def test_set_voice_and_save_writes_untagged_file_in_voice_subdir(tmp_path):
     expected = tmp_path / PROJECT_VOICE_SUBDIR / "myvoice.flac"
     assert expected.exists()
     assert not (tmp_path / "myvoice.flac").exists()
-    assert project.dots_voice_file_name == ["myvoice.flac"]
-    assert project.dots_voice_transcript == ["hello"]
+    assert get_setting(project, "dots_voice_file_name") == ["myvoice.flac"]
+    assert get_setting(project, "dots_voice_transcript") == ["hello"]
 
 
 def test_set_voice_and_save_reimport_same_model_overwrites(tmp_path):
     project = make_project(tmp_path)
     ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.DOTS)
     ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.DOTS)
-    assert project.dots_voice_file_name == ["myvoice.flac"]
+    assert get_setting(project, "dots_voice_file_name") == ["myvoice.flac"]
 
 
 def test_set_voice_and_save_disambiguates_cross_model_stem_collision(tmp_path):
@@ -91,8 +93,8 @@ def test_set_voice_and_save_disambiguates_cross_model_stem_collision(tmp_path):
     ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.DOTS)
     ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.MIRA)
 
-    assert project.dots_voice_file_name == ["myvoice.flac"]
-    assert project.mira_voice_file_name == ["myvoice_2.flac"]
+    assert get_setting(project, "dots_voice_file_name") == ["myvoice.flac"]
+    assert get_setting(project, "mira_voice_file_name") == ["myvoice_2.flac"]
     assert (tmp_path / PROJECT_VOICE_SUBDIR / "myvoice.flac").exists()
     assert (tmp_path / PROJECT_VOICE_SUBDIR / "myvoice_2.flac").exists()
 
@@ -103,7 +105,7 @@ def test_set_voice_and_save_append_same_stem_gets_distinct_name(tmp_path):
     ProjectVoiceUtil.set_voice_and_save(
         project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.DOTS, append=True
     )
-    assert project.dots_voice_file_name == ["myvoice.flac", "myvoice_2.flac"]
+    assert get_setting(project, "dots_voice_file_name") == ["myvoice.flac", "myvoice_2.flac"]
 
 
 def test_set_voice_and_save_indextts2_emo_voice_untagged(tmp_path):
@@ -111,7 +113,7 @@ def test_set_voice_and_save_indextts2_emo_voice_untagged(tmp_path):
     ProjectVoiceUtil.set_voice_and_save(
         project, make_sound(APP_SAMPLE_RATE), "emo", "", TtsModelType.INDEXTTS2, is_secondary=True
     )
-    assert project.indextts2_emo_voice_file_name == "emo.flac"
+    assert get_setting(project, "indextts2_emo_voice_file_name") == "emo.flac"
     assert (tmp_path / PROJECT_VOICE_SUBDIR / "emo.flac").exists()
 
 
@@ -138,11 +140,49 @@ def test_resolve_voice_file_path_falls_back_to_project_root(tmp_path):
 def test_verify_voice_files_exist_accepts_legacy_root_placement(tmp_path, capsys):
     project = make_project(tmp_path)
     sf.write(str(tmp_path / "legacy_dots.flac"), np.zeros(100, dtype=np.float32), APP_SAMPLE_RATE)
-    project.dots_voice_file_name = ["legacy_dots.flac"]
+    set_setting(project, "dots_voice_file_name", ["legacy_dots.flac"])
 
     warned = ProjectVoiceUtil.verify_voice_files_exist(project)
     assert not warned
-    assert project.dots_voice_file_name == ["legacy_dots.flac"]
+    assert get_setting(project, "dots_voice_file_name") == ["legacy_dots.flac"]
+
+
+def test_used_voice_names_exclude_shared_owner_or_secondary_only():
+    project = Project()
+    project.set_model_setting("fish_s2", "file_name", ["shared.flac"])
+    project.set_model_setting("qwen3tts", "file_name", ["other.flac"])
+    binding = REGISTRY.voice_binding("server_fish_s2")
+    assert binding is not None
+    owner = (binding.group or binding.model_id, binding.name)
+    used = ProjectVoiceUtil.get_used_voice_file_names(project, owner)
+    assert "shared.flac" not in used
+    assert "other.flac" in used
+
+    project.set_model_setting("indextts2", "file_name", ["primary.flac"])
+    project.set_model_setting("indextts2", "emo_voice", "secondary.flac")
+    used = ProjectVoiceUtil.get_used_voice_file_names(project, None, exclude_secondary=True)
+    assert "primary.flac" in used
+    assert "secondary.flac" not in used
+
+
+def test_verify_voice_files_keeps_transcripts_paired_when_corrupt_sample_dropped(tmp_path, monkeypatch):
+    from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+
+    monkeypatch.setattr(Tts, "_type", TtsModelType.FISH_S2)
+    project = make_project(tmp_path)
+    for name in ("first.flac", "broken.flac"):
+        (tmp_path / name).write_bytes(b"sample")
+    set_setting(project, "fish_s2_voice_file_name", ["first.flac", "broken.flac", "missing.flac"])
+    set_setting(project, "fish_s2_voice_transcript", ["first text", "broken text", "missing text"])
+    monkeypatch.setattr(SoundFileUtil, "is_valid_sound_file", lambda path: "corrupt" if path.endswith("broken.flac") else "")
+
+    result = ProjectVoiceUtil.verify_voice_files_exist(project)
+
+    assert result.corrupt["voice samples"] == ["broken.flac"]
+    assert result.not_found["voice samples"] == ["missing.flac"]
+    assert ProjectVoiceUtil.voice_reference_pairs(project, TtsModelType.FISH_S2) == [
+        ("first.flac", "first text"), ("missing.flac", "missing text")
+    ]
 
 
 def test_verify_voice_files_exist_keeps_a_reference_whose_file_is_missing(tmp_path, monkeypatch, capsys):
@@ -153,14 +193,14 @@ def test_verify_voice_files_exist_keeps_a_reference_whose_file_is_missing(tmp_pa
     """
     monkeypatch.setattr(Tts, "_type", TtsModelType.DOTS)
     project = make_project(tmp_path)
-    project.dots_voice_file_name = ["not_here_yet.flac"]
+    set_setting(project, "dots_voice_file_name", ["not_here_yet.flac"])
 
     result = ProjectVoiceUtil.verify_voice_files_exist(project)
 
     assert result
-    assert "not_here_yet.flac" in result.not_found["dots_voice_file_name"]
+    assert "not_here_yet.flac" in result.not_found["voice samples"]
     assert not result.corrupt
-    assert project.dots_voice_file_name == ["not_here_yet.flac"]
+    assert get_setting(project, "dots_voice_file_name") == ["not_here_yet.flac"]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="A Windows file name cannot contain a backslash")

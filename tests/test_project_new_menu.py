@@ -9,14 +9,17 @@ message.
 """
 
 from contextlib import contextmanager
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import PROJECT_SOUND_SEGMENTS_SUBDIR, PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.menus import project_new_menu as project_new_menu_module
+from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -116,7 +119,7 @@ def test_make_new_project_using_abr_reports_file_path_instead_of_errno(monkeypat
     monkeypatch.setattr(
         project_new_menu_module.AppMetadata,
         "load_from_file",
-        staticmethod(lambda _path: SimpleNamespace(project_snapshot={"settings": {}})),
+        staticmethod(lambda _path: SimpleNamespace(project_snapshot={"version": 2, "max_words": 50})),
     )
 
     assert ProjectNewMenu.make_new_project_using_abr(state) is False
@@ -279,6 +282,132 @@ def test_abr_import_stays_quiet_when_the_source_project_is_here(monkeypatch, tmp
         )
 
     assert "not a project directory on this computer" not in capsys.readouterr().out
+
+
+# --- Old and damaged ABR settings snapshots ---
+
+
+def _stub_abr_snapshot(monkeypatch, tmp_path, snapshot):
+    _stub_prompt(monkeypatch, str(tmp_path / "dest"))
+    monkeypatch.setattr(ask, "ask_file_path", lambda **_kwargs: str(tmp_path / "book.abr.flac"))
+    metadata = AppMetadata.get_from_json_string(json.dumps({
+        "version": 2,
+        "text_segments": [{"text": "Hello", "time_start": 0, "time_end": 1}],
+        "project_snapshot": snapshot,
+    }))
+    assert isinstance(metadata, AppMetadata)
+    monkeypatch.setattr(project_new_menu_module.AppMetadata, "load_from_file", lambda _path: metadata)
+
+
+def test_abr_import_migrates_old_flat_settings_before_selecting(monkeypatch, tmp_path):
+    state = _make_state()
+    snapshot = {
+        "version": 2,
+        "fish_s2_voice_file_name": ["narrator.flac"],
+        "fish_s2_temperature": 0.75,
+        "fish_s2_seed": 42,
+        "fish_s2_server_concurrent_requests": 3,
+    }
+    _stub_abr_snapshot(monkeypatch, tmp_path, snapshot)
+    errors, _ = _collect_exits(monkeypatch)
+    with _quiet_project_setter():
+        assert ProjectNewMenu.make_new_project_using_abr(state) is True
+    assert not errors
+    assert state.project.get_model_setting("server_fish_s2", "file_name") == ["narrator.flac"]
+    assert state.project.get_model_setting("server_fish_s2", "temperature") == 0.75
+    assert state.project.get_model_setting("fish_s2", "seed") == 42
+    assert state.project.get_model_setting("server_fish_s2", "concurrent_requests") == 3
+    assert state.prefs.project_dir == str(tmp_path / "dest")
+
+
+def test_abr_import_rejects_junk_snapshot_without_creating_project(monkeypatch, tmp_path):
+    state = _make_state()
+    previous = state.project
+    _stub_abr_snapshot(monkeypatch, tmp_path, {"settings": {}})
+    errors, _ = _collect_exits(monkeypatch)
+    assert ProjectNewMenu.make_new_project_using_abr(state) is False
+    assert "no recognizable project settings" in errors[0]
+    assert not (tmp_path / "dest").exists()
+    assert state.project is previous and state.prefs.project_dir == ""
+
+
+def test_abr_import_without_snapshot_refuses_before_creating_project(monkeypatch, tmp_path, capsys):
+    state = _make_state()
+    _stub_abr_snapshot(monkeypatch, tmp_path, {})
+    _collect_exits(monkeypatch)
+    assert ProjectNewMenu.make_new_project_using_abr(state) is False
+    assert "does not contain project snapshot data" in capsys.readouterr().out
+    assert not (tmp_path / "dest").exists()
+
+
+def test_abr_import_reports_invalid_metadata_not_old_version(monkeypatch, tmp_path):
+    state = _make_state()
+    _stub_prompt(monkeypatch, str(tmp_path / "dest"))
+    monkeypatch.setattr(ask, "ask_file_path", lambda **_kwargs: str(tmp_path / "book.abr.flac"))
+    monkeypatch.setattr(project_new_menu_module.AppMetadata, "load_from_file", lambda _path: None)
+    monkeypatch.setattr(ProjectTransferUtil, "load_raw_abr_metadata_string", lambda _path: "{bad json")
+    errors, _ = _collect_exits(monkeypatch)
+    assert ProjectNewMenu.make_new_project_using_abr(state) is False
+    assert errors[0].startswith("Invalid ABR metadata:")
+    assert not (tmp_path / "dest").exists()
+
+
+def test_abr_import_does_not_copy_files_from_cwd_without_source(monkeypatch, tmp_path, capsys):
+    state = _make_state()
+    _stub_abr_snapshot(monkeypatch, tmp_path, {
+        "version": 2, "fish_s2_voice_file_name": ["narrator.flac"],
+    })
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "narrator.flac").write_bytes(b"unrelated")
+    _collect_exits(monkeypatch)
+    with _quiet_project_setter():
+        assert ProjectNewMenu.make_new_project_using_abr(state) is True
+    assert not (tmp_path / "dest" / "narrator.flac").exists()
+    assert not (tmp_path / "dest" / PROJECT_VOICE_SUBDIR / "narrator.flac").exists()
+    assert "No source project directory was found" in capsys.readouterr().out
+
+
+def test_abr_import_copy_failure_keeps_previous_project_selected(monkeypatch, tmp_path):
+    state = _make_state()
+    previous = state.project
+    source = tmp_path / "source"
+    (source / PROJECT_VOICE_SUBDIR).mkdir(parents=True)
+    (source / PROJECT_VOICE_SUBDIR / "narrator.flac").write_bytes(b"voice")
+    _stub_abr_snapshot(monkeypatch, tmp_path, {
+        "version": 2, "dir_path": str(source), "fish_s2_voice_file_name": ["narrator.flac"],
+    })
+    errors, _ = _collect_exits(monkeypatch)
+    monkeypatch.setattr("tts_audiobook_tool.project_support.project_transfer_util.shutil.copy",
+                        lambda *_args: (_ for _ in ()).throw(OSError("copy failed")))
+    with _quiet_project_setter():
+        assert ProjectNewMenu.make_new_project_using_abr(state) is False
+    assert "Could not copy supporting file" in errors[0]
+    assert state.project is previous and state.prefs.project_dir == ""
+
+
+def test_abr_import_save_failure_keeps_previous_project_selected(monkeypatch, tmp_path):
+    state = _make_state()
+    previous = state.project
+    _stub_abr_snapshot(monkeypatch, tmp_path, {"version": 2, "max_words": 60})
+    errors, _ = _collect_exits(monkeypatch)
+    monkeypatch.setattr(Project, "save", lambda self, **_kwargs: "disk full")
+    with _quiet_project_setter():
+        assert ProjectNewMenu.make_new_project_using_abr(state) is False
+    assert "disk full" in errors[0]
+    assert "Partial files may remain" in errors[0]
+    assert state.project is previous and state.prefs.project_dir == ""
+
+
+def test_abr_import_prefs_failure_keeps_previous_project_selected(monkeypatch, tmp_path):
+    state = _make_state()
+    previous = state.project
+    _stub_abr_snapshot(monkeypatch, tmp_path, {"version": 2, "max_words": 60})
+    errors, _ = _collect_exits(monkeypatch)
+    monkeypatch.setattr(state.prefs, "save", lambda: "prefs disk full")
+    with _quiet_project_setter():
+        assert ProjectNewMenu.make_new_project_using_abr(state) is False
+    assert "prefs disk full" in errors[0]
+    assert state.project is previous and state.prefs.project_dir == ""
 
 
 # --- Console-fallback path normalization ---

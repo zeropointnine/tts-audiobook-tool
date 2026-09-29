@@ -13,3 +13,5 @@ In practice, the documents may include:
 - focused references for implementation details that are useful outside the main README
 
 The main README remains the primary entry point for installation and user-facing usage. The files here are supplementary: partly canonical documentation, partly free-form design notes, and most useful when trying to understand or change the project internals.
+
+For the current on-disk project layout, model settings, and migration behavior, start with [Project Spec v3](project-spec-v3.md).

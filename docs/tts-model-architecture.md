@@ -102,11 +102,11 @@ The effective output sample rate is exposed via `TtsBaseModel.get_output_sample_
 
 ---
 
-## Two-Level Class Hierarchy
+## Local Model Class Hierarchy and Configured Servers
 
 **Directory:** [tts_audiobook_tool/tts_models/](tts_audiobook_tool/tts_models/)
 
-Every model is implemented with exactly two subclass levels. This is enforced by convention and documented in `TtsBaseModel`'s docstring. SGL-Omni server variants follow the same two levels; their "concrete" classes simply contain no heavy library imports at all, since inference goes through `SglOmniUtil` over HTTP (e.g. `fish_s2_server_base_model.py` / `fish_s2_server_model.py`).
+Local inference models use the two-level `TtsBaseModel` subclass convention described below. SGL-Omni variants instead use validated JSON definitions, `ConfiguredModelSupport` and one `SglOmniBackendAdapter` for generation; they have no per-variant Python generation subclasses. The shared HTTP transport remains `SglOmniUtil`.
 
 ### Level 1 — `TtsBaseModel` (abstract)
 
@@ -214,29 +214,25 @@ Fake-library tests for the mechanism live in `tests/test_<model>_voice_clone_cac
 
 **Directory:** [tts_audiobook_tool/menus/voice/](tts_audiobook_tool/menus/voice/)
 
-Each model has a dedicated voice menu module:
+Local models have dedicated voice menu modules. All SGL-Omni variants use one definition-driven module:
 
 ```
 menus/voice/
   voice_menu_shared.py
+  voice_configured_sgl_omni_menu.py
   voice_chatterbox_menu.py
   voice_fish_s1_menu.py
   voice_fish_s2_menu.py
-  voice_fish_s2_server_menu.py
   voice_glm_menu.py
   voice_higgs_v2_menu.py
-  voice_higgs_v3_menu.py
   voice_indextts2_menu.py
   voice_mira_menu.py
   voice_moss_menu.py
-  voice_moss_server_menu.py
-  voice_moss_shared.py       # options shared between local MOSS and MOSS server
+  voice_moss_shared.py       # local MOSS architecture settings controls
   voice_omnivoice_menu.py
   voice_pocket_menu.py
   voice_qwen3_menu.py
-  voice_qwen3_server_menu.py
   voice_vibevoice_menu.py
-  voice_zonos2_server_menu.py
 ```
 
 ### `VoiceMenuShared`
@@ -245,7 +241,7 @@ menus/voice/
 
 Contains shared operations used by most model menus:
 
-- `menu(state)` — dispatches to the correct per-model menu via `match Tts.get_type()`
+- `menu(state)` — selects the configured menu when a SGL-Omni definition is active; otherwise dispatches to a local per-model menu via `match Tts.get_type()`
 - `menu_wrapper(state, items, subheading)` — standardized menu heading and exit callback
 - `make_resolved_voice_label(state)` — "Add voice sample …" status label
 - `ask_and_set_voice_file(state, tts_type, is_secondary, message_override, append)` — prompts for a voice audio file, optionally gets its transcript, resamples it, and calls `ProjectVoiceUtil.set_voice_and_save()` (`append` adds to a multi-voice list rather than replacing)
@@ -255,7 +251,7 @@ Contains shared operations used by most model menus:
 
 ### Per-model menu pattern
 
-Each `VoiceAbcMenu.menu(state)` builds a list of `MenuItem`s and passes them to `VoiceMenuShared.menu_wrapper()`. Model-specific options (e.g. sample rate for GLM, emotion clip for IndexTTS2, model target/variant for MOSS) are added inline alongside the shared voice clone item. Shared operations like `ask_and_set_voice_file` and `make_clear_voice_item` accept a `TtsModelType` argument rather than being baked into the menu class.
+Each local `VoiceAbcMenu.menu(state)` builds a list of `MenuItem`s and passes them to `VoiceMenuShared.menu_wrapper()`. Model-specific options (e.g. sample rate for GLM, emotion clip for IndexTTS2, model target/variant for MOSS) are added inline alongside the shared voice clone item. The SGL-Omni menu builds its items from the selected definition instead of dispatching to server-specific menus. Shared operations like `ask_and_set_voice_file` and `make_clear_voice_item` accept a `TtsModelType` argument rather than being baked into the menu class.
 
 Note that voice settings are multi-valued for most models: voice clone filenames (and transcripts) are stored as lists on `Project`, and the app auto-advances through them across generation calls via `voice_selection_index` (see `ProjectVoiceUtil` and `Tts.get_next_voice_selection_index()`).
 

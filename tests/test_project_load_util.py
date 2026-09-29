@@ -19,6 +19,7 @@ from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_SOUND_S
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from project_settings_test_support import get_setting
 
 
 @pytest.fixture
@@ -66,8 +67,12 @@ def test_load_reduces_paths_saved_by_another_os_and_persists_the_upgrade(
 
     project = load(dir_path)
 
-    assert project.chatterbox_voice_file_name == ["narrator.flac", "second.flac"]
-    assert read_saved(dir_path)["chatterbox_voice_file_name"] == ["narrator.flac", "second.flac"]
+    assert get_setting(project, "chatterbox_voice_file_name") == ["narrator.flac", "second.flac"]
+    saved = read_saved(dir_path)["model_settings"]["models"]["chatterbox"]
+    assert saved["voice_references"] == [
+        {"file_name": "narrator.flac", "transcript": ""},
+        {"file_name": "second.flac", "transcript": ""},
+    ]
     project.kill()
 
 
@@ -84,9 +89,9 @@ def test_load_keeps_a_reference_whose_file_has_not_arrived_yet(
 
     project = load(dir_path)
 
-    assert project.chatterbox_voice_file_name == ["gone.flac"]
-    # A one-item voice list is serialized as a bare string, so accept either form.
-    assert read_saved(dir_path)["chatterbox_voice_file_name"] in (["gone.flac"], "gone.flac")
+    assert get_setting(project, "chatterbox_voice_file_name") == ["gone.flac"]
+    saved = read_saved(dir_path)["model_settings"]["models"]["chatterbox"]
+    assert saved["voice_references"] == [{"file_name": "gone.flac", "transcript": ""}]
     project.kill()
 
 
@@ -101,7 +106,7 @@ def test_load_persists_a_cleared_reference_for_a_corrupt_file(
 
     project = load(dir_path)
 
-    assert project.chatterbox_voice_file_name == []
+    assert get_setting(project, "chatterbox_voice_file_name") == []
     assert "bad.flac" not in json.dumps(read_saved(dir_path))
     project.kill()
 
@@ -119,8 +124,9 @@ def test_load_leaves_a_foreign_model_target_intact_but_says_something(
 
     project = load(dir_path)
 
-    assert project.vibevoice_target == saved_target
-    assert read_saved(dir_path)["vibevoice_target"] == saved_target
+    assert get_setting(project, "vibevoice_target") == saved_target
+    saved = read_saved(dir_path)["model_settings"]["models"]["vibevoice"]
+    assert saved["parameters"]["target"] == saved_target
     assert "vibevoice_target" in capsys.readouterr().out
     project.kill()
 

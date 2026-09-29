@@ -10,6 +10,8 @@ from prompt_toolkit.output import DummyOutput
 from tts_audiobook_tool import ask, ask_advanced
 from tts_audiobook_tool.ask_advanced import AskAdvanced
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.model_settings import SettingRef
+from project_settings_test_support import get_setting, set_setting
 
 
 class _TTY:
@@ -186,7 +188,7 @@ def test_ask_number_and_save_prefills_effective_default_for_minus_one_sentinel(
     monkeypatch, is_minus_one_default, expected_prefill
 ):
     project = Project()
-    project.chatterbox_exaggeration = -1.0
+    set_setting(project, "chatterbox_exaggeration", -1.0)
     prefills = []
 
     def fake_ask_input(*, prefill):
@@ -198,7 +200,7 @@ def test_ask_number_and_save_prefills_effective_default_for_minus_one_sentinel(
 
     ask.ask_number_and_save(
         project,
-        attr="chatterbox_exaggeration",
+        target=SettingRef("chatterbox", "exaggeration"),
         prompt="Enter exaggeration:",
         min_value=0.25,
         max_value=2.0,
@@ -214,7 +216,7 @@ def test_ask_number_and_save_unchanged_effective_default_preserves_sentinel(
     monkeypatch,
 ):
     project = Project()
-    project.chatterbox_exaggeration = -1.0
+    set_setting(project, "chatterbox_exaggeration", -1.0)
     saves = []
 
     monkeypatch.setattr(ask, "ask_input", lambda *, prefill: prefill)
@@ -223,7 +225,7 @@ def test_ask_number_and_save_unchanged_effective_default_preserves_sentinel(
 
     ask.ask_number_and_save(
         project,
-        attr="chatterbox_exaggeration",
+        target=SettingRef("chatterbox", "exaggeration"),
         prompt="Enter exaggeration:",
         min_value=0.25,
         max_value=2.0,
@@ -232,14 +234,14 @@ def test_ask_number_and_save_unchanged_effective_default_preserves_sentinel(
         is_minus_one_default=True,
     )
 
-    assert project.chatterbox_exaggeration == -1.0
+    assert get_setting(project, "chatterbox_exaggeration") == -1.0
     assert saves == []
 
 
 @pytest.mark.parametrize("submitted", ["0.5", "0.50"])
 def test_ask_number_and_save_does_not_save_unchanged_value(monkeypatch, submitted):
     project = Project()
-    project.chatterbox_exaggeration = 0.5
+    set_setting(project, "chatterbox_exaggeration", 0.5)
     saves = []
 
     monkeypatch.setattr(
@@ -250,7 +252,7 @@ def test_ask_number_and_save_does_not_save_unchanged_value(monkeypatch, submitte
 
     ask.ask_number_and_save(
         project,
-        attr="chatterbox_exaggeration",
+        target=SettingRef("chatterbox", "exaggeration"),
         prompt="Enter exaggeration:",
         min_value=0.25,
         max_value=2.0,
@@ -259,13 +261,13 @@ def test_ask_number_and_save_does_not_save_unchanged_value(monkeypatch, submitte
         is_minus_one_default=True,
     )
 
-    assert project.chatterbox_exaggeration == 0.5
+    assert get_setting(project, "chatterbox_exaggeration") == 0.5
     assert saves == []
 
 
 def test_ask_number_and_save_accepts_minus_one_default_sentinel(monkeypatch):
     project = Project()
-    project.chatterbox_exaggeration = 0.5
+    set_setting(project, "chatterbox_exaggeration", 0.5)
     saves = []
 
     monkeypatch.setattr(ask, "ask_input", lambda *, prefill: "-1")
@@ -274,7 +276,7 @@ def test_ask_number_and_save_accepts_minus_one_default_sentinel(monkeypatch):
 
     ask.ask_number_and_save(
         project,
-        attr="chatterbox_exaggeration",
+        target=SettingRef("chatterbox", "exaggeration"),
         prompt="Enter exaggeration:",
         min_value=0.25,
         max_value=2.0,
@@ -283,7 +285,7 @@ def test_ask_number_and_save_accepts_minus_one_default_sentinel(monkeypatch):
         is_minus_one_default=True,
     )
 
-    assert project.chatterbox_exaggeration == -1
+    assert get_setting(project, "chatterbox_exaggeration") == -1
     assert saves == [project]
 
 
@@ -295,7 +297,7 @@ def test_ask_string_and_save_does_not_save_unchanged_value(
     monkeypatch, submitted, normalizer
 ):
     project = Project()
-    project.qwen3_instructions = "hello"
+    set_setting(project, "qwen3_instructions", "hello")
     saves = []
 
     monkeypatch.setattr(
@@ -309,13 +311,13 @@ def test_ask_string_and_save_does_not_save_unchanged_value(
     saved = ask.ask_string_and_save(
         project,
         prompt_line="Enter instructions:",
-        attr="qwen3_instructions",
+        target=SettingRef("qwen3tts", "instructions"),
         success_prefix="Instructions set:",
         normalizer=normalizer,
     )
 
     assert saved is False
-    assert project.qwen3_instructions == "hello"
+    assert get_setting(project, "qwen3_instructions") == "hello"
     assert saves == []
 
 

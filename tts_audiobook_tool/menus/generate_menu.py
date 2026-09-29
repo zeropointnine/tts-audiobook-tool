@@ -11,6 +11,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.project_support.model_settings import REGISTRY, SettingRef
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -98,7 +99,7 @@ class GenerateMenu:
                     lambda _, __: GenerateMenu.run_editor(state),
             ))
 
-            show_batch_item = Tts.get_type().value.can_batch
+            show_batch_item = Tts.get_type().can_batch()
 
             # Batch size
             if show_batch_item:
@@ -272,9 +273,10 @@ def ask_retries(state: State) -> None:
 
 def ask_batch_size(state: State) -> None:
 
-    field_name = Tts.get_type().value.batch_size_attr
-    if not field_name:
+    binding = REGISTRY.orchestration_binding(Tts.get_type().id)
+    if binding is None:
         return # silently ignore (shouldn't happen)
+    target = SettingRef(binding.model_id, binding.name)
 
     hints.show_hint_if_necessary(state.prefs, HINT_BATCH)
 
@@ -286,7 +288,7 @@ def ask_batch_size(state: State) -> None:
     max_value = PROJECT_CONCURRENT_REQUESTS_MAX if Tts.is_sgl_mode() else PROJECT_BATCH_SIZE_MAX
 
     ask.ask_number_and_save(
-        state.project, field_name, prompt,
+        state.project, target, prompt,
         1, max_value, PROJECT_BATCH_SIZE_DEFAULT,
         "Set batch size:", is_int=True
     )
@@ -362,7 +364,7 @@ def do_generate(state: State) -> None:
     printt(s)
     # Print batching setting
     tts_type = Tts.get_type()
-    if tts_type.value.can_batch:
+    if tts_type.can_batch():
         batch_size = ProjectVoiceUtil.get_batch_size(state.project)
         if Tts.is_sgl_mode():
             s = f"- Concurrent requests: {batch_size}"

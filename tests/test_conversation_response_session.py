@@ -572,7 +572,7 @@ def test_save_chat_output_saves_concatenated_sounds(tmp_path, monkeypatch) -> No
     monkeypatch.setattr(Tts, "get_info", lambda: SimpleNamespace(file_tag="testmodel"))
     monkeypatch.setattr(
         Tts,
-        "get_class",
+        "get_model_support",
         lambda: SimpleNamespace(get_voice_tag=lambda project: "voice1"),
     )
 

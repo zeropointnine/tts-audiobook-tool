@@ -30,7 +30,7 @@ def test_text_readiness_does_not_probe_microphone_or_require_stt(monkeypatch) ->
         lambda: (_ for _ in ()).throw(AssertionError("microphone probed")),
     )
     monkeypatch.setattr(
-        "tts_audiobook_tool.tts.Tts.get_class",
+        "tts_audiobook_tool.tts.Tts.get_model_support",
         lambda: SimpleNamespace(get_blocking_issues=lambda project, voice: []),
     )
 
@@ -42,7 +42,7 @@ def test_echo_readiness_does_not_require_llm_endpoint(monkeypatch) -> None:
     state.prefs.chat_echo_override = True
     state.prefs.llm_url = ""
     monkeypatch.setattr(
-        "tts_audiobook_tool.tts.Tts.get_class",
+        "tts_audiobook_tool.tts.Tts.get_model_support",
         lambda: SimpleNamespace(get_blocking_issues=lambda project, voice: []),
     )
 
@@ -55,7 +55,7 @@ def test_microphone_readiness_retains_input_requirements(monkeypatch) -> None:
         readiness.SoundInputDeviceInfo, "get_check_error", lambda: "no mic"
     )
     monkeypatch.setattr(
-        "tts_audiobook_tool.tts.Tts.get_class",
+        "tts_audiobook_tool.tts.Tts.get_model_support",
         lambda: SimpleNamespace(get_blocking_issues=lambda project, voice: []),
     )
 

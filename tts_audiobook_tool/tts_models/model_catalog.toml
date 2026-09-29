@@ -1,0 +1,1201 @@
+# Application-shipped model catalog (not a per-project settings file).
+# Parsed at import time; keep it valid and restart the application after editing.
+# schema_version is the catalog schema, not the saved project schema.
+# Model order is significant for built-in handles and matching ties.
+# IDs and built-in symbols are stable identities; do not rename them casually.
+# Local specs provide model metadata; server entries also declare request behavior and menus.
+# Omitting backend_kind is allowed only on the NONE placeholder (TOML has no null).
+# `match.model_id_substring` is a case-insensitive upstream model-ID fragment;
+# the longest matching fragment wins. `spec.file_tag` determines output naming.
+# `spec.substitutions` are ordered [before, after] pairs applied to input text.
+# `spec.ui` holds display names, prompts and upstream links, not runtime policy.
+# Server `behavior` values select built-in policies, never arbitrary code.
+# `parameters` describe request keys, validated defaults/bounds and optional
+# sentinel or request caps. `request_defaults` and `request_stream_defaults`
+# apply to their respective request modes; they are not project settings.
+# `menu` entries are ordered; `parameter` refers to a declared parameter.
+# Strings like "resolved" and "omitted" are validated policy names; a -1
+# default_sentinel represents an unset persisted preference where supported.
+# Comments count toward the raw-file fingerprint checked across processes.
+#
+# Field notes carried forward from the original hardcoded TtsModelSpec:
+# `id`: identifier used for serialization.
+# `backend_kind`: the kind of backend executing/serving this variant; the NONE
+# placeholder is not a real model and has no backend.
+# `match.model_id_substring`: substring for simple SGL-Omni model-name matching.
+# `spec.local_module_test`: module name, or "dist:<package>" /
+# "dist:<package>==<version>", probing whether the model library exists in this venv.
+# `spec.local_torch_devices`: supported torch device types for local inference.
+# `spec.file_tag`: identifier used in file names.
+# `spec.default_output_sample_rate`: model's native/default sound output sample rate.
+# `spec.requires_voice`: whether generation requires a voice clone sample.
+# `spec.can_stream`: whether the model supports streaming chunk callbacks.
+# `spec.requires_ffmpeg_libs`: FFmpeg shared libraries (dll/so/dylib), not just
+# the ffmpeg executable; usually needed because the model depends on TorchCodec.
+# `spec.un_all_caps`: forces lowercase on initially all-caps prompts (see
+# `un_all_caps_prompt()`); use for models that perform poorly on all-caps text.
+# `spec.requirements_file_name`: requirements.txt for the model's virtual environment.
+# `spec.ui`: UI-related strings and values.
+# `spec.output_filters`: case-sensitive substrings of worker console lines to
+# filter out of output history.
+# `spec.substitutions`: ordered string-replace pairs, primarily for punctuation
+# that a model might disregard or interpret unexpectedly.
+
+schema_version = 3
+
+# ------------------------------------------------------------------------
+# none: The NONE handle is a placeholder, not an inference backend. TOML has no null; only this entry
+# omits backend_kind.
+# Placeholder model type when no other models are detected
+[[models]]
+id = "none"
+symbol = "NONE"
+
+# Not a real model: no backend. In SGL-Omni mode the placeholder
+# means "server not configured"; in local mode it means "no TTS
+# model library in the venv".
+[models.spec]
+local_module_test = ""
+local_torch_devices = []
+file_tag = ""
+default_output_sample_rate = 0
+requires_voice = false
+can_stream = false
+requires_ffmpeg_libs = false
+un_all_caps = false
+# Only meaningful in SGL-Omni mode ("server not configured"); in local
+# mode there is no TTS model in the venv. Consumers presenting this file are
+# mode-aware (see Tts.get_requirements_file_name()).
+requirements_file_name = "requirements-sgl-omni.txt"
+output_filters = []
+substitutions = []
+
+[models.spec.ui]
+proper_name = "None"
+short_name = "None"
+voice_path_console = ""
+voice_path_requestor = ""
+project_links = [
+    "https://www.example.com",
+]
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "server_auk"
+symbol = "AUK_SERVER"
+backend_kind = "sgl_omni"
+
+[models.match]
+# Generic AuK match. The longer AuK-Flash substring below wins when both match.
+model_id_substring = "auk"
+
+[models.spec]
+file_tag = "auk"
+default_output_sample_rate = 24000
+un_all_caps = false
+substitutions = []
+requirements_file_name = "requirements-sgl-omni.txt"
+
+[models.spec.ui]
+proper_name = "AuK"
+short_name = "AuK"
+voice_path_console = "Enter voice clone audio clip file path (~5s recommended): "
+voice_path_requestor = "Select voice clone audio clip (~5s recommended)"
+project_links = [
+    "https://github.com/Tencent-Hunyuan/AuK",
+    "https://huggingface.co/tencent/AuK",
+    "https://sgl-project.github.io/sglang-omni/cookbook/auk.html",
+]
+
+[models.behavior]
+streaming = false
+seed = "resolved"
+voice_required = true
+transcript = "required_when_voice_present"
+prompt_policy = "auk_seconds"
+
+[models.request_defaults]
+response_format = "wav"
+
+[models.parameters]
+
+[models.parameters.speed]
+type = "float"
+request_key = "speed"
+default = 1.0
+min = 0.5
+max = 2.0
+
+[[models.menu]]
+kind = "voice_samples"
+
+[[models.menu]]
+parameter = "speed"
+label = "Speech speed"
+group = "advanced"
+
+[[models.menu]]
+kind = "seed"
+
+# ------------------------------------------------------------------------
+# server_auk_flash shares the AuK request shape but has its own stable handle and upstream model
+# match.
+[[models]]
+id = "server_auk_flash"
+symbol = "AUK_FLASH_SERVER"
+backend_kind = "sgl_omni"
+
+[models.match]
+model_id_substring = "auk-flash"
+
+[models.spec]
+file_tag = "auk"
+default_output_sample_rate = 24000
+un_all_caps = false
+substitutions = []
+requirements_file_name = "requirements-sgl-omni.txt"
+
+[models.spec.ui]
+proper_name = "AuK-Flash"
+short_name = "AuK-Flash"
+voice_path_console = "Enter voice clone audio clip file path (~5s recommended): "
+voice_path_requestor = "Select voice clone audio clip (~5s recommended)"
+project_links = [
+    "https://github.com/Tencent-Hunyuan/AuK",
+    "https://huggingface.co/tencent/AuK-Flash",
+    "https://sgl-project.github.io/sglang-omni/cookbook/auk.html",
+]
+
+[models.behavior]
+streaming = false
+seed = "resolved"
+voice_required = true
+transcript = "required_when_voice_present"
+prompt_policy = "auk_seconds"
+
+[models.request_defaults]
+response_format = "wav"
+
+[models.parameters]
+
+[models.parameters.speed]
+type = "float"
+request_key = "speed"
+default = 1.0
+min = 0.5
+max = 2.0
+
+[[models.menu]]
+kind = "voice_samples"
+
+[[models.menu]]
+parameter = "speed"
+label = "Speech speed"
+group = "advanced"
+
+[[models.menu]]
+kind = "seed"
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "chatterbox"
+symbol = "CHATTERBOX"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "chatterbox"
+local_torch_devices = ["cuda", "mps", "cpu"]
+file_tag = "chatterbox"
+default_output_sample_rate = 24000
+requires_voice = false
+can_stream = false
+requires_ffmpeg_libs = false
+un_all_caps = true
+requirements_file_name = "requirements-chatterbox.txt"
+output_filters = []
+substitutions = [["—", ", "], ["─", ", "]]
+
+[models.spec.ui]
+proper_name = "Chatterbox TTS"
+short_name = "Chatterbox"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/resemble-ai/chatterbox",
+    "https://huggingface.co/ResembleAI",
+]
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "dots"
+symbol = "DOTS"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "dots_tts"
+local_torch_devices = ["cuda", "cpu"]
+file_tag = "dots"
+default_output_sample_rate = 48000
+requires_voice = false
+can_stream = true
+requires_ffmpeg_libs = false
+un_all_caps = false
+requirements_file_name = "requirements-dots.txt"
+output_filters = []
+substitutions = []
+
+[models.spec.ui]
+proper_name = "dots.tts"
+short_name = "dots.tts"
+voice_path_console = "Enter voice clone audio clip file path (up to 10s recommended): "
+voice_path_requestor = "Select voice clone audio clip (up to 10s recommended)"
+project_links = [
+    "https://github.com/zeropointnine/dots.tts-for-tat",
+    "https://huggingface.co/dots-studio",
+]
+
+# ------------------------------------------------------------------------
+# fish_s1: This distribution probe pins the installed fish-speech version for S1
+[[models]]
+id = "fish_s1"
+symbol = "FISH_S1"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "dist:fish-speech==0.1.0"
+local_torch_devices = ["cuda", "mps", "cpu"]
+file_tag = "s1-mini"
+default_output_sample_rate = 44100
+requires_voice = false
+can_stream = false
+requires_ffmpeg_libs = false
+# Does well with all caps, but still worse than normal case.
+un_all_caps = true
+requirements_file_name = "requirements-fish-s1.txt"
+output_filters = []
+# Em dash does not reliably induce caesura.
+substitutions = [["—", ", "], ["─", ", "]]
+
+[models.spec.ui]
+proper_name = "Fish S1-mini"
+short_name = "S1-mini"
+voice_path_console = "Enter voice clone audio clip file path (up to 10s): "
+voice_path_requestor = "Select voice clone audio clip (up to 10s)"
+project_links = [
+    "https://github.com/fishaudio/fish-speech",
+    "https://huggingface.co/fishaudio/s1-mini",
+]
+
+# ------------------------------------------------------------------------
+# fish_s2: S2 uses a different fish-speech distribution version from S1
+[[models]]
+id = "fish_s2"
+symbol = "FISH_S2"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "dist:fish-speech==2.0.0"
+local_torch_devices = ["cuda", "mps", "cpu"]
+file_tag = "s2-pro"
+default_output_sample_rate = 44100
+requires_voice = false
+can_stream = false
+requires_ffmpeg_libs = false
+un_all_caps = false
+requirements_file_name = "requirements-fish-s2.txt"
+output_filters = []
+# Em dash does not reliably induce caesura.
+substitutions = [["—", ", "], ["─", ", "]]
+
+[models.spec.ui]
+proper_name = "Fish S2-Pro"
+short_name = "S2-Pro"
+voice_path_console = "Enter voice clone audio clip file path (10-30s): "
+voice_path_requestor = "Select voice clone audio clip (10-30s)"
+project_links = [
+    "https://github.com/fishaudio/fish-speech",
+    "https://huggingface.co/fishaudio/s2-pro",
+]
+
+# ------------------------------------------------------------------------
+# server_fish_s2: This server variant shares the output tag with local S2; its request-level top_k is
+# capped separately.
+[[models]]
+id = "server_fish_s2"
+symbol = "FISH_S2_SERVER"
+backend_kind = "sgl_omni"
+
+[models.match]
+# SGL-Omni only supported one type of Fish model (v2) when this match was chosen.
+model_id_substring = "fish"
+
+[models.spec]
+file_tag = "s2-pro"
+default_output_sample_rate = 44100
+un_all_caps = false
+# Em dash does not reliably induce caesura.
+substitutions = [["—", ", "], ["─", ", "]]
+requirements_file_name = "requirements-sgl-omni.txt"
+
+[models.spec.ui]
+proper_name = "Fish S2-Pro"
+short_name = "S2-Pro"
+voice_path_console = "Enter voice clone audio clip file path (10-30s): "
+voice_path_requestor = "Select voice clone audio clip (10-30s)"
+project_links = [
+    "https://github.com/fishaudio/fish-speech",
+    "https://huggingface.co/fishaudio/s2-pro",
+    "https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html",
+]
+
+[models.behavior]
+streaming = true
+seed = "unsupported"
+voice_required = false
+transcript = "required_when_voice_present"
+
+[models.parameters]
+
+[models.parameters.temperature]
+type = "float"
+request_key = "temperature"
+default = 0.7
+default_sentinel = -1
+min = 0.01
+max = 1.99
+
+[models.parameters.top_p]
+type = "float"
+request_key = "top_p"
+default = 0.9
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+[models.parameters.top_k]
+type = "int"
+request_key = "top_k"
+default = 30
+default_sentinel = -1
+min = 1
+max = 100
+# The UI accepts up to 100, but server requests cap top_k at 30.
+max_request_value = 30
+
+[[models.menu]]
+kind = "voice_samples"
+
+[[models.menu]]
+parameter = "temperature"
+label = "Temperature"
+group = "advanced"
+
+[[models.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.menu]]
+parameter = "top_k"
+label = "Top-K"
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "glm"
+symbol = "GLM"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "glm_tts"
+# CUDA-only at the time this setting was documented.
+local_torch_devices = ["cuda"]
+file_tag = "glm"
+default_output_sample_rate = 24000
+requires_voice = true
+can_stream = false
+requires_ffmpeg_libs = false
+un_all_caps = false
+requirements_file_name = "requirements-glm.txt"
+output_filters = []
+# Semicolon generates a random syllable; em-dash and space-en-dash-space do not create a caesura.
+substitutions = [
+    [";", ","],
+    ["—", ", "], ["─", ", "],
+    [" – ", ", "],
+]
+
+[models.spec.ui]
+proper_name = "GLM-TTS"
+short_name = "GLM"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/zai-org/GLM-TTS",
+    "https://huggingface.co/zai-org/GLM-TTS",
+]
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "higgs_v2"
+symbol = "HIGGS_V2"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "boson_multimodal"
+local_torch_devices = ["cuda", "mps", "cpu"]
+file_tag = "higgs_v2"
+default_output_sample_rate = 24000
+requires_voice = false
+can_stream = false
+requires_ffmpeg_libs = false
+un_all_caps = false
+requirements_file_name = "requirements-higgs-v2.txt"
+output_filters = []
+substitutions = [["—", ", "], ["─", ", "]]
+
+[models.spec.ui]
+proper_name = "Higgs Audio V2"
+short_name = "Higgs v2"
+voice_path_console = "Enter voice clone audio clip file path (~15 seconds recommended): "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/boson-ai/higgs-audio",
+    "https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base",
+]
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "server_higgs_v3"
+symbol = "HIGGS_V3_SERVER"
+backend_kind = "sgl_omni"
+
+[models.match]
+# SGL-Omni only supported one type of Higgs model (v3) when this match was chosen.
+model_id_substring = "higgs"
+
+[models.spec]
+file_tag = "higgs_v3"
+default_output_sample_rate = 24000
+un_all_caps = false
+substitutions = [["—", ", "], ["─", ", "]]
+requirements_file_name = "requirements-sgl-omni.txt"
+
+[models.spec.ui]
+proper_name = "Higgs Audio V3"
+short_name = "Higgs v3"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://huggingface.co/bosonai/higgs-audio-v3-tts-4b",
+    "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html",
+]
+
+[models.behavior]
+streaming = true
+seed = "unsupported"
+voice_required = false
+transcript = "required_when_voice_present"
+
+[models.request_defaults]
+max_tokens = 1536
+
+[models.parameters]
+
+[models.parameters.temperature]
+type = "float"
+request_key = "temperature"
+default = 1.0
+default_sentinel = -1
+min = 0.01
+max = 2.0
+
+[models.parameters.top_p]
+type = "float"
+request_key = "top_p"
+default = 1.0
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+[models.parameters.top_k]
+type = "int"
+request_key = "top_k"
+default = 100
+default_sentinel = -1
+min = 1
+max = 100
+
+[[models.menu]]
+kind = "voice_samples"
+
+[[models.menu]]
+parameter = "temperature"
+label = "Temperature"
+group = "advanced"
+
+[[models.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.menu]]
+parameter = "top_k"
+label = "Top-K"
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "indextts2"
+symbol = "INDEXTTS2"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "indextts"
+local_torch_devices = ["cuda", "mps", "cpu"]
+file_tag = "indextts2"
+default_output_sample_rate = 22050
+requires_voice = true
+can_stream = false
+requires_ffmpeg_libs = false
+un_all_caps = false
+requirements_file_name = "requirements-indextts2.txt"
+output_filters = []
+# Em-dash often does not create caesura; en-dash often generates a random syllable.
+substitutions = [["—", ", "], ["─", ", "], ["–", ", "]]
+
+[models.spec.ui]
+proper_name = "IndexTTS2"
+short_name = "IndexTTS2"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/index-tts/index-tts",
+    "https://huggingface.co/IndexTeam/IndexTTS-2",
+]
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "mira"
+symbol = "MIRA"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "mira"
+# Does not take a device as a parameter.
+local_torch_devices = []
+file_tag = "mira"
+default_output_sample_rate = 48000
+requires_voice = true
+can_stream = false
+requires_ffmpeg_libs = false
+# Falls down badly with all-caps phrases.
+un_all_caps = true
+requirements_file_name = "requirements-mira.txt"
+# Warning printout that gets spammed like crazy; could not suppress it upstream.
+output_filters = ["smem_size"]
+# Semicolon does not create caesura, but neither does comma reliably.
+# Em-dash and space-en-dash-space seem okay; caesura punctuation generally
+# behaves unpredictably, so there is no use replacing characters.
+substitutions = []
+
+[models.spec.ui]
+proper_name = "MiraTTS"
+short_name = "Mira"
+voice_path_console = "Enter voice clone audio clip file path (recommended up to 8s): "
+voice_path_requestor = "Select voice clone audio clip (recommended up to 8s)"
+project_links = [
+    "https://github.com/ysharma3501/MiraTTS",
+    "https://huggingface.co/YatharthS/MiraTTS",
+]
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "moss"
+symbol = "MOSS"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "dist:moss-tts"
+local_torch_devices = ["cuda", "cpu"]
+file_tag = "moss"
+default_output_sample_rate = 24000
+requires_voice = false
+can_stream = false
+requires_ffmpeg_libs = true
+un_all_caps = false
+requirements_file_name = "requirements-moss.txt"
+output_filters = []
+substitutions = [["—", ", "], ["─", ", "]]
+
+[models.spec.ui]
+proper_name = "MOSS-TTS"
+short_name = "MOSS"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/OpenMOSS/MOSS-TTS",
+    "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5",
+]
+
+# ------------------------------------------------------------------------
+# server_moss_delay: Delay and Local share a broad moss match; longest matching substring chooses the
+# server variant.
+[[models]]
+id = "server_moss_delay"
+symbol = "MOSS_DELAY_SERVER"
+backend_kind = "sgl_omni"
+
+[models.match]
+# Generic fallback for MOSS server IDs. The more specific Local
+# substring below wins when both match.
+model_id_substring = "moss"
+
+[models.spec]
+file_tag = "moss"
+default_output_sample_rate = 24000
+un_all_caps = false
+substitutions = [["—", ", "], ["─", ", "]]
+requirements_file_name = "requirements-sgl-omni.txt"
+
+[models.spec.ui]
+proper_name = "MOSS-TTS Delay"
+short_name = "MOSS Delay"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/OpenMOSS/MOSS-TTS",
+    "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5",
+    "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html",
+]
+
+[models.behavior]
+streaming = false
+seed = "resolved"
+voice_required = false
+transcript = "optional"
+language = "moss"
+
+[models.request_defaults]
+max_new_tokens = 1024
+
+[models.parameters]
+
+[models.parameters.delay_temperature]
+type = "float"
+request_key = "temperature"
+default = 1.7
+default_sentinel = -1
+min = 0.8
+max = 3.0
+
+[models.parameters.delay_top_p]
+type = "float"
+request_key = "audio_top_p"
+default = 0.8
+default_sentinel = -1
+min = 0.5
+max = 1.0
+
+[models.parameters.delay_top_k]
+type = "int"
+request_key = "audio_top_k"
+default = 25
+default_sentinel = -1
+min = 10
+max = 100
+
+[[models.menu]]
+kind = "voice_samples"
+
+[[models.menu]]
+parameter = "delay_temperature"
+label = "MossTTSDelay temperature"
+
+[[models.menu]]
+parameter = "delay_top_p"
+label = "MossTTSDelay top-p"
+
+[[models.menu]]
+parameter = "delay_top_k"
+label = "MossTTSDelay top-k"
+
+[[models.menu]]
+kind = "seed"
+
+# ------------------------------------------------------------------------
+# server_moss_local: The more specific moss-tts-local match wins over moss when both match.
+[[models]]
+id = "server_moss_local"
+symbol = "MOSS_LOCAL_SERVER"
+backend_kind = "sgl_omni"
+
+[models.match]
+model_id_substring = "moss-tts-local"
+
+[models.spec]
+file_tag = "moss"
+default_output_sample_rate = 48000
+un_all_caps = false
+substitutions = [["—", ", "], ["─", ", "]]
+requirements_file_name = "requirements-sgl-omni.txt"
+
+[models.spec.ui]
+proper_name = "MOSS-TTS Local"
+short_name = "MOSS Local"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/OpenMOSS/MOSS-TTS",
+    "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Local-Transformer",
+    "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html",
+]
+
+[models.behavior]
+streaming = false
+seed = "resolved"
+voice_required = false
+transcript = "optional"
+language = "moss"
+music_and_trim = true
+
+[models.request_defaults]
+max_new_tokens = 1024
+
+[models.parameters]
+
+[models.parameters.local_temperature]
+type = "float"
+request_key = "temperature"
+default = 1.0
+default_sentinel = -1
+min = 0.8
+max = 3.0
+
+[models.parameters.local_top_p]
+type = "float"
+request_key = "audio_top_p"
+default = 0.95
+default_sentinel = -1
+min = 0.5
+max = 1.0
+
+[models.parameters.local_top_k]
+type = "int"
+request_key = "audio_top_k"
+default = 50
+default_sentinel = -1
+min = 10
+max = 100
+
+[[models.menu]]
+kind = "voice_samples"
+
+[[models.menu]]
+parameter = "local_temperature"
+label = "MossTTSLocal temperature"
+
+[[models.menu]]
+parameter = "local_top_p"
+label = "MossTTSLocal top-p"
+
+[[models.menu]]
+parameter = "local_top_k"
+label = "MossTTSLocal top-k"
+
+[[models.menu]]
+kind = "seed"
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "omnivoice"
+symbol = "OMNIVOICE"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "omnivoice"
+local_torch_devices = ["cuda", "mps", "cpu"]
+file_tag = "omnivoice"
+default_output_sample_rate = 24000
+# Supports Voice Design and Auto Voice without ref_audio.
+requires_voice = false
+can_stream = false
+requires_ffmpeg_libs = false
+# Slightly more error-prone when all-caps.
+un_all_caps = true
+requirements_file_name = "requirements-omnivoice.txt"
+output_filters = []
+# Generally handles caesura-related punctuation decently, with natural
+# variations in duration.
+substitutions = []
+
+[models.spec.ui]
+proper_name = "OmniVoice"
+short_name = "OmniVoice"
+voice_path_console = "Enter voice clone audio clip file path (3-10s recommended, up to 15s): "
+voice_path_requestor = "Select voice clone audio clip (3-10s recommended, up to 15s)"
+project_links = [
+    "https://github.com/k2-fsa/OmniVoice",
+    "https://huggingface.co/k2-fsa/OmniVoice",
+]
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "pocket"
+symbol = "POCKET"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "pocket_tts"
+local_torch_devices = ["cuda", "mps", "cpu"]
+file_tag = "pocket"
+default_output_sample_rate = 24000
+requires_voice = true
+can_stream = true
+requires_ffmpeg_libs = false
+un_all_caps = false
+requirements_file_name = "requirements-pocket.txt"
+output_filters = []
+# Generally handles caesura-related punctuation decently, with natural
+# variations in duration.
+substitutions = []
+
+[models.spec.ui]
+proper_name = "Pocket TTS"
+short_name = "Pocket"
+voice_path_console = "Enter voice clone audio clip file path (5-10s, up to 15s): "
+voice_path_requestor = "Select voice clone audio clip (5-10s, up to 15s)"
+project_links = [
+    "https://github.com/kyutai-labs/pocket-tts",
+    "https://huggingface.co/kyutai/pocket-tts",
+]
+# Special case: upstream opt-in URL
+opt_in_url = "https://github.com/kyutai-labs/pocket-tts"
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "qwen3tts"
+symbol = "QWEN3TTS"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "qwen_tts"
+local_torch_devices = ["cuda", "mps", "cpu"]
+file_tag = "qwen3"
+default_output_sample_rate = 24000
+# Applies to the Base model type only.
+requires_voice = true
+can_stream = false
+requires_ffmpeg_libs = false
+# Only slightly more error-prone when all-caps.
+un_all_caps = true
+requirements_file_name = "requirements-qwen3tts.txt"
+output_filters = ["for open-end generation"]
+# Does well with various punctuation.
+substitutions = []
+
+[models.spec.ui]
+proper_name = "Qwen3-TTS"
+short_name = "Qwen3-TTS"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/QwenLM/Qwen3-TTS",
+    "https://huggingface.co/collections/Qwen/qwen3-tts",
+]
+
+# ------------------------------------------------------------------------
+# Server Qwen uses stream-request defaults separately from ordinary request defaults.
+[[models]]
+id = "server_qwen3tts"
+symbol = "QWEN3TTS_SERVER"
+backend_kind = "sgl_omni"
+
+[models.match]
+model_id_substring = "qwen"
+
+[models.spec]
+file_tag = "qwen3"
+default_output_sample_rate = 24000
+un_all_caps = true
+# Does well with various punctuation.
+substitutions = []
+requirements_file_name = "requirements-sgl-omni.txt"
+
+[models.spec.ui]
+proper_name = "Qwen3-TTS"
+short_name = "Qwen3-TTS"
+voice_path_console = ""
+voice_path_requestor = ""
+project_links = [
+    "https://github.com/QwenLM/Qwen3-TTS",
+    "https://huggingface.co/collections/Qwen/qwen3-tts",
+    "https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html",
+]
+
+[models.behavior]
+# Does NOT stream in practice, despite the SGL-Omni Qwen3-TTS docs claiming otherwise (as of 2026-06)
+streaming = false
+seed = "unsupported"
+# Historical note said this diverged from the local version. Both current
+# catalog entries require voice; keep this policy explicit.
+voice_required = true
+transcript = "optional"
+
+[models.request_stream_defaults]
+response_format = "pcm"
+
+[models.parameters]
+
+[models.parameters.temperature]
+type = "float"
+request_key = "temperature"
+default = 0.9
+default_sentinel = -1
+min = 0.01
+max = 3.0
+
+[models.parameters.top_p]
+type = "float"
+request_key = "top_p"
+default = 1.0
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+[models.parameters.top_k]
+type = "int"
+request_key = "top_k"
+default = 50
+default_sentinel = -1
+min = 1
+max = 100
+
+[models.parameters.repetition_penalty]
+type = "float"
+request_key = "repetition_penalty"
+default = 1.05
+default_sentinel = -1
+min = 1.0
+max = 2.0
+omit_when_unset = true
+
+[[models.menu]]
+kind = "voice_samples"
+
+[[models.menu]]
+parameter = "temperature"
+label = "Temperature"
+group = "advanced"
+
+[[models.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.menu]]
+parameter = "top_k"
+label = "Top-K"
+
+[[models.menu]]
+parameter = "repetition_penalty"
+label = "Repetition penalty"
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "vibevoice"
+symbol = "VIBEVOICE"
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "vibevoice"
+local_torch_devices = ["cuda", "mps", "cpu"]
+file_tag = "vibevoice"
+default_output_sample_rate = 24000
+requires_voice = false
+can_stream = true
+requires_ffmpeg_libs = false
+un_all_caps = true
+requirements_file_name = "requirements-vibevoice.txt"
+output_filters = []
+# Em dash and semicolon often do not create caesuras. A fancy apostrophe
+# can cause the rest of a word not to be spoken; ellipsis can badly disrupt
+# generation.
+substitutions = [
+    ["—", ", "], ["─", ", "], [";", ","],
+    ["’", "'"],
+    ["…", ","], ["...", ","],
+]
+
+[models.spec.ui]
+proper_name = "VibeVoice"
+short_name = "VibeVoice"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/vibevoice-community/VibeVoice",
+]
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "server_zonos2"
+symbol = "ZONOS2_SERVER"
+backend_kind = "sgl_omni"
+
+[models.match]
+model_id_substring = "zonos2"
+
+[models.spec]
+file_tag = "zonos2"
+default_output_sample_rate = 44100
+un_all_caps = false
+# Behaves well (no punctuation substitutions needed).
+substitutions = []
+requirements_file_name = "requirements-sgl-omni.txt"
+
+[models.spec.ui]
+proper_name = "ZONOS2"
+short_name = "ZONOS2"
+voice_path_console = "Enter voice clone audio clip file path (~10-20 seconds recommended): "
+voice_path_requestor = "Select voice clone audio clip (~10-20 seconds recommended)"
+project_links = [
+    "https://github.com/Zyphra/ZONOS2",
+    "https://huggingface.co/Zyphra/ZONOS2",
+    "https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html",
+]
+
+[models.behavior]
+streaming = true
+seed = "unsupported"
+voice_required = false
+# No server transcript support. The old spec warned to disambiguate
+# against a future zonos2_voice_file_name attribute; storage now lives
+# in the registry rather than on this catalog entry.
+transcript = "omitted"
+prompt_policy = "zonos_tokens"
+
+[models.request_stream_defaults]
+response_format = "pcm"
+
+[models.parameters]
+
+[models.parameters.temperature]
+type = "float"
+request_key = "temperature"
+default = 1.15
+default_sentinel = -1
+min = 0.05
+max = 2.0
+
+[models.parameters.top_k]
+type = "int"
+request_key = "top_k"
+default = 100
+default_sentinel = -1
+min = 1
+max = 200
+
+[models.parameters.repetition_penalty]
+type = "float"
+request_key = "repetition_penalty"
+default = 1.2
+default_sentinel = -1
+min = 1.0
+max = 2.0
+
+[[models.menu]]
+kind = "voice_samples"
+
+[[models.menu]]
+parameter = "temperature"
+label = "Temperature"
+group = "advanced"
+
+[[models.menu]]
+parameter = "top_k"
+label = "Top_K"
+
+[[models.menu]]
+parameter = "repetition_penalty"
+label = "Repetition penalty"
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "server_fun_cosyvoice3"
+backend_kind = "sgl_omni"
+
+[models.match]
+model_id_substring = "cosyvoice3"
+
+[models.spec]
+file_tag = "cosyvoice3"
+default_output_sample_rate = 24000
+un_all_caps = false
+substitutions = []
+requirements_file_name = "requirements-sgl-omni.txt"
+
+[models.spec.ui]
+proper_name = "Fun-CosyVoice3"
+short_name = "CosyVoice3"
+voice_path_console = "Enter voice clone audio clip file path (up to 30s): "
+voice_path_requestor = "Select voice clone audio clip (up to 30s)"
+project_links = [
+    "https://github.com/QwenAudio/CosyVoice",
+    "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+    "https://sgl-project.github.io/sglang-omni/cookbook/fun_cosyvoice3.html",
+]
+
+[models.behavior]
+streaming = true
+seed = "unsupported"
+voice_required = true
+transcript = "optional"
+orchestration = "concurrent_requests"
+
+[models.request_stream_defaults]
+response_format = "pcm"
+
+[models.parameters]
+
+[models.parameters.temperature]
+type = "float"
+request_key = "temperature"
+default = 0.7
+min = 0.01
+max = 2.0
+
+[models.parameters.top_p]
+type = "float"
+request_key = "top_p"
+default = 0.8
+min = 0.01
+max = 1.0
+
+[models.parameters.top_k]
+type = "int"
+request_key = "top_k"
+default = 20
+min = 1
+max = 100
+
+[models.parameters.repetition_penalty]
+type = "float"
+request_key = "repetition_penalty"
+default = 1.1
+min = 1.0
+max = 2.0
+
+[[models.menu]]
+kind = "voice_samples"
+
+[[models.menu]]
+parameter = "temperature"
+label = "Temperature"
+group = "advanced"
+
+[[models.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.menu]]
+parameter = "top_k"
+label = "Top-K"
+
+[[models.menu]]
+parameter = "repetition_penalty"
+label = "Repetition penalty"

@@ -8,6 +8,7 @@ from tts_audiobook_tool.model_worker_protocol import TtsInspected
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_util import strip_ansi_codes
+from project_settings_test_support import set_setting
 
 
 def test_model_selection_refreshes_qwen_menu_model_type(monkeypatch) -> None:
@@ -34,8 +35,8 @@ def test_model_selection_refreshes_qwen_menu_model_type(monkeypatch) -> None:
     def fake_apply_model_and_validate(
         state: State, target: str, on_applied=None
     ) -> None:
-        state.project.qwen3_target = target
-        state.project.qwen3_model_type = "base"
+        set_setting(state.project, "qwen3_target", target)
+        set_setting(state.project, "qwen3_model_type", "base")
         updated_inspection = TtsInspected(
             operation_id="updated",
             tts_type_id="qwen3tts",

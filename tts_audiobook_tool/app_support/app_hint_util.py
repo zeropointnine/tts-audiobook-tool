@@ -30,16 +30,16 @@ def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
     # TTS-model hint/warning
     match Tts.get_type():
         case TtsModelType.FISH_S1:
-            if project.fish_s1_compile_enabled:
+            if project.get_model_setting('fish_s1', 'compile_enabled'):
                 hints.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE, and_prompt=True)
         case TtsModelType.FISH_S2:
-            if project.fish_s2_compile_enabled:
+            if project.get_model_setting('fish_s2', 'compile_enabled'):
                 hints.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE, and_prompt=True)
         case TtsModelType.DOTS:
-            if project.dots_compile:
+            if project.get_model_setting('dots', 'compile'):
                 hints.show_hint_if_necessary(prefs, HINT_DOTS_FIRST_COMPILE, and_prompt=True)
         case TtsModelType.MOSS:
-            target = project.moss_target or MossConfigs.get_default().value.repo_id
+            target = project.get_model_setting('moss', 'target') or MossConfigs.get_default().value.repo_id
             target = "huggingface repo id: " + target
             hint = Hint.make_using(HINT_MOSS_REMOTE_CODE, target)
             can_continue = show_hint_if_necessary(prefs, hint, and_confirm=True)

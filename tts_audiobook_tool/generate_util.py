@@ -764,7 +764,7 @@ class GenerateUtil:
 
         if len(indices) == 0:
             raise ValueError("Indices cannot be empty")
-        if len(indices) > 1 and not Tts.get_type().value.can_batch:
+        if len(indices) > 1 and not Tts.get_type().can_batch():
             raise ValueError("Logic error - Model does not support batching")
 
         # Make prompts (parallel list to indices)
@@ -849,7 +849,7 @@ class GenerateUtil:
 
                 # Trim model-specific short token-like trailing artifacts.
                 # Done before STT transcription so timestamps match the final audio.
-                if sound.data.size > 0 and Tts.get_class().should_trim_trailing_token_noise(project, Tts.get_instance_if_exists()):
+                if sound.data.size > 0 and Tts.get_model_support().should_trim_trailing_token_noise(project, Tts.get_instance_if_exists()):
                     pre_token_noise_trim_duration = sound.duration
                     if save_debug_files:
                         GenerateUtil.save_debug_sound(project, indices[i], "pre_token_noise_trim", sound, is_realtime=is_realtime)

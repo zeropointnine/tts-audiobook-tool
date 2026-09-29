@@ -40,7 +40,7 @@ class SegmentTranscriptUtil:
         text the validator compares against the transcript).
         """
         from tts_audiobook_tool.tts import Tts
-        return Tts.get_class().prepare_text_for_inference(project, source)
+        return Tts.get_model_support().prepare_text_for_inference(project, source)
 
     @staticmethod
     def from_validation_result(

@@ -91,19 +91,19 @@ class DotsModel(DotsBaseModel):
         voice_path = (
             ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else None
         )
-        seed = -1 if force_random_seed else project.dots_seed
+        seed = -1 if force_random_seed else project.get_model_setting('dots', 'seed')
         if seed == -1:
             seed = random.randrange(0, self.SEED_MAX)
         speaker_scale = (
             self.SPEAKER_SCALE_DEFAULT
-            if project.dots_speaker_scale == -1
-            else project.dots_speaker_scale
+            if project.get_model_setting('dots', 'speaker_scale') == -1
+            else project.get_model_setting('dots', 'speaker_scale')
         )
         num_steps = self.resolve_num_steps(project)
         guidance_scale = (
             self.GUIDANCE_SCALE_DEFAULT
-            if project.dots_guidance_scale == -1
-            else project.dots_guidance_scale
+            if project.get_model_setting('dots', 'guidance_scale') == -1
+            else project.get_model_setting('dots', 'guidance_scale')
         )
         return self.generate(
             prompts=prompts,

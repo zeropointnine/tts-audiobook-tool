@@ -172,7 +172,7 @@ class ConversationRuntime:
 
         use_streaming = Tts.get_info().can_stream and self.project.streaming_chat
         sample_rate = (
-            Tts.get_class().get_output_sample_rate(self.project)
+            Tts.get_model_support().get_output_sample_rate(self.project)
             if use_streaming
             else APP_SAMPLE_RATE
         )

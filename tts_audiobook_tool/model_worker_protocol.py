@@ -203,6 +203,7 @@ ModelWorkerCommand = (
 @dataclass(frozen=True)
 class WorkerReady:
     process_id: int
+    config_signature: str = ""
 
 
 @dataclass(frozen=True)

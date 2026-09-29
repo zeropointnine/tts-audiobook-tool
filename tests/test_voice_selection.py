@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-from typing import cast
 from unittest.mock import patch
 import pytest
 
@@ -11,6 +9,7 @@ from tts_audiobook_tool.project_support.project_serialization_util import Projec
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from project_settings_test_support import set_setting
 
 
 def make_phrase_group(voice_index: int = -1) -> PhraseGroup:
@@ -80,10 +79,9 @@ def run_generation(
         next_rotation_index: int = 7,
         voice_selection_index: int | None = None,
 ) -> tuple[int, str, int]:
-    project = cast(Project, SimpleNamespace(
-        voice_select_mode=voice_select_mode,
-        mira_voice_file_name=voices,
-    ))
+    project = Project()
+    project.voice_select_mode = voice_select_mode
+    set_setting(project, "mira_voice_file_name", voices)
     captured_index = -1
 
     def generate_using_project(*args, **kwargs):

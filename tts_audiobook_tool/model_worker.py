@@ -783,6 +783,7 @@ def _model_worker_main(
     event_queue: Any,
     cancellation_event: Any,
     continue_event: Any,
+    expected_config_signature: str | None = None,
 ) -> None:
     from tts_audiobook_tool.model_runtime import mark_model_worker
 
@@ -799,7 +800,10 @@ def _model_worker_main(
 
         app_support.init_logging(f"{APP_NAME}-worker")
         Tts.init_local_model_type()
-        event_queue.put(WorkerReady(os.getpid()))
+        signature = Tts._config_fingerprint
+        if expected_config_signature is not None and signature != expected_config_signature:
+            raise RuntimeError("SGL-Omni configuration differs between main and worker; restart the application")
+        event_queue.put(WorkerReady(os.getpid(), signature))
     except Exception as exception:
         traceback.print_exc()
         event_queue.put(WorkerCommandFailed("", f"Worker startup failed: {exception}"))
@@ -1082,7 +1086,7 @@ def _model_worker_main(
                 device = device_type.value if device_type is not None else ""
                 blocking_issues = tuple(
                     issue.verbose
-                    for issue in Tts.get_class().get_blocking_issues(
+                    for issue in Tts.get_model_support().get_blocking_issues(
                         state.project, instance
                     )
                 )
@@ -1281,9 +1285,13 @@ class ModelWorker:
             event_queue = context.Queue()
             cancellation_event = context.Event()
             continue_event = context.Event()
+            from tts_audiobook_tool.tts import Tts
+            if not Tts._catalog_initialized:
+                Tts.init_local_model_type()
+            expected_config_signature = Tts._config_fingerprint
             process = context.Process(
                 target=_model_worker_main,
-                args=(command_queue, event_queue, cancellation_event, continue_event),
+                args=(command_queue, event_queue, cancellation_event, continue_event, expected_config_signature),
                 name="model-worker",
                 daemon=False,
             )
@@ -1312,6 +1320,11 @@ class ModelWorker:
             except (EOFError, OSError, ValueError):
                 break
             if isinstance(event, WorkerReady):
+                if event.config_signature != expected_config_signature:
+                    with cls._lock:
+                        cls._force_stop_process(process)
+                        cls._discard_process_state()
+                    return "SGL-Omni configuration changed between main and worker; restart the application"
                 with cls._lock:
                     cls._status = WorkerStatus.RUNNING
                 for output in startup_output:

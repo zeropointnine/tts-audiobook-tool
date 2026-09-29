@@ -2,6 +2,7 @@ import json
 
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.prefs import PREFS_FILE_NAME, Prefs
+from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
@@ -63,8 +64,18 @@ def test_load_legacy_moss_server_type_as_auto_and_rewrite(monkeypatch, tmp_path)
 
 
 def test_sgl_omni_type_ids_are_unique():
-    ids = [item.value.id for item in TtsModelType]
+    ids = [item.value.id for item in TtsModelType.all()]
     assert len(ids) == len(set(ids))
+
+
+def test_launcher_uses_registry_handles_without_enum_name():
+    import launch
+
+    assert launch.QUALIFIED_MODELS == [
+        (member.value.local_module_test, member.value.ui["proper_name"])
+        for member in TtsModelType.all()
+        if member != TtsModelType.NONE
+    ]
 
 
 def test_moss_server_variants_have_distinct_catalog_metadata():
@@ -92,9 +103,9 @@ def test_qwen3tts_server_is_sgl_omni_and_non_streaming():
 
     assert info.backend_kind == TtsBackendKind.SGL_OMNI
     assert info.sgl_omni_model_id_substring == "qwen"
-    assert info.voice_target_attr == "qwen3_voice_file_name"
-    assert info.voice_transcript_attr == "qwen3_voice_transcript"
-    assert info.batch_size_attr == "qwen3_server_concurrent_requests"
+    assert REGISTRY.voice_binding(info.id).group == "qwen3"
+    assert REGISTRY.transcript_binding(info.id).group == "qwen3"
+    assert REGISTRY.orchestration_binding(info.id).name == "concurrent_requests"
     assert not info.can_stream
 
 

@@ -97,7 +97,7 @@ class ModelManager:
         # depend on the concrete TTS instance.
         want_yamnet = (
             not skip_yamnet
-            and Tts.get_class().can_hallucinate_music(state.project, tts_instance)
+            and Tts.get_model_support().can_hallucinate_music(state.project, tts_instance)
         )
         if want_yamnet and not ModelManager.has_yamnet_detector():
             GenerationEvents.emit(GenerationPhase("Loading audio validation model"))

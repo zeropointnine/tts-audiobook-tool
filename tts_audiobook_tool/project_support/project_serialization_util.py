@@ -21,7 +21,12 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
-from tts_audiobook_tool.tts_models.auk_server_base_model import AuKServerBaseModel
+from tts_audiobook_tool.project_support.model_settings import (
+    REGISTRY,
+    ModelSettings,
+    normalize_paths,
+)
+from tts_audiobook_tool.project_support.model_settings_declarations import BUILTIN_LEGACY_FIELDS
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.dots_base_model import (
     DotsBaseModel,
@@ -33,11 +38,24 @@ from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.tts_models.zonos2_server_base_model import Zonos2ServerBaseModel
 from tts_audiobook_tool.util import printt
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+
+
+# Bounds for legacy (version-2) server-only fields, retained for migrating
+# older projects after the legacy server classes were removed. They match the
+# shipped JSON definitions for these models.
+AUK_SPEED_DEFAULT = 1.0
+AUK_SPEED_MIN = 0.5
+AUK_SPEED_MAX = 2.0
+ZONOS2_TOP_K_MIN = 1
+ZONOS2_TOP_K_MAX = 200
+ZONOS2_TEMPERATURE_MIN = 0.05
+ZONOS2_TEMPERATURE_MAX = 2.0
+ZONOS2_REPETITION_PENALTY_MIN = 1.0
+ZONOS2_REPETITION_PENALTY_MAX = 2.0
 
 
 class ProjectSerializationUtil:
@@ -96,6 +114,22 @@ class ProjectSerializationUtil:
         "indextts2_emo_voice_file_name": (),
     }
 
+    # Older file spellings of flat model fields. Used only to detect that a
+    # canonical field was supplied by an old project (the loops above and
+    # `remap_legacy_keys` fold the value into the canonical key); the canonical
+    # name owns the migrated value.
+    LEGACY_INPUT_ALIASES: dict[str, tuple[str, ...]] = {
+        "fish_s1_voice_transcript": ("fish_s1_voice_text",),
+        "glm_voice_transcript": ("glm_voice_text",),
+        "higgs_voice_transcript": ("higgs_voice_text",),
+        "higgs_v3_voice_transcript": ("higgs_v3_voice_text",),
+        "vibevoice_lora_target": ("vibevoice_lora_path",),
+        "omnivoice_num_step": ("omnivoice_steps",),
+        "moss_delay_temperature": ("moss_temperature",),
+        "moss_delay_top_p": ("moss_top_p",),
+        "moss_delay_top_k": ("moss_top_k",),
+    }
+
     @classmethod
     def get_project_local_path_field_names(cls) -> list[str]:
         """
@@ -138,7 +172,14 @@ class ProjectSerializationUtil:
         if not isinstance(d, dict):
             return d
 
+        # Version 3 projects carry model settings in `model_settings`; the flat
+        # model fields are then legacy remnants, not expected-but-missing
+        # properties, so their absence must not warn.
+        has_model_settings = isinstance(d.get("model_settings"), dict)
+
         def add_warning(attr_name: str, defaulting_to: Any) -> None:
+            if has_model_settings and attr_name in BUILTIN_LEGACY_FIELDS:
+                return
             s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Missing or invalid value for {COL_ACCENT}{attr_name}{COL_DEFAULT}\n"
             s += "This can occur if a new project property or feature has been\n"
             s += "added to the app since the last time you opened this project.\n"
@@ -239,6 +280,15 @@ class ProjectSerializationUtil:
 
         if 'markers' not in d and 'chapter_indices' in d:
             d['markers'] = d['chapter_indices']
+
+        # Version-3 migration: remember which flat model fields this project
+        # actually supplied, after the legacy key remap above (an old project
+        # may only carry a pre-rename key) but before the per-field loops below
+        # fill every field with its default.
+        legacy_supplied_keys = set(d) & set(BUILTIN_LEGACY_FIELDS)
+        for attr, aliases in ProjectSerializationUtil.LEGACY_INPUT_ALIASES.items():
+            if attr not in legacy_supplied_keys and any(alias in d for alias in aliases):
+                legacy_supplied_keys.add(attr)
 
         path_field_changes: list[str] = []
 
@@ -532,15 +582,15 @@ class ProjectSerializationUtil:
 
         normalize_int('auk_server_concurrent_requests', 1, min_value=1, max_value=PROJECT_CONCURRENT_REQUESTS_MAX, warn=True)
 
-        value = d.get('auk_speed', AuKServerBaseModel.SPEED_DEFAULT)
+        value = d.get('auk_speed', AUK_SPEED_DEFAULT)
         if (
             isinstance(value, bool)
             or not isinstance(value, (int, float))
-            or not AuKServerBaseModel.SPEED_MIN
+            or not AUK_SPEED_MIN
             <= value
-            <= AuKServerBaseModel.SPEED_MAX
+            <= AUK_SPEED_MAX
         ):
-            value = AuKServerBaseModel.SPEED_DEFAULT
+            value = AUK_SPEED_DEFAULT
             add_warning('auk_speed', value)
         d['auk_speed'] = float(value)
 
@@ -554,7 +604,7 @@ class ProjectSerializationUtil:
 
         value = d.get('zonos2_top_k', -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (Zonos2ServerBaseModel.TOP_K_MIN <= value <= Zonos2ServerBaseModel.TOP_K_MAX):
+            if not isinstance(value, (float, int)) or not (ZONOS2_TOP_K_MIN <= value <= ZONOS2_TOP_K_MAX):
                 value = -1
                 add_warning('zonos2_top_k', value)
             value = int(value)
@@ -562,14 +612,14 @@ class ProjectSerializationUtil:
 
         value = d.get('zonos2_temperature', -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (Zonos2ServerBaseModel.TEMPERATURE_MIN <= value <= Zonos2ServerBaseModel.TEMPERATURE_MAX):
+            if not isinstance(value, (float, int)) or not (ZONOS2_TEMPERATURE_MIN <= value <= ZONOS2_TEMPERATURE_MAX):
                 value = -1
                 add_warning('zonos2_temperature', value)
         d['zonos2_temperature'] = value
 
         value = d.get('zonos2_repetition_penalty', -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (Zonos2ServerBaseModel.REPETITION_PENALTY_MIN <= value <= Zonos2ServerBaseModel.REPETITION_PENALTY_MAX):
+            if not isinstance(value, (float, int)) or not (ZONOS2_REPETITION_PENALTY_MIN <= value <= ZONOS2_REPETITION_PENALTY_MAX):
                 value = -1
                 add_warning('zonos2_repetition_penalty', value)
         d['zonos2_repetition_penalty'] = value
@@ -788,7 +838,59 @@ class ProjectSerializationUtil:
                 add_warning("omnivoice_cfg", value)
         d["omnivoice_cfg"] = value
 
+        ProjectSerializationUtil._migrate_model_settings_objects(d, legacy_supplied_keys, warnings=warnings)
+
         return d
+
+    @staticmethod
+    def _migrate_model_settings_objects(
+        d: dict, legacy_supplied_keys: set[str], *, warnings: list[str] | None = None,
+    ) -> None:
+        """
+        Convert validated flat model fields plus any supplied model-settings
+        objects into one reconciled store, then remove the flat fields.
+
+        New objects win over flat values; absent overrides are simply absent,
+        never a persisted default sentinel. Whole unknown model/group objects
+        are retained for later environments.
+        """
+        legacy_values: dict[str, Any] = {}
+        for attr in legacy_supplied_keys:
+            value = d.get(attr)
+            if value is None:
+                aliases = ProjectSerializationUtil.LEGACY_INPUT_ALIASES.get(attr, ())
+                value = next((d[alias] for alias in aliases if alias in d), None)
+            if value is not None:
+                legacy_values[attr] = value
+
+        try:
+            settings = REGISTRY.reconcile(d.get("model_settings"), legacy=legacy_values or None)
+        except ValueError as exc:
+            # Actionable but non-destructive: keep whatever whole objects parsed
+            # so the project still loads, and surface the reason.
+            settings = ModelSettings()
+            source = d.get("model_settings")
+            if isinstance(source, dict):
+                if isinstance(source.get("models"), dict):
+                    settings.models.update(source["models"])
+                if isinstance(source.get("shared"), dict):
+                    settings.shared.update(source["shared"])
+            if warnings is not None:
+                warnings.append(f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Problem reading model settings objects:\n{exc}\n")
+
+        if normalize_paths(settings) and warnings is not None:
+            s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Rewrote project-local path(s) in this project's "
+            s += "saved model settings to the app's portable form."
+            s += "\n"
+            warnings.append(s)
+
+        d["model_settings"] = settings.to_dict()
+
+        removal_keys: set[str] = set(BUILTIN_LEGACY_FIELDS)
+        for aliases in ProjectSerializationUtil.LEGACY_INPUT_ALIASES.values():
+            removal_keys.update(aliases)
+        for key in removal_keys:
+            d.pop(key, None)
 
     @staticmethod
     def canonicalize_project_local_paths(d: dict) -> None:
@@ -846,150 +948,19 @@ class ProjectSerializationUtil:
 
             "none_voice_file_name": project.none_voice_file_name,
 
-            "auk_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.auk_voice_file_name),
-            "auk_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.auk_voice_transcript),
-            "auk_server_concurrent_requests": project.auk_server_concurrent_requests,
-            "auk_speed": project.auk_speed,
-            "auk_seed": project.auk_seed,
-
-            "chatterbox_type": project.chatterbox_type.id,
-            "chatterbox_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.chatterbox_voice_file_name),
-            "chatterbox_temperature": project.chatterbox_temperature,
-            "chatterbox_top_p": project.chatterbox_top_p,
-            "chatterbox_turbo_top_k": project.chatterbox_turbo_top_k,
-            "chatterbox_ml_v2_repetition_penalty": project.chatterbox_ml_v2_repetition_penalty,
-            "chatterbox_ml_v3_repetition_penalty": project.chatterbox_ml_v3_repetition_penalty,
-            "chatterbox_turbo_repetition_penalty": project.chatterbox_turbo_repetition_penalty,
-            "chatterbox_cfg": project.chatterbox_cfg,
-            "chatterbox_exaggeration": project.chatterbox_exaggeration,
-            "chatterbox_seed": project.chatterbox_seed,
-
-            "dots_target": project.dots_target,
-            "dots_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.dots_voice_file_name),
-            "dots_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.dots_voice_transcript),
-            "dots_seed": project.dots_seed,
-            "dots_speaker_scale": project.dots_speaker_scale,
-            "dots_num_steps_soar": project.dots_num_steps_soar,
-            "dots_num_steps_mf": project.dots_num_steps_mf,
-            "dots_guidance_scale": project.dots_guidance_scale,
-            "dots_compile": project.dots_compile,
-
-            "fish_s1_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s1_voice_file_name),
-            "fish_s1_voice_text": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s1_voice_transcript),
-            "fish_s1_temperature": project.fish_s1_temperature,
-            "fish_s1_top_p": project.fish_s1_top_p,
-            "fish_s1_repetition_penalty": project.fish_s1_repetition_penalty,
-            "fish_s1_seed": project.fish_s1_seed,
-            "fish_s1_compile_enabled": project.fish_s1_compile_enabled,
-
-            "fish_s2_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s2_voice_file_name),
-            "fish_s2_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s2_voice_transcript),
-            "fish_s2_rolling_cont": project.fish_s2_rolling_cont,
-            "fish_s2_temperature": project.fish_s2_temperature,
-            "fish_s2_top_p": project.fish_s2_top_p,
-            "fish_s2_top_k": project.fish_s2_top_k,
-            "fish_s2_seed": project.fish_s2_seed,
-            "fish_s2_compile_enabled": project.fish_s2_compile_enabled,
-            "fish_s2_server_concurrent_requests": project.fish_s2_server_concurrent_requests,
-
-            "higgs_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_voice_file_name),
-            "higgs_voice_text": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_voice_transcript),
-            "higgs_temperature": project.higgs_temperature,
-            "higgs_top_k": project.higgs_top_k,
-            "higgs_top_p": project.higgs_top_p,
-            "higgs_seed": project.higgs_seed,
-
-            "higgs_v3_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_v3_voice_file_name),
-            "higgs_v3_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_v3_voice_transcript),
-            "higgs_v3_temperature": project.higgs_v3_temperature,
-            "higgs_v3_top_p": project.higgs_v3_top_p,
-            "higgs_v3_top_k": project.higgs_v3_top_k,
-            "higgs_v3_batch_size": project.higgs_v3_batch_size,
-            "higgs_v3_seed": project.higgs_v3_seed,
-
-            "vibevoice_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.vibevoice_voice_file_name),
-            "vibevoice_target": project.vibevoice_target,
-            "vibevoice_lora_path": project.vibevoice_lora_target,
-            "vibevoice_cfg": project.vibevoice_cfg,
-            "vibevoice_steps": project.vibevoice_steps,
-            "vibevoice_batch_size": project.vibevoice_batch_size,
-            "vibevoice_seed": project.vibevoice_seed,
-
-            "indextts2_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.indextts2_voice_file_name),
-            "indextts2_temperature": project.indextts2_temperature,
-            "indextts2_emo_voice_file_name": project.indextts2_emo_voice_file_name,
-            "indextts2_emo_vector": project.indextts2_emo_vector,
-            "indextts2_emo_alpha": project.indextts2_emo_alpha,
-            "indextts2_use_fp16": project.indextts2_use_fp16,
-            "indextts2_top_p": project.indextts2_top_p,
-            "indextts2_top_k": project.indextts2_top_k,
-            "indextts2_seed": project.indextts2_seed,
-
-            "glm_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.glm_voice_file_name),
-            "glm_voice_text": ProjectSerializationUtil.serialize_voice_list_value(project.glm_voice_transcript),
-            "glm_sr": project.glm_sr,
-            "glm_seed": project.glm_seed,
-
-            "mira_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.mira_voice_file_name),
-            "mira_temperature": project.mira_temperature,
-            "mira_top_p": project.mira_top_p,
-            "mira_top_k": project.mira_top_k,
-            "mira_repetition_penalty": project.mira_repetition_penalty,
-            "mira_batch_size": project.mira_batch_size,
-            "mira_seed": project.mira_seed,
-
-            "moss_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.moss_voice_file_name),
-            "moss_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.moss_voice_transcript),
-            "moss_target": project.moss_target,
-            "moss_rolling_cont": project.moss_rolling_cont,
-            "moss_delay_temperature": project.moss_delay_temperature,
-            "moss_delay_top_p": project.moss_delay_top_p,
-            "moss_delay_top_k": project.moss_delay_top_k,
-            "moss_local_temperature": project.moss_local_temperature,
-            "moss_local_top_p": project.moss_local_top_p,
-            "moss_local_top_k": project.moss_local_top_k,
-            "moss_batch_size": project.moss_batch_size,
-            "moss_seed": project.moss_seed,
-
-            "qwen3_target": project.qwen3_target,
-            "qwen3_model_type": project.qwen3_model_type,
-            "qwen3_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.qwen3_voice_file_name),
-            "qwen3_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.qwen3_voice_transcript),
-            "qwen3_rolling_cont": project.qwen3_rolling_cont,
-            "qwen3_speaker_id": project.qwen3_speaker_id,
-            "qwen3_instructions": project.qwen3_instructions,
-            "qwen3_batch_size": project.qwen3_batch_size,
-            "qwen3_temperature": project.qwen3_temperature,
-            "qwen3_top_k": project.qwen3_top_k,
-            "qwen3_top_p": project.qwen3_top_p,
-            "qwen3_repetition_penalty": project.qwen3_repetition_penalty,
-            "qwen3_seed": project.qwen3_seed,
-            "qwen3_server_concurrent_requests": project.qwen3_server_concurrent_requests,
-
-            "zonos2_server_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.zonos2_server_voice_file_name),
-            "zonos2_server_concurrent_requests": project.zonos2_server_concurrent_requests,
-            "zonos2_top_k": project.zonos2_top_k,
-            "zonos2_temperature": project.zonos2_temperature,
-            "zonos2_repetition_penalty": project.zonos2_repetition_penalty,
-
-            "pocket_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.pocket_voice_file_name),
-            "pocket_predefined_voice": project.pocket_predefined_voice,
-            "pocket_model_code": project.pocket_model_code,
-            "pocket_temperature": project.pocket_temperature,
-            "pocket_seed": project.pocket_seed,
-
-            "omnivoice_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.omnivoice_voice_file_name),
-            "omnivoice_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.omnivoice_voice_transcript),
-            "omnivoice_target": project.omnivoice_target,
-            "omnivoice_instruct": project.omnivoice_instruct,
-            "omnivoice_cfg": project.omnivoice_cfg,
-            "omnivoice_speed": project.omnivoice_speed,
-            "omnivoice_num_step": project.omnivoice_num_step,
-            "omnivoice_seed": project.omnivoice_seed
+            "model_settings": ProjectSerializationUtil._serialize_model_settings(project),
         }
 
         ProjectSerializationUtil.canonicalize_project_local_paths(result)
         return result
+
+    @staticmethod
+    def _serialize_model_settings(project: Project) -> dict:
+        # Save-time canonicalization of declared project-local paths, matching
+        # the old flat-field behavior for values that never passed through the
+        # load funnel.
+        normalize_paths(project.model_settings)
+        return project.model_settings.to_dict()
 
     @staticmethod
     def to_snapshot_dict(project: Project) -> dict:

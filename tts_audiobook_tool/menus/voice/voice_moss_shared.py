@@ -1,3 +1,4 @@
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.constants_hints import HINT_MOSS_TEMPERATURE
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
@@ -17,23 +18,23 @@ class VoiceMossShared:
         )
 
     @staticmethod
-    def get_temperature_attr(arch_type: MossConfigs) -> str:
-        return "moss_local_temperature" if arch_type == MossConfigs.LOCAL else "moss_delay_temperature"
+    def get_temperature_ref(arch_type: MossConfigs) -> SettingRef:
+        return SettingRef("moss", "local_temperature" if arch_type == MossConfigs.LOCAL else "delay_temperature")
 
     @staticmethod
-    def get_top_p_attr(arch_type: MossConfigs) -> str:
-        return "moss_local_top_p" if arch_type == MossConfigs.LOCAL else "moss_delay_top_p"
+    def get_top_p_ref(arch_type: MossConfigs) -> SettingRef:
+        return SettingRef("moss", "local_top_p" if arch_type == MossConfigs.LOCAL else "delay_top_p")
 
     @staticmethod
-    def get_top_k_attr(arch_type: MossConfigs) -> str:
-        return "moss_local_top_k" if arch_type == MossConfigs.LOCAL else "moss_delay_top_k"
+    def get_top_k_ref(arch_type: MossConfigs) -> SettingRef:
+        return SettingRef("moss", "local_top_k" if arch_type == MossConfigs.LOCAL else "delay_top_k")
 
     @staticmethod
     def make_temperature_item(state: State, arch_type: MossConfigs) -> MenuItem:
         arch_values = arch_type.value
         return VoiceMenuShared.make_temperature_item(
             state=state,
-            attr=VoiceMossShared.get_temperature_attr(arch_type),
+            target=VoiceMossShared.get_temperature_ref(arch_type),
             base_label=f"{arch_values.arch_name} temperature",
             default_value=arch_values.temperature_default,
             min_value=arch_values.temperature_min,
@@ -48,7 +49,7 @@ class VoiceMossShared:
 
         return MenuUtil.make_number_item(
             state=state,
-            attr=VoiceMossShared.get_top_p_attr(arch_type),
+            target=VoiceMossShared.get_top_p_ref(arch_type),
             base_label=f"{arch_values.arch_name} audio top-p",
             default_value=arch_values.audio_top_p_default,
             is_minus_one_default=True,
@@ -65,7 +66,7 @@ class VoiceMossShared:
 
         return MenuUtil.make_number_item(
             state=state,
-            attr=VoiceMossShared.get_top_k_attr(arch_type),
+            target=VoiceMossShared.get_top_k_ref(arch_type),
             base_label=f"{arch_values.arch_name} audio top-k",
             default_value=arch_values.audio_top_k_default,
             is_minus_one_default=True,

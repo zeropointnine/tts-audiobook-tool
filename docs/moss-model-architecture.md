@@ -19,19 +19,19 @@ MOSS has two independent axes that both use the word “local” in different wa
 | Application backend | MOSS architecture | `TtsModelType` | Runtime implementation | Output rate |
 |---|---|---|---|---:|
 | Local/in-process | Delay or Local Transformer, selected by `project.moss_target` | `MOSS` | `MossModel` | 24 kHz or 48 kHz |
-| SGL-Omni | Delay | `MOSS_DELAY_SERVER` | `MossDelayServerModel` using the shared `MossServerModel` request implementation | 24 kHz |
-| SGL-Omni | Local Transformer | `MOSS_LOCAL_SERVER` | `MossLocalServerModel` using the shared `MossServerModel` request implementation | 48 kHz |
+| SGL-Omni | Delay | `MOSS_DELAY_SERVER` | `SglOmniBackendAdapter` with the `server_moss_delay` TOML definition | 24 kHz |
+| SGL-Omni | Local Transformer | `MOSS_LOCAL_SERVER` | `SglOmniBackendAdapter` with the `server_moss_local` TOML definition | 48 kHz |
 
 The local/in-process catalog entry remains one `MOSS` type because its Hugging Face target is a project-level model setting and the loaded architecture is discovered from that target. SGL-Omni exposes the two architectures as formal model types because the server selection needs architecture-specific metadata even when no local model target is configured.
 
 ## Catalog identities and SGL-Omni selection
 
-The server variants are defined in `tts_models/tts_model_type.py`:
+The single [`model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml) (`schema_version = 3`) declares the built-in local `MOSS` spec, both built-in server variants, and the `NONE` placeholder alongside other model specs. It supplies stable IDs/handles, backend kinds and metadata; server entries also carry model-ID matching, behavior, request defaults, parameters and menu definitions. The MOSS server handles are:
 
 - `MOSS_DELAY_SERVER`, serialized as `server_moss_delay`
 - `MOSS_LOCAL_SERVER`, serialized as `server_moss_local`
 
-Both have `TtsBackendKind.SGL_OMNI`, share the same MOSS voice/project storage fields, and use the `moss` file tag. Their output sample rates and UI identities differ.
+Both have `TtsBackendKind.SGL_OMNI`, share the same registry-declared MOSS voice/project storage fields, and use the `moss` file tag. Their output sample rates and UI identities differ. [`tts_model_type.py`](../tts_audiobook_tool/tts_models/tts_model_type.py) installs stable built-in handles from the catalog rather than maintaining a second set of built-in specs.
 
 ### Auto-detect
 
@@ -71,66 +71,13 @@ Compatibility is context-sensitive:
 
 New explicit selections and new project stamps use the two unambiguous IDs.
 
-## Class hierarchy
+## Local model and configured server runtime
 
-The relevant hierarchy is:
+The in-process class hierarchy is `TtsBaseModel` → `MossBaseModel` → `MossModel`. `MossBaseModel` retains the MOSS configs, language-name mapping, local sampling and architecture behavior, and the local batch/rolling-continuation readiness rule. `MossConfigs.get_by_target()` identifies the architecture of a local target; the local `MossModel` loads it and runs inference.
 
-```text
-TtsBaseModel
-└── MossBaseModel
-    ├── MossModel
-    └── MossServerBaseModel
-        └── MossServerModel
-            ├── MossDelayServerModel
-            └── MossLocalServerModel
-```
+Server generation does **not** subclass `MossBaseModel`. Each server variant's behavior and request definition lives alongside its spec in the v3 [`model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml), selected by its stable catalog ID. In SGL-Omni mode the complete catalog is validated before server specs are overlaid; optional validated server entries may add supported IDs with private registry settings, while built-in MOSS bindings stay fixed. `ConfiguredModelSupport` provides metadata, readiness, output rate, music/trimming decisions and menu settings; one `SglOmniBackendAdapter` constructs the `/speech` request and calls `SglOmniUtil.generate_concurrent()`. Local MOSS inference still uses `MossModel`.
 
-### `MossBaseModel`
-
-`MossBaseModel` contains behavior shared by local and server execution:
-
-- supported language-name mapping;
-- MOSS architecture/config definitions (`MossConfigs` and `MossConfig`);
-- sampling-parameter resolution from project fields and architecture defaults;
-- the local-generation readiness rule for the batch-size/rolling-continuation incompatibility;
-- architecture-related interfaces such as output sample rate, trailing-noise handling, and music-hallucination capability.
-
-`MossConfigs.get_by_target()` identifies a local model target as Local Transformer when its target identifies the Local model; otherwise it conservatively uses Delay.
-
-### `MossModel`
-
-`MossModel` is the in-process implementation. It loads the configured Hugging Face target through the MOSS library and determines its architecture from `project.moss_target`/the loaded model.
-
-At generation time it resolves `MossConfigs.DELAY` or `MossConfigs.LOCAL`, selects the corresponding project hyperparameters, and calls the local MOSS generation code.
-
-### `MossServerBaseModel`
-
-`MossServerBaseModel` adds behavior shared by all SGL-Omni MOSS variants:
-
-- SGL-Omni readiness checks;
-- fixed architecture-derived sample rate and behavior through a subclass `CONFIG`;
-- server-oriented model display behavior.
-
-Its readiness override checks server connectivity. It intentionally does not inherit the local batch/rolling-continuation blocker because the server request implementation does not use local rolling continuation.
-
-### `MossServerModel`
-
-`MossServerModel` implements the common SGL-Omni `/speech` request:
-
-- prepares prompt text and language metadata;
-- resolves the architecture-specific sampling values;
-- supplies seed and `max_new_tokens`;
-- sends voice clone audio as a base64 data URI when configured;
-- invokes `SglOmniUtil.generate_concurrent()`.
-
-The SGL-Omni API payload is the same for Delay and Local Transformer. There is intentionally one request implementation rather than duplicated HTTP model classes.
-
-`MossDelayServerModel` and `MossLocalServerModel` are thin concrete subclasses. Each fixes:
-
-- `INFO` to its formal `TtsModelType` specification;
-- `CONFIG` to `MossConfigs.DELAY` or `MossConfigs.LOCAL`.
-
-This allows generic app code to use class metadata without querying the server model ID.
+The Delay and Local definitions use their own sampling parameter keys and defaults, the existing shared MOSS voice/seed ownership, a resolved seed and a fixed token limit. They do not inherit the local batch/rolling-continuation blocker. Architecture-dependent server behavior follows the selected definition, never a second probe of the server model ID.
 
 ## Project settings
 
@@ -158,7 +105,7 @@ The following project storage is shared between architectures and is used by bot
 
 `moss_rolling_cont` applies only to local/in-process generation; the SGL-Omni request implementation does not perform local rolling continuation. `moss_target` likewise selects the model only for local/in-process execution. Neither field selects the SGL-Omni architecture; the active server `TtsModelType` does that.
 
-The server settings menu derives `MossConfigs` from the selected server model type, so it cannot preview one architecture while editing the other architecture’s fields.
+The configured server settings menu uses the selected catalog definition and its registry-declared storage bindings, so it cannot preview one architecture while editing the other architecture’s fields. [`ModelSettingsRegistry`](../tts_audiobook_tool/project_support/model_settings.py) owns setting types, defaults and shared/private ownership; the built-in declarations and old flat project-field mappings remain in [`model_settings_declarations.py`](../tts_audiobook_tool/project_support/model_settings_declarations.py), not in the TOML catalog. The flat names above are legacy input mappings, not new top-level project fields.
 
 ## Architecture-dependent behavior
 
@@ -168,16 +115,17 @@ The Local Transformer and Delay variants differ beyond sampling defaults:
 - Local Transformer is treated as capable of music hallucination.
 - Local Transformer enables MOSS trailing token-noise trimming; Delay does not.
 
-For local/in-process execution these decisions follow `moss_target` or the loaded model. For SGL-Omni execution they follow the fixed concrete server variant.
+For local/in-process execution these decisions follow `moss_target` or the loaded model. For SGL-Omni execution they follow the selected server definition.
 
 ## Main implementation files
 
-- `tts_audiobook_tool/tts_models/tts_model_type.py`: formal catalog entries and model-ID matching.
-- `tts_audiobook_tool/tts_models/moss_base_model.py`: architecture configs and shared behavior.
+- [`tts_audiobook_tool/tts_models/model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml): sole v3 TOML source for built-in local/server/`NONE` specs and MOSS server definitions; also supports validated additional server entries.
+- [`tts_audiobook_tool/tts_models/tts_model_type.py`](../tts_audiobook_tool/tts_models/tts_model_type.py): stable model handles derived from the catalog and model-ID matching.
+- `tts_audiobook_tool/tts_models/moss_base_model.py`: architecture configs and local behavior.
 - `tts_audiobook_tool/tts_models/moss_model.py`: local/in-process implementation.
-- `tts_audiobook_tool/tts_models/moss_server_base_model.py`: shared SGL-Omni model behavior.
-- `tts_audiobook_tool/tts_models/moss_server_model.py`: shared request implementation and concrete Delay/Local server classes.
-- `tts_audiobook_tool/tts.py`: factories and registry entries.
-- `tts_audiobook_tool/menus/voice/voice_moss_shared.py`: common MOSS settings controls.
-- `tts_audiobook_tool/menus/voice/voice_moss_server_menu.py`: variant-aware server settings menu.
+- [`tts_audiobook_tool/tts_models/sgl_omni_definition.py`](../tts_audiobook_tool/tts_models/sgl_omni_definition.py): server-definition validation from the shared catalog.
+- `tts_audiobook_tool/tts_models/sgl_omni_configured.py`: shared server support and adapter.
+- `tts_audiobook_tool/tts.py`: configured server runtime and local factories.
+- `tts_audiobook_tool/menus/voice/voice_moss_shared.py`: common local MOSS settings controls.
+- `tts_audiobook_tool/menus/voice/voice_configured_sgl_omni_menu.py`: configured server settings menu.
 - `tts_audiobook_tool/app_support/sgl_omni_util.py`: server model-ID and HTTP/audio utilities.

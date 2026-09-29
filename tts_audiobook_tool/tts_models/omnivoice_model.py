@@ -103,11 +103,11 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             project, TtsModelType.OMNIVOICE, voice_selection_index
         )
         voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
-        instruct = project.omnivoice_instruct
-        cfg      = project.omnivoice_cfg if project.omnivoice_cfg != -1 else self.CFG_DEFAULT
-        speed    = project.omnivoice_speed if project.omnivoice_speed != -1 else self.DEFAULT_SPEED
-        steps    = project.omnivoice_num_step if project.omnivoice_num_step != -1 else self.DEFAULT_STEPS
-        seed     = -1 if force_random_seed else project.omnivoice_seed
+        instruct = project.get_model_setting('omnivoice', 'instruct')
+        cfg      = project.get_model_setting('omnivoice', 'cfg') if project.get_model_setting('omnivoice', 'cfg') != -1 else self.CFG_DEFAULT
+        speed    = project.get_model_setting('omnivoice', 'speed') if project.get_model_setting('omnivoice', 'speed') != -1 else self.DEFAULT_SPEED
+        steps    = project.get_model_setting('omnivoice', 'num_step') if project.get_model_setting('omnivoice', 'num_step') != -1 else self.DEFAULT_STEPS
+        seed     = -1 if force_random_seed else project.get_model_setting('omnivoice', 'seed')
 
         has_voice    = bool(voice_path and os.path.isfile(voice_path))
         has_instruct = bool(instruct)

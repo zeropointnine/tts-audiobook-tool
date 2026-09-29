@@ -21,7 +21,7 @@ def get_generate_blockers(state: State) -> list[ReadinessIssue]:
             ReadinessIssue("text", "Text must be imported into the project")
         )
 
-    model_errors = Tts.get_class().get_blocking_issues(state.project, None)
+    model_errors = Tts.get_model_support().get_blocking_issues(state.project, None)
     if model_errors:
         items.extend(model_errors)
 
@@ -41,7 +41,7 @@ def get_tts_preview_blocker_text(state: State, verbose: bool = False) -> str:
     """
     from tts_audiobook_tool.tts import Tts
 
-    items = Tts.get_class().get_blocking_issues(state.project, None)
+    items = Tts.get_model_support().get_blocking_issues(state.project, None)
     return format_issues(items, verbose)
 
 
@@ -78,7 +78,7 @@ def get_chat_blockers(state: State) -> list[ReadinessIssue]:
     # TTS Model generation readiness
     from tts_audiobook_tool.tts import Tts
 
-    model_errors = Tts.get_class().get_blocking_issues(state.project, None)
+    model_errors = Tts.get_model_support().get_blocking_issues(state.project, None)
     if model_errors:
         errors.extend(model_errors)
 

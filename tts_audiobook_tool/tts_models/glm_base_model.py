@@ -27,7 +27,7 @@ class GlmBaseModel(TtsBaseModel):
         # voice menu's "Model samplerate" option). A live instance is
         # constructed from that same setting, so the project value is
         # authoritative here too.
-        sr = int(project.glm_sr)
+        sr = int(project.get_model_setting('glm', 'sr'))
         if sr not in GlmBaseModel.SAMPLE_RATES:
             sr = cls.INFO.default_output_sample_rate
         return sr
@@ -37,5 +37,5 @@ class GlmBaseModel(TtsBaseModel):
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
         s = cls.INFO.ui.get("proper_name") or ""
-        s += f" {COL_DIM}(sr: {project.glm_sr})"
+        s += f" {COL_DIM}(sr: {project.get_model_setting('glm', 'sr')})"
         return s

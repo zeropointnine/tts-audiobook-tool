@@ -18,6 +18,8 @@ from tts_audiobook_tool.constants import (
 )
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.project_support.model_settings import REGISTRY
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
@@ -51,20 +53,21 @@ class ProjectTransferUtil:
         'word_substitutions',
     }
 
-    # Fields that hold a machine-local path the user typed, or that the app
-    # recorded on their behalf. The same field may equally hold a model
-    # repository id, so these are treated as opaque user strings: nothing here
-    # rewrites them and a failed existence check never clears them.
-    # `looks_foreign` only produces a warning that the value cannot name a file
-    # on this machine, instead of letting the value fail obscurely later.
-    MACHINE_LOCAL_PATH_TARGET_ATTRS = (
-        'dots_target',
-        'moss_target',
-        'omnivoice_target',
-        'pocket_model_code',
-        'qwen3_target',
-        'vibevoice_target',
-        'vibevoice_lora_target',
+    # Settings that hold a machine-local path the user typed, or that the app
+    # recorded on their behalf, as `(model ID, setting name)` references. The
+    # same setting may equally hold a model repository id, so these are treated
+    # as opaque user strings: nothing here rewrites them and a failed existence
+    # check never clears them. `looks_foreign` only produces a warning that the
+    # value cannot name a file on this machine, instead of letting the value
+    # fail obscurely later.
+    MACHINE_LOCAL_PATH_TARGETS = (
+        ('dots', 'target'),
+        ('moss', 'target'),
+        ('omnivoice', 'target'),
+        ('pocket', 'model_code'),
+        ('qwen3tts', 'target'),
+        ('vibevoice', 'target'),
+        ('vibevoice', 'lora_target'),
     )
 
     @staticmethod
@@ -84,6 +87,40 @@ class ProjectTransferUtil:
         parse_dict = dict(project_snapshot)
         parse_dict['dir_path'] = project_dir
         return Project.model_validate(parse_dict)
+
+    @staticmethod
+    def validate_abr_snapshot(project_snapshot: dict) -> Project:
+        """Validate an ABR snapshot before creating or selecting a destination.
+
+        Pydantic ignores unknown top-level keys, so a nonempty but unrelated
+        object would otherwise import as a successful, empty project. Keep
+        legacy flat fields valid while requiring at least one actual setting.
+        """
+        from tts_audiobook_tool.project import Project
+        from tts_audiobook_tool.project_support.model_settings_declarations import BUILTIN_LEGACY_FIELDS
+        from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+
+        version = project_snapshot.get('version')
+        if version is not None and (type(version) is not int or version < 1):
+            raise ValueError('ABR project snapshot has an invalid project version')
+        known = set(Project.model_fields) | set(BUILTIN_LEGACY_FIELDS)
+        known.update(field.alias for field in Project.model_fields.values() if field.alias)
+        known.update(ProjectSerializationUtil.LEGACY_INPUT_ALIASES)
+        for aliases in ProjectSerializationUtil.LEGACY_INPUT_ALIASES.values():
+            known.update(aliases)
+        known.update(('text', 'text_segments', 'chapter_indices', 'word_substitutions_json_string'))
+        known.difference_update(('version', 'dir_path', 'source_dir_display', 'model_settings'))
+        has_settings = any(key in project_snapshot for key in known)
+        if 'model_settings' in project_snapshot:
+            if not isinstance(project_snapshot['model_settings'], dict):
+                raise ValueError('ABR project snapshot model_settings must be an object')
+            settings = REGISTRY.reconcile(project_snapshot['model_settings'])
+            has_settings |= bool(settings.models or settings.shared)
+        if not has_settings:
+            raise ValueError('ABR project snapshot contains no recognizable project settings')
+        # An empty dir_path prevents validation from creating the destination's
+        # sound-segments directory. The destination is set only at commit time.
+        return ProjectTransferUtil.make_project_from_snapshot('', project_snapshot)
 
     @staticmethod
     def apply_project_settings(dest_project: Project, source_project: Project) -> None:
@@ -141,10 +178,10 @@ class ProjectTransferUtil:
         is merely unresolvable right now may become resolvable later.
         """
         result: list[tuple[str, str]] = []
-        for attr in ProjectTransferUtil.MACHINE_LOCAL_PATH_TARGET_ATTRS:
-            value = getattr(project, attr, '')
+        for model_id, name in ProjectTransferUtil.MACHINE_LOCAL_PATH_TARGETS:
+            value = project.get_model_setting(model_id, name)
             if isinstance(value, str) and value and path_norm.looks_foreign(value):
-                result.append((attr, value))
+                result.append((f"{model_id}_{name}", value))
         return result
 
     @staticmethod
@@ -202,27 +239,22 @@ class ProjectTransferUtil:
 
     @staticmethod
     def make_supporting_project_file_names(project: Project) -> list[str]:
-        file_attrs = []
-        for model_info in TtsModelType:
-            voice_target_attr = model_info.value.voice_target_attr
-            if voice_target_attr.endswith('_voice_file_name') and voice_target_attr not in file_attrs:
-                file_attrs.append(voice_target_attr)
-            for attr in model_info.value.extra_file_attrs:
-                if attr and attr not in file_attrs:
-                    file_attrs.append(attr)
-
         raw_file_names: list[object] = [
             PROJECT_TEXT_FILE_NAME,
             PROJECT_TEXT_RAW_FILE_NAME,
             PROJECT_TEXT_EPUB_FILE_NAME,
         ]
-
-        for attr in file_attrs:
-            value = getattr(project, attr, "")
-            if isinstance(value, list):
-                raw_file_names.extend(value)
-            else:
-                raw_file_names.append(value)
+        seen_owners: set[tuple[str, str]] = set()
+        for model_type in TtsModelType.all():
+            if REGISTRY.voice_binding(model_type.id) is not None:
+                raw_file_names.extend(ProjectVoiceUtil.get_voice_values(project, model_type))
+            for binding in REGISTRY.for_model(model_type.id):
+                if binding.section != "files":
+                    continue
+                owner = (binding.group or binding.model_id, binding.name)
+                if owner not in seen_owners:
+                    seen_owners.add(owner)
+                    raw_file_names.append(project.get_model_setting(model_type.id, binding.name))
 
         filtered_file_names: list[str] = []
         for raw_file_name in raw_file_names:
@@ -243,7 +275,9 @@ class ProjectTransferUtil:
         return filtered_file_names
 
     @staticmethod
-    def copy_supporting_project_files(project: Project, source_dir: str, file_names: list[str]) -> list[str]:
+    def copy_supporting_project_files(
+        project: Project, source_dir: str, file_names: list[str], *, strict_copy_errors: bool = False,
+    ) -> list[str]:
         if not isinstance(source_dir, str):
             source_dir = ''
 
@@ -263,7 +297,9 @@ class ProjectTransferUtil:
                 if dest_dir:
                     os.makedirs(dest_dir, exist_ok=True)
                 shutil.copy(match.path, dest_path)
-            except Exception:
+            except Exception as exc:
+                if strict_copy_errors:
+                    raise OSError(f"Could not copy supporting file {match.path} to {dest_path}: {exc}") from exc
                 missing_paths.append(match.path)
 
         return missing_paths

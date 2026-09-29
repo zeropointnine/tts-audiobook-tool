@@ -9,6 +9,7 @@ from tts_audiobook_tool.menus.menu_status import MenuStatus
 
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 from typing import TypeVar, Callable, Any
@@ -371,16 +372,17 @@ class MenuUtil:
     @staticmethod
     def make_number_label(
         project: Project,
-        attr: str,
+        target: str | SettingRef,
         base_label: str,
         default_value: int | float | None = None,
         is_minus_one_default: bool = True,
         num_decimals: int = 1,
     ) -> str:
 
-        label_value: float | int | None = getattr(project, attr, None)
+        from tts_audiobook_tool.ask import _get_saveable_attr
+        label_value: float | int | None = _get_saveable_attr(project, target)
         if label_value is None:
-            raise ValueError(f"Attribute doesn't exist: {attr}")
+            raise ValueError(f"Attribute doesn't exist: {target}")
         if is_minus_one_default and label_value == -1:
             if default_value is None:
                 raise ValueError("Default value required")
@@ -391,7 +393,7 @@ class MenuUtil:
     @staticmethod
     def make_number_item(
         state: State,
-        attr: str,
+        target: str | SettingRef,
         base_label: str,
         default_value: int | float,
         is_minus_one_default: bool,
@@ -418,7 +420,7 @@ class MenuUtil:
         def on_item(_: State, __: MenuItem) -> None:
             ask.ask_number_and_save(
                 state.project,
-                attr,
+                target,
                 prompt,
                 min_value, max_value,
                 default_value,
@@ -429,7 +431,7 @@ class MenuUtil:
 
         label = MenuUtil.make_number_label(
             project=state.project,
-            attr=attr,
+            target=target,
             base_label=base_label,
             default_value=default_value,
             is_minus_one_default=is_minus_one_default,

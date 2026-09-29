@@ -137,11 +137,9 @@ class State:
         SglOmniUtil.set_base_url(self.prefs.sgl_omni_url)
         Tts.set_sgl_omni_type(self.prefs.sgl_omni_type)
 
-    def make_and_set_new_project(self, path: str) -> str:
-        """
-        Inits project directory and sets new project instance
-        Return error string on fail
-        """
+    @staticmethod
+    def prepare_new_project_directory(path: str) -> str:
+        """Create an empty project directory without selecting or saving a project."""
         try:
             project_dir_path = Path(path).expanduser()
         except:
@@ -172,6 +170,15 @@ class State:
             os.makedirs(concat_path, exist_ok=True)
         except Exception as e:
             return make_error_string(e)
+
+        return ""
+
+    def make_and_set_new_project(self, path: str) -> str:
+        """Initialize and select a new project; return an error string on failure."""
+        err = self.prepare_new_project_directory(path)
+        if err:
+            return err
+        project_dir_path = Path(path).expanduser()
 
         # Make project
         self.prefs.project_dir = str(project_dir_path)

@@ -2,6 +2,7 @@ from tts_audiobook_tool.constants import VOICE_ADVANCED_SUPERLABEL
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
 from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.dots_base_model import (
     DotsBaseModel,
@@ -17,13 +18,13 @@ class VoiceDotsMenu:
         def make_target_label(_: State) -> str:
             return VoiceMenuShared.make_target_label(
                 label_prefix="Select dots.tts model",
-                target=state.project.dots_target,
+                target=state.project.get_model_setting('dots', 'target'),
                 default_target=DotsBaseModel.DEFAULT_REPO_ID,
                 remove_prefixes=["dots-studio/"],
             )
 
         def make_compile_label(_: State) -> str:
-            mode = DotsCompileMode.get_by_enabled(state.project.dots_compile)
+            mode = DotsCompileMode.get_by_enabled(state.project.get_model_setting('dots', 'compile'))
             default = DotsCompileMode.default()
             return make_menu_label("Compile", mode.label, default.label)
 
@@ -46,15 +47,15 @@ class VoiceDotsMenu:
             )
 
             if not DotsBaseModel.is_sampling_locked_target(
-                state.project.dots_target
+                state.project.get_model_setting('dots', 'target')
             ):
                 attr, variant, default_steps, min_steps, max_steps = (
-                    DotsBaseModel.get_num_steps_config(state.project.dots_target)
+                    DotsBaseModel.get_num_steps_config(state.project.get_model_setting('dots', 'target'))
                 )
                 items.append(
                     MenuUtil.make_number_item(
                         state=state,
-                        attr=attr,
+                        target=attr,
                         base_label=f"Num steps ({variant})",
                         default_value=default_steps,
                         is_minus_one_default=True,
@@ -72,7 +73,7 @@ class VoiceDotsMenu:
             items.append(
                 MenuUtil.make_number_item(
                     state=state,
-                    attr="dots_speaker_scale",
+                    target=SettingRef("dots", "speaker_scale"),
                     base_label="Speaker scale",
                     default_value=DotsBaseModel.SPEAKER_SCALE_DEFAULT,
                     is_minus_one_default=True,
@@ -88,12 +89,12 @@ class VoiceDotsMenu:
             )
 
             if DotsBaseModel.is_cfg_configurable_target(
-                state.project.dots_target
+                state.project.get_model_setting('dots', 'target')
             ):
                 items.append(
                     MenuUtil.make_number_item(
                         state=state,
-                        attr="dots_guidance_scale",
+                        target=SettingRef("dots", "guidance_scale"),
                         base_label="CFG",
                         default_value=DotsBaseModel.GUIDANCE_SCALE_DEFAULT,
                         is_minus_one_default=True,
@@ -108,7 +109,7 @@ class VoiceDotsMenu:
                     )
                 )
 
-            items.append(VoiceMenuShared.make_seed_item(state, "dots_seed"))
+            items.append(VoiceMenuShared.make_seed_item(state, SettingRef("dots", "seed")))
             return items
 
         VoiceMenuShared.menu_wrapper(state, make_items)
@@ -124,9 +125,7 @@ class VoiceDotsMenu:
         ]
 
         def on_select(target: str) -> None:
-            state.project.dots_target = (
-                "" if target == DotsBaseModel.DEFAULT_REPO_ID else target
-            )
+            state.project.set_model_setting('dots', 'target', "" if target == DotsBaseModel.DEFAULT_REPO_ID else target)
             state.project.save()
             _ = ModelWorker.clear_models_if_running_blocking()
             print_feedback("Model set:", target)
@@ -136,7 +135,7 @@ class VoiceDotsMenu:
             heading_text="Select dots.tts model",
             labels=targets,
             values=targets,
-            current_value=DotsBaseModel.resolve_target(state.project.dots_target),
+            current_value=DotsBaseModel.resolve_target(state.project.get_model_setting('dots', 'target')),
             default_value=DotsBaseModel.DEFAULT_REPO_ID,
             on_select=on_select,
             sublabels=sublabels,
@@ -154,12 +153,12 @@ class VoiceDotsMenu:
         )
 
         def on_select(mode: DotsCompileMode) -> None:
-            state.project.dots_compile = mode.enabled
+            state.project.set_model_setting('dots', 'compile', mode.enabled)
             state.project.save()
             _ = ModelWorker.clear_models_if_running_blocking()
             print_feedback("Compile set to:", mode.label)
 
-        current = DotsCompileMode.get_by_enabled(state.project.dots_compile)
+        current = DotsCompileMode.get_by_enabled(state.project.get_model_setting('dots', 'compile'))
         MenuUtil.options_menu(
             state=state,
             heading_text="Compile",

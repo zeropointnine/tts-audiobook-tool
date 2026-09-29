@@ -192,7 +192,7 @@ class Qwen3Model(Qwen3BaseModel):
     ) -> list[Sound] | str:
 
         language = self.resolve_language_code_and_warning(project.language_code)[0]
-        seed = -1 if force_random_seed else project.qwen3_seed
+        seed = -1 if force_random_seed else project.get_model_setting('qwen3tts', 'seed')
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
         app_support.set_seed(seed)
@@ -200,10 +200,10 @@ class Qwen3Model(Qwen3BaseModel):
         # Sentinel resolution and library-kwarg mapping live here (the project
         # layer) so that the generate methods receive concrete values only.
         gen_kwargs = self._build_gen_kwargs(
-            temperature=project.qwen3_temperature,
-            top_k=project.qwen3_top_k,
-            top_p=project.qwen3_top_p,
-            repetition_penalty=project.qwen3_repetition_penalty,
+            temperature=project.get_model_setting('qwen3tts', 'temperature'),
+            top_k=project.get_model_setting('qwen3tts', 'top_k'),
+            top_p=project.get_model_setting('qwen3tts', 'top_p'),
+            repetition_penalty=project.get_model_setting('qwen3tts', 'repetition_penalty'),
             seed=seed
         )
 
@@ -225,7 +225,7 @@ class Qwen3Model(Qwen3BaseModel):
                         voice_info=voice_info,
                         language=language,
                         gen_kwargs=gen_kwargs,
-                        rolling_continuation_max_segments=project.qwen3_rolling_cont,
+                        rolling_continuation_max_segments=project.get_model_setting('qwen3tts', 'rolling_cont'),
                         print_params=print_params,
                     )
                 else:
@@ -234,7 +234,7 @@ class Qwen3Model(Qwen3BaseModel):
             case "custom_voice":
 
                 speakers = self.supported_speakers
-                speaker_id = project.qwen3_speaker_id
+                speaker_id = project.get_model_setting('qwen3tts', 'speaker_id')
                 if len(speakers) == 1:
                     if not speaker_id and speaker_id != speakers[0]:
                         ... # print warning maybe
@@ -245,7 +245,7 @@ class Qwen3Model(Qwen3BaseModel):
                     result = self.generate_custom_voice(
                         prompts=prompts,
                         speaker_id=speaker_id,
-                        instruct=project.qwen3_instructions,
+                        instruct=project.get_model_setting('qwen3tts', 'instructions'),
                         language=language,
                         gen_kwargs=gen_kwargs,
                     )
@@ -254,7 +254,7 @@ class Qwen3Model(Qwen3BaseModel):
 
                 result = self.generate_voice_design(
                     prompts=prompts,
-                    instruct=project.qwen3_instructions,
+                    instruct=project.get_model_setting('qwen3tts', 'instructions'),
                     language=language,
                     gen_kwargs=gen_kwargs,
                 )

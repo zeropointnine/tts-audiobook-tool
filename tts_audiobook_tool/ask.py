@@ -16,6 +16,7 @@ from tts_audiobook_tool.app_types import Saveable
 from tts_audiobook_tool.ask_advanced import AskAdvanced
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.util import *
 
 
@@ -228,9 +229,32 @@ def ask_path_input(message: str="", prefill: str="") -> str:
     inp = text_util.strip_quotes_around_path_string(inp)
     return inp
 
+def _get_saveable_attr(saveable: Saveable, target: str | SettingRef) -> Any:
+    """Read a saveable value addressed by an explicit SettingRef or a plain attribute."""
+    if isinstance(target, SettingRef):
+        from tts_audiobook_tool.project import Project
+        if not isinstance(saveable, Project):
+            raise ValueError(f"Model setting on non-Project saveable: {saveable}")
+        return saveable.get_model_setting(target.model_id, target.name)
+    return getattr(saveable, target)
+
+def _set_saveable_attr(saveable: Saveable, target: str | SettingRef, value: Any) -> None:
+    if isinstance(target, SettingRef):
+        from tts_audiobook_tool.project import Project
+        if not isinstance(saveable, Project):
+            raise ValueError(f"Model setting on non-Project saveable: {saveable}")
+        saveable.set_model_setting(target.model_id, target.name, value)
+        return
+    setattr(saveable, target, value)
+
+def _has_saveable_attr(saveable: Saveable, target: str | SettingRef) -> bool:
+    if isinstance(target, SettingRef):
+        return True
+    return hasattr(saveable, target)
+
 def ask_number_and_save(
     saveable: Saveable,
-    attr: str,
+    target: str | SettingRef,
     prompt: str,
     min_value: float,
     max_value: float,
@@ -247,15 +271,15 @@ def ask_number_and_save(
     if not isinstance(saveable, Project) and not isinstance(saveable, Prefs):
         raise ValueError(f"Not Project or Prefs: {saveable}")
 
-    if not hasattr(saveable, attr):
-        raise ValueError(f"No such attribute {attr}")
+    if not _has_saveable_attr(saveable, target):
+        raise ValueError(f"No such attribute {target}")
 
     if is_int:
         min_value = int(min_value)
         max_value = int(max_value)
         default_value = int(default_value)
 
-    stored_value = getattr(saveable, attr)
+    stored_value = _get_saveable_attr(saveable, target)
     is_effective_default_prefill = is_minus_one_default and stored_value == -1
     prefill = default_value if is_effective_default_prefill else stored_value
     if is_int:
@@ -290,7 +314,7 @@ def ask_number_and_save(
         ask_error("Out of range")
         return
 
-    setattr(saveable, attr, value)
+    _set_saveable_attr(saveable, target, value)
     saveable.save()
 
     print_feedback(success_prefix, str(value))
@@ -298,7 +322,7 @@ def ask_number_and_save(
 def ask_string_and_save(
     saveable: Saveable,
     prompt_line: str,
-    attr: str,
+    target: str | SettingRef,
     success_prefix: str,
     loop_on_error: bool=False,
     validator: Callable[[str], str] | None = None,
@@ -312,10 +336,10 @@ def ask_string_and_save(
     :param normalizer: Normalizes the user input before validation and saving (optional)
     :return: Whether a value was successfully saved
     """
-    if not hasattr(saveable, attr):
-        raise ValueError(f"No such attribute {attr}")
+    if not _has_saveable_attr(saveable, target):
+        raise ValueError(f"No such attribute {target}")
 
-    current_value = getattr(saveable, attr)
+    current_value = _get_saveable_attr(saveable, target)
     prefill = current_value
 
     while True:
@@ -339,7 +363,7 @@ def ask_string_and_save(
                 return False
         break
 
-    setattr(saveable, attr, value)
+    _set_saveable_attr(saveable, target, value)
     saveable.save()
     print_feedback(success_prefix, value)
     return True

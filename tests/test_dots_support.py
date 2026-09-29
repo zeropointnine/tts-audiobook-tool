@@ -8,6 +8,8 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.voice import VoiceDotsMenu
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.model_settings import REGISTRY, SettingRef
+from project_settings_test_support import get_setting, set_setting
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_util import strip_ansi_codes
@@ -27,8 +29,8 @@ def test_dots_spec_and_tts_registry(monkeypatch):
     assert info.local_torch_devices == [DeviceType.CUDA, DeviceType.CPU]
     assert info.default_output_sample_rate == 48_000
     assert DotsBaseModel.get_output_sample_rate(Project.model_validate({})) == 48_000
-    assert info.voice_target_attr == "dots_voice_file_name"
-    assert info.voice_transcript_attr == "dots_voice_transcript"
+    assert REGISTRY.voice_binding(info.id).name == "file_name"
+    assert REGISTRY.transcript_binding(info.id).name == "transcript"
     assert not info.requires_voice
     assert info.can_stream
     assert info.requirements_file_name == "requirements-dots.txt"
@@ -79,25 +81,28 @@ def test_dots_project_fields_normalize_and_serialize():
         context={"warnings": warnings},
     )
 
-    assert project.dots_target == DotsBaseModel.MF_REPO_ID
-    assert project.dots_voice_file_name == ["voice.flac"]
-    assert project.dots_voice_transcript == ["reference words"]
-    assert project.dots_seed == 12
-    assert project.dots_speaker_scale == 2.0
-    assert project.dots_num_steps_soar == 6
-    assert project.dots_num_steps_mf == 3
-    assert project.dots_guidance_scale == 1.4
-    assert project.dots_compile is False
+    assert get_setting(project, "dots_target") == DotsBaseModel.MF_REPO_ID
+    assert get_setting(project, "dots_voice_file_name") == ["voice.flac"]
+    assert get_setting(project, "dots_voice_transcript") == ["reference words"]
+    assert get_setting(project, "dots_seed") == 12
+    assert get_setting(project, "dots_speaker_scale") == 2.0
+    assert get_setting(project, "dots_num_steps_soar") == 6
+    assert get_setting(project, "dots_num_steps_mf") == 3
+    assert get_setting(project, "dots_guidance_scale") == 1.4
+    assert get_setting(project, "dots_compile") is False
     payload = ProjectSerializationUtil.to_project_json_dict(project)
-    assert payload["dots_target"] == DotsBaseModel.MF_REPO_ID
-    assert payload["dots_voice_file_name"] == "voice.flac"
-    assert payload["dots_voice_transcript"] == "reference words"
-    assert payload["dots_seed"] == 12
-    assert payload["dots_speaker_scale"] == 2.0
-    assert payload["dots_num_steps_soar"] == 6
-    assert payload["dots_num_steps_mf"] == 3
-    assert payload["dots_guidance_scale"] == 1.4
-    assert payload["dots_compile"] is False
+    dots_object = payload["model_settings"]["models"]["dots"]
+    parameters = dots_object["parameters"]
+    assert parameters["target"] == DotsBaseModel.MF_REPO_ID
+    assert dots_object["voice_references"] == [
+        {"file_name": "voice.flac", "transcript": "reference words"}
+    ]
+    assert parameters["seed"] == 12
+    assert parameters["speaker_scale"] == 2.0
+    assert parameters["num_steps_soar"] == 6
+    assert parameters["num_steps_mf"] == 3
+    assert parameters["guidance_scale"] == 1.4
+    assert parameters["compile"] is False
     assert not any("dots_" in warning for warning in warnings)
 
 
@@ -116,13 +121,13 @@ def test_dots_project_invalid_values_fall_back_with_warnings():
         context={"warnings": warnings},
     )
 
-    assert project.dots_target == ""
-    assert project.dots_seed == DotsBaseModel.SEED_DEFAULT
-    assert project.dots_speaker_scale == -1
-    assert project.dots_num_steps_soar == -1
-    assert project.dots_num_steps_mf == -1
-    assert project.dots_guidance_scale == -1
-    assert project.dots_compile is DotsCompileMode.default().enabled
+    assert get_setting(project, "dots_target") == ""
+    assert get_setting(project, "dots_seed") == DotsBaseModel.SEED_DEFAULT
+    assert get_setting(project, "dots_speaker_scale") == -1
+    assert get_setting(project, "dots_num_steps_soar") == -1
+    assert get_setting(project, "dots_num_steps_mf") == -1
+    assert get_setting(project, "dots_guidance_scale") == -1
+    assert get_setting(project, "dots_compile") is DotsCompileMode.default().enabled
     assert all(
         any(field in warning for warning in warnings)
         for field in (
@@ -170,9 +175,9 @@ def test_dots_menu_sampling_controls_visibility_by_target(monkeypatch):
     monkeypatch.setattr(VoiceMenuShared, "menu_wrapper", staticmethod(capture_wrapper))
 
     VoiceDotsMenu.menu(state)  # SOAR default
-    state.project.dots_target = DotsBaseModel.MF_REPO_ID
+    set_setting(state.project, "dots_target", DotsBaseModel.MF_REPO_ID)
     VoiceDotsMenu.menu(state)
-    state.project.dots_target = DotsBaseModel.MF_2STEPS_REPO_ID
+    set_setting(state.project, "dots_target", DotsBaseModel.MF_2STEPS_REPO_ID)
     VoiceDotsMenu.menu(state)
 
     soar, mf, mf_2steps = captured
@@ -223,31 +228,31 @@ def test_dots_menu_num_steps_branches_by_variant(monkeypatch):
     # Number items are ordered: num steps (directly under Compile),
     # speaker scale, CFG
     soar = number_items[0]
-    assert soar["attr"] == "dots_num_steps_soar"
+    assert soar["target"] == SettingRef("dots", "num_steps_soar")
     assert soar["default_value"] == DotsBaseModel.NUM_STEPS_SOAR_DEFAULT
     assert soar["min_value"] == DotsBaseModel.NUM_STEPS_SOAR_MIN
     assert soar["max_value"] == DotsBaseModel.NUM_STEPS_SOAR_MAX
     assert "(soar)" in soar["prompt"]
-    assert [item["attr"] for item in number_items] == [
-        "dots_num_steps_soar",
-        "dots_speaker_scale",
-        "dots_guidance_scale",
+    assert [item["target"] for item in number_items] == [
+        SettingRef("dots", "num_steps_soar"),
+        SettingRef("dots", "speaker_scale"),
+        SettingRef("dots", "guidance_scale"),
     ]
     assert number_items[2]["base_label"] == "CFG"
 
     number_items.clear()
-    state.project.dots_target = DotsBaseModel.MF_REPO_ID
+    set_setting(state.project, "dots_target", DotsBaseModel.MF_REPO_ID)
     VoiceDotsMenu.menu(state)
     mf = number_items[0]
-    assert mf["attr"] == "dots_num_steps_mf"
+    assert mf["target"] == SettingRef("dots", "num_steps_mf")
     assert mf["default_value"] == DotsBaseModel.NUM_STEPS_MF_DEFAULT
     assert mf["min_value"] == DotsBaseModel.NUM_STEPS_MF_MIN
     assert mf["max_value"] == DotsBaseModel.NUM_STEPS_MF_MAX
     assert "(mf)" in mf["prompt"]
     # Meanflow drops CFG, so no guidance number item is offered
-    assert [item["attr"] for item in number_items] == [
-        "dots_num_steps_mf",
-        "dots_speaker_scale",
+    assert [item["target"] for item in number_items] == [
+        SettingRef("dots", "num_steps_mf"),
+        SettingRef("dots", "speaker_scale"),
     ]
 
 
@@ -273,7 +278,7 @@ def test_dots_target_submenu_has_only_presets_and_invalidates_worker(monkeypatch
     assert captured["values"] == DotsBaseModel.PRESET_REPO_IDS
     assert len(captured["sublabels"]) == 4
     captured["on_select"](DotsBaseModel.MF_REPO_ID)  # type: ignore[operator]
-    assert state.project.dots_target == DotsBaseModel.MF_REPO_ID
+    assert get_setting(state.project, "dots_target") == DotsBaseModel.MF_REPO_ID
     assert saves == [True]
     assert clears == [True]
 
@@ -304,6 +309,6 @@ def test_dots_compile_submenu_options_and_invalidates_worker(monkeypatch):
     assert captured["current_value"] is DotsCompileMode.default()
 
     captured["on_select"](DotsCompileMode.DISABLED)  # type: ignore[operator]
-    assert state.project.dots_compile is False
+    assert get_setting(state.project, "dots_compile") is False
     assert saves == [True]
     assert clears == [True]
