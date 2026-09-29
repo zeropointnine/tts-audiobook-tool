@@ -50,34 +50,6 @@ class ChatterboxModel(ChatterboxBaseModel):
         else:
             self._chatterbox = turbo_loader.from_pretrained(device=device_value)
 
-        if device == DeviceType.CUDA:
-            ChatterboxModel._use_gpu_watermarker(self._chatterbox, device_value)
-
-    @staticmethod
-    def _use_gpu_watermarker(chatterbox: Any, device_value: str) -> None:
-        """
-        Replaces the library's CPU Perth watermarker with a GPU instance.
-
-        Chatterbox watermarks every generated segment via
-        `perth.PerthImplicitWatermarker().apply_watermark()`. Perth's CPU
-        compute path leaks native (non-Python) memory on every call —
-        measured at roughly 5-20 MB per call depending on audio length,
-        linearly, and never released: Python GC, torch empty_cache, thread
-        count, and watermarker-instance recycling all make no difference;
-        only process exit frees it (which is why `Options > Unload models`
-        appears to reclaim it — it terminates the worker). The GPU path does
-        not leak, and the PerthNet model is tiny, so the extra VRAM cost is
-        negligible. CPU-watermarked and GPU-watermarked audio decode to the
-        same watermark bits. (Upstream perth bug; revisit if fixed.)
-        """
-        try:
-            import perth # type: ignore
-            chatterbox.watermarker = perth.PerthImplicitWatermarker(
-                device=device_value
-            )
-        except Exception:
-            traceback.print_exc()
-
     def supported_languages_multi(self) -> list[str]:
         return list(chatterbox.mtl_tts.SUPPORTED_LANGUAGES)
 
@@ -267,8 +239,23 @@ class ChatterboxModel(ChatterboxBaseModel):
             dic["top_k"] = turbo_top_k # rem, multilingual does not support this param
 
         try:
-            data = self._chatterbox.generate(text, **dic)
-            data = data.cpu().numpy().squeeze()
+            # Upstream Chatterbox wraps the non-turbo `generate()` bodies in
+            # `torch.inference_mode()` (tts.py, mtl_tts.py) but leaves
+            # `tts_turbo.py` unguarded, so Turbo builds an autograd graph on
+            # every call. Perth's watermarker encoder then leaks that graph:
+            # it feeds a *view* of `magspec` into its conv stack and adds the
+            # result back with an in-place slice add, closing a reference
+            # cycle made only of C++ autograd nodes that Python's GC never
+            # sees. Nothing reclaims it — `gc.collect()` reports nothing
+            # uncollectable and `empty_cache()` frees none of it, because the
+            # blocks stay live. Measured at ~1.2 MB per second of generated
+            # audio, on either device, until the process exits. Under
+            # `inference_mode()` the view tracking that forms the cycle is
+            # disabled and growth is exactly zero. Repro:
+            # testx/perth_watermark_vram.py
+            with torch.inference_mode():
+                data = self._chatterbox.generate(text, **dic)
+                data = data.cpu().numpy().squeeze()
             return Sound(data, self.INFO.default_output_sample_rate)
         except Exception as e:
             traceback.print_exc()

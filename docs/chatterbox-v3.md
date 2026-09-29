@@ -206,17 +206,32 @@ Evidence and limitations:
 
 Conclusion: the reported speedup is consistent with the actual code change and has a strong technical mechanism behind it. It should be treated as credible but locally observed rather than as a specific upstream-guaranteed multiplier until a controlled A/B benchmark uses the same checkpoint, prompt, voice conditionals, seed, generation parameters, warm-up state, and generated-token count.
 
-### PerTh CPU leak: workaround retained
+### PerTh watermark leak: fixed with `inference_mode()`
 
-The separate PerTh watermarking workaround remains. Chatterbox still constructs its watermarker on CPU, and the app's measured CPU path retained native memory per generated segment. For CUDA-backed Chatterbox models, `_use_gpu_watermarker()` replaces it with:
+The earlier `_use_gpu_watermarker()` workaround rested on a false premise and has been removed. PerTh's CPU path does leak, but the GPU path leaked at the same rate — it only moved the leak out of host RAM and into VRAM, where a 12 GB card has far less headroom. Its docstring claim that "the GPU path does not leak" was wrong.
+
+The cause is in `perth/perth_net/perth_net_implicit/model/encoder.py`:
 
 ```python
-perth.PerthImplicitWatermarker(device="cuda")
+sub_mag = magspec[:, : self.subband]   # a view of magspec, fed into the conv stack
+res = self.layers(sub_mag) * mask
+magspec[:, : self.subband] += res      # in-place add back into that same tensor
 ```
 
-The current PerTh API still supports this. No confirmed upstream fix for the measured CPU leak was identified, so the workaround remains active for Multilingual V2, Multilingual V3, and Turbo on CUDA.
+The conv nodes save `sub_mag` for backward, and `sub_mag._base` *is* `magspec`; the in-place slice add creates a `CopySlices` node that saves the previous version of `magspec`. That closes a reference cycle composed only of C++ autograd nodes, which Python's cyclic GC never sees. `gc.collect()` reports nothing uncollectable, no live Python frame or module global references the tensors, and `torch.cuda.empty_cache()` frees none of it because the blocks stay live rather than cached. Only process exit releases it, which is why `Options > Unload models` appeared to reclaim it.
 
-Chatterbox's Git dependency currently references PerTh from its own `master`. A future PerTh update should not prompt removal of this workaround without rerunning a long-duration RSS test on the affected platform, especially Windows/CUDA.
+Upstream already guards the non-turbo paths: `tts.py` and `mtl_tts.py` wrap their `generate()` bodies — the `apply_watermark()` call included — in `torch.inference_mode()`. `tts_turbo.py` has no such wrapper anywhere, so Turbo was the only exposed variant. `ChatterboxModel.generate()` now wraps the library call in `torch.inference_mode()` itself, which covers every variant and is robust to upstream changes. `inference_mode()` also disables view tracking, so the cycle cannot form at all.
+
+Measured over 40 calls with 1.0 s of audio, watermarker only:
+
+| configuration | host RSS | CUDA allocated |
+|---|---|---|
+| CPU watermarker, default | +117.7 MiB | — |
+| CPU watermarker, `inference_mode()` | 0.0 MiB | — |
+| GPU watermarker, default | +2.0 MiB | +63.2 MiB |
+| GPU watermarker, `inference_mode()` | 0.0 MiB | 0.0 MiB |
+
+The rate is ~1.2 MB per second of generated audio on either device, so it scales with clip length. On the full Turbo path the fix takes 6.18 MiB per generation to 0.00 MiB per generation, with the watermark still applied and output bit-identical across calls at a fixed seed. The watermarker costs 4.1 ms per call on CPU versus 2.4 ms on GPU, negligible against ~620 ms per generation, so the GPU watermarker was buying nothing. Stage-by-stage repro: `testx/perth_watermark_vram.py`.
 
 ## Voice cloning and generation API compatibility
 
