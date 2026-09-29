@@ -201,10 +201,18 @@ Semantics:
 
 Important notes:
 
-- unlike a purely portable settings bundle, this snapshot intentionally includes `dir_path`
-- `dir_path` can serve as a best-effort hint for locating related files such as voice clone audio during a future import flow
-- consumers should treat `dir_path` as optional and untrusted; it may not exist or may be invalid on another machine
-- model-specific voice filename fields may therefore be meaningful in combination with `dir_path`
+- the snapshot omits `dir_path`: it is an absolute path in the writing machine's
+  grammar and an ABR file is meant to be shared
+- `source_dir_display` carries that same value for messaging only, so a recipient
+  can be told where the settings came from without the app treating it as a
+  resolvable location
+- older files carry the value as `dir_path` instead; consumers should accept
+  either key, treat both as optional and untrusted, and never resolve them
+- model-specific voice filename fields are resolved relative to the importing
+  project's own directory, not to either key
+- this key difference is not a version change. The ABR version moves only when a
+  reader must change to handle a file; a producer-side change to the snapshot's
+  field set does not qualify
 
 The exact field set tracks `ProjectSerializationUtil.to_project_json_dict()`. It is a
 settings snapshot rather than a complete project backup. In particular, the project

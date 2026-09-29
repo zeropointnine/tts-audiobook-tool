@@ -152,9 +152,10 @@ class ProjectTransferUtil:
         """
         The project directory the snapshot's settings came from.
 
-        Display-only. Version 5 snapshots store it under `source_dir_display`;
+        Display-only. Current snapshots store it under `source_dir_display`;
         older snapshots stored it as `dir_path`, which the app used to treat as
-        resolvable.
+        resolvable. Both spellings are in circulation and the ABR version is
+        unchanged either way: the difference is producer-side.
         """
         for key in ('source_dir_display', 'dir_path'):
             value = project_snapshot.get(key, '')

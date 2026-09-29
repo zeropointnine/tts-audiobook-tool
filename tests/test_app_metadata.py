@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from typing import cast
@@ -125,6 +126,31 @@ class TestAppMetadata(unittest.TestCase):
         self.assertEqual(result.sections, [])
         self.assertIsNone(result.type)
         self.assertNotIn("type", json.loads(result.to_json_string()))
+
+    def test_written_abr_version_is_loadable_by_the_browser_player(self):
+        """
+        The player refuses outright any file declaring a version above its own
+        ceiling, so raising ABR_VERSION past that ceiling makes every export
+        unopenable until the player ships. A bump is only justified when a
+        reader must change to handle a file, so this compares the two constants
+        directly rather than keeping them in sync by convention.
+        """
+        player_source = (
+            Path(__file__).resolve().parent.parent
+            / "browser_player" / "metadata-util.js"
+        ).read_text(encoding="utf-8")
+
+        match = re.search(
+            r"MAX_SUPPORTED_ABR_VERSION\s*=\s*(\d+)", player_source)
+        self.assertIsNotNone(match, "player version ceiling not found")
+        assert match is not None
+
+        self.assertLessEqual(
+            ABR_VERSION, int(match.group(1)),
+            f"ABR_VERSION {ABR_VERSION} exceeds the browser player's ceiling;"
+            " exported files would be rejected. Either the bump is unwarranted"
+            " or the player must be updated alongside it.",
+        )
 
     def test_snapshot_written_by_another_os_still_loads_and_repoints_dir(self):
         """

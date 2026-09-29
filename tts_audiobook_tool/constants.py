@@ -112,11 +112,12 @@ APP_META_MP4_TAG = "audiobook-data"
 # - 2: adds project_snapshot
 # - 3: adds structural sections metadata for reader/player navigation
 # - 4: preserves phrase subdivisions as nested text_segments lists
-# - 5: project_snapshot drops 'dir_path' (an absolute path in the writing
-#      machine's grammar, unresolvable elsewhere) and adds the display-only
-#      'source_dir_display'. Readers must still accept snapshots that carry
-#      'dir_path', since version 4 files are already in circulation.
-ABR_VERSION = 5
+#
+# Bump this only when a reader must change to handle a file. Producer-side
+# changes to 'project_snapshot' contents — such as dropping 'dir_path' in
+# favor of the display-only 'source_dir_display' — are not version bumps:
+# no reader is required to treat those snapshots any differently.
+ABR_VERSION = 4
 PROJECT_SPEC_VERSION = 2
 
 AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]
