@@ -8,10 +8,10 @@ Each supported TTS model is isolated in its own Python virtual environment. The 
 
 Models come in two flavors:
 
-- **Local models** — Generate inference runs in the application's long-lived spawned model worker; each model still has a dedicated venv (e.g. `venv-cb`, `venv-g`). During the Generate-first rollout, some realtime/enhancement features retain legacy main-process inference paths.
+- **Local models** — all interactive inference runs in the application's long-lived spawned model worker; each model still has a dedicated venv (e.g. `venv-cb`, `venv-g`). The interactive main process is forbidden from constructing models (see `model_runtime.require_model_owner()`); the REST server and `testx/` scripts keep their own in-process paths.
 - **SGL-Omni server variants** — inference is delegated to an external SGL-Omni server over HTTP. Several model variants share one server-mode venv (`venv-client`) and one requirements file (`requirements-sgl-omni.txt`); the active variant is selected at runtime from the model name reported by the server's models endpoint (see `TtsModelSpec.is_sgl_omni` / `server_model_id_substring`).
 
-The Generate process/UI boundary, cancellation behavior, and phased ownership limitations are documented in [generation-tui-architecture.md](generation-tui-architecture.md).
+The process/UI boundary, worker ownership rules, cancellation behavior, and process-safety invariants are documented in [model-worker-architecture.md](model-worker-architecture.md).
 
 ---
 
