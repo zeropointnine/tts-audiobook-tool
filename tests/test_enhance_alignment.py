@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
+import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -9,6 +13,7 @@ import pytest
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types import ConcreteWord, SttVariant
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
+from tts_audiobook_tool.constants import FFMPEG_COMMAND
 from tts_audiobook_tool.enhance import enhance_alignment
 
 
@@ -225,3 +230,82 @@ def test_interrupt_during_worker_transcription_returns_without_error(monkeypatch
     assert enhance_alignment._transcribe_stream_with_overlap("book.mp3", object(), "en") is None  # type: ignore[arg-type]
     assert Interrupts()._mode == ""
     assert not Interrupts().did_interrupt
+
+
+def test_cancellation_while_reading_next_chunk_discards_partial_transcript(monkeypatch) -> None:
+    def chunks():
+        yield np.zeros(16, dtype=np.float32)
+        yield np.zeros(16, dtype=np.float32)
+        # The stream itself notices the cancellation while reading, so the
+        # chunk loop ends without ever reaching its interrupt check.
+        Interrupts()._flag = True
+
+    monkeypatch.setattr(
+        enhance_alignment, "_stream_audio_with_overlap", lambda **_kwargs: chunks()
+    )
+    monkeypatch.setattr(
+        enhance_alignment.AudioMetaUtil, "get_audio_duration", lambda _path: None
+    )
+    monkeypatch.setattr(
+        enhance_alignment.ModelWorker,
+        "transcribe_audio_blocking",
+        lambda *_args, **_kwargs: (SimpleNamespace(segments=()), ""),
+    )
+
+    assert enhance_alignment._transcribe_stream_with_overlap("book.mp3", object(), "en") is None  # type: ignore[arg-type]
+    assert Interrupts()._mode == ""
+
+
+def _write_long_audio(path: Path) -> None:
+    subprocess.run(
+        [
+            FFMPEG_COMMAND, "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=16000:duration=180",
+            "-c:a", "pcm_s16le",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_abandoning_chunk_stream_stops_ffmpeg_promptly(tmp_path: Path) -> None:
+    """Stopping mid-stream must not leave the caller waiting on ffmpeg.
+
+    A cancelled transcription stops consuming chunks while ffmpeg is still
+    producing them, so ffmpeg ends up blocked writing into a pipe nobody
+    drains and never returns to handle its own termination signal.  The
+    generator's teardown has to break that deadlock, otherwise the enhance
+    flow hangs after a single control-c.
+    """
+    if shutil.which(FFMPEG_COMMAND) is None:
+        pytest.skip("FFmpeg is unavailable")
+    source = tmp_path / "book.wav"
+    _write_long_audio(source)
+
+    stream = enhance_alignment._stream_audio_with_overlap(
+        str(source), chunk_duration=30, overlap_duration=5
+    )
+    next(stream)
+    next(stream)
+    assert stream.gi_frame is not None
+    process = stream.gi_frame.f_locals["process"]
+
+    started_at = time.monotonic()
+    stream.close()
+
+    assert time.monotonic() - started_at < 2.0
+    assert process.poll() is not None
+
+
+def test_chunk_stream_cancel_check_stops_before_producing_a_chunk(tmp_path: Path) -> None:
+    if shutil.which(FFMPEG_COMMAND) is None:
+        pytest.skip("FFmpeg is unavailable")
+    source = tmp_path / "book.wav"
+    _write_long_audio(source)
+
+    stream = enhance_alignment._stream_audio_with_overlap(
+        str(source), cancel_check=lambda: True
+    )
+
+    assert next(stream, None) is None

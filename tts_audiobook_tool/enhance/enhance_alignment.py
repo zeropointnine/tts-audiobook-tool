@@ -10,8 +10,9 @@ This module supports the "enhance existing audiobook" flow by:
 """
 
 from dataclasses import dataclass
-from typing import Generator, List, NamedTuple
+from typing import Any, Callable, Generator, List, NamedTuple
 import logging
+import subprocess
 import time
 import ffmpeg
 import numpy as np
@@ -345,7 +346,8 @@ def _transcribe_stream_with_overlap(
             _stream_audio_with_overlap(
                 file_path=path,
                 chunk_duration=CHUNK_DURATION,
-                overlap_duration=OVERLAP_DURATION
+                overlap_duration=OVERLAP_DURATION,
+                cancel_check=lambda: Interrupts().did_interrupt,
             )
         ):
             iteration_started_at = time.monotonic()
@@ -434,6 +436,13 @@ def _transcribe_stream_with_overlap(
             )
 
             time_offset += CHUNK_DURATION - OVERLAP_DURATION
+
+        # The chunk stream stops on its own when a cancellation is noticed
+        # while it is reading the next chunk, which ends this loop without the
+        # break above ever running. A partial transcript must never be handed
+        # to the alignment step, so treat that early end as an interruption.
+        if Interrupts().did_interrupt:
+            did_interrupt = True
     finally:
         Interrupts().clear()
         print()
@@ -444,11 +453,41 @@ def _transcribe_stream_with_overlap(
     return list_of_lists
 
 
+# ffmpeg is drained one bounded piece at a time so a cancellation is noticed
+# while a chunk is still being read, and teardown is bounded so an ffmpeg that
+# refuses to stop cannot hang the caller forever.
+_PIPE_READ_BYTES = 64 * 1024
+_FFMPEG_STOP_TIMEOUT_SECONDS = 5.0
+
+
+def _stop_ffmpeg(process: Any, drained: bool) -> None:
+    """Reap the ffmpeg child without deadlocking on its output pipe.
+
+    ffmpeg's muxer thread blocks writing into the pipe the moment the parent
+    stops draining it, and a blocked write never returns to run ffmpeg's
+    signal handler.  Terminating first therefore leaves the child alive with
+    ``wait()`` hanging on it indefinitely.  Closing our read end turns that
+    blocked write into an error ffmpeg can act on, after which it exits.
+    """
+    try:
+        process.stdout.close()
+    except OSError:
+        pass
+    if not drained and process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=_FFMPEG_STOP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
 def _stream_audio_with_overlap(
     file_path: str,
     chunk_duration: int = 30,
     overlap_duration: int = 5,
     sample_rate: int = 16000,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> Generator[np.ndarray, None, None]:
     bytes_per_sample = 2
     chunk_stride = chunk_duration - overlap_duration
@@ -473,7 +512,23 @@ def _stream_audio_with_overlap(
     try:
         while True:
             bytes_to_read = bytes_per_chunk - len(buffer)
-            raw_bytes_new = process.stdout.read(bytes_to_read)
+            raw_bytes_new = b""
+            cancelled = False
+            while len(raw_bytes_new) < bytes_to_read:
+                if cancel_check is not None and cancel_check():
+                    cancelled = True
+                    break
+                piece = process.stdout.read(
+                    min(bytes_to_read - len(raw_bytes_new), _PIPE_READ_BYTES)
+                )
+                if not piece:
+                    break
+                raw_bytes_new += piece
+
+            if cancelled:
+                # Leave `completed` unset so the teardown below terminates
+                # ffmpeg instead of waiting for an EOF that will not come.
+                break
 
             if not raw_bytes_new:
                 completed = True
@@ -491,9 +546,7 @@ def _stream_audio_with_overlap(
             else:
                 buffer = b""
     finally:
-        if not completed and process.poll() is None:
-            process.terminate()
-        process.wait()
+        _stop_ffmpeg(process, drained=completed)
 
 
 def _stitch_transcripts(

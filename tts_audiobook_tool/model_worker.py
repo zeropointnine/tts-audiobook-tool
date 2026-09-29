@@ -55,6 +55,7 @@ from tts_audiobook_tool.model_worker_protocol import (
     TtsPreviewCommand,
     TtsPreviewFinished,
     UpsampleFileCommand,
+    WorkerCommandCancelled,
     WorkerCommandFailed,
     WorkerExited,
     WorkerReady,
@@ -752,6 +753,31 @@ def _terminate_worker(signum: int, frame: Any) -> None:
     raise SystemExit(0)
 
 
+def _collect_segments_until_cancelled(
+    segments: Any, cancellation_event: Any
+) -> tuple[list[Any], bool]:
+    """Materialize a transcription's segments, stopping at a cancellation point.
+
+    The whisper backends hand over a generator that yields as decoding
+    progresses, so draining it here is the only place a running transcription
+    can be abandoned without killing the worker.  The generator is closed
+    rather than left to the garbage collector so the backend unwinds now.
+    """
+    collected: list[Any] = []
+    cancelled = False
+    try:
+        for segment in segments:
+            if cancellation_event.is_set():
+                cancelled = True
+                break
+            collected.append(segment)
+    finally:
+        close = getattr(segments, "close", None)
+        if close is not None:
+            close()
+    return collected, cancelled
+
+
 def _model_worker_main(
     command_queue: Any,
     event_queue: Any,
@@ -939,11 +965,18 @@ def _model_worker_main(
                     command.language is None
                     or command.language in whisper.supported_languages
                 )
-                if not language_supported:
+                if cancellation_event.is_set():
+                    # The parent gave up while the model was loading. Skipping
+                    # the inference it no longer wants lets the worker go idle
+                    # now instead of being reaped for a command nobody awaits.
+                    L.i(f"[stt] {command.operation_id} cancelled before inference")
+                    event_queue.put(WorkerCommandCancelled(command.operation_id))
+                elif not language_supported:
                     L.w(f"[stt] {command.operation_id} unsupported language: {command.language}")
                     event_queue.put(AudioTranscribed(command.operation_id, (), False))
                 else:
                     inference_started_at = time.monotonic()
+                    transcription_cancelled = False
                     L.i(f"[stt] {command.operation_id} starting inference")
                     # Capture Python thread stacks before the parent's timeout
                     # reaps a stalled native inference. The worker's regular
@@ -974,35 +1007,49 @@ def _model_worker_main(
                                     language=command.language,
                                 )
                                 L.i(f"[stt] {command.operation_id} transcribe() returned; reading segments")
-                                raw_segments = list(raw_segments)
+                                raw_segments, transcription_cancelled = (
+                                    _collect_segments_until_cancelled(
+                                        raw_segments, cancellation_event
+                                    )
+                                )
                         finally:
                             if stack_log is not None:
                                 faulthandler.cancel_dump_traceback_later()
-                    L.i(
-                        f"[stt] {command.operation_id} inference finished in "
-                        f"{time.monotonic() - inference_started_at:.1f}s "
-                        f"({len(raw_segments)} segments)"
-                    )
-                    segments = tuple(
-                        ConcreteSegment(
-                            start=float(segment.start),
-                            end=float(segment.end),
-                            text=str(segment.text),
-                            words=[
-                                ConcreteWord(
-                                    start=float(word.start),
-                                    end=float(word.end),
-                                    word=str(word.word),
-                                    probability=float(word.probability),
-                                )
-                                for word in (getattr(segment, "words", None) or [])
-                            ],
+                    if transcription_cancelled:
+                        L.i(
+                            f"[stt] {command.operation_id} cancelled after "
+                            f"{time.monotonic() - inference_started_at:.1f}s "
+                            f"({len(raw_segments)} partial segments discarded)"
                         )
-                        for segment in raw_segments
-                    )
-                    event_queue.put(
-                        AudioTranscribed(command.operation_id, segments, True)
-                    )
+                        event_queue.put(
+                            WorkerCommandCancelled(command.operation_id)
+                        )
+                    else:
+                        L.i(
+                            f"[stt] {command.operation_id} inference finished in "
+                            f"{time.monotonic() - inference_started_at:.1f}s "
+                            f"({len(raw_segments)} segments)"
+                        )
+                        segments = tuple(
+                            ConcreteSegment(
+                                start=float(segment.start),
+                                end=float(segment.end),
+                                text=str(segment.text),
+                                words=[
+                                    ConcreteWord(
+                                        start=float(word.start),
+                                        end=float(word.end),
+                                        word=str(word.word),
+                                        probability=float(word.probability),
+                                    )
+                                    for word in (getattr(segment, "words", None) or [])
+                                ],
+                            )
+                            for segment in raw_segments
+                        )
+                        event_queue.put(
+                            AudioTranscribed(command.operation_id, segments, True)
+                        )
             except Exception as exception:
                 L.e(
                     f"[stt] {command.operation_id} failed after "
@@ -1928,6 +1975,7 @@ class ModelWorker:
         wait_started_at = time.monotonic()
         next_stt_heartbeat_at = wait_started_at + 30.0
         diagnostic_threshold_logged = False
+        cancellation_requested = False
         try:
             while True:
                 if (
@@ -1961,11 +2009,18 @@ class ModelWorker:
                     ):
                         return "Model worker operation was cancelled"
                 if cancel_check is not None and cancel_check():
-                    # Native model load/inference cannot be interrupted by an
-                    # event. Reap this worker so it cannot complete a stale
-                    # command after the caller has stopped waiting.
-                    cls.shutdown()
-                    return "Model worker operation was cancelled"
+                    # Ask the worker to stop the command it is running. It can
+                    # do that between decode steps, which keeps the process and
+                    # its loaded model warm for the next run; its
+                    # WorkerCommandCancelled event ends this wait. A worker
+                    # inside work it cannot interrupt is reaped by the timeout
+                    # below, the same backstop that covers a chunk that never
+                    # finishes.
+                    if not cancellation_requested:
+                        cancellation_requested = True
+                        with cls._lock:
+                            if cls._cancellation_event is not None:
+                                cls._cancellation_event.set()
                 if (
                     timeout_seconds is not None
                     and time.monotonic() - wait_started_at >= timeout_seconds
@@ -1995,6 +2050,13 @@ class ModelWorker:
                     return event
                 elif isinstance(event, WorkerCommandFailed):
                     return event.message
+                elif isinstance(event, WorkerCommandCancelled):
+                    with cls._lock:
+                        # The worker has left the cancelled command, so the
+                        # flag no longer has to stay up for it to notice.
+                        if cls._cancellation_event is not None:
+                            cls._cancellation_event.clear()
+                    return "Model worker operation was cancelled"
                 elif isinstance(event, WorkerExited):
                     return (
                         event.message or "Model worker exited during blocking command"
@@ -2058,6 +2120,7 @@ class ModelWorker:
                 AudioFileUpsampled,
                 ChatSynthesisFinished,
                 WorkerCommandFailed,
+                WorkerCommandCancelled,
                 WorkerStopped,
                 WorkerExited,
             ),

@@ -325,6 +325,15 @@ class WorkerCommandFailed:
 
 
 @dataclass(frozen=True)
+class WorkerCommandCancelled:
+    """Terminal event sent by the worker when it stopped an in-flight command
+    after the main process asked for cancellation. It confirms the worker is
+    back at its command queue with its models still loaded."""
+
+    operation_id: str
+
+
+@dataclass(frozen=True)
 class WorkerStopped:
     operation_id: str
 
@@ -362,6 +371,7 @@ ModelWorkerEvent = (
     | LavaSrProbed
     | AudioFileUpsampled
     | WorkerCommandFailed
+    | WorkerCommandCancelled
     | WorkerStopped
     | WorkerExited
 )

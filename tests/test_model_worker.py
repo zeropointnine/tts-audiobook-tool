@@ -32,6 +32,7 @@ from tts_audiobook_tool.model_worker_protocol import (
     TtsInspected,
     TtsPreviewCommand,
     TtsPreviewFinished,
+    WorkerCommandCancelled,
     WorkerExited,
     WorkerStatus,
 )
@@ -125,21 +126,109 @@ def test_blocking_wait_stops_when_hard_reset_invalidates_operation(
     assert get_event_calls == 1
 
 
-def test_blocking_transcription_wait_hard_stops_on_cancel(monkeypatch) -> None:
+class _FakeCancellationEvent:
+    def __init__(self) -> None:
+        self.signalled = False
+
+    def set(self) -> None:
+        self.signalled = True
+
+    def clear(self) -> None:
+        self.signalled = False
+
+    def is_set(self) -> bool:
+        return self.signalled
+
+
+def test_blocking_transcription_cancel_without_ack_uses_the_stall_timeout(
+    monkeypatch
+) -> None:
     stopped = []
     monkeypatch.setattr(ModelWorker, "shutdown", lambda: stopped.append(True))
-    monkeypatch.setattr(
-        ModelWorker, "get_event", lambda **_kwargs: pytest.fail("polled after cancellation")
-    )
+    polls = {"n": 0}
+
+    def fake_get_event(**_kwargs):
+        # Stands in for a worker inside a decode step it cannot interrupt:
+        # nothing ever comes back, so the wait ends at the stall timeout that
+        # already covers a hung chunk.
+        polls["n"] += 1
+        return None
+
+    monkeypatch.setattr(ModelWorker, "get_event", staticmethod(fake_get_event))
+    cancellation = _FakeCancellationEvent()
+    ModelWorker._cancellation_event = cancellation
     ModelWorker._active_operation_id = "transcribing"
+    try:
+        result = ModelWorker._wait_for_blocking_result(
+            "transcribing",
+            TtsInspected,
+            cancel_check=lambda: True,
+            timeout_seconds=0.2,
+        )
+    finally:
+        ModelWorker._active_operation_id = None
+        ModelWorker._cancellation_event = None
+    # Cancellation was requested and the wait stayed on the worker instead of
+    # reaping it on the first press. The request stays up: the worker that
+    # never got there is being reaped, not reused.
+    assert cancellation.signalled is True
+    assert polls["n"] > 0
+    assert stopped == [True]
+    assert result == model_worker_module.STT_TRANSCRIPTION_TIMEOUT_ERROR
+
+
+def test_cancel_lets_worker_acknowledge_and_stay_alive(monkeypatch) -> None:
+    stopped: list[bool] = []
+    monkeypatch.setattr(ModelWorker, "shutdown", lambda: stopped.append(True))
+    cancellation = _FakeCancellationEvent()
+    ModelWorker._cancellation_event = cancellation
+    ModelWorker._active_operation_id = "transcribing"
+    monkeypatch.setattr(
+        ModelWorker,
+        "get_event",
+        staticmethod(lambda timeout=0.1: WorkerCommandCancelled("transcribing")),
+    )
     try:
         result = ModelWorker._wait_for_blocking_result(
             "transcribing", TtsInspected, cancel_check=lambda: True
         )
-        assert result == "Model worker operation was cancelled"
-        assert stopped == [True]
     finally:
         ModelWorker._active_operation_id = None
+        ModelWorker._cancellation_event = None
+    # The worker stopped the command itself and is back at its command queue,
+    # so the process and its loaded model survive for the next run.
+    assert result == "Model worker operation was cancelled"
+    assert stopped == []
+    assert cancellation.signalled is False
+
+
+def test_segment_drain_stops_at_cancellation_and_unwinds() -> None:
+    cancellation = _FakeCancellationEvent()
+    unwound: list[bool] = []
+
+    def segments():
+        try:
+            yield "a"
+            # Stands in for the parent asking for cancellation mid-stream.
+            cancellation.set()
+            yield "b"
+        finally:
+            unwound.append(True)
+
+    collected, cancelled = model_worker_module._collect_segments_until_cancelled(
+        segments(), cancellation
+    )
+    assert cancelled is True
+    assert collected == ["a"]
+    assert unwound == [True]
+
+
+def test_segment_drain_collects_everything_when_not_cancelled() -> None:
+    collected, cancelled = model_worker_module._collect_segments_until_cancelled(
+        iter(["a", "b"]), _FakeCancellationEvent()
+    )
+    assert cancelled is False
+    assert collected == ["a", "b"]
 
 
 def test_blocking_transcription_timeout_stops_worker(monkeypatch, caplog) -> None:
