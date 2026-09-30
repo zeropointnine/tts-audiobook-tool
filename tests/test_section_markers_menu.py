@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.menus.menu_shared import make_output_files_subheading
 from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.section_markers_menu import (
     LIMITED_SUBLABEL,
@@ -42,12 +43,23 @@ def get_menu_subheading(state: State) -> str:
     return strip_ansi_codes(get_string_from(state, subheading))
 
 
+def test_output_files_subheading_has_only_internal_newlines() -> None:
+    state = make_multisection_state()
+    state.project.markers = {2}
+
+    assert strip_ansi_codes(make_output_files_subheading(state)) == (
+        "File 1: lines 1 to 2 (0/2 generated)\n"
+        "File 2: lines 3 to 6 (0/4 generated)"
+    )
+
+
 def test_split_points_subheading_lists_output_file_ranges() -> None:
     state = make_multisection_state()
     state.project.markers = {2}
 
     subheading = get_menu_subheading(state)
 
+    assert not subheading.endswith("\n")
     assert subheading == (
         "File 1: lines 1 to 2 (0/2 generated)\n"
         "File 2: lines 3 to 6 (0/4 generated)\n"

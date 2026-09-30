@@ -19,6 +19,7 @@ from tts_audiobook_tool.textual.tts_preview_app import (
     TtsPreviewApp,
     run_tts_preview_app,
 )
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.worker_reset import HardResetCause
 
 
@@ -27,7 +28,10 @@ def run(coroutine) -> None:
 
 
 def make_state() -> State:
-    return cast(State, SimpleNamespace(project=SimpleNamespace()))
+    # The shared compose reads the selected model's output filters from the
+    # project, so the stub needs the one lookup it performs.
+    project = SimpleNamespace(get_tts_model_type=lambda: TtsModelType.require_by_id("none"))
+    return cast(State, SimpleNamespace(project=project))
 
 
 def test_tts_preview_app_auto_returns_in_memory_sound(monkeypatch) -> None:

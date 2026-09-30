@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -6,7 +7,9 @@ import torch
 
 pytest.importorskip("omnivoice")
 
-from omnivoice.models.omnivoice import VoiceClonePrompt  # type: ignore
+from omnivoice.models.omnivoice import OmniVoiceGenerationConfig, VoiceClonePrompt  # type: ignore
+
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
@@ -47,10 +50,12 @@ class FakeOmniVoice:
         self.created_prompts.append(prompt)
         return prompt
 
-    def generate(self, text, voice_clone_prompt=None, instruct=None, speed=1.0, generation_config=None):
+    def generate(self, text, voice_clone_prompt=None, instruct=None, speed=1.0, generation_config=None,
+                 language=None):
         self.generate_calls.append(
             dict(
                 text=text,
+                language=language,
                 voice_clone_prompt=voice_clone_prompt,
                 instruct=instruct,
                 speed=speed,
@@ -76,9 +81,9 @@ def generate_clone(model: OmniVoiceModel, voice_path: str, ref_text: str = ""):
         voice_path=voice_path,
         ref_text=ref_text,
         instruct="",
-        cfg=1.5,
+        generation_config=OmniVoiceGenerationConfig(num_step=10, guidance_scale=1.5),
+        language="en",
         speed=1.0,
-        steps=10,
         seed=1,
     )
 
@@ -157,19 +162,48 @@ def test_omnivoice_non_clone_modes_do_not_touch_cache(tmp_path):
     model = make_model()
 
     assert isinstance(
-        model._generate_auto_voice(prompts=["hi"], cfg=1.0, speed=1.0, steps=5, seed=1), list
+        model._generate_auto_voice(
+            prompts=["hi"], language="en", speed=1.0, seed=1,
+            generation_config=OmniVoiceGenerationConfig(num_step=5, guidance_scale=1.0),
+        ), list
     )
     assert getattr(model, "_voice_clone_cache", None) in (None, {})
     assert model._model.generate_calls[-1]["voice_clone_prompt"] is None
 
     assert isinstance(
         model._generate_voice_design(
-            prompts=["hi"], instruct="warm and low", cfg=1.0, speed=1.0, steps=5, seed=1
+            prompts=["hi"], instruct="warm and low", language="en", speed=1.0, seed=1,
+            generation_config=OmniVoiceGenerationConfig(num_step=5, guidance_scale=1.0),
         ),
         list,
     )
     assert getattr(model, "_voice_clone_cache", None) in (None, {})
     assert model._model.generate_calls[-1]["instruct"] == "warm and low"
+
+
+@pytest.mark.parametrize("mode", ["clone", "design", "auto"])
+@pytest.mark.parametrize("language", ["es", "zh"])
+def test_omnivoice_project_language_reaches_generate(tmp_path, monkeypatch, mode, language):
+    model = make_model()
+    voice_path = tmp_path / "voice.wav"
+    voice_path.write_bytes(b"voice")
+    settings = {"instruct": "warm" if mode == "design" else "",
+                "cfg": -1, "speed": -1, "num_step": -1, "seed": 1}
+    project = SimpleNamespace(
+        language_code=language,
+        get_model_setting=lambda model_id, name: settings[name],
+    )
+    monkeypatch.setattr(
+        ProjectVoiceUtil, "current_voice_reference_pair",
+        lambda *args: (str(voice_path), "reference words") if mode == "clone" else ("", ""),
+    )
+    monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda project, path: path)
+
+    result = model.generate_using_project(project, ["First sentence.", "Second sentence."])
+
+    assert isinstance(result, list)
+    assert len(model._model.generate_calls) == 2
+    assert all(call["language"] == language for call in model._model.generate_calls)
 
 
 def test_omnivoice_kill_clears_everything(tmp_path):

@@ -10,6 +10,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -57,37 +58,38 @@ class IndexTts2Model(IndexTts2BaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
 
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.INDEXTTS2, voice_selection_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("indextts2_local"), voice_selection_index)
         if voice_file_name:
             voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
         else:
             voice_path = ""
 
-        if project.get_model_setting('indextts2', 'emo_voice'):
-            emo_voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, project.get_model_setting('indextts2', 'emo_voice'))
+        if project.get_model_setting('indextts2_local', 'emo_voice'):
+            emo_voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, project.get_model_setting('indextts2_local', 'emo_voice'))
         else:
             emo_voice_path = ""
 
-        seed = -1 if force_random_seed else project.get_model_setting('indextts2', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('indextts2_local', 'seed')
         if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
 
-        temperature = project.get_model_setting('indextts2', 'temperature')
+        temperature = project.get_model_setting('indextts2_local', 'temperature')
         if temperature == -1:
             temperature = IndexTts2BaseModel.DEFAULT_TEMPERATURE
-        emo_alpha = project.get_model_setting('indextts2', 'emo_alpha')
+        emo_alpha = project.get_model_setting('indextts2_local', 'emo_alpha')
         if emo_alpha == -1:
             emo_alpha = IndexTts2BaseModel.DEFAULT_EMO_VOICE_ALPHA
-        top_p = project.get_model_setting('indextts2', 'top_p')
+        top_p = project.get_model_setting('indextts2_local', 'top_p')
         if top_p == -1:
             top_p = IndexTts2BaseModel.DEFAULT_TOP_P
-        top_k = project.get_model_setting('indextts2', 'top_k')
+        top_k = project.get_model_setting('indextts2_local', 'top_k')
         if top_k == -1:
             top_k = IndexTts2BaseModel.DEFAULT_TOP_K
 
@@ -97,7 +99,7 @@ class IndexTts2Model(IndexTts2BaseModel):
             temperature=temperature,
             emo_alpha=emo_alpha,
             emo_voice_path=emo_voice_path,
-            emo_vector=project.get_model_setting('indextts2', 'emo_vector'),
+            emo_vector=project.get_model_setting('indextts2_local', 'emo_vector'),
             top_p=top_p,
             top_k=top_k,
             seed=seed,

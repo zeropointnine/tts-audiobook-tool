@@ -4,34 +4,40 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
-MODEL_ID = "server_fun_cosyvoice3"
+MODEL_ID = "cosyvoice3_sglomni"
 HF_ID = "FunAudioLLM/Fun-CosyVoice3-0.5B-2512"
 
 
 @pytest.fixture
 def cosyvoice(monkeypatch):
     previous = (Tts._backend_mode, getattr(Tts, "_type", None), Tts._config_fingerprint,
-                Tts._configured_definitions, Tts._configured_runtime, Tts._catalog_initialized)
-    monkeypatch.setattr(Tts, "_probe_backend_mode", staticmethod(lambda: TtsBackendKind.SGL_OMNI))
+                Tts._configured_definitions, Tts._configured_runtime, Tts._catalog_initialized,
+                 Tts._selected_server_model_id)
+    monkeypatch.setattr(Tts, "_probe_backend_mode", staticmethod(lambda: TtsRuntimeMode.REMOTE_CLIENT))
     try:
         Tts.init_local_model_type()
-        model_type = TtsModelType.get_by_id(MODEL_ID)
+        model_type = TtsModelType.require_by_id(MODEL_ID)
         Tts._type = model_type
+        Tts._selected_server_model_id = HF_ID
+        monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+            backend_kind=TtsBackendKind.SGL_OMNI, candidates=((model_type, HF_ID),)))
         yield model_type
     finally:
         TtsModelType.reset_catalog()
         REGISTRY.reset_to_builtins()
         (Tts._backend_mode, old_type, Tts._config_fingerprint,
-         Tts._configured_definitions, Tts._configured_runtime, Tts._catalog_initialized) = previous
+         Tts._configured_definitions, Tts._configured_runtime, Tts._catalog_initialized,
+                 Tts._selected_server_model_id) = previous
         if old_type is None:
             if hasattr(Tts, "_type"):
                 delattr(Tts, "_type")
@@ -55,8 +61,9 @@ def test_cosyvoice_definition_registers_and_detects(cosyvoice):
 
 def test_cosyvoice_readiness_requires_reference_not_transcript(cosyvoice, monkeypatch, tmp_path):
     monkeypatch.setattr(SglOmniUtil, "check_readiness", staticmethod(lambda _: None))
-    project = Project.model_validate({"dir_path": str(tmp_path)})
-    support = Tts.get_model_support()
+    project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": MODEL_ID})
+    project.tts_model_type = cosyvoice.id
+    support = Tts.get_model_support(project)
     assert [issue.short for issue in support.get_blocking_issues(project)] == ["voice sample"]
 
     project.set_model_setting(MODEL_ID, "file_name", ["missing.wav"])
@@ -68,7 +75,7 @@ def test_cosyvoice_readiness_requires_reference_not_transcript(cosyvoice, monkey
 
 def test_cosyvoice_buffered_and_streamed_payloads(cosyvoice, monkeypatch, tmp_path):
     (tmp_path / "reference.wav").write_bytes(b"audio")
-    project = Project.model_validate({"dir_path": str(tmp_path)})
+    project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": MODEL_ID})
     instance = Tts.get_instance()
     assert instance.generate_using_project(project, ["hello"]) == "A voice clone sample is required"
     project.set_model_setting(MODEL_ID, "file_name", ["reference.wav"])
@@ -108,7 +115,7 @@ def test_cosyvoice_buffered_and_streamed_payloads(cosyvoice, monkeypatch, tmp_pa
 
     saved = ProjectSerializationUtil.to_project_json_dict(project)
     settings = saved["model_settings"]["models"][MODEL_ID]
-    assert settings["parameters"] == {"temperature": 0.6, "top_k": 32}
+    assert settings["parameters"] == {"temperature": 0.6, "top_p": None, "top_k": 32, "repetition_penalty": None}
     assert settings["voice_references"] == [{"file_name": "reference.wav", "transcript": "Reference transcript"}]
     restored = Project.model_validate(saved)
     assert restored.get_model_setting(MODEL_ID, "top_k") == 32

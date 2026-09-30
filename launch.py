@@ -77,17 +77,17 @@ COL_INPUT = Ansi.hex("aaaaaa")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
+from tts_audiobook_tool.launcher_marker import REMOTE_CLIENT_MARKER_MODULES
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
-# Build the list of (module_test, proper_name) from the catalog, skipping NONE.
+# Build the list of (module_test, proper_name) from the catalog, skipping none.
 QUALIFIED_MODELS: list[tuple[str, str]] = []
 for member in TtsModelType.all():
-    if member == TtsModelType.NONE:
+    if member.id == "none":
         continue
     QUALIFIED_MODELS.append((member.value.local_module_test, member.value.ui["proper_name"]))
 
-SGL_OMNI_MARKER_MODULE = "tts_audiobook_tool_sgl_omni_marker"
-SGL_OMNI_DISPLAY_MODEL = "SGL-Omni server mode"
+REMOTE_CLIENT_DISPLAY_MODEL = "Remote TTS client (SGL-Omni / audio.cpp)"
 
 
 def find_venvs(base_dir: str) -> list[str]:
@@ -166,15 +166,20 @@ def probe_venv(venv_path: str) -> tuple[list[str], int]:
         return [], 0
 
 
-def has_sgl_omni_marker(venv_path: str) -> bool:
-    """Return True if *venv_path* has the dedicated SGL-Omni launcher marker package."""
+def has_remote_client_marker(venv_path: str) -> bool:
+    """Return True if *venv_path* has the new or historical remote-client marker."""
     python_exe = get_venv_python(venv_path)
     if python_exe is None:
         return False
 
     probe_code = (
         "import importlib.util\n"
-        f"raise SystemExit(0 if importlib.util.find_spec({SGL_OMNI_MARKER_MODULE!r}) is not None else 1)\n"
+        "def check(mod):\n"
+        "    try:\n"
+        "        return importlib.util.find_spec(mod) is not None\n"
+        "    except Exception:\n"
+        "        return False\n"
+        f"raise SystemExit(0 if any(check(mod) for mod in {REMOTE_CLIENT_MARKER_MODULES!r}) else 1)\n"
     )
 
     try:
@@ -201,8 +206,8 @@ def build_venv_list(base_dir: str) -> list[tuple[str, str, list[str]]]:
         name = os.path.basename(vp)
         models, match_count = probe_venv(vp)
         if match_count == 0:
-            if has_sgl_omni_marker(vp):
-                results.append((vp, name, [SGL_OMNI_DISPLAY_MODEL]))
+            if has_remote_client_marker(vp):
+                results.append((vp, name, [REMOTE_CLIENT_DISPLAY_MODEL]))
             continue
         if match_count > 1:
             print(

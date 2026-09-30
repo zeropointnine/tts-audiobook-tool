@@ -140,6 +140,7 @@ class TtsBaseModel(ABC):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
     ) -> list[Sound] | str:
         """
         Generates Sound/s using the relevant TTS model attributes in the `project` object.
@@ -156,6 +157,9 @@ class TtsBaseModel(ABC):
             the backend unchanged rather than running text preparation again.
         :param force_random_seed:
             Is ignored if implementation does not support seed
+        :param max_random_seed:
+            Inclusive upper bound on random draws only; -1 preserves the model's
+            native range. Fixed seeds and seed-omitting backends are unchanged.
         :param on_stream_chunk:
             Optional callback for streaming audio chunks in the same format as
             `Sound.data`: a 1d `np.ndarray` with dtype `float32`
@@ -432,8 +436,7 @@ class TtsBaseModel(ABC):
         if bool(voice_file_name):
             value = ProjectVoiceUtil.make_voice_sample_display_label(project, voice_file_name, tts_model_spec)
 
-            from tts_audiobook_tool.tts import Tts
-            num_items = len( ProjectVoiceUtil.get_voice_values(project, Tts.get_type()) )
+            num_items = len(ProjectVoiceUtil.get_voice_values(project, TtsModelType.require_by_id(cls.INFO.id)))
             if num_items > 1:
                 value += f", +{num_items - 1} more"
         else:
@@ -448,7 +451,7 @@ class TtsBaseModel(ABC):
         Returns the active voice reference for this model and project (could be filename or other).
         Override for models that store voice across multiple fields.
         """
-        return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.get_by_id(cls.INFO.id))
+        return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id(cls.INFO.id))
 
     @classmethod
     def get_missing_voice_file_issue(
@@ -462,7 +465,7 @@ class TtsBaseModel(ABC):
         if not cls._has_voice_binding(cls.INFO.id):
             raise Exception("Logic error - must override this method")
 
-        voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.get_by_id(cls.INFO.id))
+        voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id(cls.INFO.id))
         if not voice_file_name:
             return None
 

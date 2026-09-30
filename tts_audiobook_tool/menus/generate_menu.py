@@ -17,6 +17,7 @@ from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
     EditorClosed,
@@ -28,7 +29,7 @@ from tts_audiobook_tool.textual.generate_editor import (
     QuickGenerationRequested,
 )
 from tts_audiobook_tool.textual.generation_app import run_generation_app
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 from tts_audiobook_tool.util import *
 
 class GenerateMenu:
@@ -78,7 +79,7 @@ class GenerateMenu:
         def make_batch_size_label(state: State) -> str:
             value = ProjectVoiceUtil.get_batch_size(state.project)
             value_string = "disabled" if value == 1 else str(value)
-            s = "Concurrent requests " if Tts.is_sgl_mode() else "Batch size "
+            s = "Concurrent requests " if state.project.get_tts_model_type().value.backend_kind is TtsBackendKind.SGL_OMNI else "Batch size "
             currently = make_currently_string(value_string)
             s = s + currently
             return s
@@ -99,7 +100,12 @@ class GenerateMenu:
                     lambda _, __: GenerateMenu.run_editor(state),
             ))
 
-            show_batch_item = Tts.get_type().can_batch()
+            # Capability gate, not just storage presence: a catalog entry may
+            # declare itself non-batchable while keeping its storage binding.
+            # The effective value is clamped in ProjectVoiceUtil.get_batch_size(),
+            # so a hand-edited project file cannot re-enable concurrency here.
+            show_batch_item = state.project.get_tts_model_type().can_batch() and Tts.can_batch(
+                state.project.get_tts_model_type())
 
             # Batch size
             if show_batch_item:
@@ -178,7 +184,7 @@ class GenerateMenu:
             state.project.save()
             print_feedback(f"Concatenate when finished set to: {value}")
 
-        SUBHEADING = 'Automatically runs concatenation step ("Create audiobook file")\nwhen job is finished.\n'
+        SUBHEADING = 'Automatically runs concatenation step ("Create audiobook file")\nwhen job is finished.'
 
         MenuUtil.options_menu(
             state=state,
@@ -273,19 +279,19 @@ def ask_retries(state: State) -> None:
 
 def ask_batch_size(state: State) -> None:
 
-    binding = REGISTRY.orchestration_binding(Tts.get_type().id)
+    binding = REGISTRY.orchestration_binding(state.project.get_tts_model_type().id)
     if binding is None:
         return # silently ignore (shouldn't happen)
     target = SettingRef(binding.model_id, binding.name)
 
     hints.show_hint_if_necessary(state.prefs, HINT_BATCH)
 
-    prompt = "Enter max concurrent requests:" if Tts.is_sgl_mode() else "Enter batch size:"
+    prompt = "Enter max concurrent requests:" if state.project.get_tts_model_type().value.backend_kind is TtsBackendKind.SGL_OMNI else "Enter batch size:"
 
     # Note that if there is a TtsModelType local and server "member pair" for the same underlying TTS model,
     # and the two share the same Project "batch_size" attribute, that value can be out of range
     # compared to the 'correct' max value.
-    max_value = PROJECT_CONCURRENT_REQUESTS_MAX if Tts.is_sgl_mode() else PROJECT_BATCH_SIZE_MAX
+    max_value = PROJECT_CONCURRENT_REQUESTS_MAX if state.project.get_tts_model_type().value.backend_kind is TtsBackendKind.SGL_OMNI else PROJECT_BATCH_SIZE_MAX
 
     ask.ask_number_and_save(
         state.project, target, prompt,
@@ -301,8 +307,8 @@ def make_validation_confirmation_line(state: State) -> str:
 
 def do_generate(state: State) -> None:
 
-    # Check blockers
-    error = readiness.get_generate_blocker_text(state, verbose=True)
+    # Check blockers (forced remote probe: this run is about to start)
+    error = readiness.get_run_blocker_text(state, verbose=True)
     if error:
         ask.ask_error(error)
         return
@@ -363,10 +369,10 @@ def do_generate(state: State) -> None:
         s += f" {COL_DIM}({num} already complete)"
     printt(s)
     # Print batching setting
-    tts_type = Tts.get_type()
+    tts_type = state.project.get_tts_model_type()
     if tts_type.can_batch():
         batch_size = ProjectVoiceUtil.get_batch_size(state.project)
-        if Tts.is_sgl_mode():
+        if state.project.get_tts_model_type().value.backend_kind is TtsBackendKind.SGL_OMNI:
             s = f"- Concurrent requests: {batch_size}"
         else:
             if batch_size > 1:
@@ -423,8 +429,7 @@ def do_generate(state: State) -> None:
 STRICTNESS_DESC = \
 """Controls how many word errors are acceptable per segment.
 Applies during generation (auto-retry) and when identifying
-existing segments for regeneration.
-"""
+existing segments for regeneration."""
 
 RETRIES_DESC = \
 """This is the max number of retries an audio generation will be attempted

@@ -6,9 +6,11 @@ import random
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
+from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
 from tts_audiobook_tool.app_types import ReadinessIssue, Sound, StreamChunkCallback, StreamEndCallback, VoiceDisplayInfo
 from tts_audiobook_tool.constants import MAX_WORDS_PER_SEGMENT_RECO_RANGE, SEED_MAX
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.sgl_omni_definition import NumericParameter, SglOmniModelDefinition
@@ -46,13 +48,23 @@ class ConfiguredSettings:
         return project.save()
 
 
+def _cached_server_readiness_issue(model_id: str) -> ReadinessIssue | None:
+    snapshot = RemoteTtsDiscovery.get_snapshot()  # Never poll per sentence.
+    if snapshot.issue is not None:
+        return ReadinessIssue("SGL-Omni server", snapshot.issue.message)
+    from tts_audiobook_tool.tts import Tts
+    if not Tts._selected_server_model_id or (TtsModelType.require_by_id(model_id), Tts._selected_server_model_id) not in snapshot.candidates:
+        return ReadinessIssue("SGL-Omni server", Tts._remote_issue or "Selected server model is incompatible")
+    return None
+
+
 class ConfiguredModelSupport:
     """Class-free metadata provider usable in the interactive process."""
 
     def __init__(self, definition: SglOmniModelDefinition):
         self.definition = definition
         self.INFO = definition.spec
-        self.model_type = TtsModelType.get_by_id(self.INFO.id)
+        self.model_type = TtsModelType.require_by_id(self.INFO.id)
 
     def massage_for_inference(self, text: str) -> str:
         for before, after in self.INFO.substitutions:
@@ -111,7 +123,7 @@ class ConfiguredModelSupport:
     def get_blocking_issues(self, project: Project, instance: object = None) -> list[ReadinessIssue]:
         issues = []
         if self.definition.language_policy == "moss":
-            server_issue = SglOmniUtil.check_readiness(SglOmniUtil.get_base_url())
+            server_issue = _cached_server_readiness_issue(self.INFO.id)
             return [server_issue] if server_issue else []
         voice = self.get_primary_voice_value(project)
         if self.INFO.requires_voice and not voice:
@@ -135,7 +147,7 @@ class ConfiguredModelSupport:
                 ConfiguredSettings.get(project, parameter, self.INFO.id)
             except ValueError as exc:
                 issues.append(ReadinessIssue(parameter.name, str(exc)))
-        server_issue = SglOmniUtil.check_readiness(SglOmniUtil.get_base_url())
+        server_issue = _cached_server_readiness_issue(self.INFO.id)
         if server_issue:
             issues.append(server_issue)
         return issues
@@ -155,7 +167,7 @@ class ConfiguredModelSupport:
         if top_k and top_k.max_request_value is not None:
             stored = ConfiguredSettings.stored(project, top_k, self.INFO.id)
             if stored != top_k.default_sentinel and stored > top_k.max_request_value:
-                name = "Fish S2 Pro" if self.INFO.id == "server_fish_s2" else self.INFO.ui.get("proper_name", self.INFO.id)
+                name = "Fish S2 Pro" if self.INFO.id == "fish_s2_sglomni" else self.INFO.ui.get("proper_name", self.INFO.id)
                 warnings.append(f"Top_k ({stored}) out of range for server version of {name} inference, will clamp to {top_k.max_request_value}")
         return warnings
 
@@ -203,6 +215,7 @@ class SglOmniBackendAdapter:
         on_stream_chunk: StreamChunkCallback | None = None, on_stream_end: StreamEndCallback | None = None,
         voice_selection_index: int = 0, print_params: bool = False,
         print_generation_request: bool = False,
+        max_random_seed: int = -1,
     ) -> list[Sound] | str:
         # Nonstreaming implementations ignore callback arguments, as the
         # previous server adapters did. Qwen exposes a PCM callback route even
@@ -245,7 +258,7 @@ class SglOmniBackendAdapter:
             if self.definition.seed_policy == "resolved":
                 seed = -1 if force_random_seed else project.get_model_setting(self.INFO.id, "seed")
                 if seed == -1:
-                    seed = random.randrange(0, SEED_MAX)
+                    seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
             reference_seconds = None
             speed: int | float = 1.0
             if policy == "auk_seconds":

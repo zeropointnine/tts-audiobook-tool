@@ -16,7 +16,7 @@ else:
 
 class PocketBaseModel(TtsBaseModel):
 
-    INFO = TtsModelType.POCKET.value
+    INFO = TtsModelType.require_by_id("pocket_local").value
 
     DEFAULT_TEMPERATURE = 0.7
     DEFAULT_INT8 = False
@@ -59,13 +59,13 @@ class PocketBaseModel(TtsBaseModel):
 
     @classmethod
     def get_primary_voice_value(cls, project: Project) -> str:
-        return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET) or project.get_model_setting('pocket', 'predefined_voice')
+        return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local")) or project.get_model_setting('pocket_local', 'predefined_voice')
 
     @classmethod
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        model_code = project.get_model_setting('pocket', 'model_code') or PocketBaseModel.DEFAULT_LANGUAGE
+        model_code = project.get_model_setting('pocket_local', 'model_code') or PocketBaseModel.DEFAULT_LANGUAGE
         return f"{cls.INFO.ui['proper_name']} {COL_DIM}({model_code})"
 
     @classmethod
@@ -79,7 +79,7 @@ class PocketBaseModel(TtsBaseModel):
                 errors.append(ReadinessIssue("ungated model", verbose_ui_message))
                 return errors # don't bother adding any other errors at this point
 
-        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET) and not project.get_model_setting('pocket', 'predefined_voice'):
+        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local")) and not project.get_model_setting('pocket_local', 'predefined_voice'):
             errors.append(ReadinessIssue("voice clone", "Setting a voice clone file or predefined voice is required"))
 
         return errors
@@ -94,7 +94,7 @@ class PocketBaseModel(TtsBaseModel):
 
         Rem, use "make_gated_error_message_ui" for user-facing error message with remediation info
         """
-        voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET)
+        voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local"))
         if not voice_file_name:
             return ""
 

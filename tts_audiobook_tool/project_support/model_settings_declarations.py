@@ -1,7 +1,8 @@
-"""Stable built-in model-field declarations, independent of active backend.
+"""Frozen pre-v3 project input fields (compatibility only).
 
-Defaults and storage types captured from the version-2 Project field schema.
-Editing these declarations or their owners requires an explicit migration.
+Defaults and types describe how old flat project fields are interpreted during
+migration, NOT current model settings. Current storage is catalog-declared.
+Editing these historical declarations changes legacy conversion semantics.
 """
 from __future__ import annotations
 

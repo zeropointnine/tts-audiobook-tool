@@ -133,7 +133,7 @@ class ConcatMenu:
             )
 
             label = make_menu_label(label="Generative upsampling", value=state.project.use_upsampler)
-            if Tts.get_model_support().get_output_sample_rate(state.project) >= 44_100 and state.project.use_upsampler:
+            if Tts.get_model_support(state.project).get_output_sample_rate(state.project) >= 44_100 and state.project.use_upsampler:
                 label += f"{COL_ERROR}*"
             items.append(
                 MenuItem(
@@ -327,17 +327,16 @@ class ConcatMenu:
             print_feedback(f"Generative upsampling set to: {value}")
 
         if not lava_sr_available:
-            subheading = f"{Ansi.ITALICS}LavaSR v2 upsampler not installed\n"
+            subheading = f"{Ansi.ITALICS}LavaSR v2 upsampler not installed"
         else:
             subheading = UPSAMPLE_SUBHEADING
             link = text_util.make_terminal_hyperlink(LAVA_SR_PROJECT_URL, "LavaSR")
             subheading = subheading.replace("%1", link)
-            sample_rate = Tts.get_model_support().get_output_sample_rate(state.project)
+            sample_rate = Tts.get_model_support(state.project).get_output_sample_rate(state.project)
             if sample_rate >= 44_100:
                 subheading += (
-                    "\n"
-                    f"{COL_ERROR}*{COL_DEFAULT} {Tts.get_type().value.ui['short_name']} already outputs audio at a samplerate of {sample_rate}."
-                    "\n"
+                    "\n\n"
+                    f"{COL_ERROR}*{COL_DEFAULT} {state.project.get_tts_model_type().value.ui['short_name']} already outputs audio at a samplerate of {sample_rate}."
                 )
 
         MenuUtil.options_menu(
@@ -570,22 +569,19 @@ def make_limit_silence_gaps_label(state: State) -> str:
 LOUDNORM_SUBHEADING = \
 """Applies a final pass after concatenation to standardize overall loudness and
 control peaks. Choose Stronger for a louder, more consistent presentation on
-mobile devices or in noisy environments.
-"""
+mobile devices or in noisy environments."""
 
 SUBDIVIDE_SUBHEADING = \
 """Affects text highlighting in the player/reader app.
 When False, highlighted text maps directly to the TTS prompts used to generate the sound segments.
 When True, highlighted text is further sub-segmented by phrase (Requires \"speech-to-text validation\"
-to be enabled during TTS sound generation).
-"""
+to be enabled during TTS sound generation)."""
 
 SECTION_BREAK_SUBHEADING = \
 """When set to true, inserts a subtle \"page turn\" sound effect when
 two or more blank lines are encountered in the text. This can be a
 useful audible cue, so long as the text is formatted for it.
-Also inserts a more prominent sound at section breaks.
-"""
+Also inserts a more prominent sound at section breaks."""
 
 OPEN_AUDIOBOOK_SUBHEADING = \
 f"""Select file to be opened in the player app using %1, which will be
@@ -593,16 +589,14 @@ launched with a dedicated user profile and the following flags
 to enable opening local audio files without user input:
   {COL_DIM}--allow-file-access-from-files
   --autoplay-policy=no-user-gesture-required
-  --user-data-dir=%2
-"""
+  --user-data-dir=%2"""
 
 HIGH_SHELF_SUBHEADING = \
 """Applies a high-shelf equalizer pass to compensate for dull or muffled-sounding TTS output.
 May be useful for lower-fidelity TTS models.
 
 This setting also applies to:
-Realtime playback, LLM voice chat, and stand-alone server
-"""
+Realtime playback, LLM voice chat, and stand-alone server"""
 
 LIMIT_SILENCE_GAPS_SUBHEADING = \
 """Limits instances of silence within sound segment from extending beyond
@@ -616,17 +610,14 @@ Small values can be used to influence pacing and prosody (eg, 0.0-0.3 seconds).
 Applied when creating the audiobook file, so re-creating it with a different
 threshold re-cuts the existing audio rather than regenerating it.
 
-This setting also applies to realtime playback, voice chat, stand-alone server.
-"""
+This setting also applies to realtime playback, voice chat, stand-alone server."""
 
 REASON_PAUSES_SUBHEADING = \
 """Controls the silence inserted between generated segments.
-Applies to audiobook export, realtime playback, voice chat, and the standalone server.
-"""
+Applies to audiobook export, realtime playback, voice chat, and the standalone server."""
 
 UPSAMPLE_SUBHEADING = \
 """Uses %1 to enhance speech and generate higher-frequency detail,
 producing 48 kHz audio.
 
-FLAC file output is recommended to preserve the generated detail.
-"""
+FLAC file output is recommended to preserve the generated detail."""

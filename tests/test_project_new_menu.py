@@ -23,14 +23,13 @@ from tts_audiobook_tool.project_support.project_transfer_util import ProjectTran
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 @contextmanager
 def _quiet_project_setter():
     """Silences the model/whitelist side effects of State.project = ..."""
     with patch("tts_audiobook_tool.tts.Tts.set_model_params_using_project"), \
-            patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE), \
+            patch("tts_audiobook_tool.tts.Tts.bind_project"), \
             patch("tts_audiobook_tool.state.Whitelist"):
         yield
 
@@ -170,38 +169,14 @@ def test_abr_flow_still_waits_for_enter_on_a_validation_error(monkeypatch, tmp_p
     assert feedback == []
 
 
-# --- Model-mismatch FYI for a project cloned from an ABR file ---
-
-@contextmanager
-def _runtime_model(model_type):
-    """Holds the runtime TTS model steady for the duration of a menu flow."""
-    with patch("tts_audiobook_tool.tts.Tts.set_model_params_using_project"), \
-            patch("tts_audiobook_tool.tts.Tts.get_type", return_value=model_type), \
-            patch("tts_audiobook_tool.state.Whitelist"):
-        yield
-
-
-def _collect_shown_hints(monkeypatch) -> list:
-    """Captures the hints the flow shows, bypassing the prefs-gated ones."""
-    shown: list = []
-    monkeypatch.setattr(
-        project_new_menu_module,
-        "hints",
-        SimpleNamespace(
-            show_hint=lambda hint, **_kwargs: shown.append(hint) or True,
-            show_hint_if_necessary=lambda *_args, **_kwargs: True,
-        ),
-    )
-    return shown
-
+# --- Project cloned from an ABR file ---
 
 def _run_abr_import(
     monkeypatch,
     tmp_path,
     state,
-    source_model_id: str,
     source_dir: str | None = None,
-) -> tuple[list, list[str]]:
+) -> list[str]:
     dest_dir = tmp_path / "dest"
     dest_dir.mkdir()
     _stub_prompt(monkeypatch, str(dest_dir))
@@ -211,48 +186,13 @@ def _run_abr_import(
         "load_from_file",
         staticmethod(lambda _path: SimpleNamespace(project_snapshot={
             "dir_path": source_dir if source_dir is not None else str(tmp_path / "source_project"),
-            "current_model_type": source_model_id,
+            "language_code": "en",
         })),
     )
     errors, _ = _collect_exits(monkeypatch)
-    shown = _collect_shown_hints(monkeypatch)
 
     assert ProjectNewMenu.make_new_project_using_abr(state) is True, errors
-    return shown, errors
-
-
-def test_abr_import_shows_model_mismatch_fyi_for_the_source_model(monkeypatch, tmp_path):
-    state = _make_state()
-
-    with _runtime_model(TtsModelType.MIRA):
-        shown, _errors = _run_abr_import(
-            monkeypatch, tmp_path, state, TtsModelType.CHATTERBOX.value.id
-        )
-
-    assert [hint.heading for hint in shown] == ["FYI"]
-    assert "Chatterbox TTS" in shown[0].text
-    assert "differs from the model currently in use" in shown[0].text
-
-
-def test_abr_import_shows_no_model_mismatch_fyi_for_the_current_model(monkeypatch, tmp_path):
-    state = _make_state()
-
-    with _runtime_model(TtsModelType.MIRA):
-        shown, _errors = _run_abr_import(
-            monkeypatch, tmp_path, state, TtsModelType.MIRA.value.id
-        )
-
-    assert shown == []
-
-
-def test_abr_import_consumes_the_pending_mismatch_so_the_main_menu_stays_quiet(monkeypatch, tmp_path):
-    state = _make_state()
-
-    with _runtime_model(TtsModelType.MIRA):
-        _run_abr_import(monkeypatch, tmp_path, state, TtsModelType.CHATTERBOX.value.id)
-
-    assert state.pending_model_mismatch_name == ""
-    assert state.take_model_mismatch_name() == ""
+    return errors
 
 
 # --- Supporting files for a project cloned from another computer ---
@@ -265,8 +205,8 @@ def test_abr_import_explains_a_source_project_that_is_not_here(monkeypatch, tmp_
     """
     state = _make_state()
 
-    with _runtime_model(TtsModelType.MIRA):
-        _run_abr_import(monkeypatch, tmp_path, state, TtsModelType.MIRA.value.id)
+    with _quiet_project_setter():
+        _run_abr_import(monkeypatch, tmp_path, state)
 
     assert "not a project directory on this computer" in capsys.readouterr().out
 
@@ -276,10 +216,8 @@ def test_abr_import_stays_quiet_when_the_source_project_is_here(monkeypatch, tmp
     source_dir = tmp_path / "source_project"
     (source_dir / PROJECT_VOICE_SUBDIR).mkdir(parents=True)
 
-    with _runtime_model(TtsModelType.MIRA):
-        _run_abr_import(
-            monkeypatch, tmp_path, state, TtsModelType.MIRA.value.id, str(source_dir)
-        )
+    with _quiet_project_setter():
+        _run_abr_import(monkeypatch, tmp_path, state, str(source_dir))
 
     assert "not a project directory on this computer" not in capsys.readouterr().out
 
@@ -313,10 +251,10 @@ def test_abr_import_migrates_old_flat_settings_before_selecting(monkeypatch, tmp
     with _quiet_project_setter():
         assert ProjectNewMenu.make_new_project_using_abr(state) is True
     assert not errors
-    assert state.project.get_model_setting("server_fish_s2", "file_name") == ["narrator.flac"]
-    assert state.project.get_model_setting("server_fish_s2", "temperature") == 0.75
-    assert state.project.get_model_setting("fish_s2", "seed") == 42
-    assert state.project.get_model_setting("server_fish_s2", "concurrent_requests") == 3
+    assert state.project.get_model_setting("fish_s2_sglomni", "file_name") == ["narrator.flac"]
+    assert state.project.get_model_setting("fish_s2_sglomni", "temperature") == 0.75
+    assert state.project.get_model_setting("fish_s2_local", "seed") == 42
+    assert state.project.get_model_setting("fish_s2_sglomni", "concurrent_requests") == 3
     assert state.prefs.project_dir == str(tmp_path / "dest")
 
 

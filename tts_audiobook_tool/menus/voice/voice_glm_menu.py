@@ -17,19 +17,19 @@ class VoiceGlmMenu:
 
             items = []
             items.extend(
-                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.GLM)
+                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.require_by_id("glm_local"))
             )
 
             items.append(
                 MenuItem(
-                    make_menu_label("Model samplerate", str(state.project.get_model_setting('glm', 'sr')) + "hz"),
+                    make_menu_label("Model samplerate", str(state.project.get_model_setting('glm_local', 'sr')) + "hz"),
                     lambda _, __: samplerate_menu(state),
                     superlabel = VOICE_ADVANCED_SUPERLABEL
                 )
             )
             
             items.append(
-                VoiceMenuShared.make_seed_item(state, SettingRef("glm", "seed"))
+                VoiceMenuShared.make_seed_item(state, SettingRef("glm_local", "seed"))
             )
             
             return items
@@ -39,7 +39,7 @@ class VoiceGlmMenu:
 def samplerate_menu(state: State) -> None:
 
     def on_select(value: int) -> None:
-        state.project.set_model_setting('glm', 'sr', value)
+        state.project.set_model_setting('glm_local', 'sr', value)
         state.project.save()
         Tts.set_model_params_using_project(state.project)
         print_feedback(f"Model samplerate set to:", str(value))        
@@ -49,7 +49,7 @@ def samplerate_menu(state: State) -> None:
         heading_text="GLM model samplerate",
         labels=[str(item) + "hz" for item in GlmBaseModel.SAMPLE_RATES],
         values=GlmBaseModel.SAMPLE_RATES,
-        current_value=state.project.get_model_setting('glm', 'sr'),
+        current_value=state.project.get_model_setting('glm_local', 'sr'),
         default_value=GlmBaseModel.SAMPLE_RATES[0],
         on_select=on_select
     )

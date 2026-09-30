@@ -8,16 +8,23 @@ Once appropriate validation has passed, stop. Do not expand testing merely to in
 
 The full project test suite is relatively expensive. Treat it as broad validation, not the default completion step for every edit.
 
-
 # Python environment
 
 - Treat `pyproject.toml` as effectively irrelevant to dependency and tooling discovery; its only agent-relevant content is the configuration concerning the `tests` directory.
 
+# Developer documentation
 
-# Project directories
+`docs-dev/` contains developer- and LLM-facing architecture notes, subsystem explanations, and design context. Consult relevant documents when investigating or changing a subsystem. Use them as supporting context.
 
-`testx/`: Durable developer-facing scripts that demonstrate a mostly working subsystem, verify assumptions, or serve as rerunnable reference material belong in `testx/` instead. Run scripts in `testx/` like so:
+# Development scripts
+
+`testx/` directory contains durable developer-facing scripts that demonstrate a mostly working subsystem, verify assumptions, or serve as rerunnable reference material belong in `testx/`. Run scripts in `testx/` like so:
 
 ```bash
 ./some-venv/bin/python -m testx.llm_util
 ```
+
+# Probe scripts
+
+Use *_probe.py for disposable, task-local diagnostic scripts created during investigation to answer a specific question; remove them when no longer needed.
+

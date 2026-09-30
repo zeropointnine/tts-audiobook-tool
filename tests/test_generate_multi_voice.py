@@ -7,7 +7,6 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from generate_files_test_support import StubValidationResult, generate_files_mock_stack
 from project_settings_test_support import set_setting
@@ -34,7 +33,7 @@ def run_generate_files(
     phrase_groups = [make_phrase_group(num_words, voice) for voice in voice_indices]
     sound_segments = MagicMock()
     sound_segments.get_word_error_counts_in_generate_range.return_value = {}
-    project = Project()
+    project = Project(tts_model_type="mira_local")
     project.max_retries = max_retries
     project.phrase_groups = phrase_groups
     project._sound_segments = sound_segments
@@ -64,7 +63,7 @@ def run_generate_files(
         return results
 
     with generate_files_mock_stack(
-        generate_and_validate_batch, model_type=TtsModelType.MIRA
+        generate_and_validate_batch
     ), patch.object(Project, "save", return_value=""):
         did_interrupt = GenerateUtil.generate_files(
             state, set(range(len(voice_indices))), batch_size=batch_size, is_regen=False,

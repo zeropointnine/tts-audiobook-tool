@@ -53,7 +53,7 @@ def _cancel_pending_prompt() -> str:
     rendered, not baked into the dict above (the backend mode is a process
     invariant, but tests patch it per test).
     """
-    if Tts.is_sgl_mode():
+    if Tts.is_remote_mode():
         return f"{COL_DIM}Waiting for the current generation to stop...{COL_DEFAULT}"
     return f"Press [{COL_ERROR}CTRL-C{COL_DEFAULT}] to kill process and stop immediately"
 

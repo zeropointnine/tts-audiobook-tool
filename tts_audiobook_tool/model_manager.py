@@ -8,6 +8,7 @@ from tts_audiobook_tool.sound.yamnet_detector import YamnetDetector
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.audio_cpp_configured import AudioCppBackendAdapter
 from tts_audiobook_tool.util import *
 
 
@@ -79,6 +80,14 @@ class ModelManager:
             Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
 
+        # Adapter residency is independent of server residency: check even
+        # when need_tts is False (e.g. after idle eviction or a server restart).
+        if isinstance(tts_instance, AudioCppBackendAdapter):
+            tts_instance.print_init_if_unloaded()
+            if Interrupts().did_interrupt:
+                Interrupts().clear()
+                return ModelWarmUpResult(did_interrupt=True)
+
         # Init STT only when desired. An existing desired instance is retained.
         if need_stt:
             GenerationEvents.emit(GenerationPhase("Loading speech-to-text model"))
@@ -97,7 +106,7 @@ class ModelManager:
         # depend on the concrete TTS instance.
         want_yamnet = (
             not skip_yamnet
-            and Tts.get_model_support().can_hallucinate_music(state.project, tts_instance)
+            and Tts.get_model_support(state.project).can_hallucinate_music(state.project, tts_instance)
         )
         if want_yamnet and not ModelManager.has_yamnet_detector():
             GenerationEvents.emit(GenerationPhase("Loading audio validation model"))

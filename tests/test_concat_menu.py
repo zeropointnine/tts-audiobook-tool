@@ -2,6 +2,8 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import patch
 
+import pytest
+
 from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types import (
     ExportType,
@@ -245,6 +247,26 @@ def test_limit_silence_gaps_menu_writes_project_setting() -> None:
     )
 
 
+@pytest.mark.parametrize("sample_rate", [24000, 48000])
+def test_upsampling_subheading_has_no_terminal_newline_and_preserves_warning_gap(monkeypatch, sample_rate):
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type="chatterbox_local")))
+    support = SimpleNamespace(get_output_sample_rate=lambda _: sample_rate)
+    captured = {}
+    monkeypatch.setattr(ModelWorker, "probe_lava_sr_blocking", lambda: (True, ""))
+    monkeypatch.setattr(concat_menu.Tts, "get_model_support", lambda _: support)
+    monkeypatch.setattr(concat_menu.MenuUtil, "options_menu", lambda **kwargs: captured.update(kwargs))
+
+    ConcatMenu.upsample_menu(state)
+
+    text = strip_ansi_codes(captured["subheading"])
+    assert not text.endswith("\n")
+    if sample_rate >= 44100:
+        assert "\n\n* " in text
+        assert f"samplerate of {sample_rate}." in text
+    else:
+        assert "already outputs" not in text
+
+
 def test_concat_menu_prevents_enabling_unavailable_lava_sr() -> None:
     project = Project.model_validate({"use_upsampler": False})
     state = cast(State, SimpleNamespace(project=project))
@@ -259,6 +281,7 @@ def test_concat_menu_prevents_enabling_unavailable_lava_sr() -> None:
         kwargs["on_select"](True)
 
     assert "LavaSR v2 upsampler not installed" in kwargs["subheading"]
+    assert not kwargs["subheading"].endswith("\n")
     assert not project.use_upsampler
     save.assert_not_called()
     ask_error.assert_called_once_with(

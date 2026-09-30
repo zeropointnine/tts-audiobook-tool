@@ -57,7 +57,7 @@ class ConversationStreamingTts:
             (None, None, error_string) on failure.
         """
         project = state.project
-        sample_rate = Tts.get_model_support().get_output_sample_rate(project)
+        sample_rate = Tts.get_model_support(project).get_output_sample_rate(project)
         if sound_stream.sample_rate != sample_rate:
             return (
                 None,
@@ -392,7 +392,7 @@ class _ResponseEngine:
                 if self.output_turn_tts_started_at is None:
                     self.output_turn_tts_started_at = time.monotonic()
 
-                if Tts.get_info().can_stream and self.project.streaming_chat:
+                if Tts.get_info(self.project).can_stream and self.project.streaming_chat:
                     streamed_segment_idx: int | None = None
                     first_audio_callback_registered = False
                     self.log_tts_inference_start(mode="streaming", text=text)
@@ -593,7 +593,7 @@ class _ResponseEngine:
             return
 
         to_send: list[tuple[str, Reason]] = []
-        use_streaming_tts = Tts.get_info().can_stream and self.project.streaming_chat
+        use_streaming_tts = Tts.get_info(self.project).can_stream and self.project.streaming_chat
         with self.state_lock:
             if not self.llm_content_received:
                 L.i(f"[chat] engine: first LLM content received ({len(delta)} chars)")
@@ -645,8 +645,8 @@ class _ResponseEngine:
 
     def make_chat_file_name(self) -> str:
         timestamp = SoundSegmentUtil.make_timestamp_string()
-        model = Tts.get_info().file_tag
-        voice = Tts.get_model_support().get_voice_tag(self.project)
+        model = Tts.get_info(self.project).file_tag
+        voice = Tts.get_model_support(self.project).get_voice_tag(self.project)
         text = " " + app_text.sanitize_for_filename(self.render_response_text()[:50])
         return f"[{timestamp}] [chat] [{model}] [{voice}]{text}.flac"
 

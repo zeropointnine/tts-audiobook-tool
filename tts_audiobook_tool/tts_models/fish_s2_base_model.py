@@ -4,7 +4,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 class FishS2BaseModel(TtsBaseModel):
 
-    INFO = TtsModelType.FISH_S2.value
+    INFO = TtsModelType.require_by_id("fish_s2_local").value
 
     DEFAULT_COMPILE_ENABLED = True
 

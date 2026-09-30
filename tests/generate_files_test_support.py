@@ -27,7 +27,6 @@ class StubValidationResult:
 @contextmanager
 def generate_files_mock_stack(
         batch_side_effect: Any,
-        model_type: TtsModelType | None = None,
 ) -> Iterator[None]:
     patches = [
         patch(
@@ -63,14 +62,6 @@ def generate_files_mock_stack(
         ),
         patch("tts_audiobook_tool.generate_util.Stt.has_instance", return_value=False),
     ]
-    if model_type is not None:
-        patches.insert(
-            3,
-            patch(
-                "tts_audiobook_tool.generate_util.Tts.get_type",
-                return_value=model_type,
-            ),
-        )
 
     for patcher in patches:
         patcher.start()

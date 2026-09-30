@@ -200,7 +200,7 @@ def test_ask_number_and_save_prefills_effective_default_for_minus_one_sentinel(
 
     ask.ask_number_and_save(
         project,
-        target=SettingRef("chatterbox", "exaggeration"),
+        target=SettingRef("chatterbox_local", "exaggeration"),
         prompt="Enter exaggeration:",
         min_value=0.25,
         max_value=2.0,
@@ -225,7 +225,7 @@ def test_ask_number_and_save_unchanged_effective_default_preserves_sentinel(
 
     ask.ask_number_and_save(
         project,
-        target=SettingRef("chatterbox", "exaggeration"),
+        target=SettingRef("chatterbox_local", "exaggeration"),
         prompt="Enter exaggeration:",
         min_value=0.25,
         max_value=2.0,
@@ -252,7 +252,7 @@ def test_ask_number_and_save_does_not_save_unchanged_value(monkeypatch, submitte
 
     ask.ask_number_and_save(
         project,
-        target=SettingRef("chatterbox", "exaggeration"),
+        target=SettingRef("chatterbox_local", "exaggeration"),
         prompt="Enter exaggeration:",
         min_value=0.25,
         max_value=2.0,
@@ -276,7 +276,7 @@ def test_ask_number_and_save_accepts_minus_one_default_sentinel(monkeypatch):
 
     ask.ask_number_and_save(
         project,
-        target=SettingRef("chatterbox", "exaggeration"),
+        target=SettingRef("chatterbox_local", "exaggeration"),
         prompt="Enter exaggeration:",
         min_value=0.25,
         max_value=2.0,
@@ -311,7 +311,7 @@ def test_ask_string_and_save_does_not_save_unchanged_value(
     saved = ask.ask_string_and_save(
         project,
         prompt_line="Enter instructions:",
-        target=SettingRef("qwen3tts", "instructions"),
+        target=SettingRef("qwen3tts_local", "instructions"),
         success_prefix="Instructions set:",
         normalizer=normalizer,
     )

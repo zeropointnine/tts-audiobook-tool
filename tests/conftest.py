@@ -93,19 +93,41 @@ def isolate_app_user_dir(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def initialize_tts_type_for_tests():
+    # Real worker subprocesses initialize the same metadata catalog. Keep the
+    # parent fingerprint/declarations genuine even when tests stub model loading.
+    if not Tts._config_fingerprint:
+        Tts.init_local_model_type()
+    from tts_audiobook_tool.project_support.model_settings import REGISTRY
+    original_metadata = {name: getattr(Tts, name) for name in (
+        "_config_fingerprint", "_configured_definitions", "_audio_cpp_definitions", "_configured_runtime",
+    )}
+    original_registry = (dict(REGISTRY.bindings), dict(REGISTRY.legacy), dict(REGISTRY.members),
+                         dict(REGISTRY.parameter_bounds))
+    original_model_catalog = (dict(TtsModelType._catalog), dict(TtsModelType._specs))
     had_type = hasattr(Tts, "_type")
     original_type = getattr(Tts, "_type", None)
 
     if not had_type or Tts._type is None:
-        setattr(Tts, "_type", TtsModelType.NONE)
+        setattr(Tts, "_type", TtsModelType.require_by_id("none"))
 
-    # The backend mode is a process invariant, probed from the SGL-Omni
-    # sentinel package. The test venvs do not carry the sentinel, so pin
-    # it to the probed (local) value here; tests that need SGL-Omni mode
+    # The backend mode is a process invariant, probed from the remote-client
+    # markers. The test venvs do not carry these markers, so pin
+    # it to the probed (local) value here; tests that need remote-client mode
     # set Tts._backend_mode themselves and get it restored on teardown.
     had_mode = hasattr(Tts, "_backend_mode")
     original_mode = getattr(Tts, "_backend_mode", None)
     Tts._backend_mode = Tts._probe_backend_mode()
+    binding_fields = {
+        "_binding_issue": None,
+        "_bound_project_type_id": "",
+        "_remote_issue": "",
+        "_selected_server_model_id": "",
+        "_available_local_models": (),
+        "_model_params": {},
+    }
+    original_binding_fields = {name: getattr(Tts, name) for name in binding_fields}
+    for name, value in binding_fields.items():
+        setattr(Tts, name, value)
 
     # Production calls init_local_model_type() at startup, which finalizes the
     # catalog and marks it initialized. Tests that drive menus or the worker
@@ -118,6 +140,12 @@ def initialize_tts_type_for_tests():
     try:
         yield
     finally:
+        REGISTRY.bindings, REGISTRY.legacy, REGISTRY.members, REGISTRY.parameter_bounds = original_registry
+        TtsModelType._catalog, TtsModelType._specs = original_model_catalog
+        for name, value in original_metadata.items():
+            setattr(Tts, name, value)
+        for name, value in original_binding_fields.items():
+            setattr(Tts, name, value)
         if had_type:
             setattr(Tts, "_type", original_type)
         elif hasattr(Tts, "_type"):

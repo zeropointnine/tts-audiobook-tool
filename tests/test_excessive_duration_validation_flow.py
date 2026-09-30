@@ -41,8 +41,7 @@ def test_validate_returns_sus_duration_after_music_check_when_transcript_duratio
     # Threshold: 1.5 + 2 words * 0.75 + 2.0 gap allowance = 5.0
     sound = make_sound(5.01)
 
-    with patch("tts_audiobook_tool.validator.ModelManager.has_yamnet_detector", return_value=False), \
-            patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
+    with patch("tts_audiobook_tool.validator.ModelManager.has_yamnet_detector", return_value=False):
         result = Validator.validate(sound, "hello world", words, "en", Strictness.INTOLERANT)
 
     assert isinstance(result, ExcessiveDurationResult)
@@ -71,8 +70,7 @@ def test_validate_returns_word_error_result_when_duration_is_not_suspicious() ->
     words = make_words("hello", "world")
     sound = make_sound(3.0)
 
-    with patch("tts_audiobook_tool.validator.ModelManager.has_yamnet_detector", return_value=False), \
-            patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
+    with patch("tts_audiobook_tool.validator.ModelManager.has_yamnet_detector", return_value=False):
         result = Validator.validate(sound, "hello world", words, "en", Strictness.INTOLERANT)
 
     assert isinstance(result, WordErrorResult)
@@ -84,8 +82,7 @@ def test_validate_counts_possible_truncation_without_mislabeling_it_as_a_transcr
     sound = make_sound(1.0)
 
     with patch("tts_audiobook_tool.validator.ModelManager.has_yamnet_detector", return_value=False), \
-            patch("tts_audiobook_tool.validator.SoundExtraUtil.is_possible_truncation", return_value=True), \
-            patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
+            patch("tts_audiobook_tool.validator.SoundExtraUtil.is_possible_truncation", return_value=True):
         result = Validator.validate(sound, "hello world", words, "en", Strictness.INTOLERANT)
 
     assert isinstance(result, WordErrorResult)
@@ -103,8 +100,7 @@ def test_possible_truncation_obeys_the_existing_word_error_threshold() -> None:
     sound = make_sound(1.0)
 
     with patch("tts_audiobook_tool.validator.ModelManager.has_yamnet_detector", return_value=False), \
-            patch("tts_audiobook_tool.validator.SoundExtraUtil.is_possible_truncation", return_value=True), \
-            patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
+            patch("tts_audiobook_tool.validator.SoundExtraUtil.is_possible_truncation", return_value=True):
         result = Validator.validate(sound, "hello world", words, "en", Strictness.MODERATE)
 
     assert isinstance(result, WordErrorResult)
@@ -115,8 +111,7 @@ def test_possible_truncation_obeys_the_existing_word_error_threshold() -> None:
 def test_sus_duration_uses_all_or_nothing_word_error_sentinel_without_music_exception() -> None:
     words = make_words("hello")
     result = ExcessiveDurationResult(make_sound(2.26), words, duration=2.26)
-    with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
-        project = Project.model_validate({"language_code": "en"})
+    project = Project.model_validate({"language_code": "en"})
     phrase_group = PhraseGroup([Phrase("hello", Reason.SENTENCE)])
 
     assert SegmentTranscriptUtil.make_generation_word_error_count(result) == 99
@@ -135,8 +130,7 @@ def test_sus_duration_uses_all_or_nothing_word_error_sentinel_without_music_exce
 def test_music_exception_semantics_are_preserved() -> None:
     words = make_words("hello")
     result = MusicFailResult(make_sound(1.0), words)
-    with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
-        project = Project.model_validate({"language_code": "en"})
+    project = Project.model_validate({"language_code": "en"})
     phrase_group = PhraseGroup([Phrase("hello", Reason.SENTENCE)])
 
     info = SegmentTranscriptUtil.from_validation_result(
@@ -153,15 +147,14 @@ def test_music_exception_semantics_are_preserved() -> None:
 def test_sus_duration_file_name_uses_99_fail_tag() -> None:
     words = make_words("hello")
     result = ExcessiveDurationResult(make_sound(2.26), words, duration=2.26)
-    with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
-        project = Project.model_validate({"language_code": "en"})
+    project = Project.model_validate({"language_code": "en"})
     phrase_group = PhraseGroup([Phrase("hello", Reason.SENTENCE)])
 
     file_name = SoundSegmentUtil.make_file_name(
         index=0,
         phrase_group=phrase_group,
         project=project,
-        tts_model_type=TtsModelType.NONE.value,
+        tts_model_type=TtsModelType.require_by_id("none").value,
         validation_result=result,
         is_real_time=False,
         voice_tag="test-voice",
@@ -189,8 +182,7 @@ def test_validation_findings_separates_facts_from_legacy_filename_score() -> Non
 def test_segment_sidecar_writes_v3_validation_and_loads_it_directly() -> None:
     words = make_words("hello")
     result = MusicFailResult(make_sound(1.0), words)
-    with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
-        project = Project.model_validate({"language_code": "en"})
+    project = Project.model_validate({"language_code": "en"})
     phrase_group = PhraseGroup([Phrase("hello", Reason.SENTENCE)])
 
     info = SegmentTranscriptUtil.from_validation_result(project, phrase_group, 0, result)
@@ -214,10 +206,9 @@ def test_segment_sidecar_writes_v3_validation_and_loads_it_directly() -> None:
 def test_segment_sidecar_records_word_substituted_inference_prompt() -> None:
     words = make_words("wucha", "got")
     result = WordErrorResult(make_sound(1.0), words, num_words=2, threshold=0)
-    with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
-        project = Project.model_validate(
-            {"language_code": "en", "word_substitutions": {"woddaya": "wucha"}}
-        )
+    project = Project.model_validate(
+        {"language_code": "en", "word_substitutions": {"woddaya": "wucha"}}
+    )
     phrase_group = PhraseGroup([Phrase("Woddaya got", Reason.SENTENCE)])
 
     info = SegmentTranscriptUtil.from_validation_result(project, phrase_group, 0, result)

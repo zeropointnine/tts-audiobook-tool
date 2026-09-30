@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import ClassVar
 
 from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind, TtsModelSpec
 
@@ -18,35 +17,14 @@ class TtsModelType(metaclass=_ModelCatalogMeta):
 
     _catalog: dict[str, TtsModelType]
     _specs: dict[str, TtsModelSpec]
-    _builtin_specs: dict[str, TtsModelSpec]
-    NONE: ClassVar[TtsModelType]
-    AUK_SERVER: ClassVar[TtsModelType]
-    AUK_FLASH_SERVER: ClassVar[TtsModelType]
-    CHATTERBOX: ClassVar[TtsModelType]
-    DOTS: ClassVar[TtsModelType]
-    FISH_S1: ClassVar[TtsModelType]
-    FISH_S2: ClassVar[TtsModelType]
-    FISH_S2_SERVER: ClassVar[TtsModelType]
-    GLM: ClassVar[TtsModelType]
-    HIGGS_V2: ClassVar[TtsModelType]
-    HIGGS_V3_SERVER: ClassVar[TtsModelType]
-    INDEXTTS2: ClassVar[TtsModelType]
-    MIRA: ClassVar[TtsModelType]
-    MOSS: ClassVar[TtsModelType]
-    MOSS_DELAY_SERVER: ClassVar[TtsModelType]
-    MOSS_LOCAL_SERVER: ClassVar[TtsModelType]
-    OMNIVOICE: ClassVar[TtsModelType]
-    POCKET: ClassVar[TtsModelType]
-    QWEN3TTS: ClassVar[TtsModelType]
-    QWEN3TTS_SERVER: ClassVar[TtsModelType]
-    VIBEVOICE: ClassVar[TtsModelType]
-    ZONOS2_SERVER: ClassVar[TtsModelType]
+    _initial_catalog: dict[str, TtsModelType]
+    _initial_specs: dict[str, TtsModelSpec]
 
     @classmethod
     def reset_catalog(cls) -> None:
-        """Restore built-ins during startup (also supports isolated startup tests)."""
-        cls._catalog = {id: cls._catalog[id] for id in cls._builtin_specs}
-        cls._specs = dict(cls._builtin_specs)
+        """Restore the imported catalog, removing optional startup definitions."""
+        cls._catalog = dict(cls._initial_catalog)
+        cls._specs = dict(cls._initial_specs)
 
     def __init__(self, id: str):
         self.id = id
@@ -85,19 +63,39 @@ class TtsModelType(metaclass=_ModelCatalogMeta):
         cls._specs[spec.id] = spec
 
     @classmethod
+    def install_spec(cls, spec: TtsModelSpec) -> TtsModelType:
+        """Install metadata uniformly, retaining an existing identity if present."""
+        handle = cls._catalog.get(spec.id)
+        if handle is None:
+            handle = cls(spec.id)
+            cls._catalog[spec.id] = handle
+        cls._specs[spec.id] = spec
+        return handle
+
+    @classmethod
     def register_spec(cls, spec: TtsModelSpec) -> TtsModelType:
         if spec.id in cls._catalog:
             raise ValueError(f"Duplicate model ID: {spec.id}")
-        handle = cls(spec.id)
-        cls._catalog[spec.id] = handle
-        cls._specs[spec.id] = spec
-        return handle
+        return cls.install_spec(spec)
 
     # ---
 
     @staticmethod
+    def require_by_id(id: str) -> TtsModelType:
+        """Return a registered canonical handle, raising for an unknown ID."""
+        try:
+            return TtsModelType._catalog[id]
+        except KeyError:
+            raise ValueError(f"Unknown TTS model ID: {id!r}") from None
+
+    @staticmethod
     def get_by_id(id: str) -> TtsModelType:
-        return TtsModelType._catalog.get(id, TtsModelType.NONE)
+        """Return a canonical handle or the registered ``none`` placeholder.
+
+        Use for saved selections and external IDs that may be unavailable.
+        Callers should preserve the original ID rather than saving the fallback.
+        """
+        return TtsModelType._catalog.get(id, TtsModelType._catalog["none"])
 
     @staticmethod
     def recommended_range_string(range: tuple[int, int, str]) -> str:
@@ -143,49 +141,24 @@ class TtsModelType(metaclass=_ModelCatalogMeta):
 
     @staticmethod
     def find_tts_type_using_sgl_omni_model_id(model_id: str) -> TtsModelType | None:
-        """
-        Chooses a TtsModelType member using the model id returned by
-        the SGL-Omni models endpoint (typically an hf repo id),
-        using simple substring comparison.
-
-        If more than one variant's substring matches, the longest
-        (most specific) match wins; ties fall back to catalog order.
-        """
-        if not model_id:
-            return None
-
-        model_id = model_id.lower().strip()
-
-        best: tuple[int, TtsModelType] | None = None
-        for item in TtsModelType.get_sgl_omni_items():
-            substring = item.value.sgl_omni_model_id_substring.lower()
-            if substring and substring in model_id:
-                if best is None or len(substring) > best[0]:
-                    best = (len(substring), item)
-
-        return best[1] if best else None
+        """Compatibility helper; SGL matching belongs to its backend detector."""
+        from tts_audiobook_tool.tts_models.sgl_omni_detection import detect_sgl_omni_models
+        matches = detect_sgl_omni_models([{"id": model_id}])
+        return matches[0][0] if matches else None
 
 
-def _install_builtin_catalog() -> None:
+def _install_catalog() -> None:
     # The dependency-light parser shares model_spec types, so either the
     # catalog or this module can be imported first without a cycle.
     from tts_audiobook_tool.tts_models.model_catalog import load_catalog
 
-    builtins, _, _ = load_catalog()
-    expected = {name for name in TtsModelType.__annotations__ if name.isupper()}
-    actual = {symbol for symbol, _ in builtins}
-    if expected != actual:
-        raise ValueError(f"Model catalog built-in handles mismatch: missing {sorted(expected - actual)}, unknown {sorted(actual - expected)}")
-    catalog: dict[str, TtsModelType] = {}
-    specs: dict[str, TtsModelSpec] = {}
-    for symbol, spec in builtins:
-        handle = TtsModelType(spec.id)
-        setattr(TtsModelType, symbol, handle)
-        catalog[spec.id] = handle
-        specs[spec.id] = spec
-    TtsModelType._catalog = catalog
-    TtsModelType._specs = specs
-    TtsModelType._builtin_specs = dict(specs)
+    specs, _, _ = load_catalog()
+    TtsModelType._catalog = {}
+    TtsModelType._specs = {}
+    for spec in specs:
+        TtsModelType.install_spec(spec)
+    TtsModelType._initial_catalog = dict(TtsModelType._catalog)
+    TtsModelType._initial_specs = dict(TtsModelType._specs)
 
 
-_install_builtin_catalog()
+_install_catalog()

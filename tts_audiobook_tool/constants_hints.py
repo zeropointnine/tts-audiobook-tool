@@ -214,21 +214,19 @@ temperature is set too low. Use low values with caution..."""
 
 HINT_SGL_OMNI_DORMANT = Hint(
     "sgl_omni_dormant",
-    "Saved SGL-Omni settings are inactive in this venv",
-"""You have SGL-Omni settings saved, but this virtual environment is not set up
-for SGL-Omni, so they will not be used here.
-SGL-Omni runs from the dedicated venv created by requirements-sgl-omni.txt
-(see the README). Create or refresh that venv and run the app from it
-to use your saved settings again."""
+    "Saved remote TTS settings are inactive in this venv",
+"""You have remote TTS settings saved, but this virtual environment is not set up
+as a remote TTS client, so they will not be used here.
+Install requirements-remote.txt in a dedicated venv and run the app from it
+to use your saved SGL-Omni or audio.cpp server settings again."""
 )
 
 HINT_SGL_OMNI_URL = Hint(
     "sgl_omni_url",
-    "Set the URL to your SGL Omni server",
-"""No SGL-Omni server URL is set in your preferences, so the app
-is assuming the server is running at the default address: http://localhost:8000
-It doesn't appear to be online there, so set the correct URL in
-"Options > SGL-Omni server URL" to point the app at your server."""
+    "Set the URL to your remote TTS server",
+"""No remote TTS URL is set in your preferences. Set the URL of your
+SGL-Omni or audio.cpp server under "Options > Remote TTS server URL",
+then refresh the server listing."""
 )
 
 HINT_DIALOG_VOICE = Hint(
@@ -255,11 +253,4 @@ HINT_ENHANCE_ORPHANS = Hint(
     "Regarding unmatched text lines...",
 """Miscellaneous orphaned text lines are common, but make sure
 to review result for any uncommonly large gaps."""
-)
-
-HINT_ABR_MODEL_MISMATCH = Hint(
-    "",
-    "FYI",
-"""This project's settings were copied from an ABR file last used with the %1 model,
-which differs from the model currently in use."""
 )

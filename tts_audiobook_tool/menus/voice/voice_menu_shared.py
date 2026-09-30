@@ -14,6 +14,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
     run_content_textual_app,
 )
 from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
+from tts_audiobook_tool.menus.voice import voice_instruct_util
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY, SettingRef
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -22,11 +23,16 @@ from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool import target_util
+from tts_audiobook_tool.constants import VOICE_ADVANCED_SUPERLABEL
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.transcriber import Transcriber
+
+# Maps a definition-driven menu control's declared group name to the superlabel
+# rendered above that group. See VoiceMenuShared.apply_group_superlabels(...).
+VOICE_GROUP_SUPERLABELS: dict[str, str] = {"advanced": VOICE_ADVANCED_SUPERLABEL}
 
 class VoiceMenuShared:
 
@@ -35,55 +41,60 @@ class VoiceMenuShared:
         """
         Simply delegates to the correct model-specific voice menu
         """
-        definition = Tts.get_configured_definition()
+        audio_definition = Tts.get_audio_cpp_definition(state.project.get_tts_model_type())
+        if audio_definition is not None:
+            from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
+            VoiceAudioCppMenu.menu(state)
+            return
+        definition = Tts.get_configured_definition(state.project.get_tts_model_type())
         if definition is not None:
             from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
-            VoiceConfiguredSglOmniMenu.menu(state, definition)
+            VoiceConfiguredSglOmniMenu.menu(state)
             return
         # Only local models reach the legacy per-model menus; SGL-Omni
         # variants are always handled by the configured menu above.
-        match Tts.get_type():
-            case TtsModelType.CHATTERBOX:
+        match state.project.get_tts_model_type().id:
+            case "chatterbox_local":
                 from tts_audiobook_tool.menus.voice import VoiceChatterboxMenu
                 VoiceChatterboxMenu.menu(state)
-            case TtsModelType.DOTS:
+            case "dots_local":
                 from tts_audiobook_tool.menus.voice import VoiceDotsMenu
                 VoiceDotsMenu.menu(state)
-            case TtsModelType.FISH_S1:
+            case "fish_s1_local":
                 from tts_audiobook_tool.menus.voice import VoiceFishS1Menu
                 VoiceFishS1Menu.menu(state)
-            case TtsModelType.FISH_S2:
+            case "fish_s2_local":
                 from tts_audiobook_tool.menus.voice import VoiceFishS2Menu
                 VoiceFishS2Menu.menu(state)
-            case TtsModelType.GLM:
+            case "glm_local":
                 from tts_audiobook_tool.menus.voice import VoiceGlmMenu
                 VoiceGlmMenu.menu(state)
-            case TtsModelType.HIGGS_V2:
+            case "higgs_v2_local":
                 from tts_audiobook_tool.menus.voice import VoiceHiggsV2Menu
                 VoiceHiggsV2Menu.menu(state)
-            case TtsModelType.INDEXTTS2:
+            case "indextts2_local":
                 from tts_audiobook_tool.menus.voice import VoiceIndexTts2Menu
                 VoiceIndexTts2Menu.menu(state)
-            case TtsModelType.MIRA:
+            case "mira_local":
                 from tts_audiobook_tool.menus.voice import VoiceMiraMenu
                 VoiceMiraMenu.menu(state)
-            case TtsModelType.MOSS:
+            case "moss_local":
                 from tts_audiobook_tool.menus.voice import VoiceMossMenu
                 VoiceMossMenu.menu(state)
-            case TtsModelType.OMNIVOICE:
+            case "omnivoice_local":
                 from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
                 VoiceOmniVoiceMenu.menu(state)
-            case TtsModelType.POCKET:
+            case "pocket_local":
                 from tts_audiobook_tool.menus.voice import VoicePocketMenu
                 VoicePocketMenu.menu(state)
 
-            case TtsModelType.QWEN3TTS:
+            case "qwen3tts_local":
                 # Special case: Qwen voice menu requires loaded model
                 snapshot, _ = ModelWorker.get_model_state_blocking()
                 already_loaded = (
                     snapshot is not None
                     and snapshot.tts_loaded
-                    and snapshot.tts_type_id == Tts.get_type().value.id
+                    and snapshot.tts_type_id == state.project.get_tts_model_type().value.id
                 )
                 if not already_loaded:
                     printt(f"{COL_DIM_ITALICS}Initializing TTS model...")
@@ -95,11 +106,30 @@ class VoiceMenuShared:
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state, inspection)
 
-            case TtsModelType.VIBEVOICE:
+            case "vibevoice_local":
                 from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
                 VoiceVibeVoiceMenu.menu(state)
             case _:
-                raise NotImplementedError(f"value: {Tts.get_type()}")
+                raise NotImplementedError(f"value: {state.project.get_tts_model_type()}")
+
+    @staticmethod
+    def make_remote_items(state: State) -> list[MenuItem]:
+        """Resolve the current selection on every redraw, even across backends.
+
+        Menu reconciliation can change the selection while this menu is open.
+        Only the controls for this render retain a definition, never the menu
+        factory itself. An unselected/unknown model offers no stale controls.
+        """
+        model_type = state.project.get_tts_model_type()
+        audio_definition = Tts.get_audio_cpp_definition(model_type)
+        if audio_definition is not None:
+            from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
+            return VoiceAudioCppMenu.make_items(state, audio_definition)
+        definition = Tts.get_configured_definition(model_type)
+        if definition is not None:
+            from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
+            return VoiceConfiguredSglOmniMenu.make_items(state, definition)
+        return []
 
     @staticmethod
     def menu_wrapper(
@@ -108,20 +138,51 @@ class VoiceMenuShared:
             subheading: StringOrMaker | None = None,
     ) -> None:
         """
-        Simple wrapper with standardized heading and exit callback
+        Simple wrapper with standardized heading, model note and exit callback
         """
+        def make_subheading(current: State) -> str:
+            note = current.project.get_tts_model_type().value.ui.get("settings_note", "").strip()
+            existing = get_string_from(current, subheading) if subheading else ""
+            return "\n\n".join(part for part in (note, existing) if part)
+
         MenuUtil.menu(
             state=state,
             heading="Voice clone and model settings",
             items=items,
-            subheading=subheading,
+            subheading=make_subheading,
             on_exit=lambda: PlaySoundUtil.stop_sound_async(),
             breadcrumb="Voice",
         )
 
     @staticmethod
+    def apply_group_superlabels(items: list[MenuItem], groups: list[str]) -> None:
+        """
+        Renders each declared group's superlabel once, above that group's first item.
+
+        MenuItem.superlabel is a per-item decoration, not a section header: the menu
+        renderer reprints it before every item that carries one. Menus built from a
+        model definition therefore must not stamp every member of a group, or the
+        heading reappears between members that are not adjacent. Later members render
+        beneath the single heading, which is the intended grouping.
+
+        :param items: menu items in display order
+        :param groups: parallel list of group names ("" for ungrouped items)
+        """
+        if len(items) != len(groups):
+            raise ValueError("items and groups must be parallel lists")
+        labelled: set[str] = set()
+        for item, group in zip(items, groups):
+            if not group or group in labelled:
+                continue
+            label = VOICE_GROUP_SUPERLABELS.get(group)
+            if label is None:
+                raise ValueError(f"No superlabel mapped for menu group {group!r}")
+            labelled.add(group)
+            item.superlabel = label
+
+    @staticmethod
     def make_resolved_voice_label(state: State) -> str:
-        if Tts.get_type().value.requires_voice and not ProjectVoiceUtil.has_voice(state.project):
+        if state.project.get_tts_model_type().value.requires_voice and not ProjectVoiceUtil.has_voice(state.project):
             currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
         elif not ProjectVoiceUtil.has_voice(state.project):
             currently = make_currently_string("none", color_code=COL_ERROR)
@@ -266,7 +327,7 @@ class VoiceMenuShared:
                     return get_string_from(s, no_samples_label)
                 return VoiceMenuShared.make_resolved_voice_label(s)
 
-            first_label = ProjectVoiceUtil.make_voice_sample_display_label(state.project, voices[0], tts_type.value)
+            first_label = ProjectVoiceUtil.make_voice_sample_display_label(s.project, voices[0], tts_type.value)
             suffix = first_label
             if len(voices) > 1:
                 suffix += f", +{len(voices) - 1} more"
@@ -282,11 +343,85 @@ class VoiceMenuShared:
                 if on_set_callback:
                     on_set_callback()
                 return
+            # Remote availability may change while the nested menu is open.
+            # Local menus can also manage explicit secondary/model references.
+            sample_type = tts_type if tts_type.value.backend_kind is TtsBackendKind.LOCAL else None
             VoiceMenuShared.manage_voice_samples_submenu(
-                s, tts_type, on_before_set_callback, on_set_callback, on_clear_callback
+                s, sample_type, on_before_set_callback, on_set_callback, on_clear_callback
             )
 
         return MenuItem(make_label, on_item)
+
+    @staticmethod
+    def make_voice_instructions_item(
+            state: State,
+            model_id: str,
+            name: str = "instruct",
+            label: str = "Voice design instructions",
+            validate_omnivoice: bool = False,
+    ) -> list[MenuItem]:
+        """
+        Makes the voice-design/edit item for a string instruction setting, plus
+        its "Clear" item while a value is stored.
+
+        Shared by local and audio.cpp models. OmniVoice callers opt into their
+        tag-based validation; other models accept free-form instructions.
+        """
+        def make_label(current: State) -> str:
+            value = current.project.get_model_setting(model_id, name)
+            if not value:
+                suffix = f"{COL_DIM}(optional)"
+            else:
+                suffix = make_currently_string(truncate_pretty(value, 40, content_color=COL_ACCENT))
+            return f"{label} {suffix}"
+
+        def on_clear(current: State, _: MenuItem) -> None:
+            current.project.set_model_setting(model_id, name, None, reset=True)
+            current.project.save()
+            print_feedback("Instructions cleared")
+
+        def on_edit(current: State, _: MenuItem) -> None:
+            no_voice_note = ""
+            if validate_omnivoice and ProjectVoiceUtil.get_primary_voice_value(current.project, TtsModelType.require_by_id(model_id)):
+                no_voice_note = "Note: When used alongside voice cloning, instructions may have minimal effect"
+            VoiceMenuShared.ask_instruct(
+                current.project, model_id, name, no_voice_note,
+                label=label, validate_omnivoice=validate_omnivoice)
+
+        items = [MenuItem(make_label, on_edit)]
+        if state.project.get_model_setting(model_id, name):
+            items.append(MenuItem("Clear instructions", on_clear))
+        return items
+
+    @staticmethod
+    def ask_instruct(
+            project: Project, model_id: str, name: str = "instruct", no_voice_note: str = "",
+            *, label: str = "Voice design instructions", validate_omnivoice: bool = False,
+    ) -> None:
+        """Edit instructions with the current value prefilled.
+
+        Only OmniVoice callers use its best-effort tag validation. Free-form
+        instructions must not be checked against OmniVoice's vocabulary.
+        """
+
+        def validator(value: str) -> str:
+            error, _ = voice_instruct_util.validate_instruct(value)
+            return error
+
+        prompt = [f"Enter {label.lower()}"]
+        if validate_omnivoice:
+            prompt.append(f"{COL_DIM}Eg: \"male, british accent, low pitch\" / \"female, young adult, high pitch\"")
+        else:
+            prompt.append(f"{COL_DIM}Eg: \"Speak warmly and naturally, with calm pacing.\"")
+        if no_voice_note:
+            prompt.append(f"{COL_DIM}{no_voice_note}")
+        ask.ask_string_and_save(
+            project,
+            "\n".join(prompt),
+            SettingRef(model_id, name),
+            "Set instructions:",
+            validator=validator if validate_omnivoice else None,
+        )
 
     @staticmethod
     def make_voice_sample_items(
@@ -392,33 +527,39 @@ class VoiceMenuShared:
         for i, voice in enumerate(voices, start=1):
             label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, tts_type.value)
             lines.append(f"{COL_DIM}- Voice sample {i}: {COL_DEFAULT}{label}")
-        return "\n".join(lines) + ("\n" if lines else "")
+        return "\n".join(lines)
 
     @staticmethod
     def manage_voice_samples_submenu(
             state: State,
-            tts_type: TtsModelType,
+            tts_type: TtsModelType | None,
             on_before_set_callback: Callable | None=None,
             on_set_callback: Callable | None=None,
             on_clear_callback: Callable | None=None,
     ) -> None:
 
+        def selected_type(s: State) -> TtsModelType:
+            return tts_type if tts_type is not None else s.project.get_tts_model_type()
+
         def add_voice(s: State) -> None:
             if on_before_set_callback:
                 on_before_set_callback()
-            VoiceMenuShared.ask_and_set_voice_file(s, tts_type, append=True)
+            VoiceMenuShared.ask_and_set_voice_file(s, selected_type(s), append=True)
             if on_set_callback:
                 on_set_callback()
 
         def remove_voice(s: State) -> bool:
-            is_empty = VoiceMenuShared.remove_voice_sample_from_menu(s, tts_type)
+            is_empty = VoiceMenuShared.remove_voice_sample_from_menu(s, selected_type(s))
             if is_empty and on_clear_callback:
                 on_clear_callback()
             return is_empty
 
         def make_items(s: State) -> list[MenuItem]:
+            model_type = selected_type(s)
+            if REGISTRY.voice_binding(model_type.id) is None:
+                return []
             items = []
-            voices = ProjectVoiceUtil.get_voice_values(s.project, tts_type)
+            voices = ProjectVoiceUtil.get_voice_values(s.project, model_type)
             if len(voices) < 9:
                 items.append(MenuItem(
                     "Add voice sample",
@@ -434,7 +575,7 @@ class VoiceMenuShared:
             state=state,
             heading="Add/remove voice sample",
             items=make_items,
-            subheading=lambda s: VoiceMenuShared.make_voice_samples_subheading(s.project, tts_type),
+            subheading=lambda s: VoiceMenuShared.make_voice_samples_subheading(s.project, selected_type(s)),
             breadcrumb="Voice samples",
         )
 
@@ -807,7 +948,7 @@ class VoiceMenuShared:
         """
         subheading = ROLLING_CONTINUATION_DESC
         if qualifier_line:
-            subheading += f"\n{qualifier_line}\n"
+            subheading += f"\n\n{qualifier_line}"
 
         MenuUtil.print_screen_heading(
             state,

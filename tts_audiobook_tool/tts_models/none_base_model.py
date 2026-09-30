@@ -13,7 +13,7 @@ else:
 
 class NoneBaseModel(TtsBaseModel):
 
-    INFO = TtsModelType.NONE.value
+    INFO = TtsModelType.require_by_id("none").value
 
     MAX_WORDS_PER_SEGMENT_RECO_RANGE = (0, 0)
 
@@ -37,7 +37,9 @@ class NoneBaseModel(TtsBaseModel):
     def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
     ) -> list[ReadinessIssue]:
-        return [ ReadinessIssue("TTS model", "A TTS model is required") ]
+        message = (f"Unknown TTS model: {project.tts_model_type}" if project.tts_model_type != "none"
+                   else "Select a TTS model for this project")
+        return [ReadinessIssue("TTS model", message)]
 
 class NoneModel(NoneBaseModel):
 
@@ -53,5 +55,6 @@ class NoneModel(NoneBaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
     ) -> list[Sound] | str:
         return "No TTS model"

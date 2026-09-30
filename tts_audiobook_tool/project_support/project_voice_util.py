@@ -211,7 +211,7 @@ class ProjectVoiceUtil:
             if binding is None or (binding.group or binding.model_id, binding.name) == exclude_owner:
                 continue
             used.update(ProjectVoiceUtil.get_voice_values(project, model_type))
-        emo_voice = project.get_model_setting(TtsModelType.INDEXTTS2.id, "emo_voice")
+        emo_voice = project.get_model_setting("indextts2_local", "emo_voice")
         if not exclude_secondary and emo_voice:
             used.add(emo_voice)
         return used
@@ -229,7 +229,7 @@ class ProjectVoiceUtil:
         # Voice sample files are stored undecorated in the project's voice
         # subdir. Disambiguate the stem if a different storage owner already
         # references the same file name.
-        secondary = tts_type == TtsModelType.INDEXTTS2 and is_secondary
+        secondary = tts_type.id == "indextts2_local" and is_secondary
         binding = None if secondary else _settings_registry().voice_binding(tts_type.id)
         exclude_owner = (binding.group or binding.model_id, binding.name) if binding else None
         used = ProjectVoiceUtil.get_used_voice_file_names(project, exclude_owner, exclude_secondary=secondary)
@@ -260,8 +260,8 @@ class ProjectVoiceUtil:
         if has_transcript_storage and append:
             appended_transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_type)
 
-        if tts_type == TtsModelType.INDEXTTS2 and is_secondary:
-            project.set_model_setting(TtsModelType.INDEXTTS2.id, "emo_voice", dest_file_name)
+        if tts_type.id == "indextts2_local" and is_secondary:
+            project.set_model_setting("indextts2_local", "emo_voice", dest_file_name)
         else:
             if _settings_registry().voice_binding(tts_type.id) is None:
                 raise Exception(f"Unsupported tts type {tts_type}")
@@ -278,8 +278,8 @@ class ProjectVoiceUtil:
             else:
                 project.set_model_setting(tts_type.id, "transcript", [transcript] if transcript else [])
 
-        if tts_type == TtsModelType.POCKET:
-            project.set_model_setting('pocket', 'predefined_voice', "")
+        if tts_type.id == "pocket_local":
+            project.set_model_setting('pocket_local', 'predefined_voice', "")
 
         return project.save()
 
@@ -301,16 +301,16 @@ class ProjectVoiceUtil:
                 transcripts.pop(index)
             project.set_model_setting(tts_type.id, "transcript", transcripts)
 
-        if tts_type == TtsModelType.POCKET and not voices:
-            project.set_model_setting('pocket', 'predefined_voice', "")
+        if tts_type.id == "pocket_local" and not voices:
+            project.set_model_setting('pocket_local', 'predefined_voice', "")
 
         project.save()
         return removed
 
     @staticmethod
     def clear_voice_and_save(project: Project, tts_type: TtsModelType, is_secondary: bool=False) -> None:
-        if tts_type == TtsModelType.INDEXTTS2 and is_secondary:
-            project.set_model_setting(TtsModelType.INDEXTTS2.id, "emo_voice", "")
+        if tts_type.id == "indextts2_local" and is_secondary:
+            project.set_model_setting("indextts2_local", "emo_voice", "")
         else:
             if _settings_registry().voice_binding(tts_type.id) is None:
                 raise ValueError(f"Unsupported tts_type: {tts_type}")
@@ -319,54 +319,51 @@ class ProjectVoiceUtil:
         if _settings_registry().transcript_binding(tts_type.id) is not None:
             project.set_model_setting(tts_type.id, "transcript", [])
 
-        if tts_type == TtsModelType.POCKET:
-            project.set_model_setting('pocket', 'predefined_voice', "")
+        if tts_type.id == "pocket_local":
+            project.set_model_setting('pocket_local', 'predefined_voice', "")
 
         project.save()
 
     @staticmethod
     def get_voice_label(project: Project) -> str:
-        from tts_audiobook_tool.tts import Tts
-        if Tts.get_type() == TtsModelType.POCKET:
-            if project.get_model_setting('pocket', 'predefined_voice'):
-                return project.get_model_setting('pocket', 'predefined_voice')
-            value = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET)
+        if project.get_tts_model_type().id == "pocket_local":
+            if project.get_model_setting('pocket_local', 'predefined_voice'):
+                return project.get_model_setting('pocket_local', 'predefined_voice')
+            value = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local"))
             if not value:
                 return "none"
             return ellipsize_path_for_menu(value.removesuffix("_pocket.flac"))
 
-        value = ProjectVoiceUtil.get_primary_voice_value(project, Tts.get_type())
+        value = ProjectVoiceUtil.get_primary_voice_value(project, project.get_tts_model_type())
         if not value:
             return "none"
-        value = value.removesuffix(f"_{Tts.get_type().value.file_tag}.flac")
+        value = value.removesuffix(f"_{project.get_tts_model_type().value.file_tag}.flac")
         return ellipsize_path_for_menu(value)
 
     @staticmethod
     def has_voice(project: Project) -> bool:
-        from tts_audiobook_tool.tts import Tts
-        if Tts.get_type() == TtsModelType.POCKET:
-            return bool(project.get_model_setting('pocket', 'predefined_voice') or ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET))
-        value = ProjectVoiceUtil.get_primary_voice_value(project, Tts.get_type())
+        if project.get_tts_model_type().id == "pocket_local":
+            return bool(project.get_model_setting('pocket_local', 'predefined_voice') or ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local")))
+        value = ProjectVoiceUtil.get_primary_voice_value(project, project.get_tts_model_type())
         return bool(value)
 
     @staticmethod
     def emo_vector_to_string(project: Project) -> str:
-        if not project.get_model_setting('indextts2', 'emo_vector') or sum(project.get_model_setting('indextts2', 'emo_vector')) == 0:
+        if not project.get_model_setting('indextts2_local', 'emo_vector') or sum(project.get_model_setting('indextts2_local', 'emo_vector')) == 0:
             return "none"
         strings = []
-        for item in project.get_model_setting('indextts2', 'emo_vector'):
+        for item in project.get_model_setting('indextts2_local', 'emo_vector'):
             string = f"{item:.1f}".replace(".0", "")
             strings.append(string)
         return ",".join(strings)
 
     @staticmethod
     def verify_voice_files_exist(project: Project) -> VoiceFileVerificationResult:
-        from tts_audiobook_tool.tts import Tts
-        model_type = Tts.get_type()
+        model_type = project.get_tts_model_type()
         info = model_type.value
 
         has_voice_storage = _settings_registry().voice_binding(model_type.id) is not None
-        has_emo_voice = model_type == TtsModelType.INDEXTTS2
+        has_emo_voice = model_type.id == "indextts2_local"
         if not has_voice_storage and not has_emo_voice:
             return VoiceFileVerificationResult({}, {}, [])
 
@@ -432,10 +429,16 @@ class ProjectVoiceUtil:
     @staticmethod
     def get_batch_size(project: Project) -> int:
         from tts_audiobook_tool.tts import Tts
-        binding = _settings_registry().orchestration_binding(Tts.get_type().id)
+        model_type = project.get_tts_model_type()
+        binding = _settings_registry().orchestration_binding(model_type.id)
         if binding is None:
             return 1
-        value = project.get_model_setting(Tts.get_type().id, binding.name)
+        if not Tts.can_batch(model_type):
+            # The catalog declares the model as non-batchable (its server
+            # serializes requests). Any stored value stays untouched so the
+            # project remains portable and the declaration stays reversible.
+            return 1
+        value = project.get_model_setting(model_type.id, binding.name)
         if value == -1:
             value = PROJECT_BATCH_SIZE_DEFAULT
         elif value > PROJECT_BATCH_SIZE_MAX:
@@ -444,13 +447,12 @@ class ProjectVoiceUtil:
 
     @staticmethod
     def set_batch_size(project: Project, value: int) -> None:
-        from tts_audiobook_tool.tts import Tts
-        binding = _settings_registry().orchestration_binding(Tts.get_type().id)
+        binding = _settings_registry().orchestration_binding(project.get_tts_model_type().id)
         if binding is None:
             raise ValueError(f"No support for batch_size for the current model")
         if value > PROJECT_BATCH_SIZE_MAX:
             value = PROJECT_BATCH_SIZE_MAX
-        project.set_model_setting(Tts.get_type().id, binding.name, value)
+        project.set_model_setting(project.get_tts_model_type().id, binding.name, value)
         project.save()
 
     @staticmethod

@@ -115,7 +115,7 @@ def main() -> None:
     ModelManager.warm_up_models(state)
 
     # TTS readiness check
-    blocking_issues = Tts.get_class().get_blocking_issues(project, Tts.get_instance()) 
+    blocking_issues = Tts.get_model_support(project).get_blocking_issues(project, Tts.get_instance())
     if blocking_issues:
         print("Errors:")
         for err in blocking_issues:

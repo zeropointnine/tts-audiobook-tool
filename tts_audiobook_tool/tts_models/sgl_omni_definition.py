@@ -1,4 +1,4 @@
-"""Versioned SGL-Omni definitions. No project persistence is defined here."""
+"""Validated SGL-Omni request policies and catalog-owned settings declarations."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any, Never
 
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelSpec, TtsModelType
-from tts_audiobook_tool.tts_models.model_catalog import CATALOG_PATH, load_catalog, parse_spec
+from tts_audiobook_tool.tts_models.model_catalog import CATALOG_PATH, _load_catalog, parse_spec
+from tts_audiobook_tool.tts_models.catalog_settings import parse_model_settings
 
 DEFINITION_PATH = CATALOG_PATH
 _RESERVED = {"input", "stream", "references", "seed", "language", "max_new_tokens", "stage_params"}
@@ -47,6 +48,7 @@ class NumericParameter:
     max: int | float
     omit_when_unset: bool = False
     max_request_value: int | float | None = None
+    input_prompt_suffix: str = ""
 
     def validate(self, value: object) -> int | float:
         if isinstance(value, bool) or not isinstance(value, int if self.type == "int" else (int, float)):
@@ -77,54 +79,56 @@ class SglOmniModelDefinition:
     language_policy: str = ""
     music_and_trim: bool = False
     orchestration_name: str = ""
+    # Declares whether this model offers and uses a batch-size / concurrency
+    # value. Storage ownership stays with the model-settings registry: a false
+    # capability hides the setting and pins the effective value to one without
+    # retiring the stored `orchestration` value.
+    can_batch: bool = True
+    settings: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
 class SglOmniDefinitions:
     models: dict[str, SglOmniModelDefinition]
     fingerprint: str
+    setting_groups: dict[str, tuple[str, ...]] | None = None
 
 
 def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
-    """
-    Validate the whole file before any caller installs an overlay.
-
-    A definition either overlays an existing SGL-Omni built-in (keeping its
-    stable handle and existing registry ownership) or introduces a new model
-    ID with private model-scoped storage. No Python project field is added.
-    """
-    builtins, entries, fingerprint = load_catalog(path)
-    installed = TtsModelType._builtin_specs
-    missing = installed.keys() - {spec.id for _, spec in builtins}
+    """Validate request policies and catalog storage uniformly for every ID."""
+    document, specs, entries, fingerprint = _load_catalog(path)
+    installed = TtsModelType._initial_specs
+    missing = installed.keys() - {spec.id for spec in specs}
     if missing:
         _fail("models", f"missing built-in model definition(s): {', '.join(sorted(missing))}")
-    for symbol, spec in builtins:
-        handle = getattr(TtsModelType, symbol, None)
+    for spec in specs:
         baseline = installed.get(spec.id)
-        if handle is None or handle.id != spec.id or baseline is None or spec.backend_kind is not baseline.backend_kind:
-            _fail(f"model {spec.id}", "built-in ID, symbol and backend must match the installed catalog")
+        if baseline is None and spec.backend_kind is TtsBackendKind.SGL_OMNI:
+            continue  # Additional server models need no Python declaration.
+        if baseline is None or spec.backend_kind is not baseline.backend_kind:
+            _fail(f"model {spec.id}", "built-in ID and backend must match the installed catalog")
         if spec.backend_kind is not TtsBackendKind.SGL_OMNI and spec != baseline:
             _fail(f"model {spec.id}", "local built-in metadata must match the installed catalog")
 
-    from tts_audiobook_tool.project_support.model_settings import REGISTRY
-
     models: dict[str, SglOmniModelDefinition] = {}
-    used_file_tags = {spec.file_tag for spec in TtsModelType._builtin_specs.values()}
+    used_file_tags = {spec.file_tag for spec in installed.values()}
 
     for index, entry in enumerate(entries):
-        obj = entry  # Already validated as part of the complete v3 catalog.
-        id = _required(obj, "id", f"models[{index}]", str)
+        if entry["backend_kind"] != TtsBackendKind.SGL_OMNI.value:
+            continue  # The shared catalog also contains audio.cpp server entries.
+        id = _required(entry, "id", f"models[{index}]", str)
+        obj = entry["sgl_omni"]  # Already checked as part of the complete catalog.
         where = f"model {id}"
         if not id or id == "none":
             _fail(where, "invalid model ID")
         if id in models:
             _fail(where, "duplicate model ID")
-        builtin = TtsModelType._builtin_specs.get(id)
+        builtin = installed.get(id)
         if builtin is not None and builtin.backend_kind is not TtsBackendKind.SGL_OMNI:
             _fail(where, f"cannot overlay the non-SGL-Omni built-in model {id}")
         is_overlay = builtin is not None
 
-        behavior = _object(obj.get("behavior"), f"{where}.behavior", {"streaming", "seed", "voice_required", "transcript", "prompt_policy", "language", "music_and_trim", "orchestration"})
+        behavior = _object(obj.get("behavior"), f"{where}.behavior", {"streaming", "seed", "voice_required", "transcript", "prompt_policy", "language", "music_and_trim", "orchestration", "can_batch"})
         streaming = _required(behavior, "streaming", f"{where}.behavior", bool)
         voice_required = _required(behavior, "voice_required", f"{where}.behavior", bool)
         seed = _required(behavior, "seed", f"{where}.behavior", str)
@@ -133,19 +137,16 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
             _fail(f"{where}.behavior.seed", f"unsupported seed policy {seed!r}")
         if transcript not in _TRANSCRIPT_POLICIES:
             _fail(f"{where}.behavior.transcript", f"unsupported transcript policy {transcript!r}")
-        if is_overlay:
-            if "orchestration" in behavior:
-                _fail(f"{where}.behavior.orchestration", "built-in storage is declared by the registry")
-            if REGISTRY.voice_binding(id) is None:
-                _fail(f"{where}.behavior.voice_required", "built-in model has no voice storage")
-            has_transcript = REGISTRY.transcript_binding(id) is not None
-            if (transcript != "omitted") != has_transcript:
-                _fail(f"{where}.behavior.transcript", "must match the built-in transcript binding")
-            orchestration_name = ""
-        else:
-            orchestration_name = behavior.get("orchestration", "")
-            if orchestration_name not in ("", "batch_size", "concurrent_requests"):
-                _fail(f"{where}.behavior.orchestration", "expected batch_size or concurrent_requests")
+        settings = parse_model_settings(entry)
+        storage = {setting["name"]: setting for setting in settings}
+        if "file_name" not in storage:
+            _fail(f"{where}.behavior.voice_required", "model has no voice storage")
+        has_transcript = "transcript" in storage
+        if (transcript != "omitted") != has_transcript:
+            _fail(f"{where}.behavior.transcript", "must match catalog transcript storage")
+        orchestration_name = behavior.get("orchestration", "")
+        if orchestration_name not in ("", "batch_size", "concurrent_requests"):
+            _fail(f"{where}.behavior.orchestration", "expected batch_size or concurrent_requests")
         prompt_policy = behavior.get("prompt_policy", "")
         if prompt_policy not in ("", *_PROMPT_POLICIES):
             _fail(f"{where}.behavior.prompt_policy", f"unsupported prompt policy {prompt_policy!r}")
@@ -157,8 +158,11 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
         music_and_trim = behavior.get("music_and_trim", False)
         if not isinstance(music_and_trim, bool):
             _fail(f"{where}.behavior.music_and_trim", "expected boolean")
+        can_batch = behavior.get("can_batch", True)
+        if not isinstance(can_batch, bool):
+            _fail(f"{where}.behavior.can_batch", "expected boolean")
 
-        spec = parse_spec(obj)
+        spec = parse_spec(entry)
         file_tag = spec.file_tag
         if is_overlay:
             if file_tag != builtin.file_tag:
@@ -178,18 +182,18 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
                 _fail(item_where, "parameter name must be a nonempty string")
             if name in {"file_name", "transcript", "batch_size", "concurrent_requests", "seed"}:
                 _fail(item_where, "reserved model setting name")
-            param = _object(data, item_where, {"type", "request_key", "default", "default_sentinel", "min", "max", "omit_when_unset", "max_request_value"})
+            param = _object(data, item_where, {"type", "request_key", "default", "default_sentinel", "min", "max", "omit_when_unset", "max_request_value", "input_prompt_suffix"})
+            suffix = param.get("input_prompt_suffix", "")
+            if not isinstance(suffix, str):
+                _fail(f"{item_where}.input_prompt_suffix", "expected a string")
             typ = _required(param, "type", item_where, str)
             if typ not in _VALUE_TYPES:
                 _fail(f"{item_where}.type", f"unsupported numeric type {typ!r}")
-            if is_overlay:
-                binding = REGISTRY.bindings.get((id, name))
-                if (binding is None or binding.section != "parameters"
-                        or binding.model_id != id
-                        or binding.group and id not in REGISTRY.members.get(binding.group, ())):
-                    _fail(item_where, f"no authorized {id}.{name} parameter binding")
-                if binding.value_type is not _VALUE_TYPES[typ]:
-                    _fail(f"{item_where}.type", "must match the existing storage type")
+            binding = storage.get(name)
+            if binding is None or binding["section"] != "parameters":
+                _fail(item_where, f"no catalog {id}.{name} parameter binding")
+            if binding["type"] != typ:
+                _fail(f"{item_where}.type", "must match the catalog storage type")
             request_key = _required(param, "request_key", item_where, str)
             if request_key in _RESERVED or request_key in request_keys:
                 _fail(f"{item_where}.request_key", "reserved or duplicate request key")
@@ -199,11 +203,8 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
             sentinel = param.get("default_sentinel")
             if sentinel is not None and (isinstance(sentinel, bool) or not isinstance(sentinel, (int, float)) or not math.isfinite(sentinel)):
                 _fail(f"{item_where}.default_sentinel", "expected a finite number")
-            if is_overlay:
-                binding = REGISTRY.get(id, name)
-                if (binding.has_sentinel and sentinel != binding.sentinel
-                        or not binding.has_sentinel and sentinel is not None):
-                    _fail(f"{item_where}.default_sentinel", "must preserve the existing storage sentinel")
+            if binding.get("sentinel") != sentinel:
+                _fail(f"{item_where}.default_sentinel", "must match the catalog storage sentinel")
             omit = param.get("omit_when_unset", False)
             if not isinstance(omit, bool) or omit and sentinel is None:
                 _fail(f"{item_where}.omit_when_unset", "requires a boolean and a sentinel")
@@ -212,7 +213,7 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
                                     or not values["min"] <= cap <= values["max"]):
                 _fail(f"{item_where}.max_request_value", "expected a value within the parameter bounds")
             p = NumericParameter(id, name, typ, request_key, values["default"], sentinel,
-                                 values["min"], values["max"], omit, cap)
+                                 values["min"], values["max"], omit, cap, suffix)
             if p.min > p.max or sentinel is not None and p.min <= sentinel <= p.max:
                 _fail(item_where, "bounds must be ordered and exclude the sentinel")
             try:
@@ -229,7 +230,7 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
             for key, value in source.items():
                 if not isinstance(key, str) or not key:
                     _fail(f"{where}.{field}", "keys must be non-empty strings")
-                if key in occupied or key in _RESERVED and not (key == "max_new_tokens" and field == "request_defaults" and id in ("server_moss_delay", "server_moss_local")):
+                if key in occupied or key in _RESERVED and not (key == "max_new_tokens" and field == "request_defaults" and id in ("moss_delay_sglomni", "moss_local_sglomni")):
                     _fail(f"{where}.{field}.{key}", "reserved or duplicate request key")
                 if isinstance(value, bool) or not isinstance(value, (int, float, str)) or isinstance(value, (int, float)) and not math.isfinite(value):
                     _fail(f"{where}.{field}.{key}", "expected a finite number or string")
@@ -243,7 +244,7 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
             _fail(f"{where}.behavior.prompt_policy", "requires a speed parameter")
         if prompt_policy == "zonos_tokens" and "max_new_tokens" in defaults:
             _fail(f"{where}.request_defaults.max_new_tokens", "conflicts with prompt policy")
-        if seed == "resolved" and (id, "seed") not in REGISTRY.bindings:
+        if seed == "resolved" and "seed" not in storage:
             _fail(f"{where}.behavior.seed", "requires a declared seed binding")
 
         menu_data = obj.get("menu")
@@ -277,9 +278,10 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
                 or len(declared) != len(set(declared))
                 or sum(c.kind == "seed" for c in controls) != (seed == "resolved")):
             _fail(f"{where}.menu", "expected one voice control and each parameter exactly once")
-        models[id] = SglOmniModelDefinition(spec, parameters, tuple(controls), dict(defaults), dict(stream_defaults), transcript, seed, prompt_policy, language, music_and_trim, orchestration_name)
-    required = {id for id, spec in TtsModelType._builtin_specs.items() if spec.backend_kind is TtsBackendKind.SGL_OMNI}
+        models[id] = SglOmniModelDefinition(spec, parameters, tuple(controls), dict(defaults), dict(stream_defaults), transcript, seed, prompt_policy, language, music_and_trim, orchestration_name, can_batch, settings)
+    required = {id for id, spec in installed.items() if spec.backend_kind is TtsBackendKind.SGL_OMNI}
     missing = required - models.keys()
     if missing:
         _fail("models", f"missing built-in SGL-Omni definition(s): {', '.join(sorted(missing))}")
-    return SglOmniDefinitions(models, fingerprint)
+    groups = {name: tuple(ids) for name, ids in document.get("setting_groups", {}).items()}
+    return SglOmniDefinitions(models, fingerprint, groups)

@@ -520,3 +520,14 @@ def pretty_json_string(payload: dict, ellipsize_at: int=60) -> str:
 
     s = json.dumps(obj, indent=2)
     return s
+
+def print_generation_request(url: str, payload: dict, is_streaming: bool = False) -> None:
+    """
+    App-standard printout of a remote TTS generation request.
+
+    Long string values (eg, data URIs) are ellipsized by pretty_json_string
+    """
+    label = "Sending streaming generation request" if is_streaming else "Sending generation request"
+    s = f"{COL_DIM_ITALICS}{label} to {text_util.make_terminal_hyperlink(url)}...{Ansi.RESET}\n"
+    s += COL_DIM + pretty_json_string(payload)
+    printt(s)

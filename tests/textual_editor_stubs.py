@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from tts_audiobook_tool.app_types import Book, BookSection, VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 def run(coroutine) -> None:
@@ -97,6 +98,9 @@ class StubProject:
     save_calls: list[str] = field(default_factory=list)
     save_error: str = ""
     book: Book | None = None
+
+    def get_tts_model_type(self) -> TtsModelType:
+        return TtsModelType.require_by_id("none")
 
     def save(self) -> str:
         self.save_calls.append(self.generate_range_string)

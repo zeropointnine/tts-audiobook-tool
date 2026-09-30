@@ -1,7 +1,10 @@
 import asyncio
 
+import pytest
 from rich.text import Text
+from textual import events
 from textual.app import App, ComposeResult
+from textual.widgets.text_area import Selection
 
 from tts_audiobook_tool.conversation.prompt_draft import PromptDraft
 from tts_audiobook_tool.textual.conversation_widgets import (
@@ -95,6 +98,54 @@ def test_input_area_is_fixed_three_rows_and_editor_submits_with_newlines() -> No
             assert (
                 ConversationTextEditor.normalize_newlines("a\r\nb\rc")
                 == "a\nb\nc"
+            )
+
+    run(exercise())
+
+
+@pytest.mark.parametrize("payload", ["clipboard text", "first\r\nsecond\rthird\n"])
+def test_editor_paste_inserts_once_per_event(payload: str) -> None:
+    async def exercise() -> None:
+        app = WidgetApp()
+        async with app.run_test(size=(40, 10)) as pilot:
+            area = app.query_one(ConversationInputArea)
+            area.show_text()
+            editor = area.text_editor
+            normalized = ConversationTextEditor.normalize_newlines(payload)
+            # Dispatch through Textual, rather than calling the handler directly:
+            # inherited handlers also run unless prevent_default() is called.
+            editor.post_message(events.Paste(payload))
+            await pilot.pause()
+            assert editor.text == normalized
+            assert app.submitted_values == []
+
+            # An intentional second paste must still insert a second copy.
+            editor.post_message(events.Paste(payload))
+            await pilot.pause()
+            assert editor.text == normalized * 2
+
+    run(exercise())
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+def test_editor_paste_preserves_native_selection_and_read_only_behavior(
+    read_only: bool,
+) -> None:
+    async def exercise() -> None:
+        app = WidgetApp()
+        async with app.run_test(size=(40, 10)) as pilot:
+            area = app.query_one(ConversationInputArea)
+            area.show_text()
+            editor = area.text_editor
+            editor.load_text("before selected after")
+            editor.selection = Selection((0, 7), (0, 15))
+            editor.read_only = read_only
+            editor.post_message(events.Paste("replacement\r\ntext"))
+            await pilot.pause()
+            assert editor.text == (
+                "before selected after"
+                if read_only
+                else "before replacement\ntext after"
             )
 
     run(exercise())

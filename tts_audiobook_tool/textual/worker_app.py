@@ -303,7 +303,7 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         yield Rule(id=self.DIVIDER_ID)
         yield from self.compose_below_divider()
         yield WorkerLogContentArea(
-            output_filters=Tts.get_type().value.output_filters,
+            output_filters=Tts.get_info(self.state.project).output_filters,
             id=self.OUTPUT_SHELL_ID,
         )
         yield Horizontal(
@@ -503,7 +503,7 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         there. The GEN_TIMEOUT watchdog remains the automatic hang backstop
         in both modes.
         """
-        return not Tts.is_sgl_mode()
+        return not Tts.is_remote_mode()
 
     def _snap_log_to_tail(self) -> None:
         """Scroll the worker log to the bottom and resume tail following.

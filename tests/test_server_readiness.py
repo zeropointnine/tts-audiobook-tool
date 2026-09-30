@@ -7,17 +7,17 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 def test_blocking_issues_surfaced_as_error_text(monkeypatch, tmp_path):
-    monkeypatch.setattr(Tts, "_type", TtsModelType.NONE)
+    monkeypatch.setattr(Tts, "_type", TtsModelType.require_by_id("none"))
     project = Project.model_validate({"dir_path": str(tmp_path)})
 
     result = get_blocking_issues_error(project, None)
 
     assert result.startswith("TTS model is not ready for inference:\n")
-    assert "A TTS model is required" in result
+    assert "Select a TTS model for this project" in result
 
 
 def test_ready_model_returns_empty_string(monkeypatch, tmp_path):
-    monkeypatch.setattr(Tts, "_type", TtsModelType.NONE)
+    monkeypatch.setattr(Tts, "_type", TtsModelType.require_by_id("none"))
     monkeypatch.setattr(
         NoneBaseModel,
         "get_blocking_issues",
@@ -29,7 +29,7 @@ def test_ready_model_returns_empty_string(monkeypatch, tmp_path):
 
 
 def test_multiple_blocking_issues_all_wrapped(monkeypatch, tmp_path):
-    monkeypatch.setattr(Tts, "_type", TtsModelType.NONE)
+    monkeypatch.setattr(Tts, "_type", TtsModelType.require_by_id("none"))
     issues = [
         ReadinessIssue("voice clone", "A voice clone sample is required"),
         ReadinessIssue("server", "The inference server is unreachable"),
@@ -46,3 +46,11 @@ def test_multiple_blocking_issues_all_wrapped(monkeypatch, tmp_path):
     assert result.startswith("TTS model is not ready for inference:\n")
     assert "A voice clone sample is required" in result
     assert "The inference server is unreachable" in result
+
+
+def test_server_readiness_includes_unavailable_project_binding():
+    project = Project(tts_model_type="glm_local")
+    issue = Tts.bind_project(project)
+    assert issue is not None
+    assert issue.verbose in get_blocking_issues_error(project, None)
+    assert project.tts_model_type == "glm_local"

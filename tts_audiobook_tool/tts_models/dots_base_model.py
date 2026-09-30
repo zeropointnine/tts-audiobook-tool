@@ -57,7 +57,7 @@ class DotsCompileMode(tuple[bool, str], Enum):
 
 
 class DotsBaseModel(TtsBaseModel):
-    INFO = TtsModelType.DOTS.value
+    INFO = TtsModelType.require_by_id("dots_local").value
 
     SOAR_REPO_ID = "dots-studio/dots.tts-soar"
     MF_REPO_ID = "dots-studio/dots.tts-mf"
@@ -113,14 +113,14 @@ class DotsBaseModel(TtsBaseModel):
         """
         if cls.is_meanflow_target(target):
             return (
-                SettingRef("dots", "num_steps_mf"),
+                SettingRef("dots_local", "num_steps_mf"),
                 "mf",
                 cls.NUM_STEPS_MF_DEFAULT,
                 cls.NUM_STEPS_MF_MIN,
                 cls.NUM_STEPS_MF_MAX,
             )
         return (
-            SettingRef("dots", "num_steps_soar"),
+            SettingRef("dots_local", "num_steps_soar"),
             "soar",
             cls.NUM_STEPS_SOAR_DEFAULT,
             cls.NUM_STEPS_SOAR_MIN,
@@ -129,7 +129,7 @@ class DotsBaseModel(TtsBaseModel):
 
     @classmethod
     def resolve_num_steps(cls, project: Project) -> int:
-        ref, _, default, _, _ = cls.get_num_steps_config(project.get_model_setting('dots', 'target'))
+        ref, _, default, _, _ = cls.get_num_steps_config(project.get_model_setting('dots_local', 'target'))
         value: int = project.get_model_setting(ref.model_id, ref.name)
         return default if value == -1 else value
 
@@ -159,7 +159,7 @@ class DotsBaseModel(TtsBaseModel):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        target = cls.resolve_target(project.get_model_setting('dots', 'target'))
+        target = cls.resolve_target(project.get_model_setting('dots_local', 'target'))
         target = ellipsize_path_for_menu(target.removeprefix("dots-studio/"))
         return f"{cls.INFO.ui['proper_name']} {COL_DIM}({target})"
 

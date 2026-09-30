@@ -8,10 +8,9 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
+import logging
 import math
 from typing import TYPE_CHECKING, NamedTuple, Any, Mapping, cast
-
-from tts_audiobook_tool.project_support.model_settings_declarations import BUILTIN_LEGACY_FIELDS
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.tts_models.sgl_omni_definition import SglOmniModelDefinition
@@ -58,25 +57,13 @@ class ModelSettings:
         return {"models": deepcopy(self.models), "shared": deepcopy(self.shared)}
 
 
-# An explicit list of existing shared ownership; equal names alone do not share.
-SHARED_MEMBERS: dict[str, tuple[str, ...]] = {
-    "auk": ("server_auk", "server_auk_flash"),
-    "fish_s2": ("fish_s2", "server_fish_s2"),
-    "moss": ("moss", "server_moss_delay", "server_moss_local"),
-    "qwen3": ("qwen3tts", "server_qwen3tts"),
-}
-PREFIX_MODELS: dict[str, str] = {
-    "auk": "server_auk", "chatterbox": "chatterbox", "dots": "dots",
-    "fish_s1": "fish_s1", "fish_s2": "fish_s2", "higgs": "higgs_v2",
-    "higgs_v3": "server_higgs_v3", "vibevoice": "vibevoice",
-    "indextts2": "indextts2", "glm": "glm", "mira": "mira",
-    "moss": "moss", "qwen3": "qwen3tts", "zonos2": "server_zonos2",
-    "pocket": "pocket", "omnivoice": "omnivoice",
-}
-PRIVATE_FIELDS: dict[str, set[str]] = {
-    "fish_s2": {"rolling_cont", "compile_enabled", "server_concurrent_requests"},
-    "moss": {"target", "rolling_cont"},
-    "qwen3": {"target", "model_type", "rolling_cont", "speaker_id", "instructions", "batch_size", "server_concurrent_requests"},
+# Names retired from a section. The ownership check below cannot tell "another
+# model owns this name" from "this model used to own it" -- names are global --
+# so a retired value is dropped instead of failing the project.
+# audio.cpp retired `orchestration.concurrent_requests`: its server serializes
+# requests per model, so the setting never did anything.
+RETIRED_SETTINGS: dict[str, frozenset[str]] = {
+    "orchestration": frozenset({"concurrent_requests"}),
 }
 # Names used in the old file which differ from the actual Python field names.
 LEGACY_ALIASES = {
@@ -92,7 +79,9 @@ class ModelSettingsRegistry:
     def __init__(self) -> None:
         self.bindings: dict[tuple[str, str], Binding] = {}
         self.legacy: dict[str, Binding] = {}
-        self.members: dict[str, tuple[str, ...]] = dict(SHARED_MEMBERS)
+        self.members: dict[str, tuple[str, ...]] = {}
+        # Backend bounds supplement storage types only during load reconciliation.
+        self.parameter_bounds: dict[tuple[str, str], tuple[int | float, int | float]] = {}
 
     def add(self, binding: Binding, legacy_attr: str = "") -> None:
         key = (binding.model_id, binding.name)
@@ -107,46 +96,74 @@ class ModelSettingsRegistry:
     def for_model(self, model_id: str) -> list[Binding]:
         return [b for (id, _), b in self.bindings.items() if id == model_id]
 
-    def register_configured_model(self, definition: SglOmniModelDefinition) -> None:
-        """Accept configured IDs without manufacturing Python project fields.
+    @staticmethod
+    def _binding(model_id: str, setting: dict[str, Any]) -> Binding:
+        kind = setting["type"]
+        types = {"int": (int, object), "float": (float, object), "str": (str, object),
+                 "bool": (bool, object), "list[str]": (list, str), "list[float]": (list, float)}
+        if kind == "enum:chatterbox":
+            from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
+            value_type, item_type = ChatterboxType, object
+            if ChatterboxType.get_by_id(setting["default"]) is None:
+                raise ValueError(f"Invalid {model_id}.{setting['name']} enum default")
+        else:
+            value_type, item_type = types[kind]
+        return Binding(model_id, setting["name"], setting["section"], setting.get("group", ""),
+                       setting["default"], setting.get("sentinel", -1), "sentinel" in setting,
+                       value_type, item_type, setting.get("preserve_default", False))
 
-        Built-in overlays retain their existing storage ownership and defaults;
-        variant-specific interpretation belongs to the consumer definition.
-        A new ID gets fresh private bindings named after its parameters.
-        """
+    def register_model_settings(self, model_id: str, settings: tuple[dict[str, Any], ...]) -> None:
+        """Install a model's catalog storage identically for every backend/ID."""
+        bindings = [self._binding(model_id, setting) for setting in settings]
+        for binding in bindings:
+            if binding.group and model_id not in self.members.get(binding.group, ()):
+                raise ValueError(f"Unauthorized shared group {binding.group} for {model_id}")
+        for key in list(self.bindings):
+            if key[0] == model_id:
+                del self.bindings[key]
+        for binding in bindings:
+            self.add(binding)
+
+    def load_catalog_settings(self) -> None:
+        from tts_audiobook_tool.tts_models.model_catalog import CATALOG_PATH, _load_catalog
+        from tts_audiobook_tool.tts_models.catalog_settings import parse_model_settings
+        from tts_audiobook_tool.project_support.model_settings_compat import legacy_bindings
+        document, _, _, _ = _load_catalog(CATALOG_PATH)
+        pending = ModelSettingsRegistry()
+        pending.members = {name: tuple(ids) for name, ids in document.get("setting_groups", {}).items()}
+        for entry in document["models"]:
+            model_id = entry["id"]
+            pending.register_model_settings(model_id, parse_model_settings(entry))
+            for name, parameter in entry.get(entry.get("backend_kind", ""), {}).get("parameters", {}).items():
+                if parameter["type"] in ("int", "float"):
+                    pending.parameter_bounds[(model_id, name)] = (parameter["min"], parameter["max"])
+        # Migration defaults/owners are frozen separately from current defaults.
+        legacy = legacy_bindings()
+        self.bindings, self.members, self.legacy = pending.bindings, pending.members, legacy
+        self.parameter_bounds = pending.parameter_bounds
+
+    def register_configured_model(self, definition: SglOmniModelDefinition) -> None:
+        self.register_model_settings(definition.spec.id, definition.settings)
+        self._register_parameter_bounds(definition)
+
+    def register_audio_cpp_model(self, definition: Any) -> None:
+        self.register_model_settings(definition.spec.id, definition.settings)
+        self._register_parameter_bounds(definition)
+
+    def _register_parameter_bounds(self, definition: Any) -> None:
         model_id = definition.spec.id
-        from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-        is_overlay = model_id in TtsModelType._builtin_specs
-        for parameter in definition.parameters.values():
-            key = (model_id, parameter.name)
-            value_type = int if parameter.type == "int" else float
-            if key in self.bindings:
-                old = self.bindings[key]
-                if old.section != "parameters" or old.value_type is not value_type:
-                    raise ValueError(f"Configured {model_id}.{parameter.name} conflicts with existing storage ownership")
-                # A consumer definition cannot rewrite a shared storage default.
-                continue
-            if is_overlay:
-                raise ValueError(f"Configured {model_id}.{parameter.name} has no built-in storage binding")
-            self.add(Binding(model_id, parameter.name, "parameters", "", parameter.default,
-                             parameter.default_sentinel, parameter.default_sentinel is not None, value_type))
-        if is_overlay:
-            # Built-in voice, transcript and orchestration declarations remain
-            # authoritative, regardless of which server definitions are loaded.
-            return
-        self.add(Binding(model_id, "file_name", "voice_references", "", [], value_type=list, list_item_type=str))
-        if definition.transcript_policy != "omitted":
-            self.add(Binding(model_id, "transcript", "voice_references", "", [], value_type=list, list_item_type=str))
-        if definition.orchestration_name:
-            self.add(Binding(model_id, definition.orchestration_name, "orchestration", "", default=1, value_type=int))
+        self.parameter_bounds = {key: bounds for key, bounds in self.parameter_bounds.items() if key[0] != model_id}
+        for name, parameter in definition.parameters.items():
+            if parameter.type in ("int", "float"):
+                self.parameter_bounds[(model_id, name)] = (parameter.min, parameter.max)
+
+    def reset_to_catalog(self) -> None:
+        """Restore all shipped catalog settings, not a historical model subset."""
+        self.load_catalog_settings()
 
     def reset_to_builtins(self) -> None:
-        """Forget optional definitions on backend/flag reinitialization."""
-        self.bindings.clear()
-        self.legacy.clear()
-        self.members = dict(SHARED_MEMBERS)
-        if self is REGISTRY:
-            register_builtin_fields()
+        """Compatibility spelling; there is no built-in-only registration path."""
+        self.reset_to_catalog()
 
     def get(self, model_id: str, name: str) -> Binding:
         try:
@@ -173,6 +190,28 @@ class ModelSettingsRegistry:
             if binding is not None:
                 return binding
         return None
+
+    def serialize(self, store: ModelSettings) -> dict[str, Any]:
+        """Document all declared parameters without pinning unset defaults.
+
+        Internal storage stays sparse. JSON null means use the current default;
+        old numeric unset sentinels get the same portable spelling. Unknown
+        model/group objects and non-parameter sections remain untouched.
+        """
+        result = store.to_dict()
+        for binding in self.bindings.values():
+            if binding.section != "parameters":
+                continue
+            if binding.group:
+                obj = result["shared"].setdefault(binding.group, {"model_ids": list(self.members[binding.group])})
+            else:
+                obj = result["models"].setdefault(binding.model_id, {})
+            parameters = obj.setdefault("parameters", {})
+            value = parameters.get(binding.name)
+            if binding.has_sentinel and value == binding.sentinel:
+                value = None
+            parameters[binding.name] = deepcopy(self._json_value(value))
+        return result
 
     def resolve(self, store: ModelSettings, binding: Binding) -> Any:
         obj = store.shared.get(binding.group, {}) if binding.group else store.models.get(binding.model_id, {})
@@ -311,6 +350,23 @@ class ModelSettingsRegistry:
                     obj["voice_references"] = refs
         return result
 
+    @staticmethod
+    def _is_retired_setting(section: str, name: str) -> bool:
+        """Whether a section/name pair was retired and should be dropped on load."""
+        return name in RETIRED_SETTINGS.get(section, ())
+
+    def _validate_loaded_parameter(self, binding: Binding, value: Any) -> None:
+        self.validate_value(binding, value)
+        if binding.has_sentinel and value == binding.sentinel:
+            return
+        # Shared overrides must be valid for every declared backend consumer,
+        # including when the local member has no backend parameter declaration.
+        model_ids = self.members[binding.group] if binding.group else (binding.model_id,)
+        for model_id in model_ids:
+            bounds = self.parameter_bounds.get((model_id, binding.name))
+            if bounds is not None and not bounds[0] <= value <= bounds[1]:
+                raise ValueError(f"{model_id}.{binding.name}: expected a value between {bounds[0]} and {bounds[1]}")
+
     def _clean_object(self, raw: dict, bindings: list[Binding], where: str) -> dict[str, Any]:
         allowed: dict[str, dict[str, Binding]] = {}
         for binding in bindings:
@@ -324,7 +380,8 @@ class ModelSettingsRegistry:
             raise ValueError(f"model_settings.{where}.voice_references belongs to a different storage owner")
         for section, values in raw.items():
             if section in known and section not in ("voice_references", "parameters") and section not in allowed and isinstance(values, dict):
-                unauthorized = known[section].intersection(values)
+                unauthorized = {name for name in known[section].intersection(values)
+                                if not self._is_retired_setting(section, name)}
                 if unauthorized:
                     name = sorted(unauthorized)[0]
                     raise ValueError(f"model_settings.{where}.{section}.{name} belongs to a different storage owner")
@@ -337,17 +394,32 @@ class ModelSettingsRegistry:
             clean = {}
             for name, value in values.items():
                 if name not in fields:
-                    # Model definitions can retire parameters. A removed name
-                    # might now belong to another model (e.g. a former custom
-                    # 'speed' setting), so global name collisions are not
-                    # evidence of invalid ownership in saved projects.
-                    if section != "parameters" and name in known.get(section, ()):
+                    # Model definitions can retire parameters, and a whole
+                    # declared setting can be retired for a family (see
+                    # RETIRED_SETTINGS). A removed name might now belong to
+                    # another model (e.g. a former custom 'speed' setting), so
+                    # global name collisions are not evidence of invalid
+                    # ownership in saved projects.
+                    if (section != "parameters" and name in known.get(section, ())
+                            and not self._is_retired_setting(section, name)):
                         raise ValueError(f"model_settings.{where}.{section}.{name} belongs to a different storage owner")
                     continue
+                # JSON null intentionally follows the current default, just
+                # like an omitted key in older sparse project files.
+                if section == "parameters" and value is None:
+                    continue
                 try:
-                    self.validate_value(fields[name], value)
-                except ValueError:
                     if section == "parameters":
+                        self._validate_loaded_parameter(fields[name], value)
+                    else:
+                        self.validate_value(fields[name], value)
+                except ValueError as exc:
+                    if section == "parameters":
+                        logging.getLogger("tts-audiobook-tool").warning(
+                            "Invalid saved model setting model_settings.%s.%s.%s=%r; "
+                            "resetting to default %r: %s",
+                            where, section, name, value, fields[name].default, exc,
+                        )
                         continue
                     raise
                 clean[name] = deepcopy(value)
@@ -375,51 +447,9 @@ REGISTRY = ModelSettingsRegistry()
 
 
 def register_builtin_fields() -> None:
-    """Register all variants once, regardless of which backend is installed."""
-    if REGISTRY.legacy:
-        return
-    value_types = {"int": (int, object), "float": (float, object),
-                   "str": (str, object), "bool": (bool, object),
-                   "list[str]": (list, str), "list[float]": (list, float)}
-    for prefix, model_id in PREFIX_MODELS.items():
-        for attr, (kind, default) in BUILTIN_LEGACY_FIELDS.items():
-            if not attr.startswith(prefix + "_") or any(attr.startswith(other + "_") for other in PREFIX_MODELS if other.startswith(prefix + "_")):
-                continue
-            suffix = attr[len(prefix) + 1:]
-            if suffix.startswith("server_"):
-                target = {"fish_s2": "server_fish_s2", "qwen3": "server_qwen3tts"}.get(prefix, model_id)
-                name = "concurrent_requests" if suffix == "server_concurrent_requests" else suffix
-            else:
-                target = model_id
-                name = suffix
-            group = prefix if prefix in SHARED_MEMBERS and suffix not in PRIVATE_FIELDS.get(prefix, set()) else ""
-            if suffix in ("voice_file_name", "server_voice_file_name"):
-                section, name = "voice_references", "file_name"
-            elif suffix == "voice_transcript":
-                section, name = "voice_references", "transcript"
-            elif suffix in ("server_concurrent_requests", "batch_size"):
-                section, name = "orchestration", "concurrent_requests" if suffix == "server_concurrent_requests" else "batch_size"
-            elif suffix.endswith("_file_name"):
-                section, name = "files", suffix.removesuffix("_file_name")
-            else:
-                section = "parameters"
-            if kind == "enum:chatterbox":
-                from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
-                value_type, item_type = ChatterboxType, object
-            else:
-                value_type, item_type = value_types[kind]
-            has_sentinel = default == -1 and suffix != "seed"
-            binding = Binding(target, name, section, group, default, -1, has_sentinel,
-                              value_type, item_type, preserve_default=(suffix == "seed"))
-            REGISTRY.add(binding, attr)
-            if group:
-                for member in SHARED_MEMBERS[group]:
-                    if member != target:
-                        REGISTRY.add(Binding(member, name, section, group, default, -1, has_sentinel,
-                                             value_type, item_type, preserve_default=(suffix == "seed")))
-    if set(REGISTRY.legacy) != set(BUILTIN_LEGACY_FIELDS):
-        raise ValueError(f"Unbound built-in fields: {set(BUILTIN_LEGACY_FIELDS) - set(REGISTRY.legacy)}")
-    # Explicit aliases are input-only; the canonical name still owns the value.
+    """Compatibility name for callers: initialize all shipped catalog settings."""
+    if not REGISTRY.bindings:
+        REGISTRY.load_catalog_settings()
 
 
 register_builtin_fields()

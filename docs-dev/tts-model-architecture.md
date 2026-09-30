@@ -4,12 +4,12 @@ Last updated: 2026-08-20
 
 ## Overview
 
-Each supported TTS model is isolated in its own Python virtual environment. The app discovers which local model is active at startup by probing for the presence of model-specific packages, then loads metadata, class references, and UI routing through a set of layered abstractions. Adding a new model means touching each of these layers; none of them auto-discover new additions.
+Each supported local TTS model is isolated in its own Python virtual environment. Metadata, class references, and UI routing use a set of layered abstractions. For process mode, capability discovery, and choosing `Project.tts_model_type`, refer to [TTS model selection rules](<tts-model-selection.md>). Adding a new model means integrating the relevant layers; availability discovery does not automatically implement a new model.
 
 Models come in two flavors:
 
 - **Local models** — all interactive inference runs in the application's long-lived spawned model worker; each model still has a dedicated venv (e.g. `venv-cb`, `venv-g`). The interactive main process is forbidden from constructing models (see `model_runtime.require_model_owner()`); the REST server and `testx/` scripts keep their own in-process paths.
-- **SGL-Omni server variants** — inference is delegated to an external SGL-Omni server over HTTP. Several model variants share one server-mode venv (`venv-client`) and one requirements file (`requirements-sgl-omni.txt`); the active variant is selected at runtime from the model name reported by the server's models endpoint (see `TtsModelSpec.is_sgl_omni` / `server_model_id_substring`).
+- **Server variants** — inference is delegated to an external SGL-Omni or audio.cpp server over HTTP. Several model variants share the server-mode venv (`venv-client`). Refer to [TTS model selection rules](<tts-model-selection.md>) for selection and exact-server-entry binding.
 
 The process/UI boundary, worker ownership rules, cancellation behavior, and process-safety invariants are documented in [model-worker-architecture.md](model-worker-architecture.md).
 
@@ -33,7 +33,7 @@ requirements-omnivoice.txt
 requirements-pocket.txt
 requirements-qwen3tts.txt
 requirements-vibevoice.txt
-requirements-sgl-omni.txt   # server mode; no model-specific deps (see below)
+requirements-remote.txt    # remote-client mode; no model-specific deps (see below)
 ```
 
 Each local model file follows the same two-section layout: model-specific dependencies appear at the top, followed by a `# App dependencies` comment and then the app's own dependencies. For example:
@@ -52,9 +52,9 @@ audiotsm==0.1.2
 
 The app dependencies section is essentially identical across all requirements files (keep it in sync with `requirements-base.txt`). The one exception is `torch`/`torchaudio`, whose versions may differ between models depending on compatibility requirements of the model library (we favor 2.8.0 as much as possible; current deviations are Chatterbox at 2.6.0 and MOSS at 2.9.1).
 
-`requirements-sgl-omni.txt` is the exception to the two-section layout: it contains only the app dependencies, plus an artificial launcher-marker package (`./launcher_markers/sgl_omni`) that identifies the venv as the SGL-Omni server-mode venv. Server functionality itself requires no extra libraries beyond the base app deps.
+[`requirements-remote.txt`](<../requirements-remote.txt>) is the exception to the two-section layout: it contains only the app dependencies, plus an artificial [launcher-marker package](<../launcher_markers/remote_client/pyproject.toml>) (`./launcher_markers/remote_client`) that identifies the venv as a remote TTS client for either SGL-Omni or audio.cpp. The historical installed module `tts_audiobook_tool_sgl_omni_marker` remains recognized for existing non-editable installations; no reinstall is required, even though its source package has been removed. Both packages may coexist without adding another model capability. Server-client functionality itself requires no extra libraries beyond the base app deps.
 
-The corresponding virtual environments (e.g. `venv-chatterbox`, `venv-fish-s1`, `venv-glm`) live at the project root and are selected externally when launching the app — the app itself has no venv-switching logic. One venv → one local model. `venv-client` is the shared SGL-Omni server-mode venv, and `venv-base` is a dev-only venv with just the app dependencies.
+The corresponding virtual environments (e.g. `venv-chatterbox`, `venv-fish-s1`, `venv-glm`) live at the project root and are selected externally when launching the app — the app itself has no venv-switching logic. One venv → one local model. `venv-client` is the shared remote-client venv for SGL-Omni and audio.cpp, and `venv-base` is a dev-only venv with just the app dependencies.
 
 When implementing a new local model, create `requirements-<newmodel>.txt` first and validate it in isolation before wiring anything into the app. Copy the app dependencies block from `requirements-base.txt` (or an existing model file) and adjust `torch`/`torchaudio` versions only if the model library requires it.
 
@@ -65,40 +65,39 @@ When implementing a new local model, create `requirements-<newmodel>.txt` first 
 
 **File:** [tts_audiobook_tool/tts_models/tts_model_type.py](tts_audiobook_tool/tts_models/tts_model_type.py)
 
-`TtsModelSpec` is a `NamedTuple` holding all hardcoded, static properties for a model. `TtsModelType` is an `Enum` whose values are `TtsModelSpec` instances — it acts as the central registry of every supported model, including a `NONE` placeholder used when no model is detected.
+`TtsModelSpec` is a `NamedTuple` holding application metadata for a model, loaded from [`model_catalog.toml`](<../tts_audiobook_tool/tts_models/model_catalog.toml>). `TtsModelType` is a canonical handle with a stable `.id` and a `.value` property resolving the current spec, not an enum with model-named members. Every shipped entry is installed in exact TOML order, including data-only models and the `"none"` placeholder; there is no separate Python declaration inventory.
+
+- Use `TtsModelType.require_by_id("glm_local")` for hardcoded model IDs, base-class metadata, and handle-keyed registries. It returns the registered canonical handle and raises `ValueError` naming an unknown ID; it never creates an unregistered handle.
+- Use `TtsModelType.get_by_id(saved_id)` for persisted selections or external IDs whose absence is expected. Unknown IDs return the registered `"none"` placeholder; retain the original saved string rather than normalizing it to the fallback.
+- For a known ID both lookups return the same object, without loading a model or performing discovery. Metadata overlays replace the spec but retain handle identity, equality, and hashing; catalog reset restores the imported handles and specs.
+- For simple classification use `model.id == "glm_local"`. For structural dispatch match `model.id` with literal string cases; function calls are not value patterns.
 
 Key fields of `TtsModelSpec` most relevant to integration:
 
 | Field | Purpose |
 |---|---|
 | `id` | Stable string identifier used for serialization |
-| `is_sgl_omni` | Whether the model is backed by an external SGL-Omni backend rather than local inference |
-| `server_model_id_substring` | Substring matched against the SGL-Omni model name to select this variant (empty = not applicable) |
+| `backend_kind` | Catalog classification of how a variant executes; refer to [TTS model selection rules](<tts-model-selection.md>) for its relationship to process mode and selection |
 | `local_module_test` | Probe used to detect whether the model's library is installed in the active venv: a plain importable module name, or `dist:<package>[==<version>]` tested via `importlib.metadata` (the `dist:` form is how Fish S1 vs S2 disambiguate, since both ship as `fish-speech` at different versions) |
 | `local_torch_devices` | Supported torch device types for local inference (empty for server variants and models that don't take a device) |
 | `file_tag` | Short identifier used in generated filenames (e.g. `"glm"`, `"chatterbox"`) |
 | `default_output_sample_rate` | Native/default output sample rate; used directly by static-rate models and as the fallback for dynamically configured models |
-| `voice_target_attr` | Name of the `Project` attribute that stores the voice clone filename (empty if not applicable) |
 | `requires_voice` | Whether generation is blocked without a voice clone |
-| `voice_transcript_attr` | Name of the `Project` attribute for the voice clone transcript (empty = not needed) |
-| `extra_file_attrs` | Additional `Project` attributes for model-specific saved files (e.g. IndexTTS2 emotion clip) |
-| `batch_size_attr` | Name of the `Project` field for batch size (or concurrent requests for SGL-Omni variants); empty string means no batch support |
 | `can_stream` | Whether the model supports streaming chunk callbacks |
 | `requires_ffmpeg_libs` | Whether the model requires FFmpeg shared libraries, not just the executable (usually because of TorchCodec) |
 | `un_all_caps` | Force lowercase on all-caps prompts; set for models that perform poorly on them |
 | `requirements_file_name` | The `requirements-<model>.txt` filename for this model |
 | `ui` | Dict of UI strings: `proper_name`, `short_name`, `voice_path_console`, `voice_path_requestor`, `project_links` |
+| `output_filters` | Case-sensitive worker console substrings filtered out of output history |
 | `substitutions` | List of `(before, after)` string pairs applied to prompts before inference |
 
-There is also a derived `can_batch` property.
+Voice/transcript storage, parameters and batch size are declared in the catalog and exposed through the settings registry (`REGISTRY.voice_binding()`, `.transcript_binding()`, `.orchestration_binding()`); `TtsModelType.can_batch()` derives from the orchestration binding.
 
 The effective output sample rate is exposed via `TtsBaseModel.get_output_sample_rate(project, instance)`. Its default implementation returns `INFO.default_output_sample_rate`; models whose rate depends on project configuration can override it (currently GLM, for its selectable samplerate). It is used for playback/export paths; it deliberately does not affect voice clone audio — every model resamples reference audio internally, so imported voice clones are simply resampled to the app-native 48 kHz (`SoundPipeline.apply_voice_clone_post_processing()`), peak-normalized, and saved under the project's `voice/` subdir as `<stem>.flac` (no model tag; `ProjectVoiceUtil.resolve_voice_file_path()` prefers the subdir and falls back to the legacy project-root location for older projects).
 
-### Model type detection
+### Model selection
 
-`Tts.init_local_model_type()` ([tts.py](tts_audiobook_tool/tts.py)) runs at startup and probes every non-SGL-Omni enum member's `local_module_test` in the current Python environment. SGL-Omni variants are skipped by local probing; instead `Tts.update_tts_type()` selects one by matching the model id reported by the SGL-Omni server's models endpoint against each variant's `server_model_id_substring` (see `TtsModelType.find_tts_type_using_sgl_omni_model_id()`). `Tts._sgl_omni_type` allows the user to override auto-detection.
-
-> See [tts-type-refactor-todo.md](tts-type-refactor-todo.md) for a planned refactor to make the local/server backend distinction a formal concept rather than an `is_sgl_omni` flag.
+Refer to [TTS model selection rules](<tts-model-selection.md>) for the canonical rules covering process mode, available types, the saved project selection, automatic reconciliation, runtime binding, and status display. The former detection and override guidance has been replaced by that reference.
 
 ---
 
@@ -118,7 +117,7 @@ Defines the interface all models must satisfy:
 - `kill() -> None` — abstract; nulls out internal model references to aid garbage collection
 - `generate_using_project(project, prompts, force_random_seed, on_stream_chunk, on_stream_end, voice_selection_index) -> list[Sound] | str` — abstract; the main generation entry point (stream callbacks only used when `INFO.can_stream`)
 - `get_output_sample_rate(project, instance) -> int` — concrete classmethod returning `INFO.default_output_sample_rate`; GLM overrides it to return the project-configurable `glm_sr`
-- `get_max_words_range_reco(project, instance) -> tuple[int, int, str]` — concrete classmethod returning the app-recommended max-words-per-segment range for the model plus an optional rationale string (empty by default); the range default comes from the global constants (`MAX_WORDS_PER_SEGMENT_RECO_RANGE`), and models with model-specific recommendations override it with their own class constants (currently GLM, Higgs V2, IndexTTS2, Chatterbox, VibeVoice, and the NONE placeholder)
+- `get_max_words_range_reco(project, instance) -> tuple[int, int, str]` — concrete classmethod returning the app-recommended max-words-per-segment range for the model plus an optional rationale string (empty by default); the range default comes from the global constants (`MAX_WORDS_PER_SEGMENT_RECO_RANGE`), and models with model-specific recommendations override it with their own class constants (currently GLM, Higgs V2, IndexTTS2, Chatterbox, VibeVoice, and the `"none"` placeholder)
 - `massage_for_inference(text) -> str` — concrete; applies `INFO.substitutions`; subclasses may override-and-super
 - `prepare_text_for_inference(project, text) -> str` — concrete; the full pre-inference pipeline: project word substitutions → generic prompt normalization (incl. `un_all_caps`) → `massage_for_inference`
 - `clear_stream_state()` / `clear_continuation()` — concrete hooks for streaming and rolling-continuation state
@@ -134,7 +133,7 @@ Classmethods and helpers with default implementations (override when the default
 - `get_voice_tag(project) -> str`
 - `get_voice_display_info(project, instance) -> VoiceDisplayInfo | None`
 - `get_primary_voice_value(project) -> str`
-- `get_missing_voice_file_issue(project, voice_file_name_attr) -> ReadinessIssue | None`
+- `get_missing_voice_file_issue(project) -> ReadinessIssue | None`
 - `should_trim_trailing_token_noise(project, instance) -> bool`
 - `can_hallucinate_music(project, instance) -> bool`
 
@@ -143,14 +142,14 @@ Classmethods and helpers with default implementations (override when the default
 Example: [tts_audiobook_tool/tts_models/glm_base_model.py](tts_audiobook_tool/tts_models/glm_base_model.py)
 
 - Must **not** import any model library at module level
-- Assigns `INFO = TtsModelType.###.value`
+- Assigns metadata through strict lookup, e.g. `INFO = TtsModelType.require_by_id("glm_local").value`
 - Inherits `get_output_sample_rate(project, instance)` for static-rate models; models with configurable output rates, such as GLM, override it
 - Implements classmethods and any model-specific constants or static helpers
-- This is the class registered in `Tts.get_class()` and used for all non-instance operations (readiness checks, voice display info, etc.)
+- This is the class registered in `Tts.get_class_for_type()` and used for all non-instance operations (readiness checks, voice display info, etc.)
 
 ```python
 class GlmBaseModel(TtsBaseModel):
-    INFO = TtsModelType.GLM.value
+    INFO = TtsModelType.require_by_id("glm_local").value
     SAMPLE_RATES = [24000, 32000]
 ```
 
@@ -241,7 +240,7 @@ menus/voice/
 
 Contains shared operations used by most model menus:
 
-- `menu(state)` — selects the configured menu when a SGL-Omni definition is active; otherwise dispatches to a local per-model menu via `match Tts.get_type()`
+- `menu(state)` — selects the configured menu when a SGL-Omni definition is active; otherwise dispatches to a local per-model menu via `match state.project.get_tts_model_type().id` with literal string cases
 - `menu_wrapper(state, items, subheading)` — standardized menu heading and exit callback
 - `make_resolved_voice_label(state)` — "Add voice sample …" status label
 - `ask_and_set_voice_file(state, tts_type, is_secondary, message_override, append)` — prompts for a voice audio file, optionally gets its transcript, resamples it, and calls `ProjectVoiceUtil.set_voice_and_save()` (`append` adds to a multi-voice list rather than replacing)
@@ -261,41 +260,35 @@ Note that voice settings are multi-valued for most models: voice clone filenames
 
 Implementing the class hierarchy and voice menu is necessary but not sufficient. The following locations contain explicit per-model dispatching that does not auto-discover new additions. Each must be updated when adding a new model (Consider devising abstraction patterns for some of these).
 
-### `tts_audiobook_tool/tts_models/tts_model_type.py`
+### Model catalog
 
-Add a new `TtsModelType` enum member with a fully populated `TtsModelSpec`.
+Add a new entry to [`model_catalog.toml`](<../tts_audiobook_tool/tts_models/model_catalog.toml>) with a stable backend-suffix ID and fully populated spec/settings. No model-named attribute or declaration is added to `TtsModelType`; the canonical handle is installed from the catalog and retrieved by ID.
 
 ### `tts_audiobook_tool/tts.py`
 
-Several per-model maps/lists must each gain a new entry:
-
-- **`Tts.get_class()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelType.ABC` → `AbcBaseModel`
-- **`Tts.get_instance()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelType.ABC` → a factory function (e.g. `Tts.get_abc`) that lazily instantiates `AbcModel`
-- **`Tts.get_instance_if_exists()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelType.ABC` → the cached instance variable `Tts._abc`
-- **`Tts.instance_exists()`** — the list of cached instance variables
-- **`Tts.clear_tts_model()`** — the list of instance variables nulled on invalidation
+The handle-keyed `Tts._MODEL_REGISTRY` needs one entry, mapping strict lookup of the new literal catalog ID to `(AbcBaseModel, Tts.get_abc, "_abc")`. For example, the GLM key is `TtsModelType.require_by_id("glm_local")`. The shared registry backs class lookup, lazy instance creation, existing-instance lookup, and instance clearing; do not convert its keys to strings or create alias constants.
 
 The factory function and the `Tts._abc` cached instance variable also need to be added as class members.
 
 If the model has any constructor parameters sourced from `Project` (device flags, sample rate, variant type, etc.), also update:
 
-- **`Tts.set_model_params_using_project()`** ([tts.py](tts_audiobook_tool/tts.py)) — extract the relevant project fields into `model_params`
+- **`Tts.get_model_params_using_project()`** ([tts.py](tts_audiobook_tool/tts.py)) — extract the relevant project fields into `model_params`
 - **`Tts.set_model_params()`** ([tts.py](tts_audiobook_tool/tts.py)) — add a dirty-check comparison so that changing the param invalidates the cached instance
 
 ### `tts_audiobook_tool/menus/voice/voice_menu_shared.py`
 
-Add a `case TtsModelType.ABC:` branch to `VoiceMenuShared.menu()` ([voice_menu_shared.py](tts_audiobook_tool/menus/voice/voice_menu_shared.py)) that imports and calls the new `VoiceAbcMenu.menu(state)`.
+Add a literal ID case to `VoiceMenuShared.menu()` (for example `case "glm_local":` under `match state.project.get_tts_model_type().id`) ([voice_menu_shared.py](tts_audiobook_tool/menus/voice/voice_menu_shared.py)) that imports and calls the new `VoiceAbcMenu.menu(state)`.
 
 ### `tts_audiobook_tool/menus/voice/__init__.py`
 
 Export the new menu class.
 
-### `tts_audiobook_tool/project.py`
+### Project storage (`tts_audiobook_tool/tts_models/model_catalog.toml`)
 
-Add Pydantic field definitions for any new voice filename, transcript, seed, or other model-specific settings on the `Project` class. The voice filename and transcript attributes must match the names given in the model's `TtsModelSpec` (`voice_target_attr`, `voice_transcript_attr`).
+Declare the model's persisted storage in its catalog entry. `catalog_settings.parse_model_settings()` derives voice-reference, transcript, seed and orchestration storage from the entry's backend/parameter tables plus the explicit `settings` array, and `ModelSettingsRegistry.register_model_settings()` installs the bindings. Voice references are then detected through `REGISTRY.voice_binding()` / `.transcript_binding()`. Version 3 stores these under `Project.model_settings`; there are no new top-level `Project` fields and no spec attribute names to match.
 
-Voice set/clear is no longer a per-model `match` block in `Project`: `ProjectVoiceUtil.set_voice_and_save()` / `clear_voice_and_save()` ([project_voice_util.py](tts_audiobook_tool/project_support/project_voice_util.py)) apply changes generically via `setattr` using the spec's attribute names. Only true special cases need explicit branches there (e.g. IndexTTS2's secondary emotion clip, and Pocket's predefined-voice reset). Consequently, a mismatched or missing attribute name will surface at save time rather than failing loudly at dispatch.
+Voice set/clear is not a per-model `match` block in `Project`: `ProjectVoiceUtil.set_voice_and_save()` / `clear_voice_and_save()` ([project_voice_util.py](tts_audiobook_tool/project_support/project_voice_util.py)) apply changes generically through `Project.set_model_setting()` using those bindings. Only true special cases need explicit branches there (e.g. IndexTTS2's secondary emotion clip, and Pocket's predefined-voice reset).
 
 ### SGL-Omni variants (server mode only)
 
-For a new SGL-Omni variant instead of a new local model: add the enum member with `is_sgl_omni=True`, a matching `server_model_id_substring`, `requirements_file_name="requirements-sgl-omni.txt"`, plus the `tts.py` entries above and a voice menu. No new venv or requirements file is needed — the existing `venv-client` (identified by the launcher-marker package) hosts all server variants.
+For a new SGL-Omni variant instead of a new local model: add a catalog entry with `backend_kind = "sgl_omni"`, matching rules and request/menu configuration. The canonical handle is available through ID lookup without Python declarations; definition-driven generation and menus use the shared backend adapter, not a new per-variant local factory. No new model venv or requirements file is needed — the existing server-mode venv (identified by the launcher-marker package) hosts server clients.

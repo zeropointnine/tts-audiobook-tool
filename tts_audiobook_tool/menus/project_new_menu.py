@@ -3,7 +3,6 @@ from pathlib import Path
 
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
@@ -178,7 +177,7 @@ class ProjectNewMenu:
                 )
             # With no source directory, never search the process's current
             # directory for coincidentally named project files.
-            err = new_project.save(stamp_runtime_model=False)
+            err = new_project.save()
             if err:
                 raise ValueError(err)
             loaded_project = ProjectLoadUtil.load_using_dir_path(dest_path)
@@ -206,8 +205,6 @@ class ProjectNewMenu:
             elif missing_paths:
                 ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
 
-            ProjectNewMenu.show_abr_model_mismatch_hint(state)
-
             hints.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
             return True
         except Exception as e:
@@ -221,21 +218,6 @@ class ProjectNewMenu:
                 print_feedback("\nCancelled")
             else:
                 ask.ask_enter_to_continue()
-
-    @staticmethod
-    def show_abr_model_mismatch_hint(state: State) -> None:
-        """
-        Shows the model-mismatch FYI for a project whose settings came from an
-        ABR file, using wording specific to that flow.
-        Consumes the pending mismatch so the main menu does not show it again.
-        """
-        model_name = state.take_model_mismatch_name()
-        if not model_name:
-            return
-        hints.show_hint(
-            Hint.make_using(HINT_ABR_MODEL_MISMATCH, model_name),
-            and_prompt=False
-        )
 
     @staticmethod
     def print_snapshot_source_dir_hint(project_snapshot: dict) -> None:

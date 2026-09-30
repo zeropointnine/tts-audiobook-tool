@@ -15,7 +15,7 @@ else:
 
 class ChatterboxBaseModel(TtsBaseModel):
 
-    INFO = TtsModelType.CHATTERBOX.value
+    INFO = TtsModelType.require_by_id("chatterbox_local").value
 
     DEFAULT_EXAGGERATION = 0.5 # ml only, not turbo
     DEFAULT_CFG = 0.5 # ml only, not turbo
@@ -31,7 +31,7 @@ class ChatterboxBaseModel(TtsBaseModel):
     def get_max_words_range_reco(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> tuple[int, int, str]:
-        if project.get_model_setting('chatterbox', 'type') in (ChatterboxType.MULTILINGUAL, ChatterboxType.MULTILINGUAL_V2):
+        if project.get_model_setting('chatterbox_local', 'type') in (ChatterboxType.MULTILINGUAL, ChatterboxType.MULTILINGUAL_V2):
             return (40, 40, "Chatterbox Multilingual V2")
         return MAX_WORDS_PER_SEGMENT_RECO_RANGE
 
@@ -64,7 +64,7 @@ class ChatterboxBaseModel(TtsBaseModel):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        return project.get_model_setting('chatterbox', 'type').label # eg, "Chatterbox-Multilingual"
+        return project.get_model_setting('chatterbox_local', 'type').label # eg, "Chatterbox-Multilingual"
 
 # ---
 

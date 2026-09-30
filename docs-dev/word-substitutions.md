@@ -111,10 +111,9 @@ The segment sidecar (`SegmentTranscriptData`) stores both the `source` (project
 text, used as the validation reference) and the `prompt` (what the model was
 actually asked to say). `SegmentTranscriptUtil.from_validation_result()` derives
 `prompt` with `SegmentTranscriptUtil.make_inference_prompt()`, which calls
-`Tts.get_class().prepare_text_for_inference(project, source)` — the same
+`Tts.get_model_support(project).prepare_text_for_inference(project, source)` — the same
 pipeline function used for inference. `prepare_text_for_inference()` and
-`massage_for_inference()` are classmethods precisely so this can be computed
-without loading a model instance. As a result, substitution is reflected
+`massage_for_inference()` are callable without loading a model instance. As a result, substitution is reflected
 anywhere the sidecar prompt is shown (generation console details, the
 generation editor's segment-info dialog), while `source` and the normalized
 validation text still reflect the unmodified project text.

@@ -795,6 +795,9 @@ def run_conversation_app(state: State) -> ConversationAppResult:
         ask.ask_error(message)
         return ConversationAppResult(ConversationAppStatus.UNAVAILABLE, message)
 
+    # An explicit chat start must not reuse a cached offline binding. Menu
+    # blocker labels remain cache-only; force discovery here before readiness.
+    readiness.refresh_remote_model_state(state.project)
     blockers = tuple(item.verbose for item in readiness.get_chat_blockers(state))
     if not blockers and not app_hint_util.show_pre_inference_hints(
         state.prefs, state.project

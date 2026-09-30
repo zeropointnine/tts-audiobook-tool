@@ -17,7 +17,6 @@ from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
     STYLE_DIM,
 )
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import make_error_string
 
 
@@ -67,7 +66,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         self.original_voice_indices: list[int] = []
         self.staged_voice_indices: list[int] = []
         self.list_items: list[VoiceLineListItem] = []
-        self.voice_values = ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
+        self.voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
         if voice_sample_count is None:
             voice_sample_count = len(self.voice_values)
         self.voice_sample_count = voice_sample_count

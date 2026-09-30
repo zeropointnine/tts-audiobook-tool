@@ -1,6 +1,5 @@
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.l import L
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project import Project
@@ -20,22 +19,14 @@ class VoiceOmniVoiceMenu:
     def menu(state: State) -> None:
 
         def make_voice_label(_) -> str:
-            if not state.project.get_model_setting('omnivoice', 'file_name'):
+            if not state.project.get_model_setting('omnivoice_local', 'file_name'):
                 currently = make_currently_string("none", value_prefix="", color_code=COL_ERROR)
             else:
                 currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
             return f"Select voice clone sample {currently}"
 
-        def make_instruct_label(_) -> str:
-            if not state.project.get_model_setting('omnivoice', 'instruct'):
-                suffix = f"{COL_DIM}(optional)"
-            else:
-                value = truncate_pretty(state.project.get_model_setting('omnivoice', 'instruct'), 40, content_color=COL_ACCENT)
-                suffix = make_currently_string(value)
-            return f"Voice design instructions {suffix}"
-
         def make_target_label(_) -> str:
-            target = state.project.get_model_setting('omnivoice', 'target') or OmniVoiceBaseModel.DEFAULT_REPO_ID
+            target = state.project.get_model_setting('omnivoice_local', 'target') or OmniVoiceBaseModel.DEFAULT_REPO_ID
             is_default = (target == OmniVoiceBaseModel.DEFAULT_REPO_ID)
             if is_default:
                 label = f"{COL_DIM}(optional)"
@@ -45,20 +36,15 @@ class VoiceOmniVoiceMenu:
             return f"Custom model {label}"
 
         def make_speed_label(_) -> str:
-            speed = state.project.get_model_setting('omnivoice', 'speed')
+            speed = state.project.get_model_setting('omnivoice_local', 'speed')
             return f"Speed {make_currently_string(speed, default=OmniVoiceBaseModel.DEFAULT_SPEED, num_decimals=1)}"
 
         def make_steps_label(_) -> str:
-            steps = state.project.get_model_setting('omnivoice', 'num_step')
-            return f"Inference steps {make_currently_string(steps, default=OmniVoiceBaseModel.DEFAULT_STEPS)}"
-
-        def on_clear_instruct(s: State, __: MenuItem) -> None:
-            s.project.set_model_setting('omnivoice', 'instruct', "")
-            s.project.save()
-            print_feedback("Instructions cleared")
+            steps = state.project.get_model_setting('omnivoice_local', 'num_step')
+            return f"Steps {make_currently_string(steps, default=OmniVoiceBaseModel.DEFAULT_STEPS)}"
 
         def on_clear_model_target(s: State, __: MenuItem) -> None:
-            s.project.set_model_setting('omnivoice', 'target', "")
+            s.project.set_model_setting('omnivoice_local', 'target', "")
             s.project.save()
             Tts.set_model_params_using_project(s.project)
             _ = ModelWorker.clear_models_if_running_blocking()
@@ -71,25 +57,22 @@ class VoiceOmniVoiceMenu:
             items.extend(
                 VoiceMenuShared.make_voice_sample_items(
                     state,
-                    TtsModelType.OMNIVOICE,
+                    TtsModelType.require_by_id("omnivoice_local"),
                     no_samples_label=make_voice_label,
                 )
             )
 
-            items.append(
-                MenuItem(
-                    make_instruct_label,
-                    lambda _, __: ask_instruct(state.project),
-                    superlabel = VOICE_ADVANCED_SUPERLABEL
-                )
-            )
-            if state.project.get_model_setting('omnivoice', 'instruct'):
-                items.append(MenuItem("Clear instructions", on_clear_instruct))
+            instruct_items = VoiceMenuShared.make_voice_instructions_item(
+                state, 'omnivoice_local', validate_omnivoice=True)
+            # Only the group's first item carries the heading: the renderer
+            # reprints a superlabel before every item that has one.
+            instruct_items[0].superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.extend(instruct_items)
 
             items.append(
                 MenuItem(make_target_label, lambda _, __: ask_target(state))
             )
-            if state.project.get_model_setting('omnivoice', 'target'):
+            if state.project.get_model_setting('omnivoice_local', 'target'):
                 items.append(MenuItem("Clear custom model", on_clear_model_target))
 
             steps_item = MenuItem(make_steps_label, lambda _, __: ask_steps(state.project))
@@ -100,7 +83,7 @@ class VoiceOmniVoiceMenu:
 
             cfg_item = MenuUtil.make_number_item(
                 state=state,
-                target=SettingRef("omnivoice", "cfg"),
+                target=SettingRef("omnivoice_local", "cfg"),
                 base_label="CFG",
                 default_value=OmniVoiceBaseModel.CFG_DEFAULT,
                 is_minus_one_default=True,
@@ -112,7 +95,7 @@ class VoiceOmniVoiceMenu:
             items.append(cfg_item)
 
             items.append(
-                VoiceMenuShared.make_seed_item(state, SettingRef("omnivoice", "seed"))
+                VoiceMenuShared.make_seed_item(state, SettingRef("omnivoice_local", "seed"))
             )
 
             return items
@@ -122,79 +105,28 @@ class VoiceOmniVoiceMenu:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def ask_instruct(project: Project) -> None:
-    printt("Enter voice design instructions:")
-    printt(f"{COL_DIM}Eg: \"male, british accent, low pitch\" / \"female, young adult, high pitch\"")
-    if project.get_model_setting('omnivoice', 'file_name'):
-        printt(f"{COL_DIM}Note: When used alongside voice cloning, instructions may have minimal effect")
-    inp = ask.ask_input(lower=False)
-    if not inp:
-        return
-
-    error, normalized = validate_instruct(inp)
-    if error:
-        ask.ask_error(error)
-        return
-    if normalized == project.get_model_setting('omnivoice', 'instruct'):
-        return
-
-    project.set_model_setting('omnivoice', 'instruct', normalized)
-    project.save()
-    print_feedback("Set instructions:", truncate_pretty(normalized, 60))
-
-
-def validate_instruct(instruct: str) -> tuple[str, str]:
-    """
-    Best-effort pre-validation using OmniVoice's own instruct resolver, so users
-    get feedback at menu time instead of waiting for inference.
-
-    Returns:
-        (error_message, normalized_instruct)
-
-    If OmniVoice isn't importable in the current environment, validation is
-    skipped and the original value is returned unchanged.
-    """
-    try:
-        from omnivoice.models.omnivoice import _resolve_instruct  # type: ignore
-    except Exception as e:
-        L.e(f"{instruct} - {e}")
-        return "", instruct
-
-    try:
-        normalized = _resolve_instruct(instruct)
-    except ValueError as e:
-        return make_error_string(e), ""
-    except Exception:
-        # Can't validate, just allow
-        return "", instruct
-
-    if normalized is None:
-        return "", ""
-    return "", normalized
-
-
 def ask_target(state: State) -> None:
     project = state.project
-    model_name = Tts.get_type().value.ui["short_name"]
+    model_name = project.get_tts_model_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"k2-fsa/OmniVoice\" or \"/path/to/local/checkpoint\""
     VoiceMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.get_model_setting('omnivoice', 'target'),
+        current_target=project.get_model_setting('omnivoice_local', 'target'),
         callback=lambda _, target: apply_target(state, target)
     )
 
 
 def apply_target(state: State, target: str) -> None:
     project = state.project
-    previous_target = project.get_model_setting('omnivoice', 'target')
+    previous_target = project.get_model_setting('omnivoice_local', 'target')
 
     def revert() -> None:
-        project.set_model_setting('omnivoice', 'target', previous_target)
+        project.set_model_setting('omnivoice_local', 'target', previous_target)
         _ = ModelWorker.clear_models_if_running_blocking()
 
-    project.set_model_setting('omnivoice', 'target', target)
+    project.set_model_setting('omnivoice_local', 'target', target)
     _ = ModelWorker.clear_models_if_running_blocking()
 
     inspection, error = ModelWorker.inspect_tts_blocking(state)
@@ -210,7 +142,7 @@ def apply_target(state: State, target: str) -> None:
 def ask_speed(project: Project) -> None:
     ask.ask_number_and_save(
         project,
-        SettingRef("omnivoice", "speed"),
+        SettingRef("omnivoice_local", "speed"),
         "Enter speech speed",
         0.5,
         2.0,
@@ -223,7 +155,7 @@ def ask_speed(project: Project) -> None:
 def ask_steps(project: Project) -> None:
     ask.ask_number_and_save(
         project,
-        SettingRef("omnivoice", "num_step"),
+        SettingRef("omnivoice_local", "num_step"),
         "Enter number of inference steps\nLarger values = enhanced quality, slower",
         OmniVoiceBaseModel.MIN_STEPS,
         OmniVoiceBaseModel.MAX_STEPS,

@@ -177,7 +177,7 @@ def test_tts_reset_ordering(monkeypatch, mode, streaming) -> None:
     session = make_session()
     session.project.streaming_chat = streaming
     operations = []
-    monkeypatch.setattr(Tts, "get_info", lambda: SimpleNamespace(can_stream=streaming))
+    monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(can_stream=streaming))
 
     def reset(**_kwargs):
         operations.append("reset")
@@ -455,7 +455,7 @@ def test_make_spoken_segments_falls_back_when_phrase_segments_empty() -> None:
 
 
 def test_on_chunk_queues_complete_sentence_to_tts_queue(monkeypatch) -> None:
-    monkeypatch.setattr(Tts, "get_info", lambda: SimpleNamespace(can_stream=False))
+    monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(can_stream=False))
     session = make_session()
 
     session.on_chunk("Hello there my good friend. Hi again.")
@@ -467,7 +467,7 @@ def test_on_chunk_queues_complete_sentence_to_tts_queue(monkeypatch) -> None:
 
 
 def test_on_chunk_is_noop_when_interrupt_requested(monkeypatch) -> None:
-    monkeypatch.setattr(Tts, "get_info", lambda: SimpleNamespace(can_stream=False))
+    monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(can_stream=False))
     session = make_session()
     session.interrupt_requested.set()
 
@@ -481,7 +481,7 @@ def test_on_chunk_is_noop_when_interrupt_requested(monkeypatch) -> None:
 def test_interrupted_active_tts_sentence_remains_in_response_snapshot(
     monkeypatch, synthesis_raises: bool
 ) -> None:
-    monkeypatch.setattr(Tts, "get_info", lambda: SimpleNamespace(can_stream=False))
+    monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(can_stream=False))
     monkeypatch.setattr(
         ModelWorker,
         "reset_chat_session_blocking",
@@ -569,11 +569,11 @@ def test_save_chat_output_saves_concatenated_sounds(tmp_path, monkeypatch) -> No
         return ""
 
     monkeypatch.setattr(internals.SoundFileUtil, "save_flac", fake_save_flac)
-    monkeypatch.setattr(Tts, "get_info", lambda: SimpleNamespace(file_tag="testmodel"))
+    monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(file_tag="testmodel"))
     monkeypatch.setattr(
         Tts,
         "get_model_support",
-        lambda: SimpleNamespace(get_voice_tag=lambda project: "voice1"),
+        lambda project: SimpleNamespace(get_voice_tag=lambda project: "voice1"),
     )
 
     session.save_chat_output_if_needed()

@@ -177,5 +177,4 @@ ROLLING_CONTINUATION_DESC = \
 generated segments as context for the next segment.
 
 Larger values may improve continuity;
-lower values may allow for more natural variation.
-"""
+lower values may allow for more natural variation."""

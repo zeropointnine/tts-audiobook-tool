@@ -15,7 +15,7 @@ else:
 
 class OmniVoiceBaseModel(TtsBaseModel):
 
-    INFO = TtsModelType.OMNIVOICE.value
+    INFO = TtsModelType.require_by_id("omnivoice_local").value
 
     DEFAULT_REPO_ID = "k2-fsa/OmniVoice"
     DEFAULT_SPEED   = 1.0
@@ -30,11 +30,11 @@ class OmniVoiceBaseModel(TtsBaseModel):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        if not project.get_model_setting('omnivoice', 'target') or project.get_model_setting('omnivoice', 'target') == OmniVoiceBaseModel.DEFAULT_REPO_ID:
+        if not project.get_model_setting('omnivoice_local', 'target') or project.get_model_setting('omnivoice_local', 'target') == OmniVoiceBaseModel.DEFAULT_REPO_ID:
             s = cls.INFO.ui.get("proper_name") or ""
         else:
             s = cls.INFO.ui.get("short_name") or ""
-            target = util.ellipsize_path_for_menu(project.get_model_setting('omnivoice', 'target'))
+            target = util.ellipsize_path_for_menu(project.get_model_setting('omnivoice_local', 'target'))
             s += f" {COL_DIM}({target})"
         return s
 

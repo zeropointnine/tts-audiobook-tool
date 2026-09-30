@@ -8,12 +8,11 @@ from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDe
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.state import State
+    from tts_audiobook_tool.project import Project
 
 
 def get_generate_blockers(state: State) -> list[ReadinessIssue]:
     """Returns blocking issues that prevent audiobook generation from starting."""
-    from tts_audiobook_tool.tts import Tts
-
     items = []
 
     if not state.project.phrase_groups:
@@ -21,16 +20,46 @@ def get_generate_blockers(state: State) -> list[ReadinessIssue]:
             ReadinessIssue("text", "Text must be imported into the project")
         )
 
-    model_errors = Tts.get_model_support().get_blocking_issues(state.project, None)
+    model_errors = get_tts_blockers(state.project)
     if model_errors:
         items.extend(model_errors)
 
     return items
 
 
+def refresh_remote_model_state(project: Project) -> None:
+    """Bind the project's model with a forced remote check at run start."""
+    from tts_audiobook_tool.tts import Tts
+
+    Tts.bind_project(project, refresh=True)
+
+
+def get_tts_blockers(project: Project, instance: object | None = None) -> list[ReadinessIssue]:
+    """Project-selected model/voice checks plus its cached binding failure."""
+    from tts_audiobook_tool.tts import Tts
+
+    issues = Tts.get_model_support(project).get_blocking_issues(project, instance)
+    binding_issue = Tts._binding_issue if Tts._bound_project_type_id == project.tts_model_type else None
+    if binding_issue is not None and all(issue.verbose != binding_issue.verbose for issue in issues):
+        issues.append(binding_issue)
+    return issues
+
+
 def get_generate_blocker_text(state: State, verbose=False) -> str:
+    """Blocker text from cached state; safe to build for menu labels."""
     items = get_generate_blockers(state)
     return format_issues(items, verbose)
+
+
+def get_run_blocker_text(state: State, verbose: bool = True) -> str:
+    """Blocker text for a run start, after forcing a remote re-probe.
+
+    Run starts use this instead of ``get_generate_blocker_text`` because a
+    stale discovery observation must not decide whether a long run may start.
+    Menu labels and headers keep using the cached variant.
+    """
+    refresh_remote_model_state(state.project)
+    return get_generate_blocker_text(state, verbose)
 
 
 def get_tts_preview_blocker_text(state: State, verbose: bool = False) -> str:
@@ -39,9 +68,8 @@ def get_tts_preview_blocker_text(state: State, verbose: bool = False) -> str:
     Unlike audiobook generation, a preview supplies its own text and therefore
     does not require imported project phrase groups.
     """
-    from tts_audiobook_tool.tts import Tts
-
-    items = Tts.get_model_support().get_blocking_issues(state.project, None)
+    refresh_remote_model_state(state.project)
+    items = get_tts_blockers(state.project)
     return format_issues(items, verbose)
 
 
@@ -76,9 +104,8 @@ def get_chat_blockers(state: State) -> list[ReadinessIssue]:
         )
 
     # TTS Model generation readiness
-    from tts_audiobook_tool.tts import Tts
 
-    model_errors = Tts.get_model_support().get_blocking_issues(state.project, None)
+    model_errors = get_tts_blockers(state.project)
     if model_errors:
         errors.extend(model_errors)
 

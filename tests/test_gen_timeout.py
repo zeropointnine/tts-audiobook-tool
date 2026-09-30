@@ -96,7 +96,7 @@ def test_sgl_timeout_uses_remote_wording_and_backend_deadline(
     from tts_audiobook_tool.tts import Tts
 
     assert gen_timeout_util.SGL_OMNI_GEN_TIMEOUT == 330
-    monkeypatch.setattr(Tts, "is_sgl_mode", staticmethod(lambda: True))
+    monkeypatch.setattr(Tts, "is_remote_mode", staticmethod(lambda: True))
     monkeypatch.setattr(gen_timeout_util, "SGL_OMNI_GEN_TIMEOUT", 0.2)
     events: list[GenerationTimedOut] = []
     tracker = make_backend_gen_timeout_tracker()
@@ -131,7 +131,7 @@ def test_backend_gen_timeout_scope_is_armed_on_its_first_call(monkeypatch) -> No
 def test_backend_gen_timeout_scope_uses_the_sgl_policy(monkeypatch) -> None:
     from tts_audiobook_tool.tts import Tts
 
-    monkeypatch.setattr(Tts, "is_sgl_mode", staticmethod(lambda: True))
+    monkeypatch.setattr(Tts, "is_remote_mode", staticmethod(lambda: True))
     monkeypatch.setattr(gen_timeout_util, "SGL_OMNI_GEN_TIMEOUT", 0.2)
     events: list[GenerationTimedOut] = []
 
@@ -148,7 +148,7 @@ def test_backend_gen_timeout_scope_uses_the_sgl_policy(monkeypatch) -> None:
 def test_get_backend_gen_timeout_uses_the_local_policy(monkeypatch) -> None:
     from tts_audiobook_tool.tts import Tts
 
-    monkeypatch.setattr(Tts, "is_sgl_mode", staticmethod(lambda: False))
+    monkeypatch.setattr(Tts, "is_remote_mode", staticmethod(lambda: False))
     monkeypatch.setattr(gen_timeout_util, "GEN_TIMEOUT", 123.0)
 
     assert gen_timeout_util.get_backend_gen_timeout() == (123.0, False)

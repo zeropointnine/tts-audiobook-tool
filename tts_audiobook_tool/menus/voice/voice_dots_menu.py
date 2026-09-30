@@ -18,19 +18,19 @@ class VoiceDotsMenu:
         def make_target_label(_: State) -> str:
             return VoiceMenuShared.make_target_label(
                 label_prefix="Select dots.tts model",
-                target=state.project.get_model_setting('dots', 'target'),
+                target=state.project.get_model_setting('dots_local', 'target'),
                 default_target=DotsBaseModel.DEFAULT_REPO_ID,
                 remove_prefixes=["dots-studio/"],
             )
 
         def make_compile_label(_: State) -> str:
-            mode = DotsCompileMode.get_by_enabled(state.project.get_model_setting('dots', 'compile'))
+            mode = DotsCompileMode.get_by_enabled(state.project.get_model_setting('dots_local', 'compile'))
             default = DotsCompileMode.default()
             return make_menu_label("Compile", mode.label, default.label)
 
         def make_items(_: State) -> list[MenuItem]:
             items = VoiceMenuShared.make_voice_sample_items(
-                state, TtsModelType.DOTS
+                state, TtsModelType.require_by_id("dots_local")
             )
             items.append(
                 MenuItem(
@@ -47,10 +47,10 @@ class VoiceDotsMenu:
             )
 
             if not DotsBaseModel.is_sampling_locked_target(
-                state.project.get_model_setting('dots', 'target')
+                state.project.get_model_setting('dots_local', 'target')
             ):
                 attr, variant, default_steps, min_steps, max_steps = (
-                    DotsBaseModel.get_num_steps_config(state.project.get_model_setting('dots', 'target'))
+                    DotsBaseModel.get_num_steps_config(state.project.get_model_setting('dots_local', 'target'))
                 )
                 items.append(
                     MenuUtil.make_number_item(
@@ -73,7 +73,7 @@ class VoiceDotsMenu:
             items.append(
                 MenuUtil.make_number_item(
                     state=state,
-                    target=SettingRef("dots", "speaker_scale"),
+                    target=SettingRef("dots_local", "speaker_scale"),
                     base_label="Speaker scale",
                     default_value=DotsBaseModel.SPEAKER_SCALE_DEFAULT,
                     is_minus_one_default=True,
@@ -89,12 +89,12 @@ class VoiceDotsMenu:
             )
 
             if DotsBaseModel.is_cfg_configurable_target(
-                state.project.get_model_setting('dots', 'target')
+                state.project.get_model_setting('dots_local', 'target')
             ):
                 items.append(
                     MenuUtil.make_number_item(
                         state=state,
-                        target=SettingRef("dots", "guidance_scale"),
+                        target=SettingRef("dots_local", "guidance_scale"),
                         base_label="CFG",
                         default_value=DotsBaseModel.GUIDANCE_SCALE_DEFAULT,
                         is_minus_one_default=True,
@@ -109,7 +109,7 @@ class VoiceDotsMenu:
                     )
                 )
 
-            items.append(VoiceMenuShared.make_seed_item(state, SettingRef("dots", "seed")))
+            items.append(VoiceMenuShared.make_seed_item(state, SettingRef("dots_local", "seed")))
             return items
 
         VoiceMenuShared.menu_wrapper(state, make_items)
@@ -125,7 +125,7 @@ class VoiceDotsMenu:
         ]
 
         def on_select(target: str) -> None:
-            state.project.set_model_setting('dots', 'target', "" if target == DotsBaseModel.DEFAULT_REPO_ID else target)
+            state.project.set_model_setting('dots_local', 'target', "" if target == DotsBaseModel.DEFAULT_REPO_ID else target)
             state.project.save()
             _ = ModelWorker.clear_models_if_running_blocking()
             print_feedback("Model set:", target)
@@ -135,7 +135,7 @@ class VoiceDotsMenu:
             heading_text="Select dots.tts model",
             labels=targets,
             values=targets,
-            current_value=DotsBaseModel.resolve_target(state.project.get_model_setting('dots', 'target')),
+            current_value=DotsBaseModel.resolve_target(state.project.get_model_setting('dots_local', 'target')),
             default_value=DotsBaseModel.DEFAULT_REPO_ID,
             on_select=on_select,
             sublabels=sublabels,
@@ -149,16 +149,16 @@ class VoiceDotsMenu:
             "Whether dots.tts compiles its inference kernels. Compiling is much\n"
             "faster to generate but slows model load (a one-time warm-up) and\n"
             "uses more working memory. Disabling skips compilation for a faster\n"
-            "load and lower memory at the cost of slower generation.\n"
+            "load and lower memory at the cost of slower generation."
         )
 
         def on_select(mode: DotsCompileMode) -> None:
-            state.project.set_model_setting('dots', 'compile', mode.enabled)
+            state.project.set_model_setting('dots_local', 'compile', mode.enabled)
             state.project.save()
             _ = ModelWorker.clear_models_if_running_blocking()
             print_feedback("Compile set to:", mode.label)
 
-        current = DotsCompileMode.get_by_enabled(state.project.get_model_setting('dots', 'compile'))
+        current = DotsCompileMode.get_by_enabled(state.project.get_model_setting('dots_local', 'compile'))
         MenuUtil.options_menu(
             state=state,
             heading_text="Compile",

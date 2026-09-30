@@ -4,6 +4,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.util import *
 
@@ -58,9 +59,10 @@ class MiraModel(MiraBaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
         ) -> list[Sound] | str:
 
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MIRA, voice_selection_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("mira_local"), voice_selection_index)
         if voice_file_name:
             voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
             try:
@@ -74,27 +76,27 @@ class MiraModel(MiraBaseModel):
         else:
             self.clear_voice_clone()
 
-        if project.get_model_setting('mira', 'temperature') == -1:
+        if project.get_model_setting('mira_local', 'temperature') == -1:
             temperature = MiraBaseModel.TEMPERATURE_DEFAULT
-        elif project.get_model_setting('mira', 'temperature') < MiraBaseModel.TEMPERATURE_MIN or project.get_model_setting('mira', 'temperature') > MiraBaseModel.TEMPERATURE_MAX:
+        elif project.get_model_setting('mira_local', 'temperature') < MiraBaseModel.TEMPERATURE_MIN or project.get_model_setting('mira_local', 'temperature') > MiraBaseModel.TEMPERATURE_MAX:
             temperature = MiraBaseModel.TEMPERATURE_DEFAULT
         else:
-            temperature = project.get_model_setting('mira', 'temperature')
+            temperature = project.get_model_setting('mira_local', 'temperature')
 
-        if project.get_model_setting('mira', 'top_p') == -1:
+        if project.get_model_setting('mira_local', 'top_p') == -1:
             top_p = MiraBaseModel.TOP_P_DEFAULT
         else:
-            top_p = project.get_model_setting('mira', 'top_p')
+            top_p = project.get_model_setting('mira_local', 'top_p')
 
-        if project.get_model_setting('mira', 'top_k') == -1:
+        if project.get_model_setting('mira_local', 'top_k') == -1:
             top_k = MiraBaseModel.TOP_K_DEFAULT
         else:
-            top_k = project.get_model_setting('mira', 'top_k')
+            top_k = project.get_model_setting('mira_local', 'top_k')
 
-        if project.get_model_setting('mira', 'repetition_penalty') == -1:
+        if project.get_model_setting('mira_local', 'repetition_penalty') == -1:
             repetition_penalty = MiraBaseModel.REPETITION_PENALTY_DEFAULT
         else:
-            repetition_penalty = project.get_model_setting('mira', 'repetition_penalty')
+            repetition_penalty = project.get_model_setting('mira_local', 'repetition_penalty')
 
         self.set_params(
             temperature=temperature, max_new_tokens=MiraBaseModel.MAX_NEW_TOKENS,
@@ -102,9 +104,9 @@ class MiraModel(MiraBaseModel):
         )
 
         assert(self.mira_tts is not None)
-        seed = -1 if force_random_seed else project.get_model_setting('mira', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('mira_local', 'seed')
         if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
         app_support.set_seed(seed)
         self.mira_tts.gen_config.random_seed = seed
 

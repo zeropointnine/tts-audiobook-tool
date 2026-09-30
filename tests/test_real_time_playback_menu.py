@@ -77,9 +77,10 @@ def test_start_always_passes_project_text_and_range(monkeypatch) -> None:
     state = _make_state(phrase_groups=phrase_groups, realtime_line_range=(2, 2))
     calls: list[tuple[State, list[object], tuple[int, int] | None]] = []
 
+    # `do_start` gates on the run-readiness report, not the menu-label report.
     monkeypatch.setattr(
         menu_module.readiness,
-        "get_generate_blocker_text",
+        "get_run_blocker_text",
         lambda _state, verbose: "",
     )
     monkeypatch.setattr(

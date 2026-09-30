@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.prefs import Prefs
@@ -9,6 +11,12 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
+
+@dataclass(frozen=True)
+class PendingTtsModelChange:
+    old_model_id: str
+    new_model_id: str
+
 
 class State:
     """
@@ -20,6 +28,7 @@ class State:
 
     _prefs: Prefs
     _project: Project
+    pending_tts_model_change: PendingTtsModelChange | None
 
 
     def __init__(self):
@@ -29,7 +38,7 @@ class State:
         # menu has been drawn once.
         self.dont_show_scan_message = True
         self.has_shown_main_menu = False
-        self.pending_model_mismatch_name = ""
+        self.pending_tts_model_change = None
 
         self.prefs = Prefs.load()
 
@@ -61,7 +70,7 @@ class State:
         state._project = None  # type: ignore[assignment]
         state.dont_show_scan_message = False
         state.has_shown_main_menu = False
-        state.pending_model_mismatch_name = ""
+        state.pending_tts_model_change = None
         state.prefs = prefs
         return state
 
@@ -76,44 +85,13 @@ class State:
         if self._project and self._project != value:
             self._project.kill()
 
+        self.pending_tts_model_change = None
         self._project = value
         self._project.sound_segments.dont_show_scan_message = self.dont_show_scan_message
 
         # Sync static values
-        Tts.set_model_params_using_project(self.project)
+        Tts.bind_project(self.project)
         Whitelist().set_language_code(self.project.language_code)
-
-        # Detect a mismatch between the project's previous model and the
-        # current runtime model; the main menu displays the FYI hint once.
-        from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-
-        name = ""
-        previous_model_type = value.current_model_type
-        if (
-            previous_model_type != TtsModelType.NONE
-            and previous_model_type != Tts.get_type()
-            and Tts.get_type() != TtsModelType.NONE
-        ):
-            name = previous_model_type.value.ui.get("proper_name", "")
-        self.pending_model_mismatch_name = name
-
-    def take_model_mismatch_name(self) -> str:
-        """
-        Returns the pending model-mismatch hint name, or "" if none, and
-        treats displaying the hint as acknowledgement so it is not repeated
-        every time the unchanged project is opened outside its previous
-        model's venv.
-        """
-        from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-
-        name = self.pending_model_mismatch_name
-        self.pending_model_mismatch_name = ""
-        if name:
-            self.project.current_model_type = TtsModelType.NONE
-            err = self.project.save(stamp_runtime_model=False)
-            if err:
-                ask.ask_error(err)
-        return name
 
     def mark_main_menu_shown(self) -> None:
         if self.has_shown_main_menu:
@@ -134,8 +112,11 @@ class State:
         Stt.set_variant(self.prefs.stt_variant)
         Stt.set_config(self.prefs.stt_config)
         Tts.set_force_cpu(self.prefs.tts_force_cpu)
-        SglOmniUtil.set_base_url(self.prefs.sgl_omni_url)
-        Tts.set_sgl_omni_type(self.prefs.sgl_omni_type)
+        from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+        RemoteTtsDiscovery.set_base_url(self.prefs.remote_tts_url)
+        SglOmniUtil.set_base_url(self.prefs.remote_tts_url)
+        from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
+        AudioCppUtil.set_base_url(self.prefs.remote_tts_url)
 
     @staticmethod
     def prepare_new_project_directory(path: str) -> str:
@@ -183,7 +164,10 @@ class State:
         # Make project
         self.prefs.project_dir = str(project_dir_path)
         self.prefs.save()
-        self.project = Project( dir_path=str(project_dir_path) )
+        from tts_audiobook_tool.tts import Tts
+        available = Tts.get_available_tts_models()
+        model_id = available[0].id if len(available) == 1 else "none"
+        self.project = Project(dir_path=str(project_dir_path), tts_model_type=model_id)
 
         self.project.save()
         return ""

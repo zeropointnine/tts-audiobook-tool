@@ -70,7 +70,7 @@ def test_post_processing_entirely_silent_input_returns_empty():
 def test_set_voice_and_save_writes_untagged_file_in_voice_subdir(tmp_path):
     project = make_project(tmp_path)
     err = ProjectVoiceUtil.set_voice_and_save(
-        project, make_sound(APP_SAMPLE_RATE), "myvoice", "hello", TtsModelType.DOTS
+        project, make_sound(APP_SAMPLE_RATE), "myvoice", "hello", TtsModelType.require_by_id("dots_local")
     )
     assert not err
 
@@ -83,15 +83,15 @@ def test_set_voice_and_save_writes_untagged_file_in_voice_subdir(tmp_path):
 
 def test_set_voice_and_save_reimport_same_model_overwrites(tmp_path):
     project = make_project(tmp_path)
-    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.DOTS)
-    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.DOTS)
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.require_by_id("dots_local"))
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.require_by_id("dots_local"))
     assert get_setting(project, "dots_voice_file_name") == ["myvoice.flac"]
 
 
 def test_set_voice_and_save_disambiguates_cross_model_stem_collision(tmp_path):
     project = make_project(tmp_path)
-    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.DOTS)
-    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.MIRA)
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.require_by_id("dots_local"))
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.require_by_id("mira_local"))
 
     assert get_setting(project, "dots_voice_file_name") == ["myvoice.flac"]
     assert get_setting(project, "mira_voice_file_name") == ["myvoice_2.flac"]
@@ -101,9 +101,9 @@ def test_set_voice_and_save_disambiguates_cross_model_stem_collision(tmp_path):
 
 def test_set_voice_and_save_append_same_stem_gets_distinct_name(tmp_path):
     project = make_project(tmp_path)
-    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.DOTS)
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.require_by_id("dots_local"))
     ProjectVoiceUtil.set_voice_and_save(
-        project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.DOTS, append=True
+        project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.require_by_id("dots_local"), append=True
     )
     assert get_setting(project, "dots_voice_file_name") == ["myvoice.flac", "myvoice_2.flac"]
 
@@ -111,7 +111,7 @@ def test_set_voice_and_save_append_same_stem_gets_distinct_name(tmp_path):
 def test_set_voice_and_save_indextts2_emo_voice_untagged(tmp_path):
     project = make_project(tmp_path)
     ProjectVoiceUtil.set_voice_and_save(
-        project, make_sound(APP_SAMPLE_RATE), "emo", "", TtsModelType.INDEXTTS2, is_secondary=True
+        project, make_sound(APP_SAMPLE_RATE), "emo", "", TtsModelType.require_by_id("indextts2_local"), is_secondary=True
     )
     assert get_setting(project, "indextts2_emo_voice_file_name") == "emo.flac"
     assert (tmp_path / PROJECT_VOICE_SUBDIR / "emo.flac").exists()
@@ -149,17 +149,17 @@ def test_verify_voice_files_exist_accepts_legacy_root_placement(tmp_path, capsys
 
 def test_used_voice_names_exclude_shared_owner_or_secondary_only():
     project = Project()
-    project.set_model_setting("fish_s2", "file_name", ["shared.flac"])
-    project.set_model_setting("qwen3tts", "file_name", ["other.flac"])
-    binding = REGISTRY.voice_binding("server_fish_s2")
+    project.set_model_setting("fish_s2_local", "file_name", ["shared.flac"])
+    project.set_model_setting("qwen3tts_local", "file_name", ["other.flac"])
+    binding = REGISTRY.voice_binding("fish_s2_sglomni")
     assert binding is not None
     owner = (binding.group or binding.model_id, binding.name)
     used = ProjectVoiceUtil.get_used_voice_file_names(project, owner)
     assert "shared.flac" not in used
     assert "other.flac" in used
 
-    project.set_model_setting("indextts2", "file_name", ["primary.flac"])
-    project.set_model_setting("indextts2", "emo_voice", "secondary.flac")
+    project.set_model_setting("indextts2_local", "file_name", ["primary.flac"])
+    project.set_model_setting("indextts2_local", "emo_voice", "secondary.flac")
     used = ProjectVoiceUtil.get_used_voice_file_names(project, None, exclude_secondary=True)
     assert "primary.flac" in used
     assert "secondary.flac" not in used
@@ -168,8 +168,8 @@ def test_used_voice_names_exclude_shared_owner_or_secondary_only():
 def test_verify_voice_files_keeps_transcripts_paired_when_corrupt_sample_dropped(tmp_path, monkeypatch):
     from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 
-    monkeypatch.setattr(Tts, "_type", TtsModelType.FISH_S2)
     project = make_project(tmp_path)
+    project.tts_model_type = "fish_s2_local"
     for name in ("first.flac", "broken.flac"):
         (tmp_path / name).write_bytes(b"sample")
     set_setting(project, "fish_s2_voice_file_name", ["first.flac", "broken.flac", "missing.flac"])
@@ -180,19 +180,19 @@ def test_verify_voice_files_keeps_transcripts_paired_when_corrupt_sample_dropped
 
     assert result.corrupt["voice samples"] == ["broken.flac"]
     assert result.not_found["voice samples"] == ["missing.flac"]
-    assert ProjectVoiceUtil.voice_reference_pairs(project, TtsModelType.FISH_S2) == [
+    assert ProjectVoiceUtil.voice_reference_pairs(project, TtsModelType.require_by_id("fish_s2_local")) == [
         ("first.flac", "first text"), ("missing.flac", "missing text")
     ]
 
 
-def test_verify_voice_files_exist_keeps_a_reference_whose_file_is_missing(tmp_path, monkeypatch, capsys):
+def test_verify_voice_files_exist_keeps_a_reference_whose_file_is_missing(tmp_path, capsys):
     """
     A missing file is reported but kept, in memory and on disk alike: the sample
     may simply not have been copied over yet, and generation is blocked with a
     clear message until it shows up.
     """
-    monkeypatch.setattr(Tts, "_type", TtsModelType.DOTS)
     project = make_project(tmp_path)
+    project.tts_model_type = "dots_local"
     set_setting(project, "dots_voice_file_name", ["not_here_yet.flac"])
 
     result = ProjectVoiceUtil.verify_voice_files_exist(project)

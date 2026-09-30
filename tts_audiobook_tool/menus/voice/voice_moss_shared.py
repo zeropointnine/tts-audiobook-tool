@@ -19,15 +19,15 @@ class VoiceMossShared:
 
     @staticmethod
     def get_temperature_ref(arch_type: MossConfigs) -> SettingRef:
-        return SettingRef("moss", "local_temperature" if arch_type == MossConfigs.LOCAL else "delay_temperature")
+        return SettingRef("moss_local", "local_temperature" if arch_type == MossConfigs.LOCAL else "delay_temperature")
 
     @staticmethod
     def get_top_p_ref(arch_type: MossConfigs) -> SettingRef:
-        return SettingRef("moss", "local_top_p" if arch_type == MossConfigs.LOCAL else "delay_top_p")
+        return SettingRef("moss_local", "local_top_p" if arch_type == MossConfigs.LOCAL else "delay_top_p")
 
     @staticmethod
     def get_top_k_ref(arch_type: MossConfigs) -> SettingRef:
-        return SettingRef("moss", "local_top_k" if arch_type == MossConfigs.LOCAL else "delay_top_k")
+        return SettingRef("moss_local", "local_top_k" if arch_type == MossConfigs.LOCAL else "delay_top_k")
 
     @staticmethod
     def make_temperature_item(state: State, arch_type: MossConfigs) -> MenuItem:

@@ -308,9 +308,9 @@ def test_dots_mf_defaults_and_explicit_sampling_overrides(monkeypatch):
     # the value must not be forwarded even when the project carries one
     assert runtime.calls[-1]["guidance_scale"] is None
 
-    project.dots_num_steps_mf = 7
-    project.dots_guidance_scale = 1.7
-    project.dots_speaker_scale = 2.1
+    project.set_model_setting("dots_local", "num_steps_mf", 7)
+    project.set_model_setting("dots_local", "guidance_scale", 1.7)
+    project.set_model_setting("dots_local", "speaker_scale", 2.1)
     result = model.generate_using_project(project, ["Overrides."])
     assert not isinstance(result, str)
     assert runtime.calls[-1]["num_steps"] == 7
@@ -360,6 +360,36 @@ def test_dots_fixed_artifact_omits_sampling_overrides(monkeypatch):
     assert not isinstance(result, str)
     assert runtime.stream_calls[-1]["num_steps"] is None
     assert runtime.stream_calls[-1]["guidance_scale"] is None
+
+
+@pytest.mark.parametrize("stored_seed, force_random, cap, expected, stop", [
+    (-1, False, -1, DotsBaseModel.SEED_MAX - 1, DotsBaseModel.SEED_MAX),
+    (-1, False, 7, 7, 8),
+    (-1, False, 0, 0, 1),
+    (999, True, 7, 7, 8),
+    (999, False, 7, 999, None),
+])
+def test_dots_random_seed_cap_reaches_local_inference(
+        monkeypatch, stored_seed, force_random, cap, expected, stop):
+    runtime = FakeRuntime(sampling=SimpleNamespace(solver="scm"))
+    model = make_model(runtime, DotsBaseModel.MF_2STEPS_REPO_ID)
+    seeded = []
+    draws = []
+    monkeypatch.setattr(dots_model, "seed_everything", seeded.append)
+    monkeypatch.setattr(dots_model, "printt", lambda *_args, **_kwargs: None)
+
+    def draw(start, end):
+        draws.append((start, end))
+        return end - 1
+
+    monkeypatch.setattr(dots_model.random, "randrange", draw)
+    project = Project.model_validate({"dots_seed": stored_seed})
+    result = model.generate_using_project(
+        project, ["hello"], force_random_seed=force_random, max_random_seed=cap)
+    assert not isinstance(result, str)
+    assert seeded == [expected]
+    assert draws == ([] if stop is None else [(0, stop)])
+    assert project.get_model_setting("dots_local", "seed") == stored_seed
 
 
 def test_dots_generation_returns_standard_error_and_kill_clears_runtime(monkeypatch):

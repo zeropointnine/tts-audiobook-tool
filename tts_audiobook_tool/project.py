@@ -9,10 +9,10 @@ from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSa
 from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.model_settings import ModelSettings, REGISTRY
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.reason_pauses import ReasonPauses, ReasonPauseTypes
 from tts_audiobook_tool.util import *
 
@@ -96,8 +96,13 @@ class Project(BaseModel):
 
     dir_path: str = ""
     version: int = PROJECT_SPEC_VERSION
-    current_model_type: TtsModelType = TtsModelType.NONE
+    # Persist the opaque catalog ID, including IDs unknown to this installation.
+    tts_model_type: str = "none"
     model_settings: ModelSettings = Field(default_factory=ModelSettings)
+
+    def get_tts_model_type(self) -> TtsModelType:
+        """Resolve the saved selection without changing it or auto-detecting."""
+        return TtsModelType.get_by_id(self.tts_model_type)
 
     @field_validator("model_settings", mode="before")
     @classmethod
@@ -172,8 +177,8 @@ class Project(BaseModel):
         from tts_audiobook_tool.project_support.project_sound_segments import ProjectSoundSegments
         self._sound_segments = ProjectSoundSegments(self)
 
-        if self.get_model_setting("pocket", "file_name") and self.get_model_setting("pocket", "predefined_voice"):
-            self.set_model_setting("pocket", "predefined_voice", "", reset=True)
+        if self.get_model_setting("pocket_local", "file_name") and self.get_model_setting("pocket_local", "predefined_voice"):
+            self.set_model_setting("pocket_local", "predefined_voice", "", reset=True)
 
     @property
     def markers(self) -> set[int]:
@@ -201,18 +206,12 @@ class Project(BaseModel):
             return ""
         return os.path.join(self.dir_path, PROJECT_TEXT_FILE_NAME)
 
-    def save(self, *, stamp_runtime_model: bool = True) -> str:
+    def save(self) -> str:
         
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
 
         def make_payload() -> dict:
-            # Ensure runtime metadata is up-to-date while holding the project save lock.
-            from tts_audiobook_tool.tts import Tts
-
             super(Project, self).__setattr__('version', PROJECT_SPEC_VERSION)
-            current_model_type = Tts.get_type()
-            if stamp_runtime_model and current_model_type != TtsModelType.NONE:
-                super(Project, self).__setattr__('current_model_type', current_model_type)
             self.normalize_chapter_mode()
             return ProjectSerializationUtil.to_project_json_dict(self)
 

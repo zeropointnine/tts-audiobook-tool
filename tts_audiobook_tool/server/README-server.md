@@ -77,7 +77,7 @@ Returns the current state of the server.
 | Field | Type | Description |
 |---|---|---|
 | `status` | string | `"initializing"` while the TTS model is loading, `"ready"` when available. |
-| `tts_model` | string | Human-readable name of the active TTS engine, from `Tts.get_type().value.ui["proper_name"]`. |
+| `tts_model` | string | Human-readable name of the active TTS engine, from `Project.get_tts_model_type().value.ui["proper_name"]`. |
 | `inferencing` | string | The prompt currently being processed by the TTS model, or `""` if idle. |
 | `playing` | string | The text whose audio is currently being emitted by `AudioStream`, or `""` if silent. |
 | `audio_buffer` | number | Seconds of audio remaining in the playback buffer. |

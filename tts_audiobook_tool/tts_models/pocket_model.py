@@ -9,6 +9,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.util import *
 
@@ -122,20 +123,21 @@ class PocketModel(PocketBaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
     ) -> list[Sound] | str:
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.POCKET, voice_selection_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("pocket_local"), voice_selection_index)
         if voice_file_name:
             voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
         else:
-            voice_path = project.get_model_setting('pocket', 'predefined_voice')
+            voice_path = project.get_model_setting('pocket_local', 'predefined_voice')
 
-        temperature = project.get_model_setting('pocket', 'temperature')
+        temperature = project.get_model_setting('pocket_local', 'temperature')
         if temperature == -1:
             temperature = PocketModel.DEFAULT_TEMPERATURE
 
-        seed = -1 if force_random_seed else project.get_model_setting('pocket', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('pocket_local', 'seed')
         if seed <= -1:
-            seed = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
 
         return self.generate(
             prompts,

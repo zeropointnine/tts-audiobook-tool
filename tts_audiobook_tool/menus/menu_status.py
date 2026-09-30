@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from tts_audiobook_tool import app_support, text_util
-from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
+from tts_audiobook_tool import app_support, ask, text_util
+from tts_audiobook_tool.app_support import hints
+from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+from tts_audiobook_tool.app_types import Hint
+from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import ModelStateSnapshot
-from tts_audiobook_tool.state import State
+from tts_audiobook_tool.state import PendingTtsModelChange, State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
@@ -15,23 +18,76 @@ class MenuStatus:
     """
 
     @staticmethod
+    def prepare_tts(state: State) -> None:
+        """Reconcile before building menu items or displaying project metadata."""
+        from tts_audiobook_tool.tts import Tts
+
+        previous_id = state.project.tts_model_type
+        changed = Tts.reconcile_project_model(state.project)
+        if changed is not None and state.project.dir_path:
+            error = state.project.save()
+            if error:
+                ask.ask_error(error)
+        Tts.bind_project(state.project)
+        local_startup_finished = (
+            not Tts.is_remote_mode() and getattr(state, "has_shown_main_menu", False)
+        )
+        if local_startup_finished or (changed is not None and changed.id == "none"):
+            state.pending_tts_model_change = None
+        elif changed is not None:
+            pending = getattr(state, "pending_tts_model_change", None)
+            old_id = (pending.old_model_id if pending is not None
+                      and pending.new_model_id == previous_id else previous_id)
+            state.pending_tts_model_change = (
+                PendingTtsModelChange(old_id, changed.id) if old_id != changed.id else None
+            )
+
+    @staticmethod
+    def show_pending_tts_model_hint(state: State, *, is_first_main_menu: bool = False) -> None:
+        """Consume a deferred notice; local changes appear only at the first main menu."""
+        from tts_audiobook_tool.tts import Tts
+
+        pending = getattr(state, "pending_tts_model_change", None)
+        if pending is None:
+            return
+        if state.project.tts_model_type != pending.new_model_id:
+            state.pending_tts_model_change = None
+            return
+        if not Tts.is_remote_mode() and not is_first_main_menu:
+            if getattr(state, "has_shown_main_menu", False):
+                state.pending_tts_model_change = None
+            return
+        state.pending_tts_model_change = None
+
+        old_name = _make_model_name(pending.old_model_id)
+        current_name = _make_model_name(pending.new_model_id)
+        text = f"This project was previously using TTS model {old_name}.\n"
+        if Tts.get_active_type().id == pending.new_model_id:
+            text += f"It will now use the currently active model, {current_name}"
+        else:
+            text += (f"It is now configured to use {current_name}, "
+                     "but the runtime is unavailable (see TTS mode).")
+        hints.print_hint(Hint("", "FYI", text))
+
+    @staticmethod
     def print_block(state: State) -> None:
         from tts_audiobook_tool.tts import Tts
 
+        MenuStatus.prepare_tts(state)
         lines = []
         worker_models, _ = ModelWorker.get_model_state_blocking()
 
         project_text = _make_project_text(state)
         lines.append(("Project", project_text))
 
-        if Tts.is_sgl_mode():
+        if Tts.is_remote_mode():
             server_tts_text = _make_server_tts_text(state)
-            lines.append(("SGL-Omni", server_tts_text))
+            lines.append(("TTS model", server_tts_text))
         else:
             local_tts_text = _make_local_tts_text(state, worker_models)
             lines.append(("TTS model", local_tts_text))
 
-        voice_display_info = Tts.get_model_support().get_voice_display_info(
+        voice_display_info = Tts.get_model_support(state.project).get_voice_display_info(
             state.project, None
         )
         if voice_display_info is not None:
@@ -57,6 +113,24 @@ class MenuStatus:
             printt(s)
 
 
+# Display label per backend kind, matching the status block's "TTS model" line.
+_BACKEND_KIND_LABELS: dict[TtsBackendKind | None, str] = {
+    TtsBackendKind.LOCAL: "local",
+    TtsBackendKind.SGL_OMNI: "SGL-Omni",
+    TtsBackendKind.AUDIO_CPP: "audio.cpp",
+}
+
+
+def _make_model_name(raw_id: str) -> str:
+    """Eg: "Chatterbox TTS (local)"; the backend qualifies identically-named models."""
+    model = TtsModelType.get_by_id(raw_id)
+    if model.id == "none":
+        return "None (unselected)" if raw_id == model.id else f"Unknown model: {raw_id}"
+    proper_name = model.value.ui["proper_name"]
+    backend_label = _BACKEND_KIND_LABELS.get(model.value.backend_kind)
+    return f"{proper_name} ({backend_label})" if backend_label else proper_name
+
+
 def _make_project_text(state: State) -> str:
     if state.project.dir_path:
         text = text_util.make_terminal_hyperlink(state.project.dir_path, is_file=True)
@@ -73,12 +147,16 @@ def _make_local_tts_text(
 
     from tts_audiobook_tool.tts import Tts
 
-    text = Tts.get_model_support().get_menu_text(state.project, None)
-    if Tts.get_type() == TtsModelType.NONE:
-        text = f"{COL_ERROR}{text}"
+    text = Tts.get_model_support(state.project).get_menu_text(state.project, None)
+    if text == NONE_MODEL_NAME:
+        text = COL_ERROR + text
+    text += f" {QUALIFIER_COLOR}(local)"
 
     extras = []
-    tts_loaded = bool(worker_models and worker_models.tts_loaded)
+    tts_loaded = bool(
+        worker_models and worker_models.tts_loaded
+        and worker_models.tts_type_id == state.project.get_tts_model_type().id
+    )
     if tts_loaded and worker_models and worker_models.tts_device:
         extras.append(worker_models.tts_device)
     if tts_loaded:
@@ -94,32 +172,50 @@ def _make_local_tts_text(
 def _make_server_tts_text(state: State) -> str:
     from tts_audiobook_tool.tts import Tts
 
-    if Tts.get_type() == TtsModelType.NONE:
-        if SglOmniUtil.get_model_id():
-            label = f"{COL_ERROR}Unknown/unsupported"
-            model_id = ellipsize(SglOmniUtil.get_model_id(), 40, from_start=True)
-            qualifier = f"{QUALIFIER_COLOR}({model_id})"
+    snapshot = RemoteTtsDiscovery.get_snapshot()
+    selected = state.project.get_tts_model_type()
+    # Process mode wins over a saved local selection. While offline, a saved
+    # remote type can still identify the backend without changing modes.
+    backend_kind = snapshot.backend_kind
+    if backend_kind is None and selected.value.backend_kind is not TtsBackendKind.LOCAL:
+        backend_kind = selected.value.backend_kind
+    backend = _BACKEND_KIND_LABELS.get(backend_kind, "server")
+    base_url = RemoteTtsDiscovery.get_base_url()
+    if backend_kind is TtsBackendKind.AUDIO_CPP and base_url:
+        backend = text_util.make_terminal_hyperlink(
+            f"{base_url}/v1/models?include_session_options=true", backend
+        )
+    elif backend_kind is TtsBackendKind.SGL_OMNI and base_url:
+        backend = text_util.make_terminal_hyperlink(f"{base_url}/v1/models", backend)
+    model = selected.value.ui["proper_name"]
+    if selected.id == "none":
+        model = (COL_ERROR + NONE_MODEL_NAME if state.project.tts_model_type == selected.id else
+                 f"Unknown model: {state.project.tts_model_type}")
+    server_unreachable = snapshot.issue is not None and snapshot.issue.code in {"unavailable", "timeout"}
+    qualifiers = [] if backend == "server" and server_unreachable else [backend]
+    # Use server residency from cached metadata, not the worker's adapter state.
+    if (
+        snapshot.backend_kind is TtsBackendKind.AUDIO_CPP
+        and snapshot.issue is None
+        and Tts._binding_issue is None
+        and selected.id != "none"
+        and Tts.get_active_type() == selected
+        and Tts._selected_server_model_id
+        and any(entry.get("id") == Tts._selected_server_model_id
+                and entry.get("loaded") is True for entry in snapshot.models)
+    ):
+        qualifiers.append("loaded")
+    text = model
+    if qualifiers:
+        text += f" {QUALIFIER_COLOR}({', '.join(qualifiers)})"
+    if snapshot.issue is not None:
+        if server_unreachable:
+            text += f" {COL_ERROR}(server unreachable)"
         else:
-            label = f"{COL_ERROR}Offline"
-            url = ellipsize(SglOmniUtil.get_base_url(), 40)
-            qualifier = f"{QUALIFIER_COLOR}({url})"
-    else:
-        label = Tts.get_type().value.ui["proper_name"]
-        if state.prefs.sgl_omni_type is None:
-            model_id = ellipsize(SglOmniUtil.get_model_id(), 40, from_start=True)
-            qualifier = f"{QUALIFIER_COLOR}({model_id})" if model_id else ""
-        else:
-            if not SglOmniUtil.get_model_id():
-                SglOmniUtil.update_model_id()
-            if SglOmniUtil.get_model_id():
-                # When sgl tts type is set explicitly, we want to draw extra attention to the server model id,
-                # hence the extra qualifier
-                model_id = ellipsize(SglOmniUtil.get_model_id(), 40, from_start=True)
-                qualifier = f"{QUALIFIER_COLOR}(server model id: {model_id})"
-            else:
-                qualifier = f"{COL_ERROR}(offline)"
-
-    return f"{label}" + (f" {qualifier}" if qualifier else "")
+            text += f" {COL_ERROR}({snapshot.issue.message})"
+    elif selected.id != "none" and Tts._binding_issue is not None:
+        text += f" {COL_ERROR}({Tts._binding_issue.verbose})"
+    return text
 
 def _make_text_text(state: State) -> str:
     total_lines = len(state.project.phrase_groups)
@@ -130,8 +226,12 @@ def _make_text_text(state: State) -> str:
     language_code = state.project.book.segmentation_settings.language_code.strip()
     if language_code:
         text += f", {language_code}"
-    qual_color = COL_DIM if num_generated > 0 else COL_ERROR
-    text += f" {qual_color}({num_generated} generated)"
+    generated_text = f"{num_generated} generated"
+    if state.project.sound_segments_path:
+        generated_text = text_util.make_terminal_hyperlink(
+            state.project.sound_segments_path, generated_text, is_file=True
+        )
+    text += f" {COL_DIM}({generated_text})"
     return text
 
 def _make_stt_text(
@@ -166,3 +266,6 @@ def _make_memory_text() -> str:
 LABEL_COLOR = COL_DIM
 VALUE_COLOR = COL_MEDIUM
 QUALIFIER_COLOR = COL_DIM
+
+# Displayed name of the "no TTS model selected" placeholder
+NONE_MODEL_NAME = TtsModelType.require_by_id("none").value.ui["proper_name"]

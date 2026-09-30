@@ -8,7 +8,7 @@ Three independent version numbers should not be conflated:
 
 - `project.json` has `"version": 3` (`PROJECT_SPEC_VERSION` in [`constants.py`](../tts_audiobook_tool/constants.py)).
 - `project_text.json` still uses `"format": "book.v2"` ([`book_serialization.py`](../tts_audiobook_tool/app_types/book_serialization.py)). Project spec v3 does **not** introduce `book.v3`.
-- The application-shipped [`model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml) uses `schema_version = 3`. This is the model-catalog schema, not a project-file version. The loader rejects other catalog schema versions; it does not migrate them. This one TOML file declares the built-in local, SGL-Omni server, and `NONE` placeholder specs, plus server-specific definitions and optional additional configured server entries.
+- The application-shipped [`model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml) uses `schema_version = 1`. This is the model-catalog schema, not a project-file version. The loader rejects other catalog schema versions; it does not migrate them. This one TOML file declares the built-in local, SGL-Omni and audio.cpp server, and `"none"` placeholder specs, plus server-specific definitions and optional additional configured server entries. Every shipped entry receives a canonical Python handle in TOML order, looked up by its catalog ID; no model-named attributes or Python declaration inventory is needed. `TtsModelType.require_by_id("fish_s2_local")` is strict for hardcoded IDs and raises `ValueError` for an unknown ID. `TtsModelType.get_by_id(saved_id)` is tolerant for persisted/external IDs and falls back to the registered `"none"` handle without changing the saved string.
 
 The canonical project directory has:
 
@@ -20,6 +20,8 @@ The canonical project directory has:
 
 See [`Project`](../tts_audiobook_tool/project.py), [`ProjectSerializationUtil`](../tts_audiobook_tool/project_support/project_serialization_util.py), and [`ProjectTextIOUtil`](../tts_audiobook_tool/project_support/project_text_io_util.py) for the respective in-memory, settings-file, and text-file boundaries.
 
+For the rules governing the selected model ID (`Project.tts_model_type`), refer to [TTS model selection rules](<tts-model-selection.md>). Selection policy is documented there rather than in this storage-format reference.
+
 ## Canonical settings shape
 
 The following is illustrative: absent override keys are normal, and these objects are not a complete listing of project-wide settings.
@@ -27,15 +29,14 @@ The following is illustrative: absent override keys are normal, and these object
 ```json
 {
   "version": 3,
-  "current_model_type": "server_fish_s2",
   "language_code": "en",
   "voice_select_mode": "custom",
   "model_settings": {
     "models": {
-      "server_fish_s2": {
+      "fish_s2_sglomni": {
         "orchestration": {"concurrent_requests": 2}
       },
-      "server_higgs_v3": {
+      "higgs_v3_sglomni": {
         "parameters": {"temperature": 0.8},
         "voice_references": [
           {"file_name": "sample.flac", "transcript": "Reference text."}
@@ -45,7 +46,7 @@ The following is illustrative: absent override keys are normal, and these object
     },
     "shared": {
       "fish_s2": {
-        "model_ids": ["fish_s2", "server_fish_s2"],
+        "model_ids": ["fish_s2_local", "fish_s2_sglomni"],
         "parameters": {"top_k": 50},
         "voice_references": [
           {"file_name": "fish.flac", "transcript": "Fish reference."}
@@ -58,11 +59,13 @@ The following is illustrative: absent override keys are normal, and these object
 
 `model_settings.models` is keyed by stable **model ID**; `model_settings.shared` is keyed by a declared **storage group**, not a selectable model. Inside a recognized object, `parameters` holds named overrides, `voice_references` pairs each project-local voice filename with its optional transcript in order, `files` holds declared additional project-local file strings, and `orchestration` holds batch/concurrency values. Sections appear only when needed. The same model may read some settings from a shared object and others from a private object; there is no duplicate authoritative copy.
 
-Top-level values such as `language_code`, `markers`, `generate_range`, `voice_select_mode`, export options, and the compatibility placeholder `none_voice_file_name` remain project-wide. `current_model_type` is a stable model ID, not a storage owner or a copy of that model's definition. `project_text.json` remains separately serialized as a structured `Book`; `voice_index` belongs to each phrase group there, whereas the voice samples it selects are model settings here. For selection modes and scheduling, see [`generate-files-ordering.md`](generate-files-ordering.md).
+Top-level values such as `language_code`, `markers`, `generate_range`, `voice_select_mode`, export options, and the compatibility placeholder `none_voice_file_name` remain project-wide. A project does not record which TTS model produced its audio: remote servers expose several models at once, so "the model in use" is not a stable property to compare against. `project_text.json` remains separately serialized as a structured `Book`; `voice_index` belongs to each phrase group there, whereas the voice samples it selects are model settings here. For selection modes and scheduling, see [`generate-files-ordering.md`](generate-files-ordering.md).
 
 ## Ownership and interpretation
 
-[`ModelSettingsRegistry`](../tts_audiobook_tool/project_support/model_settings.py) is the authority for `(model ID, setting name) → section, private model or shared group, type and storage default`. The project records overrides and, for recognized shared groups, their exact `model_ids`; it cannot create a new sharing relationship by supplying matching names or editing membership. Stable built-in setting declarations and old flat input-field mappings are maintained via [`model_settings_declarations.py`](../tts_audiobook_tool/project_support/model_settings_declarations.py) and the registry, regardless of the active backend; they are not model specs or settings-ownership declarations in the TOML catalog.
+[`ModelSettingsRegistry`](../tts_audiobook_tool/project_support/model_settings.py) resolves `(model ID, setting name) → section, private model or shared group, type and storage default` from the current catalog. `models.settings` declares persisted defaults/types/owners independently of request defaults; the root `setting_groups` table declares exact shared membership. Remote backend parameters, voices, seed policies and `behavior.orchestration` supply standard private declarations when no explicit override is needed. Every model follows this same registration rule, including data-only entries available through canonical ID lookup; no Python model declaration is required. Projects cannot create sharing relationships by editing membership or using matching setting names.
+
+[`model_settings_declarations.py`](../tts_audiobook_tool/project_support/model_settings_declarations.py) and [`model_settings_compat.py`](../tts_audiobook_tool/project_support/model_settings_compat.py) freeze pre-v3 input fields, defaults and storage mappings solely for migration. They do not initialize current settings.
 
 The built-in shared groups are `auk` (AuK/Flash servers), `fish_s2` (local/server), `moss` (local and two servers), and `qwen3` (local/server). Sharing is **per field**, not per model family: for example Fish S2's voices and sampling parameters are shared, its local-only options are private, and server concurrency is private. A model switch never copies or clamps a shared override. A server variant may resolve a different effective default, cap an outgoing value, omit a request field, or warn about a shared value without modifying what the local variant will see. In particular, server Fish S2 caps outgoing top-k without overwriting the shared value.
 
@@ -72,9 +75,9 @@ Recognized objects are reconciled against the declarations: unsupported fields i
 
 ## Relationship to configured SGL-Omni models
 
-The configured SGL-Omni route is now the sole server-model route. Built-in handles and local/server/`NONE` specs are parsed from the single [`model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml) at import time. At startup the app detects its backend; in SGL-Omni mode it loads and validates the catalog's server behavior, parameters, request defaults and menus, overlays built-in server specs without replacing their stable handles, registers additional supported server IDs, and finalizes their private storage bindings before projects and preferences are resolved. Local inference keeps its Python model implementations and does not load server definitions at backend startup, but uses the **same** v3 settings registry. Built-in IDs, file tags, and existing shared ownership remain stable. Main and model-worker processes compare catalog fingerprints to avoid generating under different definitions; changes require a restart. Invalid/missing server definitions fail clearly rather than falling back to removed server subclasses.
+All shipped model identities, including entries without Python aliases such as CosyVoice3, are installed from the catalog at import time. Startup validates remote request policies and installs their specs/settings through one common registration path, preserving existing handles. Local inference keeps its Python model implementations, but its settings are catalog-declared too; metadata and settings for all backends remain available regardless of the active environment. Canonical shipped real-model IDs use the backend suffixes `_local`, `_sglomni`, and `_audiocpp`; `none` is unchanged. File tags, storage defaults, shared-group names and field sharing remain independent of those IDs. The pre-release ID rename needs no migration for undeployed IDs; v1/v2 legacy flat fields retain their old names and migrate to the current canonical owners. Main and model-worker processes compare catalog fingerprints; editing the application catalog requires a restart.
 
-The catalog controls server model metadata, numeric parameters, named behavior policies, request defaults, and dynamic voice menus. The generic adapter delegates HTTP/streaming/audio decoding to the shared SGL-Omni transport. An additional validated server entry can add a new supported server ID with private v3 settings without adding Python `Project` fields, serializers, or a per-model server class; built-in entries retain registry-declared ownership. The catalog is **not** an arbitrary plugin language: new parameter kinds, menu controls, protocol behavior, or sharing relationships require explicit implementation and validation. See [`model_catalog.py`](../tts_audiobook_tool/tts_models/model_catalog.py), [`sgl_omni_definition.py`](../tts_audiobook_tool/tts_models/sgl_omni_definition.py), [`sgl_omni_configured.py`](../tts_audiobook_tool/tts_models/sgl_omni_configured.py), and [`model-worker-architecture.md`](model-worker-architecture.md) for the runtime side of that boundary.
+The catalog controls model metadata, persisted storage, server numeric parameters, named behavior policies, request defaults and dynamic voice menus. Backend-specific adapters still own execution. Adding a supported SGL-Omni entry does not require Python `Project` fields, a legacy declaration, or a new server class. `behavior.orchestration` is valid for every SGL-Omni entry; preserve existing storage key names (`batch_size` versus `concurrent_requests`) when editing shipped entries. `can_batch = false` disables use of that storage without deleting saved values. The catalog is not an arbitrary plugin language: new protocol behavior, control types and execution policies still require implementation and validation.
 
 ## Migration and persistence logistics
 

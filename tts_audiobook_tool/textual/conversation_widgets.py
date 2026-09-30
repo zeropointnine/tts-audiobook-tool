@@ -349,7 +349,11 @@ class ConversationTextEditor(TextArea):
 
     async def _on_paste(self, event: events.Paste) -> None:
         event.stop()
-        self.insert(self.normalize_newlines(event.text))
+        # Textual dispatches inherited handlers too; stop() only prevents
+        # bubbling. Delegate once and suppress the automatic second dispatch.
+        event.prevent_default()
+        event.text = self.normalize_newlines(event.text)
+        await super()._on_paste(event)
 
     def clear_text(self) -> None:
         self.load_text("")

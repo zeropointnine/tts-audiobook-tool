@@ -18,7 +18,7 @@ INTRO = (
     f"This feature allows you to combine the audio of a pre-existing audiobook\n"
     f"with its original source text to create an {COL_ACCENT}.abr.m4a{COL_DEFAULT} / {COL_ACCENT}.abr.m4b{COL_DEFAULT}\n"
     f"audiobook file which can be played using the tts-audiobook-tool\n"
-    f"player/reader, just like the TTS audiobooks created by the main app.\n"
+    f"player/reader, just like the TTS audiobooks created by the main app."
 )
 
 

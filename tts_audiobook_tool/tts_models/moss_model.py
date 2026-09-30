@@ -13,6 +13,7 @@ from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import SEED_MAX
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.moss_base_model import MossArchType, MossConfigs, MossBaseModel
 from tts_audiobook_tool.util import *
@@ -326,28 +327,29 @@ class MossModel(MossBaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
     ) -> list[Sound] | str:
 
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MOSS, voice_selection_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("moss_local"), voice_selection_index)
         if voice_file_name:
             voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
         else:
             voice_path = ""
 
-        target = project.get_model_setting('moss', 'target')
+        target = project.get_model_setting('moss_local', 'target')
         config = MossConfigs.get_by_target(target)
 
         temperature, audio_top_p, audio_top_k = self.get_generation_params(project, config)
 
-        seed = -1 if force_random_seed else project.get_model_setting('moss', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('moss_local', 'seed')
         if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
         language = MossBaseModel.get_language_name(project.language_code) if project.language_code else ""
 
         return self.generate(
             prompts=prompts,
             voice_path=voice_path,
-            rolling_continuation_max_segments=project.get_model_setting('moss', 'rolling_cont'),
+            rolling_continuation_max_segments=project.get_model_setting('moss_local', 'rolling_cont'),
             language=language,
             temperature=temperature,
             audio_top_p=audio_top_p,

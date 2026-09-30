@@ -10,6 +10,7 @@ from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.constants import SGL_OMNI_URL_DEFAULT
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.util import print_generation_request
 
 
 def encode_wav(data: np.ndarray, sample_rate: int = 24000) -> bytes:
@@ -188,3 +189,22 @@ def test_generate_streaming_invokes_pcm_callback_per_raw_stream_chunk():
     assert len(streamed_chunks) == 2
     np.testing.assert_allclose(streamed_chunks[0], chunk_1_i16.astype(np.float32) / 32768.0)
     np.testing.assert_allclose(streamed_chunks[1], chunk_2_i16.astype(np.float32) / 32768.0)
+
+
+def test_generation_request_printout_is_shared_and_ellipsized(capsys):
+    # Shared by the SGL-Omni and audio.cpp backends: dim header + pretty JSON,
+    # with long string values (data URIs) ellipsized.
+    payload = {"input": "hello", "references": [
+        {"audio_path": "data:audio/wav;base64," + "QUJD" * 40 + "TAIL"}]}
+
+    print_generation_request("http://example.test/v1/audio/speech", payload)
+    out = capsys.readouterr().out
+    assert "Sending generation request to" in out
+    assert "Sending streaming generation request" not in out
+    assert '"input": "hello"' in out
+    assert out.count("\n") >= 5  # pretty-printed, one field per line
+    assert "..." in out
+    assert "TAIL" not in out
+
+    print_generation_request("http://example.test/v1/audio/speech", payload, is_streaming=True)
+    assert "Sending streaming generation request to" in capsys.readouterr().out

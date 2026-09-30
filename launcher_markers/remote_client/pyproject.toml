@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tts-audiobook-tool-sgl-omni-marker"
+name = "tts-audiobook-tool-remote-client-marker"
 version = "0.1.0"
-description = "Launcher marker package for the tts-audiobook-tool SGL-Omni server mode venv"
+description = "Launcher marker package for the tts-audiobook-tool remote TTS client venv"
 dependencies = []
 
 [tool.setuptools.packages.find]
 where = ["."]
 # Explicit include: never auto-discover a stale build/ dir (or anything else)
 # as a namespace package and ship it inside the wheel.
-include = ["tts_audiobook_tool_sgl_omni_marker*"]
+include = ["tts_audiobook_tool_remote_client_marker*"]

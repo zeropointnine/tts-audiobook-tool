@@ -100,7 +100,7 @@ class RealTimePlaybackMenu:
             path_text = state.project.realtime_path
         subheading = (
             f"Saves sound segment FLAC files generated while using realtime playback to\n"
-            f"{path_text}\n"
+            f"{path_text}"
         )
 
         MenuUtil.options_menu(
@@ -132,8 +132,8 @@ def do_start(state: State) -> None:
         print_feedback("No text segments specified")
         return
 
-    # Check model and other app blockers
-    err = readiness.get_generate_blocker_text(state, verbose=True)
+    # Check model and other app blockers (forced remote probe: playback is about to start)
+    err = readiness.get_run_blocker_text(state, verbose=True)
     if err:
         ask.ask_error(err)
         return
@@ -159,5 +159,5 @@ REAL_TIME_SUBHEADING = (
     'Uses the same quality checks as the normal audiobook creation workflow,\n'
     'except for loudness normalization and generative upsampling.\n\n'
     'Uninterrupted playback requires inference to be faster-than-realtime.\n'
-    'Validation/retry activates when there is 60 seconds of buffered audio.\n'
+    'Validation/retry activates when there is 60 seconds of buffered audio.'
 )

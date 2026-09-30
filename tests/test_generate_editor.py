@@ -59,21 +59,33 @@ def make_state(project: StubProject) -> State:
 
 
 readiness_patcher = None
+run_readiness_patcher = None
 
 
 def setup_function() -> None:
-    global readiness_patcher
+    global readiness_patcher, run_readiness_patcher
     readiness_patcher = patch.object(
         generate_editor_module.readiness,
         "get_generate_blocker_text",
         return_value="",
     )
     readiness_patcher.start()
+    # Quick-generate gates on the run-readiness report, which needs a real
+    # Project. The editor harness is duck-typed, so answer it as ready too;
+    # the blocker test patches this with its own message.
+    run_readiness_patcher = patch.object(
+        generate_editor_module.readiness,
+        "get_run_blocker_text",
+        return_value="",
+    )
+    run_readiness_patcher.start()
 
 
 def teardown_function() -> None:
     assert readiness_patcher is not None
+    assert run_readiness_patcher is not None
     readiness_patcher.stop()
+    run_readiness_patcher.stop()
 
 
 def make_app(
@@ -311,7 +323,7 @@ def test_q_blocker_shows_error_alert_without_saving_or_deleting() -> None:
     async def exercise() -> None:
         with patch.object(
             generate_editor_module.readiness,
-            "get_generate_blocker_text",
+            "get_run_blocker_text",
             return_value="Choose a voice\nConfigure the model",
         ) as get_blocker:
             async with app.run_test() as pilot:

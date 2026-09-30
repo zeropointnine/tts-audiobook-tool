@@ -41,8 +41,8 @@ from tts_audiobook_tool.textual.generation_app import (
     _run_generation_console,
     run_generation_app,
 )
-from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind
+from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.worker_reset import HardResetCause
 
 
@@ -50,14 +50,21 @@ def run(coroutine) -> None:
     asyncio.run(coroutine)
 
 
+def make_project(**attrs) -> SimpleNamespace:
+    """A duck-typed Project with the model lookup the shared compose performs."""
+    return SimpleNamespace(
+        get_tts_model_type=lambda: TtsModelType.require_by_id("none"), **attrs
+    )
+
+
 def make_state() -> State:
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=False)
+    project = make_project(generate_range_string="all", gen_auto_concat=False)
     return cast(State, SimpleNamespace(project=project))
 
 
 def make_saving_state(tmp_path) -> State:
     project_file = tmp_path / "project.json"
-    project = SimpleNamespace(
+    project = make_project(
         dir_path=str(tmp_path),
         generate_range_string="all",
         gen_auto_concat=False,
@@ -767,7 +774,7 @@ def test_generation_app_plays_done_sound_for_completion_and_automatic_abort(
 
 
 def test_quick_generation_auto_returns_without_concatenation_message() -> None:
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=True)
+    project = make_project(generate_range_string="all", gen_auto_concat=True)
     app = GenerationApp(
         cast(State, SimpleNamespace(project=project)),
         {0},
@@ -788,7 +795,7 @@ def test_quick_generation_auto_returns_without_concatenation_message() -> None:
 def test_quick_generation_auto_returns_without_auto_concat() -> None:
     """A quick generation that completed skips the ENTER wait even when
     auto-concat is disabled: the editor flow resumes on its own."""
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=False)
+    project = make_project(generate_range_string="all", gen_auto_concat=False)
     app = GenerationApp(
         cast(State, SimpleNamespace(project=project)),
         {0},
@@ -807,7 +814,7 @@ def test_quick_generation_auto_returns_without_auto_concat() -> None:
 
 
 def test_quick_generation_failed_item_still_waits_for_enter() -> None:
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=False)
+    project = make_project(generate_range_string="all", gen_auto_concat=False)
     app = GenerationApp(
         cast(State, SimpleNamespace(project=project)),
         {0},
@@ -834,7 +841,7 @@ def test_quick_generation_failed_item_still_waits_for_enter() -> None:
 def test_quick_generation_interrupted_still_waits_for_enter() -> None:
     """Only an uninterrupted completion bypasses ENTER: cancelled, aborted,
     failed, and reset quick generations still hold the summary for review."""
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=True)
+    project = make_project(generate_range_string="all", gen_auto_concat=True)
     app = GenerationApp(
         cast(State, SimpleNamespace(project=project)),
         {0},
@@ -864,7 +871,7 @@ def test_quick_generation_interrupted_still_waits_for_enter() -> None:
 def test_regular_generation_still_waits_for_enter_without_auto_concat() -> None:
     """The auto-concat preference still governs the regular generation
     flow: without it, a completed batch waits for ENTER."""
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=False)
+    project = make_project(generate_range_string="all", gen_auto_concat=False)
     app = GenerationApp(
         cast(State, SimpleNamespace(project=project)),
         {0},
@@ -889,7 +896,7 @@ def test_quick_generation_suppresses_completion_banner() -> None:
     """A quick generation that completed shows no completion banner: it
     returns straight to the editor, so the banner would only flash for the
     brief auto-return delay."""
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=False)
+    project = make_project(generate_range_string="all", gen_auto_concat=False)
     app = GenerationApp(
         cast(State, SimpleNamespace(project=project)),
         {0},
@@ -931,7 +938,7 @@ def test_quick_generation_app_exits_without_enter_keypress(
     # the header can then be checked while the session is still live.
     monkeypatch.setattr(worker_app_module, "EVENT_POLL_SECONDS", 3600.0)
 
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=False)
+    project = make_project(generate_range_string="all", gen_auto_concat=False)
     transcript = GenerationTranscript(str(tmp_path / "generation.log"))
     app = GenerationApp(
         cast(State, SimpleNamespace(project=project)), {0}, 1, True, transcript
@@ -975,7 +982,7 @@ def test_quick_generation_app_exits_without_enter_keypress(
 
 
 def test_quick_generation_console_omits_concatenation_message(capsys) -> None:
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=True)
+    project = make_project(generate_range_string="all", gen_auto_concat=True)
     state = cast(State, SimpleNamespace(project=project))
     result = GenerationModalResult(GenerationTerminalStatus.COMPLETED, "", "")
 
@@ -992,7 +999,7 @@ def test_quick_generation_console_omits_concatenation_message(capsys) -> None:
 def test_quick_generation_console_failed_item_waits_for_enter(
     monkeypatch, capsys
 ) -> None:
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=False)
+    project = make_project(generate_range_string="all", gen_auto_concat=False)
     state = cast(State, SimpleNamespace(project=project))
     result = GenerationModalResult(
         GenerationTerminalStatus.COMPLETED,
@@ -1047,7 +1054,7 @@ def test_generation_app_auto_continues_when_auto_concat_enabled(monkeypatch, tmp
     )
     monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
 
-    project = SimpleNamespace(generate_range_string="all", gen_auto_concat=True)
+    project = make_project(generate_range_string="all", gen_auto_concat=True)
     transcript = GenerationTranscript(str(tmp_path / "generation.log"))
     app = GenerationApp(
         cast(State, SimpleNamespace(project=project)), {0, 1}, 1, False, transcript
@@ -1271,7 +1278,7 @@ def test_second_ctrl_c_in_sgl_omni_mode_is_not_offered(monkeypatch, tmp_path) ->
     """In SGL-Omni backend mode the worker holds no local TTS model memory,
     so the hard-reset offer is gated off: CTRL-C only requests a cancel and
     further presses are no-ops."""
-    monkeypatch.setattr(Tts, "_backend_mode", TtsBackendKind.SGL_OMNI)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
 
     cancel_calls: list[str] = []
     reset_calls: list[int] = []

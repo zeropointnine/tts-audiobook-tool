@@ -19,7 +19,7 @@ class VoiceChatterboxMenu:
 
             items = []
             items.extend(
-                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.CHATTERBOX)
+                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.require_by_id("chatterbox_local"))
             )
 
             items.append( 
@@ -30,11 +30,19 @@ class VoiceChatterboxMenu:
                 ) 
             )
 
-            if state.project.get_model_setting('chatterbox', 'type').is_multilingual:
+            item = VoiceMenuShared.make_temperature_item(
+                state=state,
+                target=SettingRef("chatterbox_local", "temperature"),
+                default_value=ChatterboxBaseModel.DEFAULT_TEMPERATURE, 
+                min_value=0.01, max_value=2.0
+            )
+            items.append(item)
+
+            if state.project.get_model_setting('chatterbox_local', 'type').is_multilingual:
                 items.append( 
                     MenuUtil.make_number_item(
                         state=state,
-                        target=SettingRef("chatterbox", "exaggeration"),
+                        target=SettingRef("chatterbox_local", "exaggeration"),
                         base_label="Exaggeration",
                         default_value=ChatterboxBaseModel.DEFAULT_EXAGGERATION,
                         is_minus_one_default=True,
@@ -45,11 +53,11 @@ class VoiceChatterboxMenu:
                     )
                 )
 
-            if state.project.get_model_setting('chatterbox', 'type').is_multilingual:
+            if state.project.get_model_setting('chatterbox_local', 'type').is_multilingual:
                 items.append( 
                     MenuUtil.make_number_item(
                         state=state,
-                        target=SettingRef("chatterbox", "cfg"),
+                        target=SettingRef("chatterbox_local", "cfg"),
                         base_label="CFG/pace",
                         default_value=ChatterboxBaseModel.DEFAULT_CFG,
                         is_minus_one_default=True,
@@ -60,44 +68,36 @@ class VoiceChatterboxMenu:
                     )
                 )
 
-            item = VoiceMenuShared.make_temperature_item(
-                state=state,
-                target=SettingRef("chatterbox", "temperature"),
-                default_value=ChatterboxBaseModel.DEFAULT_TEMPERATURE, 
-                min_value=0.01, max_value=2.0
-            )
-            items.append(item)
-
             items.append(
                 VoiceMenuShared.make_top_p_item(
                     state=state,
-                    target=SettingRef("chatterbox", "top_p"),
+                    target=SettingRef("chatterbox_local", "top_p"),
                     default_value=ChatterboxBaseModel.DEFAULT_TOP_P
                 )
             )
 
-            if state.project.get_model_setting('chatterbox', 'type') == ChatterboxType.TURBO:
+            if state.project.get_model_setting('chatterbox_local', 'type') == ChatterboxType.TURBO:
                 items.append(
                     VoiceMenuShared.make_top_k_item(
                         state=state,
-                        target=SettingRef("chatterbox", "turbo_top_k"),
+                        target=SettingRef("chatterbox_local", "turbo_top_k"),
                         default_value=ChatterboxBaseModel.DEFAULT_TOP_K
                     )
                 )
 
             # Repetition penalty - using separate values for each variant
-            if state.project.get_model_setting('chatterbox', 'type').is_multilingual:
-                qual = state.project.get_model_setting('chatterbox', 'type').label.removeprefix("Chatterbox-")
+            if state.project.get_model_setting('chatterbox_local', 'type').is_multilingual:
+                qual = state.project.get_model_setting('chatterbox_local', 'type').label.removeprefix("Chatterbox-")
                 target = (
-                    SettingRef("chatterbox", "ml_v2_repetition_penalty")
-                    if state.project.get_model_setting('chatterbox', 'type') == ChatterboxType.MULTILINGUAL_V2
-                    else SettingRef("chatterbox", "ml_v3_repetition_penalty")
+                    SettingRef("chatterbox_local", "ml_v2_repetition_penalty")
+                    if state.project.get_model_setting('chatterbox_local', 'type') == ChatterboxType.MULTILINGUAL_V2
+                    else SettingRef("chatterbox_local", "ml_v3_repetition_penalty")
                 )
             else:
                 qual = "Turbo"
-                target = SettingRef("chatterbox", "turbo_repetition_penalty")
+                target = SettingRef("chatterbox_local", "turbo_repetition_penalty")
             default_value = ChatterboxBaseModel.default_repetition_penalty(
-                state.project.get_model_setting('chatterbox', 'type')
+                state.project.get_model_setting('chatterbox_local', 'type')
             )
             rep_min = REPETITION_PENALTY_MIN_DEFAULT
             rep_max = REPETITION_PENALTY_MAX_DEFAULT
@@ -116,30 +116,30 @@ class VoiceChatterboxMenu:
             items.append(item)
 
             items.append(
-                VoiceMenuShared.make_seed_item(state, SettingRef("chatterbox", "seed"))
+                VoiceMenuShared.make_seed_item(state, SettingRef("chatterbox_local", "seed"))
             )
             return items
         
         VoiceMenuShared.menu_wrapper(state, make_items)
 
 def make_model_type_label(state: State) -> str:
-    return make_menu_label("Select model", state.project.get_model_setting('chatterbox', 'type').label)
+    return make_menu_label("Select model", state.project.get_model_setting('chatterbox_local', 'type').label)
 
 def ask_type(state: State) -> None:
 
     def on_select(value: ChatterboxType) -> None:
-        state.project.set_model_setting('chatterbox', 'type', value)
+        state.project.set_model_setting('chatterbox_local', 'type', value)
         state.project.save()
         # Sync static value
         Tts.set_model_params_using_project(state.project) 
-        print_feedback("Model set to:", state.project.get_model_setting('chatterbox', 'type').label)
+        print_feedback("Model set to:", state.project.get_model_setting('chatterbox_local', 'type').label)
 
     MenuUtil.options_menu(
         state=state,
         heading_text="Chatterbox model",
         labels=[item.label for item in list(ChatterboxType)],
         values=[item for item in list(ChatterboxType)],
-        current_value=state.project.get_model_setting('chatterbox', 'type'),
+        current_value=state.project.get_model_setting('chatterbox_local', 'type'),
         default_value=list(ChatterboxType)[0],
         on_select=on_select
     )

@@ -468,7 +468,7 @@ def on_ask_max_size(state: State, _) -> None:
 
     printt("On text import, this is the maximum number of words to be used for a single text segment.")
 
-    reco = Tts.get_model_support().get_max_words_range_reco(state.project)
+    reco = Tts.get_model_support(state.project).get_max_words_range_reco(state.project)
     printt(f"Recommended range: {COL_ACCENT}{TtsModelType.recommended_range_string(reco)}")
     printt()
 
@@ -499,8 +499,7 @@ def make_subst_label(state: State) -> str:
 
 SEG_SUBHEADING = \
 """On import, text will be segmented into sentences and phrases using the settings
-shown below. Project language code can also affect how the text is segmented.
-"""
+shown below. Project language code can also affect how the text is segmented."""
 
 DIALOG_SEGMENTATION_DESC = \
 f"""Detects and splits dialog from surrounding narration,
@@ -508,19 +507,16 @@ making it easier to assign different voices.
 For example, {COL_DIM}He said, "Hello."{COL_DEFAULT} becomes {COL_DIM}He said,{COL_DEFAULT} and {COL_DIM}"Hello."{COL_DEFAULT}
 Dialog segments are preassigned to voice sample 2.
 
-For single-voice narration, leave this off to preserve natural flow.
-"""
+For single-voice narration, leave this off to preserve natural flow."""
 
 SUBSTITUTIONS_DESC = \
 f"""Word pairs that get swapped into the text before it is sent to the TTS model.
 Good for fixing mispronounced names and unusual words.
 
 {COL_DIM}Eg, mapping "Nguyen" to "win" so the model pronounces it correctly.
-Works best with a bit of experimentation.
-"""
+Works best with a bit of experimentation."""
 
 UNCOMMON_WORDS_DESC = \
 f"""Words in the project text not found in the app's
-%1 \"common words\" dictionary, sorted by frequency.
-"""
+%1 \"common words\" dictionary, sorted by frequency."""
 

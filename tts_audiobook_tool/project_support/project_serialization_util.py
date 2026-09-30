@@ -37,7 +37,6 @@ from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import printt
 
 if TYPE_CHECKING:
@@ -331,17 +330,6 @@ class ProjectSerializationUtil:
             value = 1
         d['version'] = value
 
-        # The former generic MOSS server stamp did not record whether Delay or
-        # Local was served. Treat it as unknown rather than claiming the project
-        # was last used with one particular architecture.
-        if d.get('current_model_type') == 'server_moss':
-            d['current_model_type'] = TtsModelType.NONE
-
-        normalize_by_id(
-            'current_model_type',
-            lambda value: value if isinstance(value, TtsModelType) else TtsModelType.get_by_id(value),
-            TtsModelType.NONE,
-        )
         normalize_by_id('segmentation_strategy', SegmentationStrategy.from_id, PROJECT_DEFAULT_SEGMENTATION_STRATEGY)
 
         normalize_int(
@@ -492,13 +480,8 @@ class ProjectSerializationUtil:
         chatterbox_type = ChatterboxType.get_by_id(s)
         if not chatterbox_type:
             chatterbox_type = list(ChatterboxType)[0]
-            try:
-                from tts_audiobook_tool.tts import Tts
-
-                if Tts.get_type() == TtsModelType.CHATTERBOX:
-                    add_warning('chatterbox_type', chatterbox_type.id)
-            except AttributeError:
-                pass
+            if d.get('tts_model_type') == "chatterbox_local":
+                add_warning('chatterbox_type', chatterbox_type.id)
         d['chatterbox_type'] = chatterbox_type
 
         seed = d.get('chatterbox_seed', -1)
@@ -917,7 +900,7 @@ class ProjectSerializationUtil:
             # the directory actually being opened.
             "dir_path": project.dir_path,
             "version": project.version,
-            "current_model_type": project.current_model_type.value.id,
+            "tts_model_type": project.tts_model_type,
 
             "language_code": project.language_code,
 
@@ -960,7 +943,7 @@ class ProjectSerializationUtil:
         # the old flat-field behavior for values that never passed through the
         # load funnel.
         normalize_paths(project.model_settings)
-        return project.model_settings.to_dict()
+        return REGISTRY.serialize(project.model_settings)
 
     @staticmethod
     def to_snapshot_dict(project: Project) -> dict:

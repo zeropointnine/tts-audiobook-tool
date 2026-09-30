@@ -22,7 +22,6 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import DeviceType, Hint
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts_models.chatterbox_api_detect import ChatterboxApiDetect
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 # This pulls in some dependencies we would ideally first like to test for the existence of,
 # but can't be helped
@@ -137,7 +136,7 @@ class Start:
         """ Inits TTS else prompt to continue anyway.
 
         Also fixes the process-level backend mode (probed from the
-        SGL-Omni sentinel package) before any further checks run.
+        remote-client markers) before any further checks run.
         """
 
         tts_model_type, num_matches = Tts.init_local_model_type()
@@ -151,7 +150,7 @@ class Start:
         # launcher; torch.compile and dots.tts's reduce-overhead/fullgraph
         # optimizations remain enabled. This must run before importing torch or
         # dots_tts because TorchInductor reads the setting at import.
-        if tts_model_type == TtsModelType.DOTS and sys.platform == "win32":
+        if tts_model_type.id == "dots_local" and sys.platform == "win32":
             if "torch" in sys.modules:
                 raise RuntimeError(
                     "Cannot configure the dots.tts Windows CUDA compile workaround "
@@ -170,7 +169,7 @@ class Start:
         # var workaround above has run.
         if (
             not is_server
-            and not Tts.is_sgl_mode()
+            and not Tts.is_remote_mode()
             and tts_model_type.value.local_torch_devices
             and set(tts_model_type.value.local_torch_devices) == {DeviceType.CUDA}
         ):
@@ -186,10 +185,7 @@ class Start:
                 printt(f"{COL_ERROR}torch.cuda.is_available() returned False. Exiting.")
                 exit(1)
 
-        if tts_model_type != TtsModelType.NONE:
-            return
-
-        if num_matches > 1: # Rly shouldn't happen
+        if num_matches > 1:
             error = "\nMore than one of the supported TTS models' core libraries is currently installed.\n"
             error += "This is not recommended. Please re-install your virtual environment, \n"
             error += "following the instructions in the project's README."
@@ -199,7 +195,7 @@ class Start:
     def exit_on_wrong_torch_flavor_windows(self) -> None:
         if not _is_cpu_only_torch_on_windows_nvidia_system():
             return
-        if Tts.is_sgl_mode():
+        if Tts.is_remote_mode():
             # SGL-Omni backend: local torch is not used at all
             return
 
@@ -222,7 +218,7 @@ class Start:
             exit(1)
 
     def exit_on_missing_ffmpeg_libs(self) -> None:
-        if Tts.get_type().value.requires_ffmpeg_libs:
+        if Tts.get_local_model_type().value.requires_ffmpeg_libs:
             from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
             if not FfmpegUtil.are_ffmpeg_libraries_available():
                 FfmpegUtil.attempt_add_ffmpeg_dll_windows()
@@ -233,7 +229,7 @@ class Start:
 
     def exit_on_incompatible_chatterbox_package(self) -> None:
         if (
-            Tts.get_type() == TtsModelType.CHATTERBOX
+            Tts.get_local_model_type().id == "chatterbox_local"
             and not ChatterboxApiDetect.has_required_v3_features()
         ):
             hints.print_hint(HINT_CHATTERBOX_PACKAGE_UPDATE)
@@ -283,11 +279,11 @@ class Start:
             new_packages.append("win32api") # ie, pywin32
 
         # chatterbox
-        if Tts.get_type() == TtsModelType.CHATTERBOX:
+        if Tts.get_local_model_type().id == "chatterbox_local":
             new_packages.append("chatterbox.tts_turbo")
 
         # vibevoice
-        if Tts.get_type() in [TtsModelType.VIBEVOICE]:
+        if Tts.get_local_model_type().id == "vibevoice_local":
             new_packages.append("peft")
 
         return new_packages
@@ -296,7 +292,7 @@ class Start:
         app_support.init_logging()
         printt()
         if DEV:
-            printt(f"{Ansi.CLEAR_SCREEN_AND_SCROLLBACK}### DEV ###")
+            printt(f"### DEV ###")
 
     def start_app_or_server(self) -> None:
         # Start

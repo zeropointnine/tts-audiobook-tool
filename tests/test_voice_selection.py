@@ -19,8 +19,8 @@ def make_phrase_group(voice_index: int = -1) -> PhraseGroup:
 @pytest.fixture(autouse=True)
 def initialized_tts_type():
     had_type = hasattr(Tts, "_type")
-    previous_type = getattr(Tts, "_type", TtsModelType.MIRA)
-    Tts._type = TtsModelType.MIRA
+    previous_type = getattr(Tts, "_type", TtsModelType.require_by_id("mira_local"))
+    Tts._type = TtsModelType.require_by_id("mira_local")
     try:
         yield
     finally:
@@ -79,7 +79,7 @@ def run_generation(
         next_rotation_index: int = 7,
         voice_selection_index: int | None = None,
 ) -> tuple[int, str, int]:
-    project = Project()
+    project = Project(tts_model_type="mira_local")
     project.voice_select_mode = voice_select_mode
     set_setting(project, "mira_voice_file_name", voices)
     captured_index = -1
@@ -89,7 +89,7 @@ def run_generation(
         captured_index = kwargs["voice_selection_index"]
         return "test stop"
 
-    with patch("tts_audiobook_tool.generate_util.Tts.get_type", return_value=TtsModelType.MIRA), \
+    with patch("tts_audiobook_tool.generate_util.Tts.get_active_type", return_value=TtsModelType.require_by_id("mira_local")), \
             patch("tts_audiobook_tool.generate_util.Tts.get_instance_if_exists", return_value=None), \
             patch("tts_audiobook_tool.generate_util.Tts.get_next_voice_selection_index", return_value=next_rotation_index) as get_next, \
             patch("tts_audiobook_tool.generate_util.Tts.get_voice_tag_for_selection_index", side_effect=lambda _, index: f"voice-{index}") as get_tag, \

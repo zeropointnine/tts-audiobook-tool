@@ -122,7 +122,7 @@ class SoundSegmentUtil:
         idx = str(index + 1).zfill(5)
         model = tts_model_type.file_tag
         
-        voice = voice_tag or Tts.get_model_support().get_voice_tag(project)
+        voice = voice_tag or Tts.get_model_support_for_type(TtsModelType.require_by_id(tts_model_type.id)).get_voice_tag(project)
         
         text = " " + app_text.sanitize_for_filename(phrase_group.presentable_text[:50])
         

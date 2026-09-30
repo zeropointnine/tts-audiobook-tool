@@ -12,6 +12,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -97,24 +98,25 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
     ) -> list[Sound] | str:
 
         voice_file_name, ref_text = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.OMNIVOICE, voice_selection_index
+            project, TtsModelType.require_by_id("omnivoice_local"), voice_selection_index
         )
         voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
-        instruct = project.get_model_setting('omnivoice', 'instruct')
-        cfg      = project.get_model_setting('omnivoice', 'cfg') if project.get_model_setting('omnivoice', 'cfg') != -1 else self.CFG_DEFAULT
-        speed    = project.get_model_setting('omnivoice', 'speed') if project.get_model_setting('omnivoice', 'speed') != -1 else self.DEFAULT_SPEED
-        steps    = project.get_model_setting('omnivoice', 'num_step') if project.get_model_setting('omnivoice', 'num_step') != -1 else self.DEFAULT_STEPS
-        seed     = -1 if force_random_seed else project.get_model_setting('omnivoice', 'seed')
+        instruct = project.get_model_setting('omnivoice_local', 'instruct')
+        cfg      = project.get_model_setting('omnivoice_local', 'cfg') if project.get_model_setting('omnivoice_local', 'cfg') != -1 else self.CFG_DEFAULT
+        speed    = project.get_model_setting('omnivoice_local', 'speed') if project.get_model_setting('omnivoice_local', 'speed') != -1 else self.DEFAULT_SPEED
+        steps    = project.get_model_setting('omnivoice_local', 'num_step') if project.get_model_setting('omnivoice_local', 'num_step') != -1 else self.DEFAULT_STEPS
+        seed     = -1 if force_random_seed else project.get_model_setting('omnivoice_local', 'seed')
 
         has_voice    = bool(voice_path and os.path.isfile(voice_path))
         has_instruct = bool(instruct)
 
         # Common to all generation modes
         if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
         generation_config = OmniVoiceGenerationConfig(
             num_step=steps,
             guidance_scale=cfg,
@@ -124,6 +126,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         if has_voice:
             return self._generate_voice_clone(
                 prompts=prompts,
+                language=project.language_code,
                 voice_path=voice_path,
                 ref_text=ref_text,
                 instruct=instruct,
@@ -135,6 +138,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         elif has_instruct:
             return self._generate_voice_design(
                 prompts=prompts,
+                language=project.language_code,
                 instruct=instruct,
                 speed=speed,
                 seed=seed,
@@ -144,6 +148,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         else:
             return self._generate_auto_voice(
                 prompts=prompts,
+                language=project.language_code,
                 speed=speed,
                 seed=seed,
                 generation_config=generation_config,
@@ -179,6 +184,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             speed: float,
             seed: int,
             generation_config: OmniVoiceGenerationConfig,
+            language: str,
             print_params: bool = False,
     ) -> list[Sound] | str:
 
@@ -208,6 +214,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             try:
                 kw: dict = dict(
                     text=prompt,
+                    language=language,
                     voice_clone_prompt=voice_clone_prompt,
                     speed=speed,
                     generation_config=generation_config,
@@ -233,6 +240,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             speed: float,
             seed: int,
             generation_config: OmniVoiceGenerationConfig,
+            language: str,
             print_params: bool = False,
     ) -> list[Sound] | str:
 
@@ -248,6 +256,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             try:
                 audio_arrays: list[np.ndarray] = self._model.generate(
                     text=prompt,
+                    language=language,
                     instruct=instruct,
                     speed=speed,
                     generation_config=generation_config,
@@ -268,6 +277,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             speed: float,
             seed: int,
             generation_config: OmniVoiceGenerationConfig,
+            language: str,
             print_params: bool = False,
     ) -> list[Sound] | str:
 
@@ -283,6 +293,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             try:
                 audio_arrays: list[np.ndarray] = self._model.generate(
                     text=prompt,
+                    language=language,
                     speed=speed,
                     generation_config=generation_config,
                 )

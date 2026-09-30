@@ -16,6 +16,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.util import make_error_string, printt
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -153,6 +154,7 @@ class GlmModel(GlmBaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
@@ -160,14 +162,14 @@ class GlmModel(GlmBaseModel):
         prompt = prompts[0]
 
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.GLM, voice_selection_index
+            project, TtsModelType.require_by_id("glm_local"), voice_selection_index
         )
         voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
         if not voice_path:
             return "Voice clone path is required"
-        seed = -1 if force_random_seed else project.get_model_setting('glm', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('glm_local', 'seed')
         if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
 
         result = self.generate(
             prompt_text=voice_transcript,

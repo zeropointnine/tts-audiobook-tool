@@ -55,7 +55,7 @@ class SectionMarkersMenu:
         def make_subheading(state: State) -> str:
             if not is_limited:
                 return SUBLABEL
-            return make_output_files_subheading(state) + LIMITED_SUBLABEL
+            return "\n".join(part for part in (make_output_files_subheading(state), LIMITED_SUBLABEL) if part)
 
         label = app_text.get_section_marker_label(state.project)
         MenuUtil.menu(
@@ -130,10 +130,8 @@ SUBLABEL = \
 """Section markers are line numbers which define where new sections begin. 
 Depending on the selected mode, this is used to either split the audiobook 
 into separate files or to add M4B chapters and web player bookmarks to a
-single audiobook file.
-"""
+single audiobook file."""
 
 LIMITED_SUBLABEL = \
 """File split points are line numbers that define where new audio 
-files will be created.
-"""
+files will be created."""

@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import pytest
 from typing import Any, cast
 
 import tts_audiobook_tool.menus.generate_menu as generate_menu_module
@@ -7,6 +8,7 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import COL_DEFAULT, COL_ERROR
 from tts_audiobook_tool.menus.generate_menu import GenerateMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.textual.content_textual_app import (
@@ -19,6 +21,12 @@ from tts_audiobook_tool.textual.generate_editor import QuickGenerationRequested
 from tts_audiobook_tool.textual.generation_app import GenerationModalResult
 from tts_audiobook_tool.model_worker_protocol import GenerationTerminalStatus
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+
+@pytest.fixture(autouse=True)
+def stub_binding(monkeypatch):
+    monkeypatch.setattr(Tts, "bind_project", lambda project, **kwargs: None)
 
 
 def capture_generate_menu(monkeypatch) -> tuple[State, list[MenuItem]]:
@@ -43,14 +51,63 @@ def capture_generate_menu(monkeypatch) -> tuple[State, list[MenuItem]]:
 
     monkeypatch.setattr(MenuUtil, "menu", capture_menu)
     monkeypatch.setattr(
-        Tts,
-        "get_type",
-        lambda: SimpleNamespace(can_batch=lambda: False),
+        project,
+        "get_tts_model_type",
+        lambda: TtsModelType.require_by_id("none"),
+        raising=False,
     )
 
     GenerateMenu.menu(state)
     items_maker = captured["items"]
     return state, items_maker(state)
+
+
+def _capture_menu_for_project(monkeypatch, project) -> tuple[State, list[MenuItem]]:
+    state = cast(State, SimpleNamespace(project=project))
+    captured: dict[str, Any] = {}
+
+    def capture_menu(
+        passed_state: State,
+        heading,
+        items,
+        **kwargs,
+    ) -> None:
+        captured["items"] = items
+
+    monkeypatch.setattr(MenuUtil, "menu", capture_menu)
+    monkeypatch.setattr(
+        generate_menu_module.readiness,
+        "get_generate_blocker_text",
+        lambda state, verbose: "",
+    )
+    GenerateMenu.menu(state)
+    return state, captured["items"](state)
+
+
+@pytest.mark.parametrize(
+    "model_type",
+    [TtsModelType.require_by_id("auk_sglomni"), TtsModelType.require_by_id("auk_flash_sglomni")],
+)
+def test_generate_menu_hides_concurrency_for_non_batchable_auk(monkeypatch, model_type) -> None:
+    state, items = _capture_menu_for_project(
+        monkeypatch, Project(tts_model_type=model_type.id)
+    )
+
+    rendered = [
+        strip_ansi_codes(item.label(state)) for item in items if callable(item.label)
+    ]
+    assert not any("Concurrent requests" in text for text in rendered)
+    assert not any("Batch size" in text for text in rendered)
+
+
+def test_generate_menu_keeps_concurrency_for_batchable_server(monkeypatch) -> None:
+    state, items = _capture_menu_for_project(
+        monkeypatch, Project(tts_model_type="higgs_v3_sglomni")
+    )
+    rendered = [
+        strip_ansi_codes(item.label(state)) for item in items if callable(item.label)
+    ]
+    assert any("Concurrent requests" in text for text in rendered)
 
 
 def test_generate_menu_replaces_legacy_generation_entries(monkeypatch):
@@ -334,9 +391,10 @@ def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
     )
     monkeypatch.setattr(generate_menu_module.MenuUtil, "print_screen_heading", lambda *_: None)
     monkeypatch.setattr(
-        generate_menu_module.Tts,
-        "get_type",
-        lambda: SimpleNamespace(can_batch=lambda: False),
+        project,
+        "get_tts_model_type",
+        lambda: TtsModelType.require_by_id("none"),
+        raising=False,
     )
     monkeypatch.setattr(
         generate_menu_module.ProjectVoiceUtil,
@@ -472,9 +530,10 @@ def make_empty_queue_env(
         generate_menu_module.MenuUtil, "print_screen_heading", lambda *_: None
     )
     monkeypatch.setattr(
-        generate_menu_module.Tts,
-        "get_type",
-        lambda: SimpleNamespace(can_batch=lambda: False),
+        project,
+        "get_tts_model_type",
+        lambda: TtsModelType.require_by_id("none"),
+        raising=False,
     )
     monkeypatch.setattr(
         generate_menu_module.ProjectVoiceUtil,

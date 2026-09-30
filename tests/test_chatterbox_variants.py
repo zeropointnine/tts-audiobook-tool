@@ -20,7 +20,7 @@ def test_legacy_multilingual_project_id_remains_v2():
 
     assert ChatterboxType.MULTILINGUAL is ChatterboxType.MULTILINGUAL_V2
     assert get_setting(project, "chatterbox_type") == ChatterboxType.MULTILINGUAL_V2
-    parameters = ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]["models"]["chatterbox"]["parameters"]
+    parameters = ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]["models"]["chatterbox_local"]["parameters"]
     assert parameters["type"] == "multilingual"
 
 
@@ -30,7 +30,7 @@ def test_multilingual_v3_project_id_round_trips():
 
     assert get_setting(project, "chatterbox_type") == ChatterboxType.MULTILINGUAL_V3
     payload = ProjectSerializationUtil.to_project_json_dict(project)
-    parameters = payload["model_settings"]["models"]["chatterbox"]["parameters"]
+    parameters = payload["model_settings"]["models"]["chatterbox_local"]["parameters"]
     assert parameters["type"] == "multilingual-v3"
     assert get_setting(Project.model_validate(payload), "chatterbox_type") == ChatterboxType.MULTILINGUAL_V3
 
@@ -72,7 +72,7 @@ def test_multilingual_repetition_penalty_values_are_independent():
     assert get_setting(project, "chatterbox_turbo_repetition_penalty") == 1.4
 
     d = ProjectSerializationUtil.to_project_json_dict(project)
-    parameters = d["model_settings"]["models"]["chatterbox"]["parameters"]
+    parameters = d["model_settings"]["models"]["chatterbox_local"]["parameters"]
     assert parameters["ml_v2_repetition_penalty"] == 1.7
     assert parameters["ml_v3_repetition_penalty"] == 1.3
     assert parameters["turbo_repetition_penalty"] == 1.4
@@ -89,10 +89,10 @@ def test_legacy_shared_repetition_penalty_key_maps_to_v2_only():
     assert get_setting(project, "chatterbox_ml_v2_repetition_penalty") == 1.7
     assert get_setting(project, "chatterbox_ml_v3_repetition_penalty") == -1.0
 
-    parameters = ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]["models"]["chatterbox"]["parameters"]
+    parameters = ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]["models"]["chatterbox_local"]["parameters"]
     assert parameters["ml_v2_repetition_penalty"] == 1.7
-    # The untouched v3 field equals its declared default, so it is not stored.
-    assert "ml_v3_repetition_penalty" not in parameters
+    # The untouched v3 field documents that it follows the current default.
+    assert parameters["ml_v3_repetition_penalty"] is None
     assert "ml_repetition_penalty" not in parameters
 
 

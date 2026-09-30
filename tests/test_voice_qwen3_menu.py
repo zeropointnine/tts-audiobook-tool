@@ -21,7 +21,7 @@ def test_model_selection_refreshes_qwen_menu_model_type(monkeypatch) -> None:
     state = cast(State, SimpleNamespace(project=project))
     initial_inspection = TtsInspected(
         operation_id="initial",
-        tts_type_id="qwen3tts",
+        tts_type_id="qwen3tts_local",
         metadata={
             "model_type": "custom_voice",
             "supported_speakers": ["Vivian"],
@@ -39,7 +39,7 @@ def test_model_selection_refreshes_qwen_menu_model_type(monkeypatch) -> None:
         set_setting(state.project, "qwen3_model_type", "base")
         updated_inspection = TtsInspected(
             operation_id="updated",
-            tts_type_id="qwen3tts",
+            tts_type_id="qwen3tts_local",
             metadata={"model_type": "base"},
         )
         if on_applied is not None:

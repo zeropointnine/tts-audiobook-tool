@@ -1,28 +1,52 @@
+import pytest
+
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
+from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot, RemoteTtsIssue
 from tts_audiobook_tool.constants_hints import (
     HINT_CHATTERBOX_MULTILINGUAL_V3,
     HINT_SGL_OMNI_URL,
 )
-from tts_audiobook_tool.menus.main_menu import MainMenu, get_heading_tts_text
+from tts_audiobook_tool.menus.main_menu import MainMenu, get_heading_tts_text, make_project_label
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from project_settings_test_support import set_setting
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.util import COL_ERROR
 
 
-def make_state() -> State:
+def make_state(model: TtsModelType = TtsModelType.require_by_id("none")) -> State:
     state = object.__new__(State)
     state._prefs = Prefs()
-    state._project = Project(dir_path="")
+    state._project = Project(dir_path="", tts_model_type=model.id)
     state.has_shown_main_menu = False
-    state.pending_model_mismatch_name = ""
     return state
+
+
+@pytest.mark.parametrize("dir_path", ["", "/example/book"])
+@pytest.mark.parametrize("available_count", [0, 1, 2, 3])
+def test_project_label_requires_selection_only_with_multiple_types(monkeypatch, dir_path, available_count):
+    state = make_state()
+    state.project.dir_path = dir_path
+    models = [TtsModelType.require_by_id("chatterbox_audiocpp"), TtsModelType.require_by_id("higgs_v3_audiocpp"),
+              TtsModelType.require_by_id("echo_tts_audiocpp")]
+    monkeypatch.setattr(Tts, "get_available_tts_models", lambda: models[:available_count])
+
+    expected = "Project"
+    if available_count >= 2:
+        expected += f" {COL_ERROR}(requires: TTS model selection)"
+    assert make_project_label(state) == expected
+
+
+def test_project_label_with_selected_model_does_not_check_availability(monkeypatch):
+    state = make_state(TtsModelType.require_by_id("chatterbox_audiocpp"))
+    monkeypatch.setattr(Tts, "get_available_tts_models",
+                        lambda: pytest.fail("A selected model needs no selection suffix"))
+
+    assert make_project_label(state) == "Project"
 
 
 def _capture_and_invoke_on_shown(monkeypatch, state) -> dict:
@@ -43,7 +67,7 @@ def _capture_and_invoke_on_shown(monkeypatch, state) -> dict:
 def test_main_menu_on_shown_marks_main_menu_shown(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._backend_mode = TtsBackendKind.LOCAL
+        Tts._backend_mode = TtsRuntimeMode.LOCAL
         state = make_state()
         marks = []
         state.mark_main_menu_shown = lambda: marks.append(True)  # type: ignore[method-assign]
@@ -59,9 +83,9 @@ def test_main_menu_on_shown_shows_v3_hint_for_chatterbox_v2(monkeypatch):
     hint_calls = []
     state = None
     try:
-        Tts._type = TtsModelType.CHATTERBOX
-        Tts._backend_mode = TtsBackendKind.LOCAL
-        state = make_state()
+        Tts._type = TtsModelType.require_by_id("chatterbox_local")
+        Tts._backend_mode = TtsRuntimeMode.LOCAL
+        state = make_state(TtsModelType.require_by_id("chatterbox_local"))
         set_setting(state.project, "chatterbox_type", ChatterboxType.MULTILINGUAL_V2)
         state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
         monkeypatch.setattr(
@@ -80,9 +104,9 @@ def test_main_menu_on_shown_skips_v3_hint_for_chatterbox_v3(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     hint_calls = []
     try:
-        Tts._type = TtsModelType.CHATTERBOX
-        Tts._backend_mode = TtsBackendKind.LOCAL
-        state = make_state()
+        Tts._type = TtsModelType.require_by_id("chatterbox_local")
+        Tts._backend_mode = TtsRuntimeMode.LOCAL
+        state = make_state(TtsModelType.require_by_id("chatterbox_local"))
         set_setting(state.project, "chatterbox_type", ChatterboxType.MULTILINGUAL_V3)
         state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
         monkeypatch.setattr(
@@ -102,8 +126,8 @@ def test_main_menu_on_shown_shows_sgl_omni_url_hint_when_offline_and_unset(monke
     hint_calls = []
     state = None
     try:
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
-        SglOmniUtil._model_id = ""
+        Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
+        Tts._selected_server_model_id = ""
         state = make_state()  # Prefs() leaves sgl_omni_url unset (empty)
         state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
         monkeypatch.setattr(
@@ -121,10 +145,10 @@ def test_main_menu_on_shown_does_not_show_sgl_omni_url_hint_when_url_set(monkeyp
     saved = preserve_tts_and_sgl_state()
     hint_calls = []
     try:
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
-        SglOmniUtil._model_id = ""
+        Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
+        Tts._selected_server_model_id = ""
         state = make_state()
-        state._prefs = Prefs(sgl_omni_url="http://example.test:9009")
+        state._prefs = Prefs(remote_tts_url="http://example.test:9009")
         state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
         monkeypatch.setattr(
             hints, "show_hint_if_necessary",
@@ -141,9 +165,10 @@ def test_main_menu_on_shown_does_not_show_sgl_omni_url_hint_when_online(monkeypa
     saved = preserve_tts_and_sgl_state()
     hint_calls = []
     try:
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
-        SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
+        Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
+        Tts._selected_server_model_id = "bosonai/higgs-audio-v3"
         state = make_state()
+        state._prefs = Prefs(remote_tts_url="http://example.test")
         state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
         monkeypatch.setattr(
             hints, "show_hint_if_necessary",
@@ -160,8 +185,8 @@ def test_main_menu_on_shown_does_not_show_sgl_omni_url_hint_in_local_mode(monkey
     saved = preserve_tts_and_sgl_state()
     hint_calls = []
     try:
-        Tts._backend_mode = TtsBackendKind.LOCAL
-        SglOmniUtil._model_id = ""
+        Tts._backend_mode = TtsRuntimeMode.LOCAL
+        Tts._selected_server_model_id = ""
         state = make_state()
         state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
         monkeypatch.setattr(
@@ -179,8 +204,8 @@ def test_main_menu_on_shown_does_not_show_sgl_omni_url_hint_after_first_display(
     saved = preserve_tts_and_sgl_state()
     hint_calls = []
     try:
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
-        SglOmniUtil._model_id = ""
+        Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
+        Tts._selected_server_model_id = ""
         state = make_state()
         state.has_shown_main_menu = True
         state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
@@ -200,9 +225,8 @@ def preserve_tts_and_sgl_state():
         "had_tts_type": hasattr(Tts, "_type"),
         "tts_type": getattr(Tts, "_type", None),
         "backend_mode": getattr(Tts, "_backend_mode", None),
-        "sgl_omni_type": Tts._sgl_omni_type,
-        "base_url": SglOmniUtil._base_url,
-        "model_id": SglOmniUtil._model_id,
+        "selected_server_model_id": Tts._selected_server_model_id,
+        "remote_issue": Tts._remote_issue,
         "configured_definitions": Tts._configured_definitions,
     }
 
@@ -212,9 +236,8 @@ def restore_tts_and_sgl_state(saved) -> None:
     else:
         delattr(Tts, "_type")
     Tts._backend_mode = saved["backend_mode"]
-    Tts._sgl_omni_type = saved["sgl_omni_type"]
-    SglOmniUtil._base_url = saved["base_url"]
-    SglOmniUtil._model_id = saved["model_id"]
+    Tts._selected_server_model_id = saved["selected_server_model_id"]
+    Tts._remote_issue = saved["remote_issue"]
     Tts._configured_definitions = saved["configured_definitions"]
 
 
@@ -227,15 +250,16 @@ def install_configured_definitions() -> None:
 def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelType.HIGGS_V3_SERVER
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
+        Tts._type = TtsModelType.require_by_id("higgs_v3_sglomni")
+        Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
         install_configured_definitions()
-        SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
-        monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
+        Tts._selected_server_model_id = "bosonai/higgs-audio-v3"
+        monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+            backend_kind=TtsBackendKind.SGL_OMNI))
 
-        result = get_heading_tts_text(make_state())
+        result = get_heading_tts_text(make_state(TtsModelType.require_by_id("higgs_v3_sglomni")))
 
-        assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 server model id: bosonai/higgs-audio-v3"
+        assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 SGL-Omni server model id: bosonai/higgs-audio-v3"
     finally:
         restore_tts_and_sgl_state(saved)
 
@@ -243,15 +267,18 @@ def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
 def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelType.HIGGS_V3_SERVER
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
+        Tts._type = TtsModelType.require_by_id("higgs_v3_sglomni")
+        Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
         install_configured_definitions()
-        SglOmniUtil._model_id = ""
-        monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
+        Tts._selected_server_model_id = ""
+        Tts._remote_issue = ""
+        monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+            backend_kind=TtsBackendKind.SGL_OMNI,
+            issue=RemoteTtsIssue("unavailable", "Remote server unavailable")))
 
-        result = get_heading_tts_text(make_state())
+        result = get_heading_tts_text(make_state(TtsModelType.require_by_id("higgs_v3_sglomni")))
 
-        assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 SGL-Omni offline"
+        assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 SGL-Omni: Remote server unavailable"
         assert COL_ERROR in result
     finally:
         restore_tts_and_sgl_state(saved)
@@ -260,37 +287,33 @@ def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(mon
 def test_tts_model_heading_detail_keeps_local_model_unchanged():
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelType.CHATTERBOX
-        Tts._backend_mode = TtsBackendKind.LOCAL
-        SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
-        state = make_state()
+        Tts._type = TtsModelType.require_by_id("chatterbox_local")
+        Tts._backend_mode = TtsRuntimeMode.LOCAL
+        Tts._selected_server_model_id = "bosonai/higgs-audio-v3"
+        state = make_state(TtsModelType.require_by_id("chatterbox_local"))
 
         result = get_heading_tts_text(state)
 
-        assert result == Tts.get_class().get_menu_text(state.project, Tts.get_instance_if_exists())
+        assert result == Tts.get_model_support(state.project).get_menu_text(state.project, None)
         assert "bosonai/higgs-audio-v3" not in text_util.strip_ansi_codes(result)
     finally:
         restore_tts_and_sgl_state(saved)
 
 
-def test_tts_model_heading_detail_refreshes_stale_sgl_omni_model_id(monkeypatch):
+def test_tts_model_heading_reads_cached_selection_without_polling(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelType.MOSS_DELAY_SERVER
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
+        Tts._type = TtsModelType.require_by_id("moss_delay_sglomni")
+        Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
         install_configured_definitions()
-        SglOmniUtil._model_id = "bosonai/higgs-audio-v3-tts-4b"
+        Tts._selected_server_model_id = "served/moss-delay"
+        monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+            backend_kind=TtsBackendKind.SGL_OMNI))
+        monkeypatch.setattr(RemoteTtsDiscovery, "refresh", lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("heading must not perform network discovery")))
 
-        def update_model_id():
-            SglOmniUtil._model_id = ""
+        result = get_heading_tts_text(make_state(TtsModelType.require_by_id("moss_delay_sglomni")))
 
-        monkeypatch.setattr(SglOmniUtil, "update_model_id", update_model_id)
-
-        result = get_heading_tts_text(make_state())
-
-        stripped = text_util.strip_ansi_codes(result)
-        assert stripped == "MOSS-TTS Delay SGL-Omni offline"
-        assert "bosonai/higgs-audio-v3-tts-4b" not in stripped
-        assert COL_ERROR in result
+        assert text_util.strip_ansi_codes(result) == "MOSS-TTS Delay SGL-Omni server model id: served/moss-delay"
     finally:
         restore_tts_and_sgl_state(saved)

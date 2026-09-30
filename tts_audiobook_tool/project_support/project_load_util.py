@@ -154,6 +154,28 @@ class ProjectLoadUtil:
 
     @staticmethod
     def remap_legacy_keys(d: dict) -> None:
+        # The audio.cpp family includes dedicated English weights as well as
+        # multilingual checkpoints; its former ID misleadingly named only one route.
+        old_model_id = "chatterbox_multilingual_audiocpp"
+        new_model_id = "chatterbox_audiocpp"
+        if d.get("tts_model_type") == old_model_id:
+            d["tts_model_type"] = new_model_id
+        settings = d.get("model_settings")
+        models = settings.get("models") if isinstance(settings, dict) else None
+        if isinstance(models, dict) and old_model_id in models:
+            old_settings = models.pop(old_model_id)
+            current_settings = models.get(new_model_id)
+            if isinstance(old_settings, dict) and isinstance(current_settings, dict):
+                # Explicit settings under the new ID win, but retain old overrides
+                # in sections/parameters not yet supplied under the new ID.
+                for section, values in old_settings.items():
+                    if section not in current_settings:
+                        current_settings[section] = values
+                    elif isinstance(values, dict) and isinstance(current_settings[section], dict):
+                        current_settings[section] = {**values, **current_settings[section]}
+            else:
+                models.setdefault(new_model_id, old_settings)
+
         for old, new in [
             ('fish_voice_file_name', 'fish_s1_voice_file_name'),
             ('fish_voice_text', 'fish_s1_voice_text'),

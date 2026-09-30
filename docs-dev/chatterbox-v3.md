@@ -139,7 +139,7 @@ This intentionally establishes API compatibility rather than repository provenan
 
 ### Blocking behavior
 
-After TTS environment detection and the Python-version check, `Start.exit_on_incompatible_chatterbox_package()` runs before the generic new-package check. It only applies when `Tts.get_type() == TtsModelType.CHATTERBOX`.
+After TTS environment detection and the Python-version check, `Start.exit_on_incompatible_chatterbox_package()` runs before the generic new-package check. It only applies when `Tts.get_local_model_type().id == "chatterbox_local"`.
 
 When the required feature cluster is absent or cannot be inspected, startup prints `HINT_CHATTERBOX_PACKAGE_UPDATE` and exits with status 1. The remediation is to uninstall Chatterbox, then reinstall the requirements so pip cannot mistake the PyPI wheel for the Git build with the identical version:
 

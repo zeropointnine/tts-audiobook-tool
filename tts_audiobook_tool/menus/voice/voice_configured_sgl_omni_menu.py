@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.sgl_omni_configured import ConfiguredSettings
 from tts_audiobook_tool.tts_models.sgl_omni_definition import NumericParameter, SglOmniModelDefinition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.constants import VOICE_ADVANCED_SUPERLABEL
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.util import make_menu_label, print_feedback, printt
 
@@ -17,20 +17,23 @@ class VoiceConfiguredSglOmniMenu:
     @staticmethod
     def make_items(state: State, definition: SglOmniModelDefinition) -> list[MenuItem]:
         items: list[MenuItem] = []
-        model_type = TtsModelType.get_by_id(definition.spec.id)
+        groups: list[str] = []
+        model_type = TtsModelType.require_by_id(definition.spec.id)
         for control in definition.menu:
             if control.kind == "voice_samples":
-                items.extend(VoiceMenuShared.make_voice_sample_items(state, model_type))
+                voice_items = VoiceMenuShared.make_voice_sample_items(state, model_type)
+                items.extend(voice_items)
+                groups.extend([""] * len(voice_items))
                 continue
             if control.kind == "seed":
                 items.append(VoiceMenuShared.make_seed_item(
                     state, SettingRef(definition.spec.id, "seed"), add_batch_warning=True))
+                groups.append("")
                 continue
             parameter = definition.parameters[control.parameter]
-            item = VoiceConfiguredSglOmniMenu.make_parameter_item(state, parameter, control.label, definition.spec.id)
-            if control.group == "advanced":
-                item.superlabel = VOICE_ADVANCED_SUPERLABEL
-            items.append(item)
+            items.append(VoiceConfiguredSglOmniMenu.make_parameter_item(state, parameter, control.label, definition.spec.id))
+            groups.append(control.group)
+        VoiceMenuShared.apply_group_superlabels(items, groups)
         return items
 
     @staticmethod
@@ -51,7 +54,8 @@ class VoiceConfiguredSglOmniMenu:
                 effective = parameter.default
             ceiling = parameter.max_request_value if parameter.max_request_value is not None else parameter.max
             reset = f"; {parameter.default_sentinel} resets to default {parameter.default}" if parameter.default_sentinel is not None else ""
-            printt(f"Enter {label} (valid range: {parameter.min}-{ceiling}{reset}):")
+            suffix = f" {COL_DIM}{parameter.input_prompt_suffix}{COL_DEFAULT}" if parameter.input_prompt_suffix else ""
+            printt(f"Enter {label} (valid range: {parameter.min}-{ceiling}{reset}){suffix}:")
             response = ask.ask_input(prefill=str(effective))
             if not response or response == str(effective):
                 return
@@ -76,5 +80,5 @@ class VoiceConfiguredSglOmniMenu:
         return MenuItem(display, edit)
 
     @staticmethod
-    def menu(state: State, definition: SglOmniModelDefinition) -> None:
-        VoiceMenuShared.menu_wrapper(state, lambda current: VoiceConfiguredSglOmniMenu.make_items(current, definition))
+    def menu(state: State) -> None:
+        VoiceMenuShared.menu_wrapper(state, VoiceMenuShared.make_remote_items)

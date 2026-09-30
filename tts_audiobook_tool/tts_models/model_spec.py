@@ -13,13 +13,15 @@ class TtsBackendKind(Enum):
     virtual environment (one venv per model, see `.agents/venv-models.md`).
     SGL_OMNI: the variant is served over HTTP by an external SGL-Omni
     (SGLang) server.
+    AUDIO_CPP: the variant is served by a local audio.cpp server.
 
-    The `TtsModelType.NONE` placeholder is not a real model and has no
+    The catalog's `none` placeholder is not a real model and has no
     backend; its `TtsModelSpec.backend_kind` is `None`.
     """
 
     LOCAL = "local"
     SGL_OMNI = "sgl_omni"
+    AUDIO_CPP = "audio_cpp"
 
 
 class TtsModelSpec(NamedTuple):
@@ -32,8 +34,6 @@ class TtsModelSpec(NamedTuple):
     # The kind of backend that executes/serves this variant;
     # None on the NONE placeholder, which is not a real model and has no backend
     backend_kind: TtsBackendKind | None
-    # Substring to use for simple model matching against SGL-Omni model name (empty = not applicable)
-    sgl_omni_model_id_substring: str
     # Module name, or "dist:<package>" / "dist:<package>==<version>", to test for that implies the TTS model library exists in the current py env
     local_module_test: str
     # Supported torch device types for local inference
@@ -62,4 +62,6 @@ class TtsModelSpec(NamedTuple):
     # List of string replace pairs
     # Primarily used for punctuation marks that models might either disregard or trigger them in other ways
     substitutions: list[ tuple[str, str] ]
+    # Inclusive random seed limit; -1 means no model-specific cap
+    max_random_seed: int = -1
 

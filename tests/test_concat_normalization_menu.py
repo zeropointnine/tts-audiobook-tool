@@ -14,10 +14,7 @@ def test_normalization_menu_uses_profile_descriptions_and_saves_selection() -> N
 
     with patch.object(Project, "save") as save, patch(
         "tts_audiobook_tool.menus.concat_menu.MenuUtil.options_menu"
-    ) as options_menu, patch(
-        "tts_audiobook_tool.menus.concat_menu.Tts.get_type",
-        return_value=None,
-    ):
+    ) as options_menu:
         ConcatMenu.normalization_menu(state)
         kwargs = options_menu.call_args.kwargs
         kwargs["on_select"](NormalizationType.STRONGER)

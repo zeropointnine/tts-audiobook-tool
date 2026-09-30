@@ -60,7 +60,6 @@ def stub_voice_values(monkeypatch) -> None:
         "get_voice_values",
         lambda *_: [f"voice-{index + 1}" for index in range(9)],
     )
-    monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
 
 
 def test_rows_are_deferred_but_voice_header_data_is_loaded_synchronously() -> None:
@@ -375,7 +374,6 @@ def test_number_hotkey_assigns_voice_to_every_selected_line(monkeypatch) -> None
         "get_voice_values",
         lambda *_: ["voice-1", "voice-2"],
     )
-    monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
@@ -452,7 +450,6 @@ def test_reverting_staged_values_makes_editor_clean(monkeypatch) -> None:
         "get_voice_values",
         lambda *_: ["voice-1", "voice-2"],
     )
-    monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
@@ -475,7 +472,6 @@ def test_save_button_commits_staged_values_and_persists_once(monkeypatch) -> Non
         "get_voice_values",
         lambda *_: ["voice-1", "voice-2"],
     )
-    monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
     monkeypatch.setattr(
         voice_line_editor.ProjectTextIOUtil,
         "save_book",
@@ -513,7 +509,6 @@ def test_save_failure_rolls_back_project_and_records_error(monkeypatch) -> None:
         "get_voice_values",
         lambda *_: ["voice-1", "voice-2"],
     )
-    monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
     monkeypatch.setattr(
         voice_line_editor.ProjectTextIOUtil,
         "save_book",
@@ -540,7 +535,6 @@ def test_unexpected_save_exception_rolls_back_project_and_records_error(
         "get_voice_values",
         lambda *_: ["voice-1", "voice-2"],
     )
-    monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
 
     def fail_save(*_) -> str:
         raise RuntimeError("unexpected failure")

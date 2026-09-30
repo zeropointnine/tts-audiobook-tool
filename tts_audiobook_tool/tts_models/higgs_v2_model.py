@@ -29,6 +29,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -142,6 +143,7 @@ class HiggsV2Model(HiggsV2BaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
@@ -149,7 +151,7 @@ class HiggsV2Model(HiggsV2BaseModel):
         prompt = prompts[0]
 
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.HIGGS_V2, voice_selection_index
+            project, TtsModelType.require_by_id("higgs_v2_local"), voice_selection_index
         )
         if voice_file_name:
             voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
@@ -157,24 +159,24 @@ class HiggsV2Model(HiggsV2BaseModel):
             voice_path = ""
             voice_transcript = ""
 
-        if project.get_model_setting('higgs_v2', 'temperature') == -1:
+        if project.get_model_setting('higgs_v2_local', 'temperature') == -1:
             temperature = HiggsV2BaseModel.DEFAULT_TEMPERATURE
         else:
-            temperature = project.get_model_setting('higgs_v2', 'temperature')
+            temperature = project.get_model_setting('higgs_v2_local', 'temperature')
 
-        if project.get_model_setting('higgs_v2', 'top_k') == -1:
+        if project.get_model_setting('higgs_v2_local', 'top_k') == -1:
             top_k = HiggsV2BaseModel.DEFAULT_TOP_K
         else:
-            top_k = project.get_model_setting('higgs_v2', 'top_k')
+            top_k = project.get_model_setting('higgs_v2_local', 'top_k')
 
-        if project.get_model_setting('higgs_v2', 'top_p') == -1:
+        if project.get_model_setting('higgs_v2_local', 'top_p') == -1:
             top_p = HiggsV2BaseModel.DEFAULT_TOP_P
         else:
-            top_p = project.get_model_setting('higgs_v2', 'top_p')
+            top_p = project.get_model_setting('higgs_v2_local', 'top_p')
 
-        seed = -1 if force_random_seed else project.get_model_setting('higgs_v2', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('higgs_v2_local', 'seed')
         if seed == -1:
-            seed = random.randint(1, sys.maxsize)
+            seed = random.randint(1, get_random_seed_max(sys.maxsize, max_random_seed, min_seed=1))
 
         result = self.generate(
             p_voice_path=voice_path,

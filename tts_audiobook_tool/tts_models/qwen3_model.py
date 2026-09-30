@@ -11,6 +11,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.util import *
@@ -188,22 +189,23 @@ class Qwen3Model(Qwen3BaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
-            print_params: bool=False
+            print_params: bool=False,
+            max_random_seed: int = -1,
     ) -> list[Sound] | str:
 
         language = self.resolve_language_code_and_warning(project.language_code)[0]
-        seed = -1 if force_random_seed else project.get_model_setting('qwen3tts', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('qwen3tts_local', 'seed')
         if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
         app_support.set_seed(seed)
 
         # Sentinel resolution and library-kwarg mapping live here (the project
         # layer) so that the generate methods receive concrete values only.
         gen_kwargs = self._build_gen_kwargs(
-            temperature=project.get_model_setting('qwen3tts', 'temperature'),
-            top_k=project.get_model_setting('qwen3tts', 'top_k'),
-            top_p=project.get_model_setting('qwen3tts', 'top_p'),
-            repetition_penalty=project.get_model_setting('qwen3tts', 'repetition_penalty'),
+            temperature=project.get_model_setting('qwen3tts_local', 'temperature'),
+            top_k=project.get_model_setting('qwen3tts_local', 'top_k'),
+            top_p=project.get_model_setting('qwen3tts_local', 'top_p'),
+            repetition_penalty=project.get_model_setting('qwen3tts_local', 'repetition_penalty'),
             seed=seed
         )
 
@@ -212,7 +214,7 @@ class Qwen3Model(Qwen3BaseModel):
             case "base":
 
                 voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-                    project, TtsModelType.QWEN3TTS, voice_selection_index
+                    project, TtsModelType.require_by_id("qwen3tts_local"), voice_selection_index
                 )
                 can = voice_file_name and voice_transcript
                 if can:
@@ -225,7 +227,7 @@ class Qwen3Model(Qwen3BaseModel):
                         voice_info=voice_info,
                         language=language,
                         gen_kwargs=gen_kwargs,
-                        rolling_continuation_max_segments=project.get_model_setting('qwen3tts', 'rolling_cont'),
+                        rolling_continuation_max_segments=project.get_model_setting('qwen3tts_local', 'rolling_cont'),
                         print_params=print_params,
                     )
                 else:
@@ -234,7 +236,7 @@ class Qwen3Model(Qwen3BaseModel):
             case "custom_voice":
 
                 speakers = self.supported_speakers
-                speaker_id = project.get_model_setting('qwen3tts', 'speaker_id')
+                speaker_id = project.get_model_setting('qwen3tts_local', 'speaker_id')
                 if len(speakers) == 1:
                     if not speaker_id and speaker_id != speakers[0]:
                         ... # print warning maybe
@@ -245,7 +247,7 @@ class Qwen3Model(Qwen3BaseModel):
                     result = self.generate_custom_voice(
                         prompts=prompts,
                         speaker_id=speaker_id,
-                        instruct=project.get_model_setting('qwen3tts', 'instructions'),
+                        instruct=project.get_model_setting('qwen3tts_local', 'instructions'),
                         language=language,
                         gen_kwargs=gen_kwargs,
                     )
@@ -254,7 +256,7 @@ class Qwen3Model(Qwen3BaseModel):
 
                 result = self.generate_voice_design(
                     prompts=prompts,
-                    instruct=project.get_model_setting('qwen3tts', 'instructions'),
+                    instruct=project.get_model_setting('qwen3tts_local', 'instructions'),
                     language=language,
                     gen_kwargs=gen_kwargs,
                 )

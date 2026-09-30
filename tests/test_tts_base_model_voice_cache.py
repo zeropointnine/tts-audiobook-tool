@@ -7,7 +7,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 class FakeTtsModel(TtsBaseModel):
-    INFO = TtsModelType.NONE.value
+    INFO = TtsModelType.require_by_id("none").value
 
     def kill(self) -> None:
         self.clear_voice_clone_cache()

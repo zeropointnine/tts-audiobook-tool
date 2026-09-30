@@ -8,9 +8,7 @@ import soundfile
 
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types import ReadinessIssue, Sound, StreamChunkCallback, StreamEndCallback
-from tts_audiobook_tool.constants import COL_DIM_ITALICS, SGL_OMNI_URL_DEFAULT
-from tts_audiobook_tool.text_util import make_terminal_hyperlink
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.constants import APP_SAMPLE_RATE, SGL_OMNI_URL_DEFAULT
 from tts_audiobook_tool.util import *
 
 
@@ -22,6 +20,21 @@ class SglOmniUtil:
 
     _base_url: str = ""
     _model_id: str = ""
+
+    @staticmethod
+    def fallback_sample_rate(explicit: int | None = None) -> int:
+        """Resolve a sample rate the server did not report.
+
+        Prefers the caller's declared rate, then the active model's configured
+        default, then the app's native rate. Never assumes another model's rate.
+        """
+        if explicit:
+            return explicit
+        try:
+            from tts_audiobook_tool.tts import Tts
+            return Tts.get_active_type().value.default_output_sample_rate or APP_SAMPLE_RATE
+        except Exception:
+            return APP_SAMPLE_RATE
 
     @staticmethod
     def get_base_url() -> str:
@@ -139,9 +152,7 @@ class SglOmniUtil:
         url = base_url + SPEECH_PATH
 
         if print:
-            s = f"{COL_DIM_ITALICS}Sending generation request to {make_terminal_hyperlink(url)}...{Ansi.RESET}\n"
-            s += COL_DIM + pretty_json_string(payload)
-            printt(s)
+            print_generation_request(url, payload)
 
         try:
             with httpx.Client(timeout=GENERATE_TIMEOUT) as client:
@@ -212,9 +223,7 @@ class SglOmniUtil:
         payload = {**payload, "stream": True}
 
         if should_print:
-            s = f"{COL_DIM_ITALICS}Sending streaming generation request to {make_terminal_hyperlink(url)}...{Ansi.RESET}\n"
-            s += COL_DIM + pretty_json_string(payload)
-            printt(s)
+            print_generation_request(url, payload, is_streaming=True)
 
         chunks: list[np.ndarray] = []
         sample_rate = 0
@@ -265,7 +274,7 @@ class SglOmniUtil:
 
             return Sound(
                 np.concatenate(chunks),
-                sample_rate or fallback_sample_rate or TtsModelType.HIGGS_V3_SERVER.value.default_output_sample_rate,
+                sample_rate or SglOmniUtil.fallback_sample_rate(fallback_sample_rate),
             )
 
         except Exception as e:
@@ -281,7 +290,7 @@ class SglOmniUtil:
         sample_rate = SglOmniUtil.get_int_header(
             response,
             ["x-sample-rate", "x-audio-sample-rate", "x-stream-sample-rate", "sample-rate"],
-            fallback_sample_rate or TtsModelType.QWEN3TTS_SERVER.value.default_output_sample_rate,
+            SglOmniUtil.fallback_sample_rate(fallback_sample_rate),
         )
         channels = SglOmniUtil.get_int_header(
             response,
@@ -365,14 +374,10 @@ class SglOmniUtil:
 
         sr = int(sample_rate)
         if not sr:
-            from tts_audiobook_tool.tts import Tts
-            sr = fallback_sample_rate or Tts.get_type().value.default_output_sample_rate
+            sr = SglOmniUtil.fallback_sample_rate(fallback_sample_rate)
             L.i(f"Samplerate unknown, falling back to configured/default value {sr}")
 
-        return Sound(
-            data,
-            sr or fallback_sample_rate or TtsModelType.HIGGS_V3_SERVER.value.default_output_sample_rate,
-        )
+        return Sound(data, sr)
 
 # ---
 

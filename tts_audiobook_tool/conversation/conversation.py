@@ -37,7 +37,6 @@ from tts_audiobook_tool.model_worker import (
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 @dataclass(frozen=True)
@@ -110,7 +109,7 @@ class ConversationRuntime:
         """Whether generated assistant audio should be re-transcribed by STT."""
         if self.phrase_stt_enabled is not None:
             return self.phrase_stt_enabled
-        return self.is_microphone_input and Tts.get_type() is not TtsModelType.GLM
+        return self.is_microphone_input and self.project.get_tts_model_type().id != "glm_local"
 
     @property
     def input_level_db(self) -> float | None:
@@ -170,9 +169,9 @@ class ConversationRuntime:
             raise RuntimeError(reset_error)
         L.i(f"[chat] initialize: worker ready in {time.monotonic() - t0:.1f}s")
 
-        use_streaming = Tts.get_info().can_stream and self.project.streaming_chat
+        use_streaming = Tts.get_info(self.project).can_stream and self.project.streaming_chat
         sample_rate = (
-            Tts.get_model_support().get_output_sample_rate(self.project)
+            Tts.get_model_support(self.project).get_output_sample_rate(self.project)
             if use_streaming
             else APP_SAMPLE_RATE
         )

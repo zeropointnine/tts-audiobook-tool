@@ -51,13 +51,13 @@ class WorkerStatus(str, Enum):
 
 @dataclass(frozen=True)
 class GenerationSettings:
-    """Small, explicitly serializable preference snapshot for one generation."""
+    """Serializable live project selection and preference snapshot for a command."""
 
     stt_variant_id: str
     stt_config_id: str
     tts_force_cpu: bool
-    sgl_omni_type_id: str | None
-    sgl_omni_url: str
+    tts_model_type_id: str
+    remote_tts_url: str
     save_debug_files: bool
 
 

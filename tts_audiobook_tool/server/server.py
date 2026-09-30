@@ -31,7 +31,7 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
-from tts_audiobook_tool.readiness import format_issues
+from tts_audiobook_tool.readiness import format_issues, get_tts_blockers
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.server.audio_stream import AudioStream
 from tts_audiobook_tool.server.audio_stream_http import AudioStreamHttp
@@ -54,7 +54,7 @@ def get_blocking_issues_error(project: Project, instance: object | None) -> str:
     Returns user-facing error text if the TTS model has blocking issues that
     prevent inference, else empty string.
     """
-    issues = Tts.get_model_support().get_blocking_issues(project, instance)
+    issues = get_tts_blockers(project, instance)
     if not issues:
         return ""
     return "TTS model is not ready for inference:\n" + format_issues(issues, verbose=True)
@@ -67,7 +67,11 @@ class Server:
         # Load current project
         # (project_dir, if non-empty, is a --project CLI override validated at startup)
         prefs = Prefs.load()
-        SglOmniUtil.set_base_url(prefs.sgl_omni_url)
+        from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+        from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
+        RemoteTtsDiscovery.set_base_url(prefs.remote_tts_url)
+        SglOmniUtil.set_base_url(prefs.remote_tts_url)
+        AudioCppUtil.set_base_url(prefs.remote_tts_url)
         if not project_dir:
             project_dir = prefs.project_dir
         if not project_dir:
@@ -80,7 +84,7 @@ class Server:
             exit(0)
         self._project = result
 
-        Tts.set_model_params_using_project(self._project)
+        Tts.bind_project(self._project, refresh=True)
 
         s = f"{COL_ACCENT}Loaded tts-audiobook-tool's current active project's settings from:\n"
         s += f"{COL_ACCENT}{text_util.make_terminal_hyperlink(self._project.dir_path, is_file=True)}"
@@ -105,7 +109,7 @@ class Server:
 
         self._is_initializing = True
         self._local_audio_enabled = True
-        self._tts_streaming_enabled = Tts.get_info().can_stream
+        self._tts_streaming_enabled = Tts.get_info(self._project).can_stream
         self._tts_ready = threading.Event()
 
         self._worker_thread = threading.Thread(target=self._worker, daemon=True)
@@ -271,7 +275,7 @@ class Server:
     def status(self) -> dict:
         return {
             "status": "initializing" if self._is_initializing else "ready",
-            "tts_model": Tts.get_type().value.ui["proper_name"],
+            "tts_model": self._project.get_tts_model_type().value.ui["proper_name"],
             "inferencing": self._prompt_currently_inferencing,
             "playing": self._audio_stream.get_currently_playing(),
             "audio_buffer": self._audio_stream.get_seconds_left(),
@@ -279,7 +283,7 @@ class Server:
             "stream_clients": self._audio_http_stream.client_count(),
             "local_audio": self._local_audio_enabled,
             "tts_streaming": self._tts_streaming_enabled,
-            "tts_streaming_supported": Tts.get_info().can_stream,
+            "tts_streaming_supported": Tts.get_info(self._project).can_stream,
         }
 
     def local_audio(self, enabled: bool) -> dict:
@@ -288,7 +292,7 @@ class Server:
         return {"local_audio": self._local_audio_enabled}
 
     def tts_streaming(self, enabled: bool) -> dict:
-        supported = Tts.get_info().can_stream
+        supported = Tts.get_info(self._project).can_stream
         effective_enabled = enabled and supported
         self._tts_streaming_enabled = effective_enabled
 
@@ -311,7 +315,7 @@ class Server:
 
         # Used for convenience response output feedback
         prompt_texts = []
-        use_tts_streaming = self._tts_streaming_enabled and Tts.get_info().can_stream
+        use_tts_streaming = self._tts_streaming_enabled and Tts.get_info(self._project).can_stream
 
         if should_segment:
             phrase_groups = PhraseGrouper.text_to_groups(prompt, self._project.max_words, self._project.segmentation_strategy, self._project.language_code)
@@ -348,7 +352,7 @@ class Server:
         phrase_group: PhraseGroup,
         generation_id: int,
     ) -> bool:
-        sample_rate = Tts.get_model_support().get_output_sample_rate(self._project)
+        sample_rate = Tts.get_model_support(self._project).get_output_sample_rate(self._project)
         stream_started_at = time.monotonic()
         self.log_tts_inference_start(mode="streaming", text=prompt_text)
         first_audio_callback_registered = False
@@ -537,7 +541,7 @@ class Server:
             self._prompt_currently_inferencing = prompt_text
 
             try:
-                if prompt_item.use_tts_streaming and Tts.get_info().can_stream:
+                if prompt_item.use_tts_streaming and Tts.get_info(self._project).can_stream:
                     self.generate_streaming_output(prompt_text, phrase_group, generation_id)
                 else:
                     self.generate_non_streaming_output(prompt_text, phrase_group, generation_id)

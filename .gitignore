@@ -12,4 +12,5 @@ package-lock.json
 plans/
 .agents/
 
-config_oute_dev.py
+# Disposable diagnostic scripts
+*_probe.py

@@ -138,7 +138,7 @@ def test_create_response_uses_project_max_words(monkeypatch) -> None:
 
 @pytest.mark.parametrize(
     ("tts_type", "expected"),
-    [(TtsModelType.GLM, False), (TtsModelType.POCKET, True)],
+    [(TtsModelType.require_by_id("glm_local"), False), (TtsModelType.require_by_id("pocket_local"), True)],
 )
 def test_create_response_disables_redundant_output_stt_only_for_glm_mic_chat(
     monkeypatch, tts_type: TtsModelType, expected: bool
@@ -160,7 +160,7 @@ def test_create_response_disables_redundant_output_stt_only_for_glm_mic_chat(
     runtime.sound_stream = object()  # type: ignore[assignment]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(Tts, "get_type", staticmethod(lambda: tts_type))
+    project.tts_model_type = tts_type.id
     monkeypatch.setattr(
         conversation_module,
         "ResponseSession",
@@ -304,7 +304,7 @@ def _patch_tts_for_streaming(monkeypatch, sample_rate: int, generate_side_effect
     fake_tts_class = SimpleNamespace(
         get_output_sample_rate=lambda project, instance=None: sample_rate
     )
-    monkeypatch.setattr(Tts, "get_model_support", staticmethod(lambda: fake_tts_class))
+    monkeypatch.setattr(Tts, "get_model_support", staticmethod(lambda project: fake_tts_class))
     monkeypatch.setattr(ModelWorker, "synthesize_chat_blocking", fake_synthesize)
     return spies
 
@@ -313,7 +313,7 @@ def test_streaming_tts_reports_sample_rate_mismatch(monkeypatch) -> None:
     fake_tts_class = SimpleNamespace(
         get_output_sample_rate=lambda project, instance=None: 48000
     )
-    monkeypatch.setattr(Tts, "get_model_support", staticmethod(lambda: fake_tts_class))
+    monkeypatch.setattr(Tts, "get_model_support", staticmethod(lambda project: fake_tts_class))
     project = Project.model_validate({})
 
     stream_range, saved_sound, error = (

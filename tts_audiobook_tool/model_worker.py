@@ -331,40 +331,55 @@ def _get_or_load_chat_project(command: SynthesizeChatCommand) -> Any:
     return project
 
 
+def _make_generation_settings(state: Any) -> GenerationSettings:
+    """Snapshot live selection, including edits not yet saved to project.json."""
+    prefs = state.prefs
+    return GenerationSettings(
+        stt_variant_id=prefs.stt_variant.id,
+        stt_config_id=prefs.stt_config.id,
+        tts_force_cpu=prefs.tts_force_cpu,
+        tts_model_type_id=state.project.tts_model_type,
+        remote_tts_url=prefs.remote_tts_url,
+        save_debug_files=prefs.save_debug_files,
+    )
+
+
+def _make_worker_prefs(project_dir: str, settings: GenerationSettings) -> Any:
+    """Reconstruct connection/device preferences, never project model selection."""
+    from tts_audiobook_tool.app_types import SttConfig, SttVariant
+    from tts_audiobook_tool.prefs import Prefs
+
+    stt_variant = SttVariant.get_by_id(settings.stt_variant_id)
+    stt_config = SttConfig.from_id(settings.stt_config_id)
+    if stt_variant is None or stt_config is None:
+        raise ValueError("Generation settings contain an unsupported STT configuration")
+    return Prefs(
+        project_dir=project_dir,
+        stt_variant=stt_variant,
+        stt_config=stt_config,
+        tts_force_cpu=settings.tts_force_cpu,
+        remote_tts_url=settings.remote_tts_url,
+        save_debug_files=settings.save_debug_files,
+    )
+
+
 def _make_chat_worker_state(command: SynthesizeChatCommand) -> Any:
     """
     Like _make_worker_state, but reuses a cached Project across chat
     sentences while project.json on disk is unchanged.
     """
-    from tts_audiobook_tool.app_types import SttConfig, SttVariant
-    from tts_audiobook_tool.prefs import Prefs
     from tts_audiobook_tool.state import State
-    from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
-    stt_variant = SttVariant.get_by_id(command.settings.stt_variant_id)
-    stt_config = SttConfig.from_id(command.settings.stt_config_id)
-    if stt_variant is None or stt_config is None:
-        raise ValueError("Generation settings contain an unsupported STT configuration")
-    sgl_type = (
-        None
-        if command.settings.sgl_omni_type_id is None
-        else TtsModelType.get_by_id(command.settings.sgl_omni_type_id)
-    )
-    prefs = Prefs(
-        project_dir=command.project_dir,
-        stt_variant=stt_variant,
-        stt_config=stt_config,
-        tts_force_cpu=command.settings.tts_force_cpu,
-        sgl_omni_type=sgl_type,
-        sgl_omni_url=command.settings.sgl_omni_url,
-        save_debug_files=command.settings.save_debug_files,
-    )
+    prefs = _make_worker_prefs(command.project_dir, command.settings)
 
     state = State.for_worker(prefs)
     project = _get_or_load_chat_project(command)
     if isinstance(project, str):
         raise RuntimeError(project)
     try:
+        # The command is authoritative even when the cached/on-disk project
+        # has a different selection. Assignment binds this snapshot in memory.
+        project.tts_model_type = command.settings.tts_model_type_id
         state.project = project
     except BaseException:
         # Only kill when the project is not the retained cache value.
@@ -383,30 +398,19 @@ def _make_worker_state(
         | SynthesizeChatCommand
     ),
 ) -> Any:
-    from tts_audiobook_tool.app_types import SttConfig, SttVariant
-    from tts_audiobook_tool.prefs import Prefs
     from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
     from tts_audiobook_tool.state import State
-    from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
-    stt_variant = SttVariant.get_by_id(command.settings.stt_variant_id)
-    stt_config = SttConfig.from_id(command.settings.stt_config_id)
-    if stt_variant is None or stt_config is None:
-        raise ValueError("Generation settings contain an unsupported STT configuration")
-    sgl_type = (
-        None
-        if command.settings.sgl_omni_type_id is None
-        else TtsModelType.get_by_id(command.settings.sgl_omni_type_id)
-    )
-    prefs = Prefs(
-        project_dir=command.project_dir,
-        stt_variant=stt_variant,
-        stt_config=stt_config,
-        tts_force_cpu=command.settings.tts_force_cpu,
-        sgl_omni_type=sgl_type,
-        sgl_omni_url=command.settings.sgl_omni_url,
-        save_debug_files=command.settings.save_debug_files,
-    )
+    prefs = _make_worker_prefs(command.project_dir, command.settings)
+
+    # In remote mode, the long-lived worker's discovery observation can outlive
+    # a server change; force one probe per command before building the state.
+    # Local mode must ignore saved remote endpoints entirely.
+    from tts_audiobook_tool.tts import Tts
+    if Tts.is_remote_mode() and prefs.remote_tts_url:
+        from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+        RemoteTtsDiscovery.set_base_url(prefs.remote_tts_url)
+        RemoteTtsDiscovery.refresh(force=True)
 
     # The worker builds a process-local State without invoking the interactive
     # startup path (which loads a project from mutable global prefs). Property
@@ -420,6 +424,9 @@ def _make_worker_state(
     if isinstance(project, str):
         raise RuntimeError(project)
     try:
+        # The command is authoritative even when the cached/on-disk project
+        # has a different selection. Assignment binds this snapshot in memory.
+        project.tts_model_type = command.settings.tts_model_type_id
         state.project = project
     except BaseException:
         project.kill()
@@ -566,6 +573,8 @@ def _run_tts_preview_command(
     )
     from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
     from tts_audiobook_tool.tts import Tts
+    from tts_audiobook_tool.tts_models.audio_cpp_configured import AudioCppBackendAdapter
+    from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 
     state = None
     interrupts = Interrupts()
@@ -585,6 +594,17 @@ def _run_tts_preview_command(
         Tts.clear_continuation()
         Tts.reset_voice_selection_index()
         watch_inference = _should_watch_preview_inference()
+        # Preview deliberately skips full warm-up (STT/YAMNet), but should
+        # still explain a cold server model before the speech request.
+        if Tts.get_active_type().value.backend_kind is TtsBackendKind.AUDIO_CPP:
+            model = Tts.get_instance()
+            if isinstance(model, AudioCppBackendAdapter):
+                model.print_init_if_unloaded()
+            if interrupts.did_interrupt:
+                event_queue.put(TtsPreviewFinished(
+                    command.operation_id, GenerationTerminalStatus.CANCELLED,
+                ))
+                return
         timeout_scope = (
             backend_gen_timeout_scope() if watch_inference else nullcontext()
         )
@@ -802,7 +822,7 @@ def _model_worker_main(
         Tts.init_local_model_type()
         signature = Tts._config_fingerprint
         if expected_config_signature is not None and signature != expected_config_signature:
-            raise RuntimeError("SGL-Omni configuration differs between main and worker; restart the application")
+            raise RuntimeError("Remote TTS configuration differs between main and worker; restart the application")
         event_queue.put(WorkerReady(os.getpid(), signature))
     except Exception as exception:
         traceback.print_exc()
@@ -1086,7 +1106,7 @@ def _model_worker_main(
                 device = device_type.value if device_type is not None else ""
                 blocking_issues = tuple(
                     issue.verbose
-                    for issue in Tts.get_model_support().get_blocking_issues(
+                    for issue in Tts.get_model_support(state.project).get_blocking_issues(
                         state.project, instance
                     )
                 )
@@ -1111,7 +1131,7 @@ def _model_worker_main(
                 event_queue.put(
                     TtsInspected(
                         command.operation_id,
-                        Tts.get_type().value.id,
+                        Tts.get_active_type().value.id,
                         device,
                         blocking_issues,
                         warnings,
@@ -1164,7 +1184,7 @@ def _model_worker_main(
                         command.operation_id,
                         ModelStateSnapshot(
                             tts_loaded=tts_instance is not None,
-                            tts_type_id=Tts.get_type().value.id,
+                            tts_type_id=Tts.get_active_type().value.id,
                             tts_device=tts_device,
                             stt_loaded=Stt.has_instance(),
                             stt_variant_id=Stt.get_variant().id,
@@ -1394,16 +1414,7 @@ class ModelWorker:
             if cls._active_operation_id is not None:
                 raise RuntimeError("Model worker is already processing a command")
             operation_id = uuid.uuid4().hex
-            prefs = state.prefs
-            sgl_type = prefs.sgl_omni_type
-            settings = GenerationSettings(
-                stt_variant_id=prefs.stt_variant.id,
-                stt_config_id=prefs.stt_config.id,
-                tts_force_cpu=prefs.tts_force_cpu,
-                sgl_omni_type_id=(None if sgl_type is None else sgl_type.value.id),
-                sgl_omni_url=prefs.sgl_omni_url,
-                save_debug_files=prefs.save_debug_files,
-            )
+            settings = _make_generation_settings(state)
             command = GenerateCommand(
                 operation_id=operation_id,
                 project_dir=state.project.dir_path,
@@ -1436,16 +1447,7 @@ class ModelWorker:
             if cls._active_operation_id is not None:
                 raise RuntimeError("Model worker is already processing a command")
             operation_id = uuid.uuid4().hex
-            prefs = state.prefs
-            sgl_type = prefs.sgl_omni_type
-            settings = GenerationSettings(
-                stt_variant_id=prefs.stt_variant.id,
-                stt_config_id=prefs.stt_config.id,
-                tts_force_cpu=prefs.tts_force_cpu,
-                sgl_omni_type_id=(None if sgl_type is None else sgl_type.value.id),
-                sgl_omni_url=prefs.sgl_omni_url,
-                save_debug_files=prefs.save_debug_files,
-            )
+            settings = _make_generation_settings(state)
             command = TtsPreviewCommand(
                 operation_id=operation_id,
                 project_dir=state.project.dir_path,
@@ -1476,16 +1478,7 @@ class ModelWorker:
             if cls._active_operation_id is not None:
                 raise RuntimeError("Model worker is already processing a command")
             operation_id = uuid.uuid4().hex
-            prefs = state.prefs
-            sgl_type = prefs.sgl_omni_type
-            settings = GenerationSettings(
-                stt_variant_id=prefs.stt_variant.id,
-                stt_config_id=prefs.stt_config.id,
-                tts_force_cpu=prefs.tts_force_cpu,
-                sgl_omni_type_id=(None if sgl_type is None else sgl_type.value.id),
-                sgl_omni_url=prefs.sgl_omni_url,
-                save_debug_files=prefs.save_debug_files,
-            )
+            settings = _make_generation_settings(state)
             command = RealTimePlaybackCommand(
                 operation_id=operation_id,
                 project_dir=state.project.dir_path,
@@ -1678,16 +1671,7 @@ class ModelWorker:
         error = cls._start_with_console_handler(console_handler)
         if error:
             return None, error
-        prefs = state.prefs
-        sgl_type = prefs.sgl_omni_type
-        settings = GenerationSettings(
-            stt_variant_id=prefs.stt_variant.id,
-            stt_config_id=prefs.stt_config.id,
-            tts_force_cpu=prefs.tts_force_cpu,
-            sgl_omni_type_id=(None if sgl_type is None else sgl_type.value.id),
-            sgl_omni_url=prefs.sgl_omni_url,
-            save_debug_files=prefs.save_debug_files,
-        )
+        settings = _make_generation_settings(state)
         with cls._lock:
             if cls._active_operation_id is not None:
                 return None, "Model worker is busy"
@@ -1827,16 +1811,7 @@ class ModelWorker:
         error = cls._start_with_console_handler(console_handler)
         if error:
             return None, error
-        prefs = state.prefs
-        sgl_type = prefs.sgl_omni_type
-        settings = GenerationSettings(
-            stt_variant_id=prefs.stt_variant.id,
-            stt_config_id=prefs.stt_config.id,
-            tts_force_cpu=prefs.tts_force_cpu,
-            sgl_omni_type_id=(None if sgl_type is None else sgl_type.value.id),
-            sgl_omni_url=prefs.sgl_omni_url,
-            save_debug_files=prefs.save_debug_files,
-        )
+        settings = _make_generation_settings(state)
         with cls._lock:
             if cls._active_operation_id is not None:
                 return None, "Model worker is busy"

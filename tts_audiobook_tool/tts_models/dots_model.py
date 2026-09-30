@@ -14,6 +14,7 @@ from tts_audiobook_tool.app_types import (
     StreamEndCallback,
 )
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.tts_models.dots_base_model import (
     DotsBaseModel,
@@ -84,26 +85,27 @@ class DotsModel(DotsBaseModel):
         on_stream_end: StreamEndCallback | None = None,
         voice_selection_index: int = 0,
             print_params: bool = False,
+        max_random_seed: int = -1,
     ) -> list[Sound] | str:
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.DOTS, voice_selection_index
+            project, TtsModelType.require_by_id("dots_local"), voice_selection_index
         )
         voice_path = (
             ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else None
         )
-        seed = -1 if force_random_seed else project.get_model_setting('dots', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('dots_local', 'seed')
         if seed == -1:
-            seed = random.randrange(0, self.SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(self.SEED_MAX - 1, max_random_seed) + 1)
         speaker_scale = (
             self.SPEAKER_SCALE_DEFAULT
-            if project.get_model_setting('dots', 'speaker_scale') == -1
-            else project.get_model_setting('dots', 'speaker_scale')
+            if project.get_model_setting('dots_local', 'speaker_scale') == -1
+            else project.get_model_setting('dots_local', 'speaker_scale')
         )
         num_steps = self.resolve_num_steps(project)
         guidance_scale = (
             self.GUIDANCE_SCALE_DEFAULT
-            if project.get_model_setting('dots', 'guidance_scale') == -1
-            else project.get_model_setting('dots', 'guidance_scale')
+            if project.get_model_setting('dots_local', 'guidance_scale') == -1
+            else project.get_model_setting('dots_local', 'guidance_scale')
         )
         return self.generate(
             prompts=prompts,

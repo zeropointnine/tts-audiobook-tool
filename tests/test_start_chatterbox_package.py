@@ -7,7 +7,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 def test_startup_blocks_incompatible_chatterbox_package(monkeypatch):
     printed = []
-    monkeypatch.setattr(start_module.Tts, "get_type", lambda: TtsModelType.CHATTERBOX)
+    monkeypatch.setattr(start_module.Tts, "get_local_model_type", lambda: TtsModelType.require_by_id("chatterbox_local"))
     monkeypatch.setattr(
         start_module.ChatterboxApiDetect,
         "has_required_v3_features",
@@ -23,7 +23,7 @@ def test_startup_blocks_incompatible_chatterbox_package(monkeypatch):
 
 
 def test_startup_accepts_compatible_chatterbox_package(monkeypatch):
-    monkeypatch.setattr(start_module.Tts, "get_type", lambda: TtsModelType.CHATTERBOX)
+    monkeypatch.setattr(start_module.Tts, "get_local_model_type", lambda: TtsModelType.require_by_id("chatterbox_local"))
     monkeypatch.setattr(
         start_module.ChatterboxApiDetect,
         "has_required_v3_features",
@@ -39,7 +39,7 @@ def test_startup_accepts_compatible_chatterbox_package(monkeypatch):
 
 
 def test_startup_does_not_probe_package_for_other_model(monkeypatch):
-    monkeypatch.setattr(start_module.Tts, "get_type", lambda: TtsModelType.DOTS)
+    monkeypatch.setattr(start_module.Tts, "get_local_model_type", lambda: TtsModelType.require_by_id("dots_local"))
     monkeypatch.setattr(
         start_module.ChatterboxApiDetect,
         "has_required_v3_features",

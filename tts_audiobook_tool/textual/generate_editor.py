@@ -707,7 +707,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
     def quick_generate_phrase(self, phrase_index: int) -> None:
         """Regenerate a specific phrase outside the full-screen editor."""
 
-        blocker_text = readiness.get_generate_blocker_text(self.state, verbose=True)
+        blocker_text = readiness.get_run_blocker_text(self.state, verbose=True)
         if blocker_text:
             self.push_screen(
                 AlertDialog(

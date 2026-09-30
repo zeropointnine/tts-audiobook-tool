@@ -1,40 +1,41 @@
 """
 Tests for the backend-mode refactor:
 
-- sentinel probe -> immutable process-level backend mode (LOCAL / SGL_OMNI)
-- init_local_model_type() mode gating (SGL mode skips the local probe)
+- sentinel probe -> process-level LOCAL / REMOTE_CLIENT runtime mode
+- init_local_model_type() skips local probing in remote-client mode
 - mode-aware requirements-file name for the NONE placeholder
 - catalog helpers built on TtsModelSpec.backend_kind
-- the longest-substring stopgap in find_tts_type_using_sgl_omni_model_id()
+- SGL-Omni's detector uses catalog-only substring metadata
 """
 
 import types
-from types import SimpleNamespace
 
 import pytest
 
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.project import Project
 from project_settings_test_support import set_setting
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
-SENTINEL = "tts_audiobook_tool_sgl_omni_marker"
+SENTINEL = "tts_audiobook_tool_remote_client_marker"
+LEGACY_SENTINEL = "tts_audiobook_tool_sgl_omni_marker"
 
 
-def test_probe_backend_mode_absent_sentinel_is_local():
-    # The fence venv (venv-base) does not carry the sentinel
-    assert Tts._probe_backend_mode() == TtsBackendKind.LOCAL
+def test_probe_backend_mode_absent_sentinel_is_local(monkeypatch):
+    monkeypatch.setattr("importlib.util.find_spec", lambda name: None)
+    assert Tts._probe_backend_mode() == TtsRuntimeMode.LOCAL
 
 
-def test_probe_backend_mode_present_sentinel_is_sgl_omni(monkeypatch):
+@pytest.mark.parametrize("markers", [(SENTINEL,), (LEGACY_SENTINEL,), (SENTINEL, LEGACY_SENTINEL)])
+def test_probe_backend_mode_present_sentinel_is_remote_client(monkeypatch, markers):
     monkeypatch.setattr(
         "importlib.util.find_spec",
-        lambda name: types.ModuleType(name) if name == SENTINEL else None,
+        lambda name: types.ModuleType(name) if name in markers else None,
     )
-    assert Tts._probe_backend_mode() == TtsBackendKind.SGL_OMNI
+    assert Tts._probe_backend_mode() == TtsRuntimeMode.REMOTE_CLIENT
 
 
 def test_probe_backend_mode_unreadable_sentinel_is_local(monkeypatch):
@@ -42,37 +43,52 @@ def test_probe_backend_mode_unreadable_sentinel_is_local(monkeypatch):
         raise OSError("unreadable")
 
     monkeypatch.setattr("importlib.util.find_spec", boom)
-    assert Tts._probe_backend_mode() == TtsBackendKind.LOCAL
+    assert Tts._probe_backend_mode() == TtsRuntimeMode.LOCAL
 
 
-def test_get_backend_mode_probes_lazily_and_caches(monkeypatch):
+@pytest.mark.parametrize("sentinel", [SENTINEL, LEGACY_SENTINEL])
+def test_probe_backend_mode_unreadable_other_marker_still_is_remote_client(monkeypatch, sentinel):
+    def find_spec(name):
+        if name == sentinel:
+            return types.ModuleType(name)
+        raise OSError("unreadable")
+
+    monkeypatch.setattr("importlib.util.find_spec", find_spec)
+    assert Tts._probe_backend_mode() == TtsRuntimeMode.REMOTE_CLIENT
+
+
+@pytest.mark.parametrize("sentinel", [SENTINEL, LEGACY_SENTINEL])
+def test_get_backend_mode_probes_lazily_and_caches(monkeypatch, sentinel):
     calls = []
 
     def find_spec(name):
         calls.append(name)
-        return types.ModuleType(name) if name == SENTINEL else None
+        return types.ModuleType(name) if name == sentinel else None
 
     monkeypatch.setattr("importlib.util.find_spec", find_spec)
 
     Tts._backend_mode = None
-    assert Tts.get_backend_mode() == TtsBackendKind.SGL_OMNI
-    assert Tts._backend_mode == TtsBackendKind.SGL_OMNI
+    assert Tts.get_backend_mode() == TtsRuntimeMode.REMOTE_CLIENT
+    assert Tts._backend_mode == TtsRuntimeMode.REMOTE_CLIENT
+    first_calls = list(calls)
     Tts.get_backend_mode()
-    assert calls.count(SENTINEL) == 1  # probed exactly once
+    assert calls == first_calls  # no additional probes after caching
+    assert calls.count(sentinel) == 1
 
 
-def test_init_local_model_type_in_sgl_mode_skips_local_probe(monkeypatch):
-    # Dual-capable venv (sentinel plus a local model library): SGL-Omni wins,
+@pytest.mark.parametrize("sentinel", [SENTINEL, LEGACY_SENTINEL])
+def test_init_local_model_type_in_remote_mode_skips_local_probe(monkeypatch, sentinel):
+    # Dual-capable venv (sentinel plus a local model library): remote-client wins,
     # the local probe is skipped entirely
     def find_spec(name):
-        return types.ModuleType(name) if name in (SENTINEL, "chatterbox") else None
+        return types.ModuleType(name) if name in (sentinel, "chatterbox") else None
 
     monkeypatch.setattr("importlib.util.find_spec", find_spec)
 
     tts_model_type, num_matches = Tts.init_local_model_type()
 
-    assert Tts.get_backend_mode() == TtsBackendKind.SGL_OMNI
-    assert tts_model_type == TtsModelType.NONE
+    assert Tts.get_backend_mode() == TtsRuntimeMode.REMOTE_CLIENT
+    assert tts_model_type.id == "none"
     assert num_matches == 0
 
 
@@ -84,8 +100,8 @@ def test_init_local_model_type_in_local_mode_probes_local_models(monkeypatch):
 
     tts_model_type, num_matches = Tts.init_local_model_type()
 
-    assert Tts.get_backend_mode() == TtsBackendKind.LOCAL
-    assert tts_model_type == TtsModelType.CHATTERBOX
+    assert Tts.get_backend_mode() == TtsRuntimeMode.LOCAL
+    assert tts_model_type.id == "chatterbox_local"
     assert num_matches == 1
 
 
@@ -95,7 +111,7 @@ def test_start_configures_dots_windows_compile_workaround(monkeypatch):
     monkeypatch.setattr(
         Tts,
         "init_local_model_type",
-        staticmethod(lambda: (TtsModelType.DOTS, 1)),
+        staticmethod(lambda: (TtsModelType.require_by_id("dots_local"), 1)),
     )
     monkeypatch.setattr(start_module.sys, "platform", "win32")
     monkeypatch.delitem(start_module.sys.modules, "torch", raising=False)
@@ -112,7 +128,7 @@ def test_start_rejects_dots_workaround_after_torch_import(monkeypatch):
     monkeypatch.setattr(
         Tts,
         "init_local_model_type",
-        staticmethod(lambda: (TtsModelType.DOTS, 1)),
+        staticmethod(lambda: (TtsModelType.require_by_id("dots_local"), 1)),
     )
     monkeypatch.setattr(start_module.sys, "platform", "win32")
     monkeypatch.setitem(start_module.sys.modules, "torch", types.ModuleType("torch"))
@@ -122,38 +138,16 @@ def test_start_rejects_dots_workaround_after_torch_import(monkeypatch):
 
 
 def test_get_requirements_file_name_is_mode_aware():
-    Tts._type = TtsModelType.NONE
-    Tts._backend_mode = TtsBackendKind.LOCAL
+    Tts._type = TtsModelType.require_by_id("none")
+    Tts._backend_mode = TtsRuntimeMode.LOCAL
     assert Tts.get_requirements_file_name() == "requirements-base.txt"
 
-    Tts._backend_mode = TtsBackendKind.SGL_OMNI
-    assert Tts.get_requirements_file_name() == TtsModelType.NONE.value.requirements_file_name
+    Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
+    assert Tts.get_requirements_file_name() == TtsModelType.require_by_id("none").value.requirements_file_name
 
-    Tts._type = TtsModelType.CHATTERBOX
-    assert Tts.get_requirements_file_name() == TtsModelType.CHATTERBOX.value.requirements_file_name
-
-
-def test_set_sgl_omni_type_in_local_mode_stores_but_does_not_resolve(monkeypatch):
-    original_type = Tts._type
-    original_sgl_omni_type = Tts._sgl_omni_type
-    original_base_url = SglOmniUtil._base_url
-    calls = []
-
-    try:
-        Tts._type = TtsModelType.NONE
-        Tts._backend_mode = TtsBackendKind.LOCAL
-        SglOmniUtil._base_url = "http://example.test"
-        monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: calls.append(True))
-
-        Tts.set_sgl_omni_type(TtsModelType.QWEN3TTS_SERVER)
-
-        assert Tts._sgl_omni_type == TtsModelType.QWEN3TTS_SERVER
-        assert Tts.get_type() == TtsModelType.NONE
-        assert calls == []
-    finally:
-        Tts._type = original_type
-        Tts._sgl_omni_type = original_sgl_omni_type
-        SglOmniUtil._base_url = original_base_url
+    Tts._available_local_models = (TtsModelType.require_by_id("chatterbox_local"),)
+    Tts._backend_mode = TtsRuntimeMode.LOCAL
+    assert Tts.get_requirements_file_name() == TtsModelType.require_by_id("chatterbox_local").value.requirements_file_name
 
 
 def _show_startup_hints(monkeypatch, prefs):
@@ -185,7 +179,7 @@ def test_startup_hint_shown_when_sgl_settings_dormant_in_local_mode(monkeypatch)
     from tts_audiobook_tool.prefs import Prefs
 
     shown = _show_startup_hints(
-        monkeypatch, Prefs(sgl_omni_type=TtsModelType.QWEN3TTS_SERVER)
+        monkeypatch, Prefs(remote_tts_url="http://example.test")
     )
     assert "sgl_omni_dormant" in shown
 
@@ -194,7 +188,7 @@ def test_startup_hint_shown_when_only_sgl_url_custom(monkeypatch):
     from tts_audiobook_tool.prefs import Prefs
 
     shown = _show_startup_hints(
-        monkeypatch, Prefs(sgl_omni_url="http://example.test:9009")
+        monkeypatch, Prefs(remote_tts_url="http://example.test:9009")
     )
     assert "sgl_omni_dormant" in shown
 
@@ -212,11 +206,11 @@ def test_startup_hint_not_shown_in_sgl_mode(monkeypatch):
 
     saved_mode = Tts._backend_mode
     try:
-        Tts._type = TtsModelType.NONE
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
+        Tts._type = TtsModelType.require_by_id("none")
+        Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
 
         shown = _show_startup_hints(
-            monkeypatch, Prefs(sgl_omni_type=TtsModelType.QWEN3TTS_SERVER)
+            monkeypatch, Prefs(remote_tts_url="http://example.test")
         )
         assert "sgl_omni_dormant" not in shown
     finally:
@@ -227,18 +221,23 @@ def test_catalog_helpers_classify_by_backend_kind():
     local_items = TtsModelType.get_local_items()
     sgl_items = TtsModelType.get_sgl_omni_items()
 
-    assert len(local_items) == 13
-    assert len(sgl_items) == 8
-    assert set(local_items) | set(sgl_items) == set(TtsModelType) - {TtsModelType.NONE}
+    audio_items = TtsModelType.get_items_by_backend(TtsBackendKind.AUDIO_CPP)
+    assert local_items and sgl_items
+    assert audio_items == [TtsModelType.require_by_id("breeze_tts_2_audiocpp"), TtsModelType.require_by_id("chatterbox_audiocpp"),
+                           TtsModelType.require_by_id("echo_tts_audiocpp"),
+                           # TtsModelType.require_by_id("glm_tts_audiocpp"),  # DISABLED; see model_catalog.toml
+                           TtsModelType.require_by_id("higgs_v3_audiocpp"),
+                           TtsModelType.require_by_id("omnivoice_audiocpp")]
+    assert set(local_items) | set(sgl_items) | set(audio_items) == set(TtsModelType) - {TtsModelType.require_by_id("none")}
     assert all(item.value.backend_kind == TtsBackendKind.LOCAL for item in local_items)
     assert all(item.value.backend_kind == TtsBackendKind.SGL_OMNI for item in sgl_items)
-    assert TtsModelType.NONE.value.backend_kind is None
+    assert TtsModelType.require_by_id("none").value.backend_kind is None
 
-    assert TtsModelType.is_backend(TtsModelType.CHATTERBOX, TtsBackendKind.LOCAL)
-    assert not TtsModelType.is_backend(TtsModelType.CHATTERBOX, TtsBackendKind.SGL_OMNI)
-    assert not TtsModelType.is_valid_sgl_omni_type(TtsModelType.NONE)
+    assert TtsModelType.is_backend(TtsModelType.require_by_id("chatterbox_local"), TtsBackendKind.LOCAL)
+    assert not TtsModelType.is_backend(TtsModelType.require_by_id("chatterbox_local"), TtsBackendKind.SGL_OMNI)
+    assert not TtsModelType.is_valid_sgl_omni_type(TtsModelType.require_by_id("none"))
     assert not TtsModelType.is_valid_sgl_omni_type(None)
-    assert TtsModelType.is_valid_sgl_omni_type(TtsModelType.QWEN3TTS_SERVER)
+    assert TtsModelType.is_valid_sgl_omni_type(TtsModelType.require_by_id("qwen3tts_sglomni"))
 
 
 def test_glm_output_sample_rate_uses_project_value_and_catalog_fallback() -> None:
@@ -247,7 +246,7 @@ def test_glm_output_sample_rate_uses_project_value_and_catalog_fallback() -> Non
     assert GlmBaseModel.get_output_sample_rate(project) == 32_000
 
     set_setting(project, "glm_sr", 12_345)
-    assert GlmBaseModel.get_output_sample_rate(project) == TtsModelType.GLM.value.default_output_sample_rate
+    assert GlmBaseModel.get_output_sample_rate(project) == TtsModelType.require_by_id("glm_local").value.default_output_sample_rate
 
 
 def test_moss_output_sample_rate_follows_architecture(monkeypatch) -> None:
@@ -268,8 +267,8 @@ def test_moss_output_sample_rate_follows_architecture(monkeypatch) -> None:
         lambda: (_ for _ in ()).throw(AssertionError("fixed server variants must not inspect model id")),
     )
     definitions = load_definitions()
-    delay_support = ConfiguredModelSupport(definitions.models["server_moss_delay"])
-    local_support = ConfiguredModelSupport(definitions.models["server_moss_local"])
+    delay_support = ConfiguredModelSupport(definitions.models["moss_delay_sglomni"])
+    local_support = ConfiguredModelSupport(definitions.models["moss_local_sglomni"])
     assert delay_support.get_output_sample_rate(local_project) == 24_000
     assert local_support.get_output_sample_rate(delay_project) == 48_000
 
@@ -278,51 +277,32 @@ def test_worker_output_filters_defined_only_where_expected() -> None:
     # MIRA leaks "smem_size" setup info; QWEN3TTS leaks an "open-end generation"
     # pad-token warning. Every other model variant must keep a clean worker log.
     expected = {
-        TtsModelType.MIRA: ["smem_size"],
-        TtsModelType.QWEN3TTS: ["for open-end generation"],
+        TtsModelType.require_by_id("mira_local"): ["smem_size"],
+        TtsModelType.require_by_id("qwen3tts_local"): ["for open-end generation"],
     }
     for item in TtsModelType:
         assert item.value.output_filters == expected.get(item, [])
 
 
-def with_substring(spec, substring):
-    # TtsModelSpec is a NamedTuple; _replace is its copy-with-changed-field helper
-    return spec._replace(sgl_omni_model_id_substring=substring)
+def test_sgl_detector_prefers_longest_catalog_fragment(monkeypatch):
+    from tts_audiobook_tool.tts_models import sgl_omni_detection
+
+    monkeypatch.setattr(sgl_omni_detection, "_matchers", lambda: (
+        ("fish_s2_sglomni", "fish"),
+        ("qwen3tts_sglomni", "fishs2"),
+    ))
+    assert sgl_omni_detection.detect_sgl_omni_models([{"id": "acme/FishS2-v2"}]) == [
+        (TtsModelType.require_by_id("qwen3tts_sglomni"), "acme/FishS2-v2")
+    ]
 
 
-def test_finder_prefers_longest_matching_substring(monkeypatch):
-    # Synthetic: a second SGL variant whose substring ("fishs2") contains
-    # FISH_S2_SERVER's substring ("fish")
-    real_items = TtsModelType.get_sgl_omni_items()
-    fake_spec = with_substring(TtsModelType.FISH_S2_SERVER.value, "fishs2")
-    fake_item = SimpleNamespace(value=fake_spec)
-    monkeypatch.setattr(
-        TtsModelType,
-        "get_sgl_omni_items",
-        staticmethod(lambda: [*real_items, fake_item]),
-    )
+def test_sgl_detector_ties_keep_catalog_order(monkeypatch):
+    from tts_audiobook_tool.tts_models import sgl_omni_detection
 
-    # The model id contains both "fish" (real FISH_S2_SERVER) and "fishs2"
-    # (the longer synthetic variant) -> the longer match wins
-    result = TtsModelType.find_tts_type_using_sgl_omni_model_id("acme/fishs2-v2")
-    assert result.value.sgl_omni_model_id_substring == "fishs2"
-
-
-def test_finder_ties_fall_back_to_catalog_order(monkeypatch):
-    # Two variants with the same substring length: the one earlier in the
-    # catalog (get_sgl_omni_items() order) wins
-    first = TtsModelType.get_sgl_omni_items()[0]
-    second = TtsModelType.get_sgl_omni_items()[1]
-    shared = "zzzshared"
-    monkeypatch.setattr(
-        TtsModelType,
-        "get_sgl_omni_items",
-        staticmethod(lambda: [
-            SimpleNamespace(value=with_substring(first.value, shared)),
-            SimpleNamespace(value=with_substring(second.value, shared)),
-        ]),
-    )
-
-    result = TtsModelType.find_tts_type_using_sgl_omni_model_id(f"repo/{shared}")
-    assert result.value.sgl_omni_model_id_substring == shared
-    assert result.value.id == first.value.id
+    first, second = TtsModelType.get_sgl_omni_items()[:2]
+    monkeypatch.setattr(sgl_omni_detection, "_matchers", lambda: (
+        (first.id, "zzzshared"), (second.id, "zzzshared"),
+    ))
+    assert sgl_omni_detection.detect_sgl_omni_models([{"id": "repo/zzzshared"}]) == [
+        (first, "repo/zzzshared")
+    ]

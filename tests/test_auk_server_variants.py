@@ -2,16 +2,19 @@ import pytest
 
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
-from project_settings_test_support import get_setting
+from project_settings_test_support import get_setting, set_setting
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.sgl_omni_detection import detect_sgl_omni_models
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 
 @pytest.mark.parametrize(
     ("model_type", "substring", "proper_name"),
     [
-        (TtsModelType.AUK_SERVER, "auk", "AuK"),
-        (TtsModelType.AUK_FLASH_SERVER, "auk-flash", "AuK-Flash"),
+        (TtsModelType.require_by_id("auk_sglomni"), "auk", "AuK"),
+        (TtsModelType.require_by_id("auk_flash_sglomni"), "auk-flash", "AuK-Flash"),
     ],
 )
 def test_auk_variants_have_distinct_catalog_identity(
@@ -20,7 +23,9 @@ def test_auk_variants_have_distinct_catalog_identity(
     info = model_type.value
 
     assert info.backend_kind is TtsBackendKind.SGL_OMNI
-    assert info.sgl_omni_model_id_substring == substring
+    assert detect_sgl_omni_models([{"id": f"tencent/{substring}"}]) == [
+        (model_type, f"tencent/{substring}")
+    ]
     assert info.ui["proper_name"] == proper_name
     assert info.default_output_sample_rate == 24_000
     assert REGISTRY.voice_binding(model_type.id).group == "auk"
@@ -28,23 +33,57 @@ def test_auk_variants_have_distinct_catalog_identity(
     assert REGISTRY.orchestration_binding(model_type.id).name == "concurrent_requests"
     assert info.requires_voice
     assert not info.can_stream
-    assert info.requirements_file_name == "requirements-sgl-omni.txt"
+    assert info.requirements_file_name == "requirements-remote.txt"
+
+
+@pytest.mark.parametrize(
+    "model_type",
+    [TtsModelType.require_by_id("auk_sglomni"), TtsModelType.require_by_id("auk_flash_sglomni")],
+)
+def test_auk_variants_declare_no_concurrency(model_type):
+    definition = Tts._configured_definitions[model_type.id]
+    assert definition.can_batch is False
+    assert not Tts.can_batch(model_type)
+
+    # Storage ownership stays with the registry (projects keep round-tripping),
+    # but the effective value never exceeds one.
+    assert REGISTRY.orchestration_binding(model_type.id).name == "concurrent_requests"
+    project = Project(tts_model_type=model_type.id)
+    set_setting(project, "auk_server_concurrent_requests", 4)
+    assert get_setting(project, "auk_server_concurrent_requests") == 4
+    assert ProjectVoiceUtil.get_batch_size(project) == 1
+
+    payload = ProjectSerializationUtil.to_project_json_dict(project)
+    assert payload["model_settings"]["shared"]["auk"]["orchestration"] == {
+        "concurrent_requests": 4
+    }
+
+
+@pytest.mark.parametrize(
+    "model_type",
+    [TtsModelType.require_by_id("fish_s2_sglomni"), TtsModelType.require_by_id("qwen3tts_sglomni"), TtsModelType.require_by_id("zonos2_sglomni")],
+)
+def test_other_server_variants_keep_declared_concurrency(model_type):
+    project = Project(tts_model_type=model_type.id)
+    project.set_model_setting(model_type.id, "concurrent_requests", 4)
+    assert Tts.can_batch(model_type)
+    assert ProjectVoiceUtil.get_batch_size(project) == 4
 
 
 def test_find_auk_variant_using_sgl_omni_model_id():
     assert (
         TtsModelType.find_tts_type_using_sgl_omni_model_id("tencent/AuK")
-        is TtsModelType.AUK_SERVER
+        is TtsModelType.require_by_id("auk_sglomni")
     )
     assert (
         TtsModelType.find_tts_type_using_sgl_omni_model_id("tencent/AuK-Flash")
-        is TtsModelType.AUK_FLASH_SERVER
+        is TtsModelType.require_by_id("auk_flash_sglomni")
     )
     assert (
         TtsModelType.find_tts_type_using_sgl_omni_model_id(
             "/models/TENCENT/AUK-FLASH"
         )
-        is TtsModelType.AUK_FLASH_SERVER
+        is TtsModelType.require_by_id("auk_flash_sglomni")
     )
 
 
@@ -68,13 +107,13 @@ def test_auk_project_fields_are_shared_normalized_and_serialized():
     # AuK and AuK-Flash share one storage group.
     payload = ProjectSerializationUtil.to_project_json_dict(project)
     shared = payload["model_settings"]["shared"]["auk"]
-    assert shared["model_ids"] == ["server_auk", "server_auk_flash"]
+    assert shared["model_ids"] == ["auk_sglomni", "auk_flash_sglomni"]
     assert shared["voice_references"] == [
         {"file_name": "voice.flac", "transcript": "reference transcript"}
     ]
-    # The invalid speed, concurrency and seed normalized to their defaults; a
-    # value equal to the default is absent (seeds stay explicit by design).
-    assert shared["parameters"] == {"seed": -1}
+    # Unset speed is documented as null; seeds stay explicit by design.
+    # Default concurrency remains absent from the orchestration section.
+    assert shared["parameters"] == {"speed": None, "seed": -1}
     assert "orchestration" not in shared
 
 

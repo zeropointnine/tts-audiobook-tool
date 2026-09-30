@@ -17,7 +17,7 @@ def test_warm_up_retains_desired_loaded_stt_and_clears_unwanted_yamnet() -> None
         Tts, "get_instance", return_value=tts_instance
     ), patch.object(
         Tts,
-        "get_class",
+        "get_model_support",
         return_value=SimpleNamespace(can_hallucinate_music=lambda project, instance: False),
     ), patch.object(Stt, "eager_warm_up_for_inference") as warm_stt, patch.object(
         ModelManager, "clear_yamnet_detector"
@@ -40,7 +40,7 @@ def test_warm_up_clears_disabled_stt_without_skipping_tts_reconciliation() -> No
         Tts, "get_instance", return_value=tts_instance
     ) as get_tts, patch.object(
         Tts,
-        "get_class",
+        "get_model_support",
         return_value=SimpleNamespace(can_hallucinate_music=lambda project, instance: False),
     ), patch.object(ModelManager, "clear_yamnet_detector"):
         result = ModelManager.warm_up_models(state)  # type: ignore[arg-type]
@@ -109,6 +109,33 @@ def test_warm_up_is_silent_when_models_are_resident() -> None:
     assert not result.should_stop
     warm_stt.assert_not_called()
     print_init.assert_not_called()
+
+
+@pytest.mark.parametrize("adapter_exists", [False, True])
+def test_audio_cpp_init_notice_checks_server_on_every_warm_up(adapter_exists: bool) -> None:
+    """A retained Python adapter must not hide a server-side unload."""
+    from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
+    from tts_audiobook_tool.tts_models.audio_cpp_configured import AudioCppBackendAdapter, AudioCppModelSupport
+    from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
+
+    definition = load_audio_cpp_definitions().models["breeze_tts_2_audiocpp"]
+    adapter = AudioCppBackendAdapter(definition, AudioCppModelSupport(definition), "exact-server-id")
+    state = SimpleNamespace(project=SimpleNamespace())
+    with patch.object(Stt, "should_skip", return_value=True), patch.object(
+        Stt, "clear_stt_model"
+    ), patch.object(Tts, "instance_exists", return_value=adapter_exists), patch.object(
+        Tts, "get_instance", return_value=adapter
+    ), patch.object(ModelManager, "clear_yamnet_detector"), patch(
+        "tts_audiobook_tool.model_manager.print_init"
+    ), patch.object(AudioCppUtil, "get_base_url", return_value="http://server:8080"), patch.object(
+        AudioCppUtil, "print_model_init_if_unloaded"
+    ) as notice:
+        for _ in range(2):
+            result = ModelManager.warm_up_models(state, skip_yamnet=True)
+            assert not result.should_stop
+
+    assert notice.call_count == 2
+    notice.assert_called_with("http://server:8080", "exact-server-id", definition.spec.ui["proper_name"])
 
 
 def test_clear_all_models_is_best_effort() -> None:

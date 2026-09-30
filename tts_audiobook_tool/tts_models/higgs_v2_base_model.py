@@ -10,7 +10,7 @@ else:
 
 class HiggsV2BaseModel(TtsBaseModel):
 
-    INFO = TtsModelType.HIGGS_V2.value
+    INFO = TtsModelType.require_by_id("higgs_v2_local").value
 
     DEFAULT_TEMPERATURE = 0.3
     DEFAULT_TOP_K = 50

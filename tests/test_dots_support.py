@@ -22,7 +22,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsMode
 
 
 def test_dots_spec_and_tts_registry(monkeypatch):
-    info = TtsModelType.DOTS.value
+    info = TtsModelType.require_by_id("dots_local").value
 
     assert info.backend_kind is TtsBackendKind.LOCAL
     assert info.local_module_test == "dots_tts"
@@ -35,10 +35,10 @@ def test_dots_spec_and_tts_registry(monkeypatch):
     assert info.can_stream
     assert info.requirements_file_name == "requirements-dots.txt"
 
-    monkeypatch.setattr(Tts, "_type", TtsModelType.DOTS)
-    assert Tts.get_class() is DotsBaseModel
-    assert Tts._MODEL_REGISTRY[TtsModelType.DOTS][0] is DotsBaseModel
-    assert Tts._MODEL_REGISTRY[TtsModelType.DOTS][2] == "_dots"
+    monkeypatch.setattr(Tts, "_type", TtsModelType.require_by_id("dots_local"))
+    assert Tts.get_class_for_type(TtsModelType.require_by_id("dots_local")) is DotsBaseModel
+    assert Tts._MODEL_REGISTRY[TtsModelType.require_by_id("dots_local")][0] is DotsBaseModel
+    assert Tts._MODEL_REGISTRY[TtsModelType.require_by_id("dots_local")][2] == "_dots"
 
 
 def test_local_model_probe_detects_dots(monkeypatch):
@@ -49,7 +49,7 @@ def test_local_model_probe_detects_dots(monkeypatch):
 
     tts_type, matches = Tts.init_local_model_type()
 
-    assert tts_type is TtsModelType.DOTS
+    assert tts_type is TtsModelType.require_by_id("dots_local")
     assert matches == 1
 
 
@@ -91,7 +91,7 @@ def test_dots_project_fields_normalize_and_serialize():
     assert get_setting(project, "dots_guidance_scale") == 1.4
     assert get_setting(project, "dots_compile") is False
     payload = ProjectSerializationUtil.to_project_json_dict(project)
-    dots_object = payload["model_settings"]["models"]["dots"]
+    dots_object = payload["model_settings"]["models"]["dots_local"]
     parameters = dots_object["parameters"]
     assert parameters["target"] == DotsBaseModel.MF_REPO_ID
     assert dots_object["voice_references"] == [
@@ -143,9 +143,8 @@ def test_dots_project_invalid_values_fall_back_with_warnings():
 
 
 def test_voice_menu_routes_dots_to_dots_menu(monkeypatch):
-    state = cast(State, SimpleNamespace(project=Project()))
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type="dots_local")))
     calls: list[State] = []
-    monkeypatch.setattr(Tts, "get_type", staticmethod(lambda: TtsModelType.DOTS))
     monkeypatch.setattr(VoiceDotsMenu, "menu", staticmethod(calls.append))
 
     VoiceMenuShared.menu(state)
@@ -228,15 +227,15 @@ def test_dots_menu_num_steps_branches_by_variant(monkeypatch):
     # Number items are ordered: num steps (directly under Compile),
     # speaker scale, CFG
     soar = number_items[0]
-    assert soar["target"] == SettingRef("dots", "num_steps_soar")
+    assert soar["target"] == SettingRef("dots_local", "num_steps_soar")
     assert soar["default_value"] == DotsBaseModel.NUM_STEPS_SOAR_DEFAULT
     assert soar["min_value"] == DotsBaseModel.NUM_STEPS_SOAR_MIN
     assert soar["max_value"] == DotsBaseModel.NUM_STEPS_SOAR_MAX
     assert "(soar)" in soar["prompt"]
     assert [item["target"] for item in number_items] == [
-        SettingRef("dots", "num_steps_soar"),
-        SettingRef("dots", "speaker_scale"),
-        SettingRef("dots", "guidance_scale"),
+        SettingRef("dots_local", "num_steps_soar"),
+        SettingRef("dots_local", "speaker_scale"),
+        SettingRef("dots_local", "guidance_scale"),
     ]
     assert number_items[2]["base_label"] == "CFG"
 
@@ -244,15 +243,15 @@ def test_dots_menu_num_steps_branches_by_variant(monkeypatch):
     set_setting(state.project, "dots_target", DotsBaseModel.MF_REPO_ID)
     VoiceDotsMenu.menu(state)
     mf = number_items[0]
-    assert mf["target"] == SettingRef("dots", "num_steps_mf")
+    assert mf["target"] == SettingRef("dots_local", "num_steps_mf")
     assert mf["default_value"] == DotsBaseModel.NUM_STEPS_MF_DEFAULT
     assert mf["min_value"] == DotsBaseModel.NUM_STEPS_MF_MIN
     assert mf["max_value"] == DotsBaseModel.NUM_STEPS_MF_MAX
     assert "(mf)" in mf["prompt"]
     # Meanflow drops CFG, so no guidance number item is offered
     assert [item["target"] for item in number_items] == [
-        SettingRef("dots", "num_steps_mf"),
-        SettingRef("dots", "speaker_scale"),
+        SettingRef("dots_local", "num_steps_mf"),
+        SettingRef("dots_local", "speaker_scale"),
     ]
 
 

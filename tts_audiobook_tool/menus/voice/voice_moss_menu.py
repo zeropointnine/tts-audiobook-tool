@@ -4,7 +4,6 @@ from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.menus.voice.voice_moss_shared import VoiceMossShared
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -23,7 +22,7 @@ class VoiceMossMenu:
         def make_target_label(_) -> str:
             return VoiceMenuShared.make_target_label(
                 label_prefix="Select MOSS-TTS model",
-                target=state.project.get_model_setting('moss', 'target'),
+                target=state.project.get_model_setting('moss_local', 'target'),
                 default_target=MossConfigs.get_default_repo_id(),
                 remove_prefixes=["OpenMOSS-Team/"],
             )
@@ -32,7 +31,7 @@ class VoiceMossMenu:
 
             items = []
 
-            VoiceMossShared.append_voice_items(items, state, TtsModelType.MOSS)
+            VoiceMossShared.append_voice_items(items, state, TtsModelType.require_by_id("moss_local"))
 
             items.append(
                 MenuItem(
@@ -43,17 +42,17 @@ class VoiceMossMenu:
             )
 
             item = MenuItem(
-                VoiceMenuShared.make_rolling_continuation_label(state.project.get_model_setting('moss', 'rolling_cont')),
+                VoiceMenuShared.make_rolling_continuation_label(state.project.get_model_setting('moss_local', 'rolling_cont')),
                 lambda _, __: VoiceMenuShared.ask_rolling_continuation(
                     state=state,
-                    target=SettingRef("moss", "rolling_cont"),
+                    target=SettingRef("moss_local", "rolling_cont"),
                     max_value=MossBaseModel.ROLLING_CONTINUATION_MAX_LENGTH,
                     qualifier_line="MOSS-TTS rolling continuation requires batch size 1."
                 )
             )
             items.append(item)
 
-            config = MossConfigs.get_by_target(state.project.get_model_setting('moss', 'target'))
+            config = MossConfigs.get_by_target(state.project.get_model_setting('moss_local', 'target'))
 
             items.append(VoiceMossShared.make_temperature_item(state, config))
 
@@ -61,7 +60,7 @@ class VoiceMossMenu:
 
             items.append(VoiceMossShared.make_audio_top_k_item(state, config))
 
-            item = VoiceMenuShared.make_seed_item(state, SettingRef("moss", "seed"), add_batch_warning=True)
+            item = VoiceMenuShared.make_seed_item(state, SettingRef("moss_local", "seed"), add_batch_warning=True)
             items.append(item)
 
             return items
@@ -76,7 +75,7 @@ def target_submenu(state: State) -> None:
         state=state,
         heading="Select MOSS-TTS model",
         preset_targets=[config.value.repo_id for config in configs],
-        current_target=state.project.get_model_setting('moss', 'target'),
+        current_target=state.project.get_model_setting('moss_local', 'target'),
         default_target=MossConfigs.get_default_repo_id(),
         ask_custom_target=lambda: ask_target(state),
         apply_target=lambda target: apply_model_and_validate(state, target),
@@ -86,27 +85,27 @@ def target_submenu(state: State) -> None:
 def ask_target(state: State) -> None:
     project = state.project
 
-    model_name = Tts.get_type().value.ui["short_name"]
+    model_name = project.get_tts_model_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"OpenMOSS-Team/MOSS-TTS-v1.5\" or \"/path/to/checkpoint\""
 
     VoiceMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.get_model_setting('moss', 'target'),
+        current_target=project.get_model_setting('moss_local', 'target'),
         callback=lambda _, target: apply_model_and_validate(state, target)
     )
 
 def apply_model_and_validate(state: State, target: str) -> None:
     project = state.project
 
-    previous_target = project.get_model_setting('moss', 'target')
+    previous_target = project.get_model_setting('moss_local', 'target')
 
     def revert() -> None:
-        project.set_model_setting('moss', 'target', previous_target)
+        project.set_model_setting('moss_local', 'target', previous_target)
         _ = ModelWorker.clear_models_if_running_blocking()
 
-    project.set_model_setting('moss', 'target', target)
+    project.set_model_setting('moss_local', 'target', target)
     _ = ModelWorker.clear_models_if_running_blocking()
 
     # Preset targets are pinned, known-good repos whose runtime properties
@@ -132,7 +131,7 @@ def apply_model_and_validate(state: State, target: str) -> None:
     ask.ask_enter_to_continue()
 
 def on_clear_model_target(state: State, __: MenuItem) -> None:
-    state.project.set_model_setting('moss', 'target', "")
+    state.project.set_model_setting('moss_local', 'target', "")
     state.project.save()
     _ = ModelWorker.clear_models_if_running_blocking()
     print_feedback("Cleared, will use default model")

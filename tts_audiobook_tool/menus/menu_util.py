@@ -111,10 +111,28 @@ class MenuUtil:
         try:
             while True:
 
-                from tts_audiobook_tool.tts import Tts
-                Tts.update_tts_type()
+                # MainMenu.on_shown marks startup complete before footer hints run.
+                is_first_main_menu = not is_submenu and not getattr(state, "has_shown_main_menu", False)
+                MenuStatus.prepare_tts(state)
 
-                # Initialize items list
+                # Print heading
+                s = get_string_from(state, heading)
+                breadcrumb_text = MenuUtil.make_breadcrumb_text(state)
+                MenuUtil.print_heading(state, s, breadcrumb_text=breadcrumb_text)
+
+                # Print optional subheading
+                if subheading:
+                    s = get_string_from(state, subheading).rstrip("\r\n")
+                    if s:
+                        printt(s)
+                        printt()
+
+                # Print optional hint
+                if hint:
+                    hints.show_hint_if_necessary(state.prefs, hint)
+
+                # The heading's status block also reconciles model selection.
+                # Build controls afterward so they target the displayed model.
                 if isinstance(items, list):
                     items_list: list[MenuItem] = items
                 else:
@@ -139,21 +157,6 @@ class MenuUtil:
                         if item.hotkey in hotkeys:
                             raise ValueError(f"Duplicate hotkey {item.hotkey}")
                         hotkeys.add(item.hotkey)
-
-                # Print heading
-                s = get_string_from(state, heading)
-                breadcrumb_text = MenuUtil.make_breadcrumb_text(state)
-                MenuUtil.print_heading(state, s, breadcrumb_text=breadcrumb_text)
-
-                # Print optional subheading
-                if subheading:
-                    s = get_string_from(state, subheading)
-                    if s:
-                        printt(s)
-
-                # Print optional hint
-                if hint:
-                    hints.show_hint_if_necessary(state.prefs, hint)
 
                 left_padding = "  "
 
@@ -188,6 +191,7 @@ class MenuUtil:
 
                 if on_shown:
                     on_shown()
+                MenuStatus.show_pending_tts_model_hint(state, is_first_main_menu=is_first_main_menu)
 
                 while True:
                     # Prompt
@@ -283,9 +287,10 @@ class MenuUtil:
             breadcrumb_text = MenuUtil.make_breadcrumb_text(state)
             MenuUtil.print_heading(state, heading_text, breadcrumb_text=breadcrumb_text)
             if subheading:
-                s = get_string_from(state, subheading)
+                s = get_string_from(state, subheading).rstrip("\r\n")
                 if s:
                     printt(s)
+                    printt()
 
         finally:
             MenuUtil.menu_frames.pop()

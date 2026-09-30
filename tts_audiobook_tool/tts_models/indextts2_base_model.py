@@ -13,7 +13,7 @@ else:
 
 class IndexTts2BaseModel(TtsBaseModel):
 
-    INFO = TtsModelType.INDEXTTS2.value
+    INFO = TtsModelType.require_by_id("indextts2_local").value
 
     DEFAULT_EMO_VOICE_ALPHA = 0.65 # project gradio demo default
     DEFAULT_TEMPERATURE = 0.8 # project api default
@@ -47,7 +47,7 @@ class IndexTts2BaseModel(TtsBaseModel):
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
         s = cls.INFO.ui.get("proper_name") or ""
-        s += f" {COL_DIM}(fp16: {project.get_model_setting('indextts2', 'use_fp16')})"
+        s += f" {COL_DIM}(fp16: {project.get_model_setting('indextts2_local', 'use_fp16')})"
         return s
 
     @classmethod
@@ -60,8 +60,8 @@ class IndexTts2BaseModel(TtsBaseModel):
             return None
         value = display_info.value
 
-        if ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.INDEXTTS2):
-            if project.get_model_setting('indextts2', 'emo_vector') or project.get_model_setting('indextts2', 'emo_voice'):
+        if ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("indextts2_local")):
+            if project.get_model_setting('indextts2_local', 'emo_vector') or project.get_model_setting('indextts2_local', 'emo_voice'):
                 value += " + emotion"
 
         return display_info._replace(value=value)

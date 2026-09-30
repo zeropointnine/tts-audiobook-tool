@@ -17,7 +17,6 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import worker_app as worker_app_module
 from tts_audiobook_tool.textual.worker_app import WorkerTextualApp, worker_app_css
 from tts_audiobook_tool.textual.worker_content import WorkerLog
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.worker_reset import HardResetCause
 
@@ -28,8 +27,11 @@ class _StubResult:
     message: str = ""
 
 
-def make_state() -> State:
-    return cast(State, SimpleNamespace())
+def make_state(model_id: str = "none") -> State:
+    # The shared compose reads the selected model's output filters from the
+    # project, so the stub needs the one lookup it performs.
+    project = SimpleNamespace(get_tts_model_type=lambda: TtsModelType.require_by_id(model_id))
+    return cast(State, SimpleNamespace(project=project))
 
 
 class StubWorkerApp(WorkerTextualApp[_StubResult]):
@@ -40,8 +42,8 @@ class StubWorkerApp(WorkerTextualApp[_StubResult]):
     HEADER_UPDATE_SECONDS = 3600.0
     CSS = worker_app_css("stub-divider")
 
-    def __init__(self) -> None:
-        super().__init__(make_state())
+    def __init__(self, model_id: str = "none") -> None:
+        super().__init__(make_state(model_id))
         self.continued = 0
         self.cancelled = 0
 
@@ -98,8 +100,7 @@ def test_worker_app_uses_active_model_output_filters(monkeypatch) -> None:
     monkeypatch.setattr(worker_app_module, "EVENT_POLL_SECONDS", 3600.0)
 
     async def exercise() -> None:
-        Tts._type = TtsModelType.MIRA
-        mira_app = StubWorkerApp()
+        mira_app = StubWorkerApp(model_id="mira_local")
         async with mira_app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
             mira_log = mira_app._worker_log()
@@ -107,8 +108,7 @@ def test_worker_app_uses_active_model_output_filters(monkeypatch) -> None:
             mira_log.feed_console(["kernel smem_size=123"], "")
             assert mira_log.line_texts() == [""]
 
-        Tts._type = TtsModelType.CHATTERBOX
-        normal_app = StubWorkerApp()
+        normal_app = StubWorkerApp(model_id="chatterbox_local")
         async with normal_app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
             normal_log = normal_app._worker_log()

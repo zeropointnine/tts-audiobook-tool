@@ -58,7 +58,7 @@ def test_normalize_loaded_project_dict_reduces_a_foreign_voice_list() -> None:
 
     ProjectSerializationUtil.normalize_loaded_project_dict(d, warnings=warnings)
 
-    references = d["model_settings"]["models"]["chatterbox"]["voice_references"]
+    references = d["model_settings"]["models"]["chatterbox_local"]["voice_references"]
     assert references == [
         {"file_name": "narrator.flac", "transcript": ""},
         {"file_name": "voice/second.flac", "transcript": ""},
@@ -78,7 +78,7 @@ def test_normalize_loaded_project_dict_reduces_scalar_path_fields() -> None:
     ProjectSerializationUtil.normalize_loaded_project_dict(d, warnings=warnings)
 
     assert d["none_voice_file_name"] == "none.flac"
-    assert d["model_settings"]["models"]["indextts2"]["files"]["emo_voice"] == "emo.flac"
+    assert d["model_settings"]["models"]["indextts2_local"]["files"]["emo_voice"] == "emo.flac"
     assert "indextts2_emo_voice_file_name" not in d
     assert len(path_warnings(warnings)) == 1
     assert "none_voice_file_name" in path_warnings(warnings)[0]
@@ -111,7 +111,7 @@ def test_normalize_loaded_project_dict_leaves_transcript_text_alone() -> None:
 
     ProjectSerializationUtil.normalize_loaded_project_dict(d)
 
-    references = d["model_settings"]["models"]["fish_s1"]["voice_references"]
+    references = d["model_settings"]["models"]["fish_s1_local"]["voice_references"]
     assert references == [{"file_name": "voice.flac", "transcript": text}]
 
 
@@ -129,7 +129,7 @@ def test_normalize_loaded_project_dict_leaves_aliased_transcript_text_alone() ->
 
     ProjectSerializationUtil.normalize_loaded_project_dict(d)
 
-    references = d["model_settings"]["models"]["glm"]["voice_references"]
+    references = d["model_settings"]["models"]["glm_local"]["voice_references"]
     assert references == [{"file_name": "voice.flac", "transcript": text}]
     assert "glm_voice_text" not in d
     assert "glm_voice_transcript" not in d
@@ -150,7 +150,7 @@ def test_to_project_json_dict_canonicalizes_values_never_loaded() -> None:
 
     result = ProjectSerializationUtil.to_project_json_dict(project)
 
-    references = result["model_settings"]["models"]["chatterbox"]["voice_references"]
+    references = result["model_settings"]["models"]["chatterbox_local"]["voice_references"]
     assert [reference["file_name"] for reference in references] == [
         "narrator.flac",
         "other.flac",

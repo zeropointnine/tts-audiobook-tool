@@ -37,7 +37,6 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -165,7 +164,7 @@ class GenerateUtil:
         is_cjk = ProjectVoiceUtil.is_language_cjk(state.project)
         voice_of_index: dict[int, int] | None = None
         if batch_size > 1 and project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
-            voice_values = ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
+            voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
             if voice_values:
                 voice_of_index = effective_voice_indices(
                     project.phrase_groups, sorted_indices, len(voice_values)
@@ -764,7 +763,7 @@ class GenerateUtil:
 
         if len(indices) == 0:
             raise ValueError("Indices cannot be empty")
-        if len(indices) > 1 and not Tts.get_type().can_batch():
+        if len(indices) > 1 and not project.get_tts_model_type().can_batch():
             raise ValueError("Logic error - Model does not support batching")
 
         # Make prompts (parallel list to indices)
@@ -775,10 +774,10 @@ class GenerateUtil:
 
         # Generate
         voice_tag = ""
-        if Tts.get_type() == TtsModelType.NONE:
+        if Tts.get_active_type().id == "none":
             result = "No active TTS model"
         else:
-            voice_values = ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
+            voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
             has_voice_values = bool(voice_values)
             is_user_defined_voice_mode = project.voice_select_mode == VoiceSelectMode.USER_DEFINED
             use_custom_voice_index = (
@@ -849,7 +848,7 @@ class GenerateUtil:
 
                 # Trim model-specific short token-like trailing artifacts.
                 # Done before STT transcription so timestamps match the final audio.
-                if sound.data.size > 0 and Tts.get_model_support().should_trim_trailing_token_noise(project, Tts.get_instance_if_exists()):
+                if sound.data.size > 0 and Tts.get_model_support(project).should_trim_trailing_token_noise(project, Tts.get_instance_if_exists()):
                     pre_token_noise_trim_duration = sound.duration
                     if save_debug_files:
                         GenerateUtil.save_debug_sound(project, indices[i], "pre_token_noise_trim", sound, is_realtime=is_realtime)
@@ -929,7 +928,7 @@ class GenerateUtil:
             phrase_group=phrase_group,
             project=project,
             validation_result=validation_result,
-            tts_model_type=Tts.get_type().value,
+            tts_model_type=project.get_tts_model_type().value,
             is_real_time=is_real_time,
             voice_tag=voice_tag,
         )

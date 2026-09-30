@@ -17,12 +17,12 @@ class VoiceFishS1Menu:
         def make_items(_: State) -> list[MenuItem]:
             items = []
             items.extend(
-                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.FISH_S1)
+                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.require_by_id("fish_s1_local"))
             )
 
             items.append(
                 MenuItem(
-                    make_menu_label("Torch compile", state.project.get_model_setting('fish_s1', 'compile_enabled')),
+                    make_menu_label("Torch compile", state.project.get_model_setting('fish_s1_local', 'compile_enabled')),
                     lambda _, __: VoiceFishS1Menu.compile_menu(state), 
                     superlabel=VOICE_ADVANCED_SUPERLABEL
                 )
@@ -30,7 +30,7 @@ class VoiceFishS1Menu:
 
             temperature_item = VoiceMenuShared.make_temperature_item(
                 state=state,
-                target=SettingRef("fish_s1", "temperature"),
+                target=SettingRef("fish_s1_local", "temperature"),
                 default_value=FishS1BaseModel.DEFAULT_TEMPERATURE,
                 min_value=0.01,
                 max_value=2.0
@@ -40,7 +40,7 @@ class VoiceFishS1Menu:
             items.append(
                 VoiceMenuShared.make_top_p_item(
                     state=state,
-                    target=SettingRef("fish_s1", "top_p"),
+                    target=SettingRef("fish_s1_local", "top_p"),
                     default_value=FishS1BaseModel.DEFAULT_TOP_P
                 )
             )
@@ -48,13 +48,13 @@ class VoiceFishS1Menu:
             items.append(
                 VoiceMenuShared.make_repetition_penalty_item(
                     state=state,
-                    target=SettingRef("fish_s1", "repetition_penalty"),
+                    target=SettingRef("fish_s1_local", "repetition_penalty"),
                     default_value=FishS1BaseModel.DEFAULT_REPETITION_PENALTY
                 )
             )
 
             items.append(
-                VoiceMenuShared.make_seed_item(state, SettingRef("fish_s1", "seed"))
+                VoiceMenuShared.make_seed_item(state, SettingRef("fish_s1_local", "seed"))
             )
 
             return items
@@ -65,19 +65,19 @@ class VoiceFishS1Menu:
     def compile_menu(state: State) -> None:
 
         def on_select(value: bool) -> None:
-            if state.project.get_model_setting('fish_s1', 'compile_enabled') != value:
-                state.project.set_model_setting('fish_s1', 'compile_enabled', value)
+            if state.project.get_model_setting('fish_s1_local', 'compile_enabled') != value:
+                state.project.set_model_setting('fish_s1_local', 'compile_enabled', value)
                 state.project.save()
                 # Sync static value
                 Tts.set_model_params_using_project(state.project)
-            print_feedback(f"Set to:", str(state.project.get_model_setting('fish_s1', 'compile_enabled')))
+            print_feedback(f"Set to:", str(state.project.get_model_setting('fish_s1_local', 'compile_enabled')))
 
         MenuUtil.options_menu(
             state=state,
             heading_text="Torch compile",
             labels=["True", "False"],
             values=[True, False],
-            current_value=state.project.get_model_setting('fish_s1', 'compile_enabled'),
+            current_value=state.project.get_model_setting('fish_s1_local', 'compile_enabled'),
             default_value=FishS1BaseModel.DEFAULT_COMPILE_ENABLED,
             on_select=on_select
         )

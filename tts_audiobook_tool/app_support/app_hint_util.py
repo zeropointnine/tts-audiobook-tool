@@ -12,7 +12,6 @@ from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
-from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 """
 Hints related to 'high level app flow'
@@ -23,23 +22,21 @@ def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
     Shows one-time hints/warnings related to doing inference.
     Returns False if inference should *not* continue.
     """
-    from tts_audiobook_tool.tts import Tts
-
     can_continue = True
 
     # TTS-model hint/warning
-    match Tts.get_type():
-        case TtsModelType.FISH_S1:
-            if project.get_model_setting('fish_s1', 'compile_enabled'):
+    match project.get_tts_model_type().id:
+        case "fish_s1_local":
+            if project.get_model_setting('fish_s1_local', 'compile_enabled'):
                 hints.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE, and_prompt=True)
-        case TtsModelType.FISH_S2:
-            if project.get_model_setting('fish_s2', 'compile_enabled'):
+        case "fish_s2_local":
+            if project.get_model_setting('fish_s2_local', 'compile_enabled'):
                 hints.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE, and_prompt=True)
-        case TtsModelType.DOTS:
-            if project.get_model_setting('dots', 'compile'):
+        case "dots_local":
+            if project.get_model_setting('dots_local', 'compile'):
                 hints.show_hint_if_necessary(prefs, HINT_DOTS_FIRST_COMPILE, and_prompt=True)
-        case TtsModelType.MOSS:
-            target = project.get_model_setting('moss', 'target') or MossConfigs.get_default().value.repo_id
+        case "moss_local":
+            target = project.get_model_setting('moss_local', 'target') or MossConfigs.get_default().value.repo_id
             target = "huggingface repo id: " + target
             hint = Hint.make_using(HINT_MOSS_REMOTE_CODE, target)
             can_continue = show_hint_if_necessary(prefs, hint, and_confirm=True)
@@ -73,12 +70,9 @@ def show_shared_startup_hints(prefs: Prefs, is_server: bool) -> None:
     # SGL-Omni is a venv-level capability: in a local-mode venv without a
     # TTS model, saved SGL-Omni settings cannot be used here
     if (
-        Tts.get_backend_mode() == TtsBackendKind.LOCAL
-        and Tts.get_type() == TtsModelType.NONE
-        and (
-            prefs.sgl_omni_type is not None
-            or prefs.sgl_omni_url != ""
-        )
+        not Tts.is_remote_mode()
+        and not Tts.get_available_tts_models()
+        and prefs.remote_tts_url != ""
     ):
         hints.show_hint_if_necessary(prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
 

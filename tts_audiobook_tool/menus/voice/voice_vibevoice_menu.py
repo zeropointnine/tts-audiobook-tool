@@ -4,7 +4,6 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -20,7 +19,7 @@ class VoiceVibeVoiceMenu:
 
         def make_select_voice_label(_: State) -> str: # custom
             if not ProjectVoiceUtil.has_voice(state.project):
-                if state.project.get_model_setting('vibevoice', 'lora_target'):
+                if state.project.get_model_setting('vibevoice_local', 'lora_target'):
                     col = COL_ACCENT
                 else:
                     col = COL_ERROR
@@ -32,13 +31,13 @@ class VoiceVibeVoiceMenu:
         def make_model_target_label(_) -> str:
             return VoiceMenuShared.make_target_label(
                 label_prefix="Select model",
-                target=project.get_model_setting('vibevoice', 'target'),
+                target=project.get_model_setting('vibevoice_local', 'target'),
                 default_target=VibeVoiceBaseModel.DEFAULT_REPO_ID,
             )
 
         def make_lora_target_label(_) -> str:
-            if project.get_model_setting('vibevoice', 'lora_target'):
-                value = ellipsize_path_for_menu(project.get_model_setting('vibevoice', 'lora_target'))
+            if project.get_model_setting('vibevoice_local', 'lora_target'):
+                value = ellipsize_path_for_menu(project.get_model_setting('vibevoice_local', 'lora_target'))
                 label = make_currently_string(value)
             else:
                 label = f"{COL_DIM}(optional)"
@@ -52,7 +51,7 @@ class VoiceVibeVoiceMenu:
             items.extend(
                 VoiceMenuShared.make_voice_sample_items(
                     state,
-                    TtsModelType.VIBEVOICE,
+                    TtsModelType.require_by_id("vibevoice_local"),
                     no_samples_label=make_select_voice_label,
                 )
             )
@@ -61,7 +60,7 @@ class VoiceVibeVoiceMenu:
             items.append(
                 MenuItem(make_lora_target_label, lambda _, __: ask_lora_target(state))
             )
-            if state.project.get_model_setting('vibevoice', 'lora_target'):
+            if state.project.get_model_setting('vibevoice_local', 'lora_target'):
                 items.append(MenuItem("Clear LoRA", on_clear_lora))
 
             # Model
@@ -72,7 +71,7 @@ class VoiceVibeVoiceMenu:
                     superlabel = VOICE_ADVANCED_SUPERLABEL
                 )
             )
-            if state.project.get_model_setting('vibevoice', 'target'):
+            if state.project.get_model_setting('vibevoice_local', 'target'):
                 items.append(
                     MenuItem("Clear custom model", lambda _, __: clear_custom_model(state))
                 )
@@ -80,7 +79,7 @@ class VoiceVibeVoiceMenu:
             # Other config
             item = MenuUtil.make_number_item(
                 state=state,
-                target=SettingRef("vibevoice", "cfg"),
+                target=SettingRef("vibevoice_local", "cfg"),
                 base_label="CFG",
                 default_value=VibeVoiceBaseModel.CFG_DEFAULT,
                 is_minus_one_default=True,
@@ -94,7 +93,7 @@ class VoiceVibeVoiceMenu:
             items.append(
                 MenuUtil.make_number_item(
                     state=state,
-                    target=SettingRef("vibevoice", "steps"),
+                    target=SettingRef("vibevoice_local", "steps"),
                     base_label="Steps",
                     default_value=VibeVoiceBaseModel.DEFAULT_NUM_STEPS,
                     is_minus_one_default=True,
@@ -106,7 +105,7 @@ class VoiceVibeVoiceMenu:
             )
 
             items.append(
-                VoiceMenuShared.make_seed_item(state, SettingRef("vibevoice", "seed"))
+                VoiceMenuShared.make_seed_item(state, SettingRef("vibevoice_local", "seed"))
             )
             return items
 
@@ -119,7 +118,7 @@ def target_submenu(state: State) -> None:
         state=state,
         heading="Select VibeVoice model",
         preset_targets=VibeVoiceBaseModel.PRESET_REPO_IDS,
-        current_target=state.project.get_model_setting('vibevoice', 'target'),
+        current_target=state.project.get_model_setting('vibevoice_local', 'target'),
         default_target=VibeVoiceBaseModel.DEFAULT_REPO_ID,
         ask_custom_target=lambda: ask_model_target(state),
         apply_target=lambda target: apply_model_and_validate(state, target),
@@ -128,24 +127,24 @@ def target_submenu(state: State) -> None:
 def ask_model_target(state: State) -> None:
     project = state.project
 
-    model_name = Tts.get_type().value.ui["short_name"]
+    model_name = project.get_tts_model_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"vibevoice/VibeVoice-7B\"; \"/path/to/checkpoint\""
-    if project.get_model_setting('vibevoice', 'target'):
-        prompt += f"\n{COL_DIM}(currently: {project.get_model_setting('vibevoice', 'target')})"
+    if project.get_model_setting('vibevoice_local', 'target'):
+        prompt += f"\n{COL_DIM}(currently: {project.get_model_setting('vibevoice_local', 'target')})"
 
     VoiceMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.get_model_setting('vibevoice', 'target'),
+        current_target=project.get_model_setting('vibevoice_local', 'target'),
         callback=lambda _, target: apply_model_and_validate(state, target)
     )
 
 def apply_model_and_validate(state: State, target: str) -> None:
     project = state.project
 
-    previous_target = project.get_model_setting('vibevoice', 'target')
-    project.set_model_setting('vibevoice', 'target', target)
+    previous_target = project.get_model_setting('vibevoice_local', 'target')
+    project.set_model_setting('vibevoice_local', 'target', target)
     _ = ModelWorker.clear_models_if_running_blocking()
 
     # Preset targets are known-good repos with a single fixed architecture,
@@ -161,7 +160,7 @@ def apply_model_and_validate(state: State, target: str) -> None:
 
     inspection, error = ModelWorker.inspect_tts_blocking(state)
     if error or inspection is None:
-        project.set_model_setting('vibevoice', 'target', previous_target)
+        project.set_model_setting('vibevoice_local', 'target', previous_target)
         _ = ModelWorker.clear_models_if_running_blocking()
         ask.ask_error(f"\n{error}")
         return
@@ -171,7 +170,7 @@ def apply_model_and_validate(state: State, target: str) -> None:
 
 def clear_custom_model(state: State) -> None:
     project = state.project
-    project.set_model_setting('vibevoice', 'target', "")
+    project.set_model_setting('vibevoice_local', 'target', "")
     project.save()
     _ = ModelWorker.clear_models_if_running_blocking()
     print_feedback("Cleared, will use default model")
@@ -181,26 +180,26 @@ def ask_lora_target(state: State) -> None:
 
     prompt = f"Enter huggingface repo id or local directory path to VibeVoice LoRA"
     prompt += f"\n{COL_DIM}Eg, \"vibevoice-community/klett\", \"/path/to/checkpoint\""
-    if project.get_model_setting('vibevoice', 'lora_target'):
-        prompt += f"\n{COL_DIM}(Currently: {project.get_model_setting('vibevoice', 'lora_target')})"
+    if project.get_model_setting('vibevoice_local', 'lora_target'):
+        prompt += f"\n{COL_DIM}(Currently: {project.get_model_setting('vibevoice_local', 'lora_target')})"
 
     VoiceMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.get_model_setting('vibevoice', 'lora_target'),
+        current_target=project.get_model_setting('vibevoice_local', 'lora_target'),
         callback=lambda _, target: apply_lora_and_validate(state, target)
     )
 
 def apply_lora_and_validate(state: State, target: str) -> None:
     project = state.project
 
-    previous_target = project.get_model_setting('vibevoice', 'lora_target')
+    previous_target = project.get_model_setting('vibevoice_local', 'lora_target')
 
     def revert() -> None:
-        project.set_model_setting('vibevoice', 'lora_target', previous_target)
+        project.set_model_setting('vibevoice_local', 'lora_target', previous_target)
         _ = ModelWorker.clear_models_if_running_blocking()
 
-    project.set_model_setting('vibevoice', 'lora_target', target)
+    project.set_model_setting('vibevoice_local', 'lora_target', target)
     _ = ModelWorker.clear_models_if_running_blocking()
 
     printt(f"{COL_DIM_ITALICS}Initializing model...")
@@ -221,7 +220,7 @@ def apply_lora_and_validate(state: State, target: str) -> None:
         ask.ask_error("Couldn't load LoRA")
 
 def on_clear_lora(state: State, __: MenuItem) -> None:
-    state.project.set_model_setting('vibevoice', 'lora_target', "")
+    state.project.set_model_setting('vibevoice_local', 'lora_target', "")
     state.project.save()
     _ = ModelWorker.clear_models_if_running_blocking()
     print_feedback("Cleared LoRA")

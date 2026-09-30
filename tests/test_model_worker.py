@@ -1,5 +1,6 @@
 import os
 import queue
+from dataclasses import fields, replace
 import signal
 import threading
 import time
@@ -600,7 +601,7 @@ def test_state_for_worker_mirrors_init_attribute_set() -> None:
         "_prefs",
         "dont_show_scan_message",
         "has_shown_main_menu",
-        "pending_model_mismatch_name",
+        "pending_tts_model_change",
     }
     assert state.project is None
     assert state.dont_show_scan_message is False
@@ -710,7 +711,7 @@ def test_run_tts_preview_returns_processed_sound_without_word_substitutions(
     command = TtsPreviewCommand(
         operation_id="preview-job",
         project_dir="/project",
-        settings=GenerationSettings("disabled", "cpu", False, None, "", False),
+        settings=GenerationSettings("disabled", "cpu_int8_float32", False, "none", "", False),
         prompt="Original word: foo. Substitute word: bar",
         apply_word_substitutions=False,
     )
@@ -789,7 +790,7 @@ def test_run_tts_preview_rejects_nan_output(monkeypatch) -> None:
     command = TtsPreviewCommand(
         operation_id="preview-job",
         project_dir="/project",
-        settings=GenerationSettings("disabled", "cpu", False, None, "", False),
+        settings=GenerationSettings("disabled", "cpu_int8_float32", False, "none", "", False),
         prompt="Original word: foo. Substitute word: bar",
         apply_word_substitutions=False,
     )
@@ -825,7 +826,7 @@ def _make_preview_command() -> TtsPreviewCommand:
     return TtsPreviewCommand(
         operation_id="preview-job",
         project_dir="/project",
-        settings=GenerationSettings("disabled", "cpu", False, None, "", False),
+        settings=GenerationSettings("disabled", "cpu_int8_float32", False, "none", "", False),
         prompt="Original word: foo. Substitute word: bar",
         apply_word_substitutions=False,
     )
@@ -858,6 +859,49 @@ def _install_preview_state(monkeypatch) -> None:
     monkeypatch.setattr(
         Tts, "reset_voice_selection_index", staticmethod(lambda: None)
     )
+
+
+@pytest.mark.parametrize("cancel_during_notice", [False, True])
+def test_audio_cpp_preview_reports_init_before_inference(monkeypatch, cancel_during_notice: bool) -> None:
+    from tts_audiobook_tool.model_manager import ModelManager
+    from tts_audiobook_tool.tts_models.audio_cpp_configured import AudioCppBackendAdapter, AudioCppModelSupport
+    from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
+    from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+    _install_preview_state(monkeypatch)
+    definition = load_audio_cpp_definitions().models["breeze_tts_2_audiocpp"]
+    adapter = AudioCppBackendAdapter(definition, AudioCppModelSupport(definition), "exact-server-id")
+    monkeypatch.setattr(Tts, "_type", TtsModelType.require_by_id(definition.spec.id))
+    monkeypatch.setattr(Tts, "get_instance", lambda: adapter)
+    monkeypatch.setattr(model_worker_module, "_should_watch_preview_inference", lambda: False)
+    monkeypatch.setattr(model_worker_module, "_preview_inferences_this_process", 0)
+    cancellation_event = threading.Event()
+    calls: list[str] = []
+    sound = Sound(np.zeros(8, dtype=np.float32), 24_000)
+
+    def notice() -> None:
+        calls.append("notice")
+        if cancel_during_notice:
+            cancellation_event.set()
+
+    def generate(*_args, **_kwargs):
+        calls.append("generate")
+        return [sound]
+
+    monkeypatch.setattr(adapter, "print_init_if_unloaded", notice)
+    monkeypatch.setattr(SoundPipeline, "generate_processed_using_project", generate)
+    monkeypatch.setattr(ModelManager, "warm_up_models", lambda *_args, **_kwargs: pytest.fail("Preview must not warm STT/YAMNet"))
+    event_queue = _PreviewEventQueue()
+    model_worker_module._run_tts_preview_command(
+        _make_preview_command(), event_queue, cancellation_event
+    )
+
+    assert calls == (["notice"] if cancel_during_notice else ["notice", "generate"])
+    assert len(event_queue.events) == 1
+    event = event_queue.events[0]
+    assert isinstance(event, TtsPreviewFinished)
+    assert event.status is (GenerationTerminalStatus.CANCELLED if cancel_during_notice else GenerationTerminalStatus.COMPLETED)
+    assert event.sound is (None if cancel_during_notice else sound)
 
 
 def test_should_watch_preview_inference_exempts_model_setup_calls(monkeypatch) -> None:
@@ -919,7 +963,7 @@ def test_run_tts_preview_reports_a_watchdog_timeout(monkeypatch, capsys) -> None
         model_worker_module, "_should_watch_preview_inference", lambda: True
     )
     monkeypatch.setattr(gen_timeout_util, "GEN_TIMEOUT", 0.2)
-    monkeypatch.setattr(Tts, "is_sgl_mode", staticmethod(lambda: False))
+    monkeypatch.setattr(Tts, "is_remote_mode", staticmethod(lambda: False))
 
     def slow_generate(*_args: object, **_kwargs: object) -> list[Sound]:
         time.sleep(0.6)
@@ -978,6 +1022,7 @@ def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(L, "d", lambda *_: None)
     project = Project(dir_path=str(tmp_path))
     assert project.save() == ""
+    project.tts_model_type = "vibevoice_local"
     set_setting(project, "vibevoice_lora_target", "vibevoice-community/unsaved-adapter")
     state = SimpleNamespace(
         project=project,
@@ -991,7 +1036,7 @@ def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
 
     def wait_for_result(cls, operation_id, _expected_type):
         cls._active_operation_id = None
-        return TtsInspected(operation_id, "vibevoice")
+        return TtsInspected(operation_id, "vibevoice_local")
 
     monkeypatch.setattr(ModelWorker, "start", classmethod(lambda cls: ""))
     monkeypatch.setattr(ModelWorker, "_command_queue", CommandQueue())
@@ -1010,6 +1055,7 @@ def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
     command = commands[0]
     assert isinstance(command, InspectTtsCommand)
     assert command.model_params["vibevoice_lora_path"] == get_setting(project, "vibevoice_lora_target")
+    assert command.settings.tts_model_type_id == "vibevoice_local"
     assert command.warm_models is False
     assert command.warm_stt is False
 
@@ -1031,7 +1077,7 @@ def test_inspect_tts_chat_warm_up_flags_are_carried(tmp_path, monkeypatch) -> No
 
     def wait_for_result(cls, operation_id, _expected_type):
         cls._active_operation_id = None
-        return TtsInspected(operation_id, "vibevoice")
+        return TtsInspected(operation_id, "vibevoice_local")
 
     monkeypatch.setattr(ModelWorker, "start", classmethod(lambda cls: ""))
     monkeypatch.setattr(ModelWorker, "_command_queue", CommandQueue())
@@ -1048,6 +1094,262 @@ def test_inspect_tts_chat_warm_up_flags_are_carried(tmp_path, monkeypatch) -> No
     assert isinstance(command, InspectTtsCommand)
     assert command.warm_models is True
     assert command.warm_stt is True
+
+
+@pytest.mark.parametrize("kind", ["generation", "preview", "realtime", "chat", "inspection"])
+def test_command_producers_snapshot_live_project_selection(kind, tmp_path, monkeypatch) -> None:
+    """All command paths use unsaved selection, not global prefs or disk state."""
+    project = Project(dir_path=str(tmp_path))
+    assert project.save() == ""
+    project.tts_model_type = "higgs_v3_audiocpp"
+    prefs = Prefs(
+        project_dir=str(tmp_path), stt_variant=SttVariant.DISABLED,
+        remote_tts_url="http://example.test:9009", tts_force_cpu=True,
+        save_debug_files=True,
+    )
+    state = SimpleNamespace(project=project, prefs=prefs)
+    commands = queue.Queue()
+    monkeypatch.setattr(ModelWorker, "start", classmethod(lambda cls: ""))
+    monkeypatch.setattr(ModelWorker, "_start_with_console_handler", classmethod(lambda cls, handler: ""))
+    monkeypatch.setattr(ModelWorker, "_command_queue", commands)
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", None)
+    monkeypatch.setattr(ModelWorker, "_cancellation_event", threading.Event())
+    monkeypatch.setattr(ModelWorker, "_continue_event", threading.Event())
+    monkeypatch.setattr(
+        ModelWorker, "_wait_for_blocking_result_with_handler",
+        classmethod(lambda cls, operation_id, expected, handler: TtsInspected(operation_id, "bound-model")),
+    )
+    monkeypatch.setattr(
+        ModelWorker, "get_event",
+        classmethod(lambda cls, timeout: model_worker_module.ChatSynthesisFinished(cls._active_operation_id)),
+    )
+
+    if kind == "generation":
+        ModelWorker.submit_generation(state=state, indices={1}, batch_size=1, is_regen=False)
+    elif kind == "preview":
+        ModelWorker.submit_tts_preview(state=state, prompt="Hello")
+    elif kind == "realtime":
+        ModelWorker.submit_realtime_playback(state=state, phrase_groups=[], line_range=None)
+    elif kind == "chat":
+        ModelWorker.synthesize_chat_blocking(state, "Hello", None, streaming=False)
+    else:
+        ModelWorker.inspect_tts_blocking(state)
+
+    command = commands.get_nowait()
+    assert command.settings.tts_model_type_id == "higgs_v3_audiocpp"
+    assert command.settings.remote_tts_url == "http://example.test:9009"
+    assert command.settings.stt_variant_id == SttVariant.DISABLED.id
+    assert command.settings.tts_force_cpu is True
+    assert command.settings.save_debug_files is True
+    assert {field.name for field in fields(command.settings)} == {
+        "stt_variant_id", "stt_config_id", "tts_force_cpu", "tts_model_type_id",
+        "remote_tts_url", "save_debug_files",
+    }
+    # A queued snapshot remains independent of further live edits.
+    project.tts_model_type = "vibevoice_local"
+    assert command.settings.tts_model_type_id == "higgs_v3_audiocpp"
+
+
+def test_worker_state_overrides_disk_selection_before_binding(tmp_path, monkeypatch) -> None:
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+    from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
+    from tts_audiobook_tool.tts import TtsRuntimeMode
+
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    project = Project(dir_path=str(tmp_path), tts_model_type="vibevoice_local")
+    project._sound_segments = SimpleNamespace(dont_show_scan_message=False)
+    calls = []
+    monkeypatch.setattr(
+        ProjectLoadUtil, "load_using_dir_path",
+        staticmethod(lambda *args, **kwargs: calls.append("load") or project),
+    )
+    monkeypatch.setattr(
+        Project, "save", lambda self: pytest.fail("worker snapshots must not save project settings"),
+    )
+    monkeypatch.setattr(
+        Tts, "bind_project",
+        staticmethod(lambda selected, **kwargs: calls.append(("bind", selected.tts_model_type))),
+    )
+    monkeypatch.setattr(
+        RemoteTtsDiscovery, "refresh",
+        classmethod(lambda cls, force=False: calls.append(("refresh", force))),
+    )
+    command = TtsPreviewCommand(
+        "snapshot", str(tmp_path),
+        GenerationSettings("disabled", "cpu_int8_float32", False, "higgs_v3_audiocpp", "http://example.test", False),
+        "Hello",
+    )
+
+    state = model_worker_module._make_worker_state(command)
+
+    assert state.project is project
+    assert calls == [("refresh", True), "load", ("bind", "higgs_v3_audiocpp")]
+    assert state.prefs.remote_tts_url == "http://example.test"
+    assert not hasattr(state.prefs, "remote_tts_type")
+    assert not hasattr(state.prefs, "remote_tts_model_id")
+
+
+def test_local_worker_state_ignores_saved_remote_url(tmp_path, monkeypatch) -> None:
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+    from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
+    from tts_audiobook_tool.tts import TtsRuntimeMode
+    from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+    model_type = TtsModelType.require_by_id("chatterbox_local")
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.LOCAL)
+    monkeypatch.setattr(Tts, "_available_local_models", (model_type,))
+    project = Project(dir_path=str(tmp_path), tts_model_type="vibevoice_local")
+    project._sound_segments = SimpleNamespace(dont_show_scan_message=False)
+    monkeypatch.setattr(
+        ProjectLoadUtil, "load_using_dir_path", staticmethod(lambda *args, **kwargs: project),
+    )
+    monkeypatch.setattr(
+        Project, "save", lambda self: pytest.fail("worker snapshots must not save project settings"),
+    )
+    monkeypatch.setattr(
+        RemoteTtsDiscovery, "refresh",
+        classmethod(lambda cls, force=False: pytest.fail("local workers must not probe remote endpoints")),
+    )
+    command = TtsPreviewCommand(
+        "local-snapshot", str(tmp_path),
+        GenerationSettings("disabled", "cpu_int8_float32", False, model_type.id, "http://offline.example", False),
+        "Hello",
+    )
+
+    state = model_worker_module._make_worker_state(command)
+
+    assert state.project is project
+    assert state.project.tts_model_type == model_type.id
+    assert state.prefs.remote_tts_url == "http://offline.example"
+    assert Tts.get_active_type() is model_type
+    assert Tts._binding_issue is None
+
+
+def test_chat_cached_project_rebinds_each_command_selection_without_forced_probe(tmp_path, monkeypatch) -> None:
+    import tts_audiobook_tool.tts as tts_module
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot
+    from tts_audiobook_tool.model_runtime import ModelRuntimeRole
+    from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
+    from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
+    from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+    (tmp_path / "project.json").write_text("{}", encoding="utf-8")
+    project = Project(dir_path=str(tmp_path), tts_model_type="vibevoice_local")
+    project._sound_segments = SimpleNamespace(dont_show_scan_message=False)
+    loads = []
+    bound_ids = []
+    monkeypatch.setattr(model_worker_module, "_chat_project_cache", None)
+    monkeypatch.setattr(
+        ProjectLoadUtil, "load_using_dir_path",
+        staticmethod(lambda *args, **kwargs: loads.append(True) or project),
+    )
+    monkeypatch.setattr(
+        Project, "save", lambda self: pytest.fail("chat snapshots must not save project settings"),
+    )
+    model_types = [TtsModelType.require_by_id("higgs_v3_audiocpp"), TtsModelType.require_by_id("chatterbox_audiocpp")]
+    snapshot = RemoteTtsSnapshot(
+        backend_kind=TtsBackendKind.AUDIO_CPP,
+        candidates=tuple(zip(model_types, (
+            "entry-server_higgs_v3_audio_cpp", "entry-server_chatterbox_audio_cpp_v3",
+        ))),
+    )
+    cleared_types = []
+    monkeypatch.setattr(Tts, "_type", TtsModelType.require_by_id("none"))
+    monkeypatch.setattr(Tts, "_selected_server_model_id", "")
+    monkeypatch.setattr(Tts, "_binding_issue", None)
+    monkeypatch.setattr(Tts, "_remote_issue", "")
+    monkeypatch.setattr(tts_module.SglOmniUtil, "_model_id", "")
+    monkeypatch.setattr(tts_module, "current_role", lambda: ModelRuntimeRole.MODEL_WORKER)
+    monkeypatch.setattr(Tts, "is_remote_mode", staticmethod(lambda: True))
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", classmethod(lambda cls: snapshot))
+    monkeypatch.setattr(Tts, "clear_tts_model", staticmethod(lambda: cleared_types.append(Tts.get_active_type())))
+    monkeypatch.setattr(
+        Tts, "set_model_params_using_project",
+        staticmethod(lambda selected: bound_ids.append(selected.tts_model_type)),
+    )
+    refresh_modes = []
+    def cached_refresh(cls, force=False):
+        refresh_modes.append(force)
+        assert not force, "chat sentences must not force discovery"
+        return snapshot
+    monkeypatch.setattr(RemoteTtsDiscovery, "refresh", classmethod(cached_refresh))
+    settings = GenerationSettings("disabled", "cpu_int8_float32", False, "higgs_v3_audiocpp", "http://example.test", False)
+    command = model_worker_module.SynthesizeChatCommand("first", str(tmp_path), settings, "Hello", False, None)
+
+    first = model_worker_module._make_chat_worker_state(command)
+    assert Tts.get_active_type() is TtsModelType.require_by_id("higgs_v3_audiocpp")
+    unchanged = model_worker_module._make_chat_worker_state(replace(command, operation_id="unchanged"))
+    assert cleared_types == [TtsModelType.require_by_id("none")]
+    second = model_worker_module._make_chat_worker_state(replace(
+        command, operation_id="second",
+        settings=replace(settings, tts_model_type_id="chatterbox_audiocpp"),
+    ))
+
+    assert first.project is unchanged.project is second.project is project
+    assert loads == [True]
+    assert bound_ids == ["higgs_v3_audiocpp", "higgs_v3_audiocpp", "chatterbox_audiocpp"]
+    assert project.tts_model_type == "chatterbox_audiocpp"
+    assert Tts.get_active_type() is TtsModelType.require_by_id("chatterbox_audiocpp")
+    assert Tts._selected_server_model_id == "entry-server_chatterbox_audio_cpp_v3"
+    assert cleared_types == [TtsModelType.require_by_id("none"), TtsModelType.require_by_id("higgs_v3_audiocpp")]
+    assert refresh_modes == [False, False, False]
+
+
+def test_worker_inspection_preserves_unsaved_params_after_selection_binding(tmp_path, monkeypatch) -> None:
+    import tts_audiobook_tool.app_support as app_support
+    import tts_audiobook_tool.model_runtime as model_runtime
+    from tts_audiobook_tool.model_manager import ModelManager
+    from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
+    from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+    project = Project(dir_path=str(tmp_path), tts_model_type="none")
+    project._sound_segments = SimpleNamespace(dont_show_scan_message=False, observer=SimpleNamespace(stop=lambda: None))
+    calls = []
+    instance = SimpleNamespace(
+        get_device_type=lambda: None,
+        get_warning_issues=lambda selected: [],
+        has_lora=lambda: True,
+    )
+    monkeypatch.setattr(model_runtime, "mark_model_worker", lambda: None)
+    monkeypatch.setattr(model_worker_module.signal, "signal", lambda *args: None)
+    monkeypatch.setattr(model_worker_module._WorkerOutputCapture, "install", lambda self: None)
+    monkeypatch.setattr(app_support, "init_logging", lambda *args: None)
+    monkeypatch.setattr(Tts, "init_local_model_type", staticmethod(lambda: None))
+    monkeypatch.setattr(Tts, "_config_fingerprint", "")
+    monkeypatch.setattr(
+        ProjectLoadUtil, "load_using_dir_path", staticmethod(lambda *args, **kwargs: project),
+    )
+    monkeypatch.setattr(
+        Tts, "bind_project", staticmethod(lambda selected, **kwargs: calls.append(("bind", selected.tts_model_type))),
+    )
+    monkeypatch.setattr(Tts, "set_model_params", staticmethod(lambda params: calls.append(("params", params))))
+    monkeypatch.setattr(Tts, "get_instance", staticmethod(lambda: calls.append("instance") or instance))
+    monkeypatch.setattr(Tts, "get_active_type", staticmethod(lambda: TtsModelType.require_by_id("vibevoice_local")))
+    monkeypatch.setattr(
+        Tts, "get_model_support",
+        staticmethod(lambda selected: SimpleNamespace(get_blocking_issues=lambda p, i: [])),
+    )
+    monkeypatch.setattr(ModelManager, "clear_all_models", staticmethod(lambda: None))
+    command = InspectTtsCommand(
+        "inspection", str(tmp_path),
+        GenerationSettings("disabled", "cpu_int8_float32", False, "vibevoice_local", "", False),
+        {"vibevoice_lora_path": "unsaved-adapter"},
+    )
+    commands = queue.Queue()
+    commands.put(command)
+    commands.put(model_worker_module.ShutdownCommand("shutdown"))
+    events = queue.Queue()
+
+    model_worker_module._model_worker_main(commands, events, threading.Event(), threading.Event())
+
+    assert calls == [("bind", "vibevoice_local"), ("params", command.model_params), "instance"]
+    emitted = []
+    while not events.empty():
+        emitted.append(events.get_nowait())
+    inspections = [event for event in emitted if isinstance(event, TtsInspected)]
+    assert len(inspections) == 1
+    assert inspections[0].tts_type_id == "vibevoice_local"
+    assert inspections[0].metadata["has_lora"] is True
 
 
 def test_release_chat_synthesis_state_clears_callbacks_and_transient_memory(

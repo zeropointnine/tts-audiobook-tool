@@ -19,7 +19,6 @@ from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from project_settings_test_support import get_setting
 
 
@@ -47,9 +46,10 @@ class TestProjectBookIntegration(unittest.TestCase):
         with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "w", encoding="utf-8") as file:
             json.dump(payload, file)
 
-    def write_complete_project_json(self, project_dir: str, current_model_type: object) -> None:
+    def write_complete_project_json(self, project_dir: str, legacy_model_stamp: str | None = None) -> None:
         payload = ProjectSerializationUtil.to_project_json_dict(Project())
-        payload["current_model_type"] = current_model_type
+        if legacy_model_stamp is not None:
+            payload["current_model_type"] = legacy_model_stamp
         with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "w", encoding="utf-8") as file:
             json.dump(payload, file)
 
@@ -159,7 +159,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
-        orchestration = payload["model_settings"]["models"]["server_qwen3tts"]["orchestration"]
+        orchestration = payload["model_settings"]["models"]["qwen3tts_sglomni"]["orchestration"]
         self.assertEqual(orchestration["concurrent_requests"], 3)
 
     def test_project_model_validate_normalizes_legacy_voice_strings_to_lists(self):
@@ -203,8 +203,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_dir:
             self.write_minimal_project_json(project_dir, {"streaming_chat": "invalid"})
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
-                    patch("tts_audiobook_tool.project_support.project_load_util.printt") as print_mock, \
+            with patch("tts_audiobook_tool.project_support.project_load_util.printt") as print_mock, \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
@@ -216,150 +215,15 @@ class TestProjectBookIntegration(unittest.TestCase):
         ))
         continue_mock.assert_called_once_with()
 
-    def test_project_current_model_type_defaults_and_normalizes_by_id(self):
-        self.assertEqual(Project().current_model_type, TtsModelType.NONE)
-        self.assertEqual(
-            Project.model_validate({"current_model_type": TtsModelType.CHATTERBOX.value.id}).current_model_type,
-            TtsModelType.CHATTERBOX,
-        )
-        self.assertEqual(
-            Project.model_validate({"current_model_type": TtsModelType.CHATTERBOX}).current_model_type,
-            TtsModelType.CHATTERBOX,
-        )
-        self.assertEqual(
-            Project.model_validate({"current_model_type": "server_moss"}).current_model_type,
-            TtsModelType.NONE,
-        )
-        self.assertEqual(
-            Project.model_validate({"current_model_type": "unknown-model"}).current_model_type,
-            TtsModelType.NONE,
-        )
-
-    def test_project_current_model_type_serializes_using_id(self):
-        project = Project.model_validate({"current_model_type": TtsModelType.CHATTERBOX.value.id})
-
-        payload = ProjectSerializationUtil.to_project_json_dict(project)
-
-        self.assertEqual(payload["current_model_type"], TtsModelType.CHATTERBOX.value.id)
-
-    def test_project_save_stamps_current_runtime_model_type(self):
+    def test_project_load_ignores_removed_model_stamp_field(self):
+        """Projects written by older builds still load; the key is simply ignored."""
         with tempfile.TemporaryDirectory() as project_dir:
-            project = Project(dir_path=project_dir)
+            self.write_complete_project_json(project_dir, legacy_model_stamp="server_moss")
 
-            with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.MIRA):
-                error = project.save()
-
-            with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
-                payload = json.load(file)
-
-        self.assertEqual(error, "")
-        self.assertEqual(project.current_model_type, TtsModelType.MIRA)
-        self.assertEqual(payload["current_model_type"], TtsModelType.MIRA.value.id)
-
-    def test_project_save_does_not_replace_current_model_type_with_none(self):
-        with tempfile.TemporaryDirectory() as project_dir:
-            project = Project.model_validate({
-                "dir_path": project_dir,
-                "current_model_type": TtsModelType.CHATTERBOX.value.id,
-            })
-
-            with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
-                error = project.save()
-
-            with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
-                payload = json.load(file)
-
-        self.assertEqual(error, "")
-        self.assertEqual(project.current_model_type, TtsModelType.CHATTERBOX)
-        self.assertEqual(payload["current_model_type"], TtsModelType.CHATTERBOX.value.id)
-
-    def test_state_reports_and_acknowledges_different_previous_model(self):
-        with tempfile.TemporaryDirectory() as project_dir:
-            self.write_complete_project_json(project_dir, TtsModelType.CHATTERBOX.value.id)
-            state = State.for_worker(Prefs(project_dir="", stt_variant=SttVariant.DISABLED))
-
-            with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.MIRA), \
-                    patch("tts_audiobook_tool.tts.Tts.set_model_params_using_project"), \
-                    patch("tts_audiobook_tool.state.Whitelist") as whitelist_mock, \
-                    patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
-                result = ProjectLoadUtil.load_using_dir_path(project_dir)
-                self.assertIsInstance(result, Project)
-                # Loading alone no longer consumes or rewrites the stored model
-                self.assertEqual(result.current_model_type, TtsModelType.CHATTERBOX)
-
-                state.project = result
-                self.assertEqual(state.pending_model_mismatch_name, "Chatterbox TTS")
-
-                # Consuming the pending hint acknowledges it: the stored model
-                # type is cleared so the hint is not repeated on next load
-                self.assertEqual(state.take_model_mismatch_name(), "Chatterbox TTS")
-                self.assertEqual(state.pending_model_mismatch_name, "")
-                self.assertEqual(state.take_model_mismatch_name(), "")
-
-            with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
-                payload = json.load(file)
-            self.assertEqual(payload["current_model_type"], TtsModelType.NONE.value.id)
-            whitelist_mock.assert_called_once_with()
-            continue_mock.assert_not_called()
-
-    def test_state_clears_pending_model_mismatch_for_fresh_project(self):
-        state = State.for_worker(Prefs(project_dir="", stt_variant=SttVariant.DISABLED))
-
-        with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.MIRA), \
-                patch("tts_audiobook_tool.tts.Tts.set_model_params_using_project"), \
-                patch("tts_audiobook_tool.state.Whitelist"):
-            state.project = Project(dir_path="")
-            state.pending_model_mismatch_name = "Chatterbox TTS"
-            state.project = Project(dir_path="")
-
-        self.assertEqual(state.pending_model_mismatch_name, "")
-        self.assertEqual(state.take_model_mismatch_name(), "")
-
-    def test_project_load_treats_legacy_moss_server_stamp_as_unknown(self):
-        with tempfile.TemporaryDirectory() as project_dir:
-            self.write_complete_project_json(project_dir, "server_moss")
-
-            with patch(
-                    "tts_audiobook_tool.tts.Tts.get_type",
-                    return_value=TtsModelType.MOSS_LOCAL_SERVER,
-            ), patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
-                result = ProjectLoadUtil.load_using_dir_path(project_dir)
+            result = ProjectLoadUtil.load_using_dir_path(project_dir)
 
         self.assertIsInstance(result, Project)
-        self.assertEqual(result.current_model_type, TtsModelType.NONE)
-        continue_mock.assert_not_called()
-
-    def test_project_load_skips_previous_model_report_when_not_applicable(self):
-        cases = [
-            ("matching model", TtsModelType.CHATTERBOX.value.id, TtsModelType.CHATTERBOX, True),
-            ("previous model is none", TtsModelType.NONE.value.id, TtsModelType.MIRA, True),
-            ("previous model id is invalid", "unknown-model", TtsModelType.MIRA, True),
-            ("noninteractive load", TtsModelType.CHATTERBOX.value.id, TtsModelType.MIRA, False),
-        ]
-        for label, stored_type, runtime_type, prompt_on_warnings in cases:
-            with self.subTest(label=label), tempfile.TemporaryDirectory() as project_dir:
-                self.write_complete_project_json(project_dir, stored_type)
-                with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=runtime_type), \
-                        patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
-                    result = ProjectLoadUtil.load_using_dir_path(
-                        project_dir,
-                        prompt_on_warnings=prompt_on_warnings,
-                    )
-
-                self.assertIsInstance(result, Project)
-                continue_mock.assert_not_called()
-
-    def test_state_skips_model_mismatch_report_without_proper_name(self):
-        state = State.for_worker(Prefs(project_dir="", stt_variant=SttVariant.DISABLED))
-
-        with patch.dict(TtsModelType.CHATTERBOX.value.ui, {}, clear=True), \
-                patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.MIRA), \
-                patch("tts_audiobook_tool.tts.Tts.set_model_params_using_project"), \
-                patch("tts_audiobook_tool.state.Whitelist"):
-            state.project = Project(current_model_type=TtsModelType.CHATTERBOX)
-
-        self.assertEqual(state.pending_model_mismatch_name, "")
-        self.assertEqual(state.take_model_mismatch_name(), "")
+        self.assertNotIn("current_model_type", Project.model_fields)
 
     def test_project_to_dict_serializes_single_voice_item_as_string_and_multiple_as_list(self):
         project = Project.model_validate({
@@ -399,7 +263,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
-        parameters = payload["model_settings"]["models"]["server_higgs_v3"]["parameters"]
+        parameters = payload["model_settings"]["models"]["higgs_v3_sglomni"]["parameters"]
         self.assertEqual(parameters["temperature"], 0.43)
         self.assertEqual(parameters["top_p"], 0.87)
         self.assertEqual(parameters["top_k"], 42)
@@ -439,7 +303,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
-        self.assertEqual(payload["model_settings"]["models"]["moss"]["parameters"]["target"], target)
+        self.assertEqual(payload["model_settings"]["models"]["moss_local"]["parameters"]["target"], target)
 
     def test_project_model_validate_normalizes_moss_audio_top_p_and_top_k(self):
         project = Project.model_validate({
@@ -517,8 +381,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(os.path.join(project_dir, PROJECT_TEXT_FILE_NAME), "w", encoding="utf-8") as file:
                 json.dump(text_payload, file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
-                    patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+            with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
         self.assertIsInstance(result, Project)
@@ -541,8 +404,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(text_payload, file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
-                    patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+            with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
             with open(text_path, "r", encoding="utf-8") as file:
@@ -580,8 +442,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(book_to_project_text_json_dict(book), file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
-                    patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+            with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
             with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
@@ -608,8 +469,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(text_payload, file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
-                    patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+            with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
             with open(text_path, "r", encoding="utf-8") as file:
@@ -641,8 +501,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(payload, file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
-                    patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+            with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
             with open(text_path, "r", encoding="utf-8") as file:
@@ -806,10 +665,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             )
             self.assertEqual(project.voice_select_mode, VoiceSelectMode.DISABLED)
 
-            with patch(
-                "tts_audiobook_tool.project_support.project_util.Tts.get_type",
-                return_value=TtsModelType.NONE,
-            ), patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+            with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 reloaded = ProjectUtil.load_using_dir_path(project_dir)
 
         self.assertIsInstance(reloaded, Project)
@@ -898,8 +754,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(book_to_project_text_json_dict(book), file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
-                    patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+            with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
         self.assertIsInstance(result, Project)
@@ -929,8 +784,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             project.markers = {1}
             project.save()
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
-                    patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+            with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 reloaded = ProjectUtil.load_using_dir_path(project_dir)
 
         self.assertIsInstance(reloaded, Project)

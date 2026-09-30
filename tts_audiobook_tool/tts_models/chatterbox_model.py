@@ -12,6 +12,7 @@ import logging
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -122,19 +123,20 @@ class ChatterboxModel(ChatterboxBaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
 
         # Parameters common to both model types
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.CHATTERBOX, voice_selection_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("chatterbox_local"), voice_selection_index)
 
-        temperature = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox', 'temperature'), ChatterboxBaseModel.DEFAULT_TEMPERATURE)
-        top_p = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox', 'top_p'), ChatterboxBaseModel.DEFAULT_TOP_P)
+        temperature = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox_local', 'temperature'), ChatterboxBaseModel.DEFAULT_TEMPERATURE)
+        top_p = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox_local', 'top_p'), ChatterboxBaseModel.DEFAULT_TOP_P)
         # Only consumed by the multilingual variant, but always passed
-        exaggeration = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox', 'exaggeration'), ChatterboxBaseModel.DEFAULT_EXAGGERATION)
-        cfg = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox', 'cfg'), ChatterboxBaseModel.DEFAULT_CFG)
+        exaggeration = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox_local', 'exaggeration'), ChatterboxBaseModel.DEFAULT_EXAGGERATION)
+        cfg = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox_local', 'cfg'), ChatterboxBaseModel.DEFAULT_CFG)
 
         # Note how each model has an independent repetition penalty value b/c the values behave differently on each
         language_id = ""
@@ -143,24 +145,24 @@ class ChatterboxModel(ChatterboxBaseModel):
         if self._model_type.is_multilingual:
             language_id = project.language_code
             ml_repetition_penalty = (
-                project.get_model_setting('chatterbox', 'ml_v2_repetition_penalty')
+                project.get_model_setting('chatterbox_local', 'ml_v2_repetition_penalty')
                 if self._model_type == ChatterboxType.MULTILINGUAL_V2
-                else project.get_model_setting('chatterbox', 'ml_v3_repetition_penalty')
+                else project.get_model_setting('chatterbox_local', 'ml_v3_repetition_penalty')
             )
             repetition_penalty = ChatterboxModel._resolve_setting(
                 ml_repetition_penalty,
                 ChatterboxBaseModel.default_repetition_penalty(self._model_type),
             )
         else:
-            turbo_top_k = None if project.get_model_setting('chatterbox', 'turbo_top_k') == -1 else project.get_model_setting('chatterbox', 'turbo_top_k')
+            turbo_top_k = None if project.get_model_setting('chatterbox_local', 'turbo_top_k') == -1 else project.get_model_setting('chatterbox_local', 'turbo_top_k')
             repetition_penalty = ChatterboxModel._resolve_setting(
-                project.get_model_setting('chatterbox', 'turbo_repetition_penalty'), ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
+                project.get_model_setting('chatterbox_local', 'turbo_repetition_penalty'), ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
             )
 
         # Randomize seed here so that generate() receives a concrete value
-        seed = -1 if force_random_seed else project.get_model_setting('chatterbox', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('chatterbox_local', 'seed')
         if seed <= -1:
-            seed = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
 
         result = self.generate(
             text=prompts[0],

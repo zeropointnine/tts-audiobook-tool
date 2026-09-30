@@ -17,7 +17,7 @@ else:
 
 class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
-    INFO = TtsModelType.VIBEVOICE.value
+    INFO = TtsModelType.require_by_id("vibevoice_local").value
 
     DEFAULT_REPO_ID = "microsoft/VibeVoice-1.5b"
     PRESET_REPO_IDS = [
@@ -41,7 +41,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
 ) -> str:
-        target = project.get_model_setting('vibevoice', 'target') or VibeVoiceBaseModel.DEFAULT_REPO_ID
+        target = project.get_model_setting('vibevoice_local', 'target') or VibeVoiceBaseModel.DEFAULT_REPO_ID
         target = target.removeprefix("vibevoice/")
         target = target.removeprefix("microsoft/")
         target = ellipsize_path_for_menu(target)
@@ -62,13 +62,13 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         errors = []
         if instance:
             assert isinstance(instance, VibeVoiceBaseModel)
-            if project.get_model_setting('vibevoice', 'lora_target') and not instance.has_lora:
+            if project.get_model_setting('vibevoice_local', 'lora_target') and not instance.has_lora:
                 errors.append( ReadinessIssue("valid LoRA", "Couldn't load LoRA") )
         return errors
 
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = super().get_warning_issues(project)
-        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE) and not project.get_model_setting('vibevoice', 'lora_target'):
+        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("vibevoice_local")) and not project.get_model_setting('vibevoice_local', 'lora_target'):
             warning = "Model may generate random voices because no voice sample or lora has been defined"
             warnings.append(warning)
         return warnings
@@ -77,11 +77,11 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     def get_voice_tag(cls, project: Project) -> str:
 
         def get_lora_value() -> str:
-            value = Path(project.get_model_setting('vibevoice', 'lora_target')).stem
+            value = Path(project.get_model_setting('vibevoice_local', 'lora_target')).stem
             value = app_text.sanitize_for_filename(value[:30])
             return value
 
-        match (bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE)), bool(project.get_model_setting('vibevoice', 'lora_target'))):
+        match (bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("vibevoice_local"))), bool(project.get_model_setting('vibevoice_local', 'lora_target'))):
             case (False, False):
                 return "none"
             case (True, True):
@@ -97,8 +97,8 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> VoiceDisplayInfo | None:
 
-        has_voice_clone = bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE))
-        has_lora = bool(project.get_model_setting('vibevoice', 'lora_target'))
+        has_voice_clone = bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("vibevoice_local")))
+        has_lora = bool(project.get_model_setting('vibevoice_local', 'lora_target'))
         match (has_voice_clone, has_lora):
             case (True, False):
                 return super().get_voice_display_info_default(project, instance)
@@ -111,8 +111,8 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
             case (False, True):
                 status_prefix = "Voice LoRA"
                 menu_prefix = "current lora:"
-                value = ellipsize_path_for_menu(project.get_model_setting('vibevoice', 'lora_target'))
-                value = text_util.make_terminal_hyperlink(project.get_model_setting('vibevoice', 'lora_target'), value, is_file=True)
+                value = ellipsize_path_for_menu(project.get_model_setting('vibevoice_local', 'lora_target'))
+                value = text_util.make_terminal_hyperlink(project.get_model_setting('vibevoice_local', 'lora_target'), value, is_file=True)
                 value = value
 
         return VoiceDisplayInfo(status_prefix, menu_prefix, value)
@@ -121,7 +121,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
 def is_15b(project: Project) -> bool:
     # Best-guess using target value only
-    target = project.get_model_setting('vibevoice', 'target').lower()
+    target = project.get_model_setting('vibevoice_local', 'target').lower()
     if not target:
         return True # 1.5B is the default
     if "1.5b" in target or "15b" in target:

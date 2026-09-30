@@ -12,6 +12,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -175,6 +176,7 @@ class FishS1Model(FishS1BaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
             print_params: bool = False,
+            max_random_seed: int = -1,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
@@ -182,7 +184,7 @@ class FishS1Model(FishS1BaseModel):
         prompt = prompts[0]
 
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.FISH_S1, voice_selection_index
+            project, TtsModelType.require_by_id("fish_s1_local"), voice_selection_index
         )
         if voice_file_name:
             voice_info = (ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name), voice_transcript)
@@ -198,24 +200,24 @@ class FishS1Model(FishS1BaseModel):
             self.clear_voice_clone()
 
 
-        if project.get_model_setting('fish_s1', 'temperature') == -1:
+        if project.get_model_setting('fish_s1_local', 'temperature') == -1:
             temperature = FishS1BaseModel.DEFAULT_TEMPERATURE
         else:
-            temperature = project.get_model_setting('fish_s1', 'temperature')
+            temperature = project.get_model_setting('fish_s1_local', 'temperature')
 
-        if project.get_model_setting('fish_s1', 'top_p') == -1:
+        if project.get_model_setting('fish_s1_local', 'top_p') == -1:
             top_p = FishS1BaseModel.DEFAULT_TOP_P
         else:
-            top_p = project.get_model_setting('fish_s1', 'top_p')
+            top_p = project.get_model_setting('fish_s1_local', 'top_p')
 
-        if project.get_model_setting('fish_s1', 'repetition_penalty') == -1:
+        if project.get_model_setting('fish_s1_local', 'repetition_penalty') == -1:
             repetition_penalty = FishS1BaseModel.DEFAULT_REPETITION_PENALTY
         else:
-            repetition_penalty = project.get_model_setting('fish_s1', 'repetition_penalty')
+            repetition_penalty = project.get_model_setting('fish_s1_local', 'repetition_penalty')
 
-        seed = -1 if force_random_seed else project.get_model_setting('fish_s1', 'seed')
+        seed = -1 if force_random_seed else project.get_model_setting('fish_s1_local', 'seed')
         if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
 
         result = self.generate(
             prompt=prompt,

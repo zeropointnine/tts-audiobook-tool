@@ -168,7 +168,7 @@ def get_backend_gen_timeout() -> tuple[float, bool]:
     # watchdog module during import initialization.
     from tts_audiobook_tool.tts import Tts
 
-    if Tts.is_sgl_mode():
+    if Tts.is_remote_mode():
         return SGL_OMNI_GEN_TIMEOUT, True
     return GEN_TIMEOUT, False
 

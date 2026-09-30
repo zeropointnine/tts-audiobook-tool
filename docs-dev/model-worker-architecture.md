@@ -85,7 +85,7 @@ Model accessors call `require_model_owner("<name>")` before constructing anythin
 Configuration still flows through the main process's statics, and the worker reconciles its own copy:
 
 - `Tts.set_type()`, `Stt.set_variant()`, and the model-parameter setters run in the main process to record intent. Those setters only clear resident model instances when the current role is *not* `INTERACTIVE_MAIN` — the interactive main has no instances to clear, and the worker applies the same setters per command.
-- The worker applies the settings that matter to inference from a frozen `GenerationSettings` snapshot carried by the command (`stt_variant_id`, `stt_config_id`, `tts_force_cpu`, `sgl_omni_type_id`, `sgl_omni_url`, `save_debug_files`), then uses the normal setters so worker-local statics stay authoritative inside the worker.
+- The worker applies the settings that matter to inference from a frozen `GenerationSettings` snapshot carried by the command (`stt_variant_id`, `stt_config_id`, `tts_force_cpu`, `tts_model_type_id`, `remote_tts_url`, `save_debug_files`), then uses the normal setters so worker-local statics stay authoritative inside the worker.
 
 **The filesystem is the cross-process data plane.** Generated audio, segment metadata, `project.json`, and `gen_logs/` transcripts are written by whichever process owns them and re-read by the other. After a terminal event the main process copies back `remaining_range_string` and invalidates its sound-segment catalog; if the worker died mid-run, the main process re-derives the range string from the on-disk catalog so stored state always matches the audio that exists.
 

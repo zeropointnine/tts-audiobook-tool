@@ -1,66 +1,9 @@
-import json
-
+from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
-from tts_audiobook_tool.prefs import PREFS_FILE_NAME, Prefs
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
-
-
-def restore_tts_type(had_original_type, original_type):
-    if had_original_type:
-        setattr(Tts, "_type", original_type)
-    else:
-        delattr(Tts, "_type")
-
-
-def write_prefs(tmp_path, sgl_omni_type):
-    prefs_dict = {
-        "stt_variant": "faster_whisper",
-        "stt_config": "cpu_int8",
-        "sgl_omni_type": sgl_omni_type,
-    }
-    prefs_path = tmp_path / PREFS_FILE_NAME
-    prefs_path.write_text(json.dumps(prefs_dict), encoding="utf-8")
-    return prefs_path
-
-
-def test_load_sgl_omni_type_auto_detect_values(monkeypatch, tmp_path):
-    monkeypatch.setattr("tts_audiobook_tool.app_support.app_paths.get_app_user_dir", lambda: str(tmp_path))
-
-    for raw_value in [None, "", TtsModelType.NONE.value.id]:
-        write_prefs(tmp_path, raw_value)
-        prefs = Prefs.load(save_if_dirty=False)
-        assert prefs.sgl_omni_type is None
-
-
-def test_load_sgl_omni_type_rejects_invalid_or_local_values(monkeypatch, tmp_path):
-    monkeypatch.setattr("tts_audiobook_tool.app_support.app_paths.get_app_user_dir", lambda: str(tmp_path))
-
-    for raw_value in ["does-not-exist", TtsModelType.CHATTERBOX.value.id, 7]:
-        write_prefs(tmp_path, raw_value)
-        prefs = Prefs.load(save_if_dirty=False)
-        assert prefs.sgl_omni_type is None
-
-
-def test_load_sgl_omni_type_accepts_sgl_omni_values(monkeypatch, tmp_path):
-    monkeypatch.setattr("tts_audiobook_tool.app_support.app_paths.get_app_user_dir", lambda: str(tmp_path))
-
-    for expected in TtsModelType.get_sgl_omni_items():
-        write_prefs(tmp_path, expected.value.id)
-        prefs = Prefs.load(save_if_dirty=False)
-
-        assert prefs.sgl_omni_type == expected
-
-
-def test_load_legacy_moss_server_type_as_auto_and_rewrite(monkeypatch, tmp_path):
-    monkeypatch.setattr("tts_audiobook_tool.app_support.app_paths.get_app_user_dir", lambda: str(tmp_path))
-    prefs_path = write_prefs(tmp_path, "server_moss")
-
-    prefs = Prefs.load()
-
-    assert prefs.sgl_omni_type is None
-    assert json.loads(prefs_path.read_text(encoding="utf-8"))["sgl_omni_type"] == ""
 
 
 def test_sgl_omni_type_ids_are_unique():
@@ -74,13 +17,13 @@ def test_launcher_uses_registry_handles_without_enum_name():
     assert launch.QUALIFIED_MODELS == [
         (member.value.local_module_test, member.value.ui["proper_name"])
         for member in TtsModelType.all()
-        if member != TtsModelType.NONE
+        if member.id != "none"
     ]
 
 
 def test_moss_server_variants_have_distinct_catalog_metadata():
-    delay = TtsModelType.MOSS_DELAY_SERVER.value
-    local = TtsModelType.MOSS_LOCAL_SERVER.value
+    delay = TtsModelType.require_by_id("moss_delay_sglomni").value
+    local = TtsModelType.require_by_id("moss_local_sglomni").value
 
     assert delay.backend_kind is TtsBackendKind.SGL_OMNI
     assert local.backend_kind is TtsBackendKind.SGL_OMNI
@@ -92,17 +35,20 @@ def test_moss_server_variants_have_distinct_catalog_metadata():
 def test_find_moss_server_variant_using_model_id():
     assert TtsModelType.find_tts_type_using_sgl_omni_model_id(
         "OpenMOSS-Team/MOSS-TTS-v1.5"
-    ) is TtsModelType.MOSS_DELAY_SERVER
+    ) is TtsModelType.require_by_id("moss_delay_sglomni")
     assert TtsModelType.find_tts_type_using_sgl_omni_model_id(
         "OpenMOSS-Team/MOSS-TTS-Local-Transformer"
-    ) is TtsModelType.MOSS_LOCAL_SERVER
+    ) is TtsModelType.require_by_id("moss_local_sglomni")
 
 
 def test_qwen3tts_server_is_sgl_omni_and_non_streaming():
-    info = TtsModelType.QWEN3TTS_SERVER.value
+    info = TtsModelType.require_by_id("qwen3tts_sglomni").value
 
     assert info.backend_kind == TtsBackendKind.SGL_OMNI
-    assert info.sgl_omni_model_id_substring == "qwen"
+    from tts_audiobook_tool.tts_models.sgl_omni_detection import detect_sgl_omni_models
+    assert detect_sgl_omni_models([{"id": "Qwen/Qwen3-TTS"}]) == [
+        (TtsModelType.require_by_id("qwen3tts_sglomni"), "Qwen/Qwen3-TTS")
+    ]
     assert REGISTRY.voice_binding(info.id).group == "qwen3"
     assert REGISTRY.transcript_binding(info.id).group == "qwen3"
     assert REGISTRY.orchestration_binding(info.id).name == "concurrent_requests"
@@ -110,63 +56,43 @@ def test_qwen3tts_server_is_sgl_omni_and_non_streaming():
 
 
 def test_find_tts_type_using_sgl_omni_model_id_finds_qwen3tts_server():
-    assert TtsModelType.find_tts_type_using_sgl_omni_model_id("Qwen/Qwen3-TTS") == TtsModelType.QWEN3TTS_SERVER
+    model = TtsModelType.find_tts_type_using_sgl_omni_model_id("Qwen/Qwen3-TTS")
+    assert model is not None
+    assert model.id == "qwen3tts_sglomni"
 
 
-def test_update_tts_type_uses_explicit_sgl_omni_type_without_model_id_probe(monkeypatch):
-    original_type = getattr(Tts, "_type", None)
-    had_original_type = hasattr(Tts, "_type")
-    original_sgl_omni_type = Tts._sgl_omni_type
-    original_base_url = SglOmniUtil._base_url
-    explicit_type = TtsModelType.get_sgl_omni_items()[0]
-
-    try:
-        Tts._type = TtsModelType.NONE
-        Tts._sgl_omni_type = explicit_type
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
-        SglOmniUtil._base_url = "http://example.test"
-
-        def fail_update_model_id():
-            raise AssertionError("explicit SGL-Omni type should not auto-detect model id")
-
-        monkeypatch.setattr(SglOmniUtil, "update_model_id", fail_update_model_id)
-
-        Tts.update_tts_type()
-
-        assert Tts.get_type() == explicit_type
-    finally:
-        restore_tts_type(had_original_type, original_type)
-        Tts._sgl_omni_type = original_sgl_omni_type
-        SglOmniUtil._base_url = original_base_url
+def test_sgl_binding_requires_server_to_match_project_selection(monkeypatch):
+    selected = TtsModelType.require_by_id("auk_sglomni")
+    other = TtsModelType.require_by_id("higgs_v3_sglomni")
+    project = Project(tts_model_type=selected.id)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(RemoteTtsDiscovery, "_snapshots", {})
+    monkeypatch.setattr(RemoteTtsDiscovery, "_base_url", "http://example.test")
+    monkeypatch.setattr(SglOmniUtil, "_model_id", "")
+    RemoteTtsDiscovery._store(RemoteTtsSnapshot(
+        TtsBackendKind.SGL_OMNI, candidates=((selected, "org/served-auk"),)))
+    assert Tts.bind_project(project) is None
+    assert Tts.get_active_type() is selected
+    assert Tts._selected_server_model_id == "org/served-auk"
+    assert SglOmniUtil._model_id == "org/served-auk"
+    RemoteTtsDiscovery._store(RemoteTtsSnapshot(
+        TtsBackendKind.SGL_OMNI, candidates=((other, "org/served-higgs"),)))
+    issue = Tts.bind_project(project)
+    assert issue is not None and "No server model matches" in issue.verbose
+    assert "org/served-higgs" in issue.verbose
+    assert Tts.get_active_type() is TtsModelType.require_by_id("none")
+    assert Tts._selected_server_model_id == ""
+    assert project.tts_model_type == selected.id
 
 
-def test_update_tts_type_auto_detects_when_sgl_omni_type_is_none(monkeypatch):
-    original_type = getattr(Tts, "_type", None)
-    had_original_type = hasattr(Tts, "_type")
-    original_sgl_omni_type = Tts._sgl_omni_type
-    original_base_url = SglOmniUtil._base_url
-    original_model_id = SglOmniUtil._model_id
-    sgl_omni_type = TtsModelType.get_sgl_omni_items()[0]
-    calls = []
-
-    try:
-        Tts._type = TtsModelType.NONE
-        Tts._sgl_omni_type = None
-        Tts._backend_mode = TtsBackendKind.SGL_OMNI
-        SglOmniUtil._base_url = "http://example.test"
-
-        def update_model_id():
-            calls.append(True)
-            SglOmniUtil._model_id = sgl_omni_type.value.sgl_omni_model_id_substring
-
-        monkeypatch.setattr(SglOmniUtil, "update_model_id", update_model_id)
-
-        Tts.update_tts_type()
-
-        assert calls == [True]
-        assert Tts.get_type() == sgl_omni_type
-    finally:
-        restore_tts_type(had_original_type, original_type)
-        Tts._sgl_omni_type = original_sgl_omni_type
-        SglOmniUtil._base_url = original_base_url
-        SglOmniUtil._model_id = original_model_id
+def test_unselected_project_does_not_auto_follow_sole_sgl_model(monkeypatch):
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(RemoteTtsDiscovery, "_snapshots", {})
+    monkeypatch.setattr(RemoteTtsDiscovery, "_base_url", "http://example.test")
+    RemoteTtsDiscovery._store(RemoteTtsSnapshot(
+        TtsBackendKind.SGL_OMNI, candidates=((TtsModelType.require_by_id("auk_sglomni"), "org/served-auk"),)))
+    assert Tts.get_available_tts_models() == [TtsModelType.require_by_id("auk_sglomni")]
+    project = Project()
+    assert Tts.bind_project(project) is not None
+    assert Tts.get_active_type() is TtsModelType.require_by_id("none")
+    assert project.tts_model_type == "none"

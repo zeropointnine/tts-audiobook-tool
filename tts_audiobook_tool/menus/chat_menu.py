@@ -31,7 +31,7 @@ class ChatMenu:
 
         subheading = (
             f"Interactive chat with a configured LLM where each assistant reply is\n"
-            "generated as speech using the current TTS model and voice settings.\n"
+            "generated as speech using the current TTS model and voice settings."
         )
 
         def start_conversation(_: State, __: MenuItem) -> None:
@@ -57,7 +57,7 @@ class ChatMenu:
                 ),
             ]
 
-            if Tts.get_info().can_stream:
+            if Tts.get_info(state.project).can_stream:
                 items.append(
                     MenuItem(
                         lambda _: make_menu_label(
@@ -178,7 +178,7 @@ class ChatMenu:
         subheading = (
             f"{COL_DIM}Streaming outputs audio as it is generated, instead of\n"
             "waiting for the normal full generation path to finish. This gives\n"
-            "minimal response latency, but skips the usual post-processing.\n"
+            "minimal response latency, but skips the usual post-processing."
         )
 
         MenuUtil.options_menu(
@@ -208,7 +208,7 @@ class ChatMenu:
             path_text = dir_path
         subheading = (
             f"Saves sound segment FLAC files generated while using LLM Chat will be saved to\n"
-            f"{path_text}\n"
+            f"{path_text}"
         )
 
         MenuUtil.options_menu(

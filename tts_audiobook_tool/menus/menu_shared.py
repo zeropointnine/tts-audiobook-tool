@@ -23,9 +23,7 @@ def make_output_files_subheading(state: State) -> str:
     strings = make_output_range_info_strings(subinfos, list(range(len(subinfos))))
     if extra:
         strings[-1] += extra
-    string = "\n".join(strings)
-    string += "\n"
-    return string
+    return "\n".join(strings)
 
 
 def make_output_range_info_strings(infos: list[OutputRangeInfo], indices: list[int]) -> list[str]:

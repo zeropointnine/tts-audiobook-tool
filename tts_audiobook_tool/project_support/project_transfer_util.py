@@ -61,13 +61,13 @@ class ProjectTransferUtil:
     # value cannot name a file on this machine, instead of letting the value
     # fail obscurely later.
     MACHINE_LOCAL_PATH_TARGETS = (
-        ('dots', 'target'),
-        ('moss', 'target'),
-        ('omnivoice', 'target'),
-        ('pocket', 'model_code'),
-        ('qwen3tts', 'target'),
-        ('vibevoice', 'target'),
-        ('vibevoice', 'lora_target'),
+        ('dots_local', 'target'),
+        ('moss_local', 'target'),
+        ('omnivoice_local', 'target'),
+        ('pocket_local', 'model_code'),
+        ('qwen3tts_local', 'target'),
+        ('vibevoice_local', 'target'),
+        ('vibevoice_local', 'lora_target'),
     )
 
     @staticmethod

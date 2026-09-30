@@ -47,8 +47,8 @@ from tts_audiobook_tool.textual.worker_content import (
     WorkerLogContentArea,
     _SeparatorLine,
 )
-from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind
+from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.worker_reset import HardResetCause
 
 
@@ -57,7 +57,10 @@ def run(coroutine) -> None:
 
 
 def make_state() -> State:
-    return cast(State, SimpleNamespace(project=SimpleNamespace()))
+    # The shared compose reads the selected model's output filters from the
+    # project, so the stub needs the one lookup it performs.
+    project = SimpleNamespace(get_tts_model_type=lambda: TtsModelType.require_by_id("none"))
+    return cast(State, SimpleNamespace(project=project))
 
 
 def test_app_source_band_is_framed_below_the_shared_divider(monkeypatch) -> None:
@@ -233,7 +236,7 @@ def test_ctrl_c_in_sgl_omni_mode_does_not_offer_hard_reset(monkeypatch) -> None:
     """In SGL-Omni backend mode the worker holds no local TTS model memory,
     so the hard-reset offer is gated off: CTRL-C only requests a cancel and
     further presses are no-ops."""
-    monkeypatch.setattr(Tts, "_backend_mode", TtsBackendKind.SGL_OMNI)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
 
     monkeypatch.setattr(
         ModelWorker,
@@ -414,7 +417,7 @@ def test_submit_realtime_playback_serializes_text_and_control_events(monkeypatch
     monkeypatch.setattr(ModelWorker, "_continue_event", continue_event)
     phrase_group = PhraseGroup([Phrase("Hello.", Reason.SENTENCE)], voice_index=2)
     state = SimpleNamespace(
-        project=SimpleNamespace(dir_path="/project"),
+        project=SimpleNamespace(dir_path="/project", tts_model_type="vibevoice_local"),
         prefs=Prefs(project_dir="/project"),
     )
 
@@ -429,6 +432,7 @@ def test_submit_realtime_playback_serializes_text_and_control_events(monkeypatch
     assert isinstance(command, RealTimePlaybackCommand)
     assert command.operation_id == operation_id
     assert command.line_range == (2, 4)
+    assert command.settings.tts_model_type_id == "vibevoice_local"
     assert command.phrase_groups_json[0]["voice_index"] == 2
     assert command.phrase_groups_json[0]["phrases"] == [
         {"text": "Hello.", "reason": Reason.SENTENCE.json_value}

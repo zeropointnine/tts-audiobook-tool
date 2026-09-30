@@ -57,7 +57,7 @@ import torch
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 GB = 1024 ** 3
@@ -110,7 +110,7 @@ def cache_entry_count(model: TtsBaseModel) -> int:
 
 
 def validate_voice_files(model_type: TtsModelType, voices: list[tuple[str, str, str]]) -> None:
-    if model_type == TtsModelType.POCKET:
+    if model_type.id == "pocket_local":
         # A Pocket voice reference may be a bare predefined-voice name
         # rather than a file, so no file is required
         return
@@ -143,9 +143,9 @@ def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, str | None]:
     Returns (model, target); target is the repo/dir actually loaded (for
     logging), or None for models with a built-in model.
     """
-    match model_type:
+    match model_type.id:
 
-        case TtsModelType.QWEN3TTS:
+        case "qwen3tts_local":
             from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
             from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
             # The voice clone flow needs the 'base' variant; that is
@@ -153,53 +153,53 @@ def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, str | None]:
             target = Qwen3BaseModel.DEFAULT_REPO_ID
             return Qwen3Model(target, DeviceType.CUDA), target
 
-        case TtsModelType.OMNIVOICE:
+        case "omnivoice_local":
             from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
             from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
             target = OmniVoiceBaseModel.DEFAULT_REPO_ID
             return OmniVoiceModel(model_target=target, device=DeviceType.CUDA), target
 
-        case TtsModelType.MOSS:
+        case "moss_local":
             from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
             from tts_audiobook_tool.tts_models.moss_model import MossModel
             target = MossConfigs.get_default_repo_id()
             return MossModel(device=DeviceType.CUDA, model_target=target), target
 
-        case TtsModelType.CHATTERBOX:
+        case "chatterbox_local":
             from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
             from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
             # Project default: Chatterbox Multilingual V3
             return ChatterboxModel(ChatterboxType.MULTILINGUAL_V3, DeviceType.CUDA), None
 
-        case TtsModelType.FISH_S1:
+        case "fish_s1_local":
             from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
             from tts_audiobook_tool.tts_models.fish_s1_model import FishS1Model
             # Loads the library's built-in model
             return FishS1Model(DeviceType.CUDA, FishS1BaseModel.DEFAULT_COMPILE_ENABLED), None
 
-        case TtsModelType.FISH_S2:
+        case "fish_s2_local":
             from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
             from tts_audiobook_tool.tts_models.fish_s2_model import FishS2Model
             return FishS2Model(DeviceType.CUDA, FishS2BaseModel.DEFAULT_COMPILE_ENABLED), None
 
-        case TtsModelType.GLM:
+        case "glm_local":
             from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
             from tts_audiobook_tool.tts_models.glm_model import GlmModel
             # CUDA-only model; downloads zai-org/GLM-TTS itself.
             # 24000 = the app default (GlmBaseModel.SAMPLE_RATES[0])
             return GlmModel(DeviceType.CUDA, GlmBaseModel.SAMPLE_RATES[0]), None
 
-        case TtsModelType.HIGGS_V2:
+        case "higgs_v2_local":
             from tts_audiobook_tool.tts_models.higgs_v2_model import HiggsV2Model
             # Loads a pinned local model file
             return HiggsV2Model(DeviceType.CUDA), None
 
-        case TtsModelType.MIRA:
+        case "mira_local":
             from tts_audiobook_tool.tts_models.mira_model import MiraModel
             # No constructor parameters; CUDA-only under the hood
             return MiraModel(), None
 
-        case TtsModelType.POCKET:
+        case "pocket_local":
             from tts_audiobook_tool.tts_models.pocket_model import PocketModel
             # language="" loads the language-agnostic default model
             return PocketModel(device=DeviceType.CUDA, language=""), None
@@ -215,27 +215,27 @@ def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, str | None]:
 def make_project(model_type: TtsModelType, voices: list[tuple[str, str, str]]):
     """
     Builds the Project the trace generates against: the voice lists land
-    on the spec's own attribute names, so per-voice selection in
-    generate_using_project(voice_selection_index=...) picks A/B/C in turn,
-    exactly as the app's round-robin does. Requires the model type to have
-    been initialized first (main() calls Tts.init_local_model_type()),
+    in the model's registry-declared voice storage, so per-voice selection
+    in generate_using_project(voice_selection_index=...) picks A/B/C in
+    turn, exactly as the app's round-robin does. Requires the model type to
+    have been initialized first (main() calls Tts.init_local_model_type()),
     since Project's load-time normalization consults it.
     """
     from tts_audiobook_tool.project import Project
+    from tts_audiobook_tool.project_support.model_settings import REGISTRY
 
-    spec = model_type.value
     project = Project.model_validate({"dir_path": VOICE_DIR})
 
-    if spec.voice_target_attr:
+    if REGISTRY.voice_binding(model_type.id) is not None:
         project.set_model_setting(model_type.id, "file_name", [path for _, path, _ in voices])
-    if spec.voice_transcript_attr:
+    if REGISTRY.transcript_binding(model_type.id) is not None:
         project.set_model_setting(model_type.id, "transcript", [transcript for _, _, transcript in voices])
 
     # MOSS's generate_using_project reads the stored target to pick the
     # LOCAL vs DELAY hyperparams; it must agree with what got loaded
-    if model_type == TtsModelType.MOSS:
+    if model_type.id == "moss_local":
         from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
-        project.set_model_setting("moss", "target", MossConfigs.get_default_repo_id())
+        project.set_model_setting("moss_local", "target", MossConfigs.get_default_repo_id())
 
     return project
 
@@ -274,12 +274,12 @@ def main() -> int:
     # Probe the venv the same way the app does at startup; this script
     # traces whichever local model library that venv provides
     model_type, num_matches = Tts.init_local_model_type()
-    if model_type == TtsModelType.NONE:
-        if Tts.get_backend_mode() == TtsBackendKind.SGL_OMNI:
+    if model_type.id == "none":
+        if Tts.is_remote_mode():
             print(
-                "This venv is in SGL-Omni mode (TTS served by an external "
-                "server); this script traces local inference, so it cannot "
-                "run here"
+                "This venv is in server mode (TTS served by an external "
+                "SGL-Omni or audio.cpp server); this script traces local "
+                "inference, so it cannot run here"
             )
         else:
             print(

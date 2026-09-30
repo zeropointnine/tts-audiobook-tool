@@ -1,5 +1,7 @@
-from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
+from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
+from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
+from tts_audiobook_tool.ask_advanced import AskAdvanced
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.llm_settings_menu import LlmSettingsMenu
@@ -8,7 +10,7 @@ from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 from tts_audiobook_tool.util import *
 
 class OptionsMenu:
@@ -45,77 +47,79 @@ class OptionsMenu:
         def item_maker(_: State) -> list[MenuItem]:
 
             items = []
+            remote_mode = Tts.is_remote_mode()
 
-            if Tts.is_sgl_mode():
-                items.append(
-                    MenuItem(
-                        lambda _: make_menu_label(
-                            "SGL-Omni server URL",
-                            text_util.make_terminal_hyperlink(
-                                state.prefs.sgl_omni_url,
-                                ellipsize(state.prefs.sgl_omni_url, 50)
-                            ) if state.prefs.sgl_omni_url else f"{COL_ERROR}required"
-                        ),
-                        lambda _, __: OptionsMenu.ask_sgl_omni_url(state)
-                    )
-                )
-                items.append(
-                    MenuItem(
-                        lambda _: make_menu_label(
-                            "SGL-Omni TTS model type",
-                            OptionsMenu.make_sgl_omni_type_label(state)
-                        ),
-                        lambda _, __: OptionsMenu.sgl_omni_type_menu(state)
-                    )
-                )
-
-            # Whisper model
+            # Whisper controls are shared, but follow the server controls in remote mode.
             from tts_audiobook_tool.stt import Stt
-            if not Stt.should_use_mlx_whisper():
-                items.append(
-                    MenuItem(
-                        lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id, SttVariant.get_default().id),
-                        lambda _, __: OptionsMenu.stt_model_menu(state),
-                        superlabel="Model options", superlabel_no_blank_line=Tts.is_local_model()
-                    )
-                )
+            use_mlx_whisper = Stt.should_use_mlx_whisper()
+            whisper_items = []
+            if not use_mlx_whisper:
+                whisper_items.append(MenuItem(
+                    lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id, SttVariant.get_default().id),
+                    lambda _, __: OptionsMenu.stt_model_menu(state),
+                    superlabel="Speech-to-text model" if remote_mode else "Model options",
+                    superlabel_no_blank_line=not remote_mode,
+                ))
+                whisper_items.append(MenuItem(
+                    lambda _: make_menu_label("Whisper device", state.prefs.stt_config.description),
+                    lambda _, __: OptionsMenu.whisper_device_menu(state),
+                ))
 
-            # Whisper device
-            if not Stt.should_use_mlx_whisper():
-                items.append(
-                    MenuItem(
-                        lambda _: make_menu_label("Whisper device", state.prefs.stt_config.description),
-                        lambda _, __: OptionsMenu.whisper_device_menu(state)
-                    )
-                )
+            if remote_mode:
+                items.append(MenuItem(
+                    lambda _: make_menu_label(
+                        "Server URL",
+                        text_util.make_terminal_hyperlink(state.prefs.remote_tts_url,
+                            ellipsize(state.prefs.remote_tts_url, 50))
+                        if state.prefs.remote_tts_url else f"{COL_ERROR}required"),
+                    lambda _, __: OptionsMenu.ask_remote_tts_url(state),
+                    superlabel=lambda _: OptionsMenu.make_remote_tts_superlabel(),
+                    superlabel_no_blank_line=True))
+                items.append(MenuItem(
+                    lambda _: OptionsMenu.make_refresh_remote_tts_label(),
+                    lambda _, __: OptionsMenu.refresh_remote_tts(state)))
+                if state.project.get_tts_model_type().id != "none":
+                    items.append(MenuItem(
+                        lambda _: f"About current TTS model: {state.project.get_tts_model_type().value.ui['proper_name']}",
+                        lambda _, __: print_about_model(state),
+                    ))
+                snapshot = RemoteTtsDiscovery.get_snapshot()
+                if (snapshot.backend_kind is TtsBackendKind.AUDIO_CPP
+                        and any(model.get("loaded") is True for model in snapshot.models)):
+                    items.append(MenuItem(
+                        "Unload audio.cpp models",
+                        lambda _, __: OptionsMenu.unload_audio_cpp_models(),
+                    ))
+                items.extend(whisper_items)
+            else:
+                items.extend(whisper_items)
 
-            # TTS force cpu
-            import torch
-            from tts_audiobook_tool.app_types import DeviceType
-            model_devices = Tts.get_type().value.local_torch_devices
-            has_gpu = (
-                (torch.cuda.is_available() and DeviceType.CUDA in model_devices) or
-                (torch.backends.mps.is_available() and DeviceType.MPS in model_devices)
-            )
-            if model_devices and has_gpu:
-                items.append(
-                    MenuItem(
+                # TTS force cpu
+                import torch
+                from tts_audiobook_tool.app_types import DeviceType
+                model_devices = state.project.get_tts_model_type().value.local_torch_devices
+                has_gpu = (
+                    (torch.cuda.is_available() and DeviceType.CUDA in model_devices) or
+                    (torch.backends.mps.is_available() and DeviceType.MPS in model_devices)
+                )
+                if model_devices and has_gpu:
+                    items.append(MenuItem(
                         make_menu_label("TTS model - Force CPU", state.prefs.tts_force_cpu, False),
-                        lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
-                    )
-                )
+                        lambda _, __: OptionsMenu.tts_force_cpu_menu(state),
+                    ))
 
-            # About TTS model
-            if Tts.get_type() != TtsModelType.NONE:
-                items.append(
-                    MenuItem(
-                        lambda _: f"TTS model - About {Tts.get_type().value.ui['proper_name']}",
-                        lambda _, __: print_about_model(state)
-                    )
-                )
+                # About TTS model
+                if state.project.get_tts_model_type().id != "none":
+                    items.append(MenuItem(
+                        lambda _: f"TTS model - About {state.project.get_tts_model_type().value.ui['proper_name']}",
+                        lambda _, __: print_about_model(state),
+                    ))
 
             # Unload models
-            items.append(MenuItem("Unload models", on_unload))
+            items.append(MenuItem(
+                "Unload local models", on_unload,
+                superlabel="Speech-to-text model" if remote_mode and use_mlx_whisper else "",
+            ))
 
             # Various:
             items.append(
@@ -156,6 +160,10 @@ class OptionsMenu:
             )
             return items
 
+        # Entering Options is an explicit server-inspection action: refresh
+        # before the heading/status and controls are rendered, not on redraws.
+        if Tts.is_remote_mode():
+            RemoteTtsDiscovery.refresh(force=True)
         MenuUtil.menu(state, "Options", item_maker, breadcrumb="Options")
 
     @staticmethod
@@ -215,7 +223,7 @@ class OptionsMenu:
                 state.prefs.save()
             print_feedback(f"Set to:", str(state.prefs.tts_force_cpu))
 
-        subheading = f"Forces TTS model to use CPU as its torch device even when GPU is available.\n"
+        subheading = f"Forces TTS model to use CPU as its torch device even when GPU is available."
 
         MenuUtil.options_menu(
             state=state,
@@ -237,7 +245,7 @@ class OptionsMenu:
                 state.prefs.save()
             print_feedback(f"Set to:", str(state.prefs.save_gen_log))
 
-        subheading = "Saves log file when generating TTS audio\n"
+        subheading = "Saves log file when generating TTS audio"
 
         MenuUtil.options_menu(
             state=state,
@@ -264,7 +272,7 @@ class OptionsMenu:
         )
         subheading = (
             f"Saves intermediate sound files alongside finalized sound segment\n"
-            f"FLAC files in the project {segments_dir} directory.\n"
+            f"FLAC files in the project {segments_dir} directory."
         )
 
         MenuUtil.options_menu(
@@ -298,69 +306,73 @@ class OptionsMenu:
         )
 
     @staticmethod
-    def make_sgl_omni_type_label(state: State) -> str:
-        value = state.prefs.sgl_omni_type
-        if value is None:
-            # Annotate auto-detect with the model it currently resolves to
-            detected = Tts.get_type()
-            if detected == TtsModelType.NONE:
-                return "auto-detect"
-            return f"auto-detect - {detected.value.ui['proper_name']}"
-        return value.value.ui["proper_name"]
+    def make_remote_tts_superlabel() -> str:
+        backend = RemoteTtsDiscovery.get_snapshot().backend_kind
+        backend_name = {
+            TtsBackendKind.AUDIO_CPP: "audio.cpp",
+            TtsBackendKind.SGL_OMNI: "SGL-Omni",
+        }.get(backend) if backend is not None else None
+        return f"Remote TTS server ({backend_name})" if backend_name else "Remote TTS server"
 
     @staticmethod
-    def sgl_omni_type_menu(state: State) -> None:
-
-        def on_select(value: TtsModelType | None) -> None:
-            if state.prefs.sgl_omni_type != value:
-                state.prefs.sgl_omni_type = value
-                state.prefs.save()
-            print_feedback("Set SGL-Omni TTS model type to:", OptionsMenu.make_sgl_omni_type_label(state))
-
-        values: list[TtsModelType | None] = [None] + TtsModelType.get_sgl_omni_items()
-        labels = ["Auto-detect"] + [item.value.ui["proper_name"] for item in TtsModelType.get_sgl_omni_items()]
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text="SGL-Omni TTS model type",
-            labels=labels,
-            values=values,
-            current_value=state.prefs.sgl_omni_type,
-            default_value=None,
-            on_select=on_select,
-            breadcrumb="SGL-Omni TTS model type",
-        )
+    def make_refresh_remote_tts_label() -> str:
+        label = "Refresh server info"
+        snapshot = RemoteTtsDiscovery.get_snapshot()
+        if snapshot.backend_kind is TtsBackendKind.AUDIO_CPP:
+            count = len(snapshot.candidates)
+            noun = "model" if count == 1 else "models"
+            return make_menu_label(label, f"{count} compatible {noun} available")
+        return label
 
     @staticmethod
-    def ask_sgl_omni_url(state: State) -> None:
-        s = f"Enter SGL-Omni URL:\n"
-        s += f"{COL_DIM}(Eg, http://localhost:8000)"
-        printt(s)
+    def unload_audio_cpp_models() -> None:
+        print_feedback("Unloading...", skip_pause=True)
+        error = AudioCppUtil.unload_all_models(RemoteTtsDiscovery.get_base_url())
+        if error is not None:
+            ask.ask_error(error)
+            return
+        RemoteTtsDiscovery.refresh(force=True)
+        print_feedback("Successfully unloaded models")
 
-        value = ask.ask_input("", lower=False)
-        value = value.strip().rstrip("/")
+    @staticmethod
+    def refresh_remote_tts(state: State) -> None:
+        snapshot = RemoteTtsDiscovery.refresh(force=True)
+        Tts.bind_project(state.project)
+        if snapshot.issue is not None:
+            printt(f"Remote TTS server:\n{COL_ERROR}{snapshot.issue.message}\n")
+            ask.ask_enter_to_continue()
+        else:
+            count = len(snapshot.candidates)
+            noun = make_noun("model", "models", count)
+            value = f"{snapshot.backend_kind.value if snapshot.backend_kind else 'unknown'}, {count} compatible {noun}"
+            print_feedback("Remote TTS server refreshed:", value, long_pause=True)
+
+    @staticmethod
+    def ask_remote_tts_url(state: State) -> None:
+        printt(f"Enter Remote TTS server URL:\n{COL_DIM}(Eg, http://localhost:8000)")
+        value = AskAdvanced.ask(prefill=state.prefs.remote_tts_url).strip()
+        printt()
         if not value:
             return
-
         if "://" not in value:
             value = f"http://{value}"
-
-        state.prefs.sgl_omni_url = value
+        issue = RemoteTtsDiscovery.validate_url(value)
+        if issue is not None:
+            ask.ask_error(issue.message)
+            return
+        state.prefs.remote_tts_url = value.rstrip("/")
         state.prefs.save()
-        SglOmniUtil.set_base_url(state.prefs.sgl_omni_url)
-        Tts.update_tts_type()
-
-        print_feedback("Set SGL-Omni URL to:", state.prefs.sgl_omni_url)
+        Tts.bind_project(state.project)
+        print_feedback("Set Remote TTS URL to:", state.prefs.remote_tts_url)
 
 # ---
 
 def print_about_model(state: State) -> None:
 
-    from tts_audiobook_tool.tts import Tts
     from tts_audiobook_tool import ask
     from tts_audiobook_tool.menus.menu_util import MenuUtil
 
-    ui = Tts.get_type().value.ui
+    ui = state.project.get_tts_model_type().value.ui
     model_name = ui["proper_name"]
     MenuUtil.print_screen_heading(state, f"About {model_name}")
 

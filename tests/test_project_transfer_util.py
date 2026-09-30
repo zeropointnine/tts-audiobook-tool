@@ -26,7 +26,7 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
     })
     # A project object that never passed through the load funnel can still
     # hold malformed entries; the collector must skip them rather than crash.
-    project.model_settings.models['pocket'] = cast(Any, {
+    project.model_settings.models['pocket_local'] = cast(Any, {
         'voice_references': [
             {'file_name': ''},
             {'file_name': 123},
@@ -45,12 +45,12 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
         'primary-a.flac',
         'shared.flac',
         'fish-s2.flac',
-        'higgs-v3.flac',
         'emotion.flac',
         'primary-b.flac',
         'absolute.flac',
         'narrator.flac',
         'primary-c.flac',
+        'higgs-v3.flac',
     ]
     assert 'server-target.flac' not in result
     assert 'https://example.com/voice.flac' not in result
@@ -226,4 +226,4 @@ def test_find_foreign_path_targets_warns_without_changing_anything(tmp_path: Pat
 
     found = dict(ProjectTransferUtil.find_foreign_path_targets(project))
 
-    assert found == {'vibevoice_target': 'C:\\Users\\lee\\models\\VibeVoice'}
+    assert found == {'vibevoice_local_target': 'C:\\Users\\lee\\models\\VibeVoice'}

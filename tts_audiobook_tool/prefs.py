@@ -8,7 +8,6 @@ from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSa
 from tts_audiobook_tool.app_types import Hint, Saveable, SttConfig, SttVariant
 from tts_audiobook_tool.conversation.conversation_types import ChatInputMode
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -52,8 +51,7 @@ class Prefs(Saveable):
             stt_variant: SttVariant = SttVariant.get_default(),
             stt_config: SttConfig | None = None,
             tts_force_cpu: bool = False,
-            sgl_omni_type: TtsModelType | None = None,
-            sgl_omni_url: str = "",
+            remote_tts_url: str = "",
             aac_bitrate: str = AAC_BITRATE_DEFAULT,
             llm_url: str = "",
             llm_api_key_env_var: str = PREFS_DEFAULT_LLM_API_KEY_ENV_VAR,
@@ -83,11 +81,8 @@ class Prefs(Saveable):
         self._stt_config = stt_config if stt_config else SttConfig.get_default()
         self._tts_force_cpu = tts_force_cpu
 
-        # When in "sgl-omni mode", this is the active TTS type
-        # When value is None, it autodetects based on server model id
-        self._sgl_omni_type: TtsModelType | None = sgl_omni_type
-        
-        self._sgl_omni_url = sgl_omni_url.strip()
+        # Connection settings are machine-global; model selection belongs to Project.
+        self._remote_tts_url = remote_tts_url.strip().rstrip("/")
         
         self._aac_bitrate = aac_bitrate
         self._llm_url = llm_url
@@ -271,31 +266,11 @@ class Prefs(Saveable):
             tts_force_cpu = False
             dirty = True
 
-        # SGL-Omni base url; empty = not set
-        # (the program uses SGL_OMNI_URL_DEFAULT at request time when unset)
-        sgl_omni_url = prefs_dict.get("sgl_omni_url", "")
-        if not isinstance(sgl_omni_url, str) or not sgl_omni_url.strip():
-            sgl_omni_url = ""
+        remote_tts_url = prefs_dict.get("remote_tts_url", "")
+        if not isinstance(remote_tts_url, str):
+            remote_tts_url = ""
             dirty = True
-
-        # SGL-Omni TTS type
-        s = prefs_dict.get("sgl_omni_type", "")
-        if s is None or s == "":
-            sgl_omni_type = None
-        elif s == "server_moss":
-            # The former generic MOSS server selection could represent either
-            # architecture because runtime metadata was inferred from the
-            # served model ID. Preserve that behavior by migrating to Auto.
-            sgl_omni_type = None
-            dirty = True
-        elif isinstance(s, str):
-            sgl_omni_type = TtsModelType.get_by_id(s)
-            if not TtsModelType.is_valid_sgl_omni_type(sgl_omni_type):
-                sgl_omni_type = None
-                dirty = True
-        else:
-            sgl_omni_type = None
-            dirty = True
+        remote_tts_url = remote_tts_url.strip().rstrip("/")
 
         # AAC/M4B bitrate
         # Back-compat: support legacy key "aac_bitrate"
@@ -427,8 +402,7 @@ class Prefs(Saveable):
             stt_variant=stt_variant,
             stt_config=stt_config,
             tts_force_cpu=tts_force_cpu,
-            sgl_omni_type=sgl_omni_type,
-            sgl_omni_url=sgl_omni_url,
+            remote_tts_url=remote_tts_url,
             aac_bitrate=aac_bitrate,
             llm_url=llm_url,
             llm_api_key_env_var=llm_api_key_env_var,
@@ -529,24 +503,19 @@ class Prefs(Saveable):
         Tts.set_force_cpu(value)
 
     @property
-    def sgl_omni_type(self) -> TtsModelType | None:
-        return self._sgl_omni_type
+    def remote_tts_url(self) -> str:
+        return self._remote_tts_url
 
-    @sgl_omni_type.setter
-    def sgl_omni_type(self, value: TtsModelType | None) -> None:
-        from tts_audiobook_tool.tts import Tts
-        Tts.set_sgl_omni_type(value)
-        # Mirror the normalized runtime value so prefs persists it
-        # (Tts.set_sgl_omni_type() is the single source of validation)
-        self._sgl_omni_type = Tts._sgl_omni_type
-
-    @property
-    def sgl_omni_url(self) -> str:
-        return self._sgl_omni_url
-
-    @sgl_omni_url.setter
-    def sgl_omni_url(self, value: str) -> None:
-        self._sgl_omni_url = value.strip()
+    @remote_tts_url.setter
+    def remote_tts_url(self, value: str) -> None:
+        value = value.strip().rstrip("/")
+        self._remote_tts_url = value
+        from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+        RemoteTtsDiscovery.set_base_url(value)
+        from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
+        from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
+        SglOmniUtil.set_base_url(value)
+        AudioCppUtil.set_base_url(value)
 
     @property
     def aac_bitrate(self) -> str:
@@ -708,8 +677,7 @@ class Prefs(Saveable):
                 "stt_variant": self._stt_variant.id,
                 "stt_config": self._stt_config.id,
                 "tts_force_cpu": self._tts_force_cpu,
-                "sgl_omni_type": "" if self._sgl_omni_type is None else self._sgl_omni_type.value.id,
-                "sgl_omni_url": self._sgl_omni_url,
+                "remote_tts_url": self._remote_tts_url,
                 "aac_bitrate": self._aac_bitrate,
                 "llm_url": self._llm_url,
                 "llm_api_key_env_var": self._llm_api_key_env_var,

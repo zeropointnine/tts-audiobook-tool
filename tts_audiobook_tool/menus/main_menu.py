@@ -8,8 +8,6 @@ from tts_audiobook_tool.menus.generate_menu import GenerateMenu
 from tts_audiobook_tool.menus.project_menu import ProjectMenu
 from tts_audiobook_tool.menus.tools_menu import ToolsMenu
 from tts_audiobook_tool.app_support import app_hint_util, hints
-from tts_audiobook_tool.app_types import Hint
-from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.constants_hints import (
     HINT_CHATTERBOX_MULTILINGUAL_V3,
     HINT_LLM_API_KEY_REMOVED,
@@ -18,7 +16,7 @@ from tts_audiobook_tool.constants_hints import (
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.menus.text_menu import TextMenu
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
@@ -104,21 +102,18 @@ class MainMenu:
                     hints.show_hint_if_necessary(state.prefs, HINT_LLM_API_KEY_REMOVED)
 
                 if (
-                    Tts.get_type() == TtsModelType.CHATTERBOX
-                    and state.project.get_model_setting('chatterbox', 'type') == ChatterboxType.MULTILINGUAL_V2
+                    state.project.get_tts_model_type().id == "chatterbox_local"
+                    and state.project.get_model_setting('chatterbox_local', 'type') == ChatterboxType.MULTILINGUAL_V2
                 ):
                     hints.show_hint_if_necessary(
                         state.prefs, HINT_CHATTERBOX_MULTILINGUAL_V3
                     )
 
                 if (
-                    Tts.is_sgl_mode()
-                    and not state.prefs.sgl_omni_url
-                    and not SglOmniUtil.get_model_id()
+                    Tts.is_remote_mode()
+                    and not state.prefs.remote_tts_url
                 ):
                     hints.show_hint_if_necessary(state.prefs, HINT_SGL_OMNI_URL)
-
-            show_model_mismatch_hint(state)
 
         heading = text_util.make_terminal_hyperlink(APP_URL, APP_NAME)
         MenuUtil.menu(
@@ -135,30 +130,38 @@ class MainMenu:
 
 def get_heading_tts_text(state: State) -> str:
 
-    s = Tts.get_model_support().get_menu_text(state.project, None)
-    if not Tts.is_sgl_mode():
+    s = Tts.get_model_support(state.project).get_menu_text(state.project, None)
+    if not Tts.is_remote_mode():
         return s
-    SglOmniUtil.update_model_id()
-    if SglOmniUtil.get_model_id():
-        s += f" {COL_DIM}server model id: {SglOmniUtil.get_model_id()}{COL_ACCENT}"
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+    snapshot = RemoteTtsDiscovery.get_snapshot()
+    backend = ("audio.cpp" if snapshot.backend_kind == TtsBackendKind.AUDIO_CPP else
+               "SGL-Omni" if snapshot.backend_kind == TtsBackendKind.SGL_OMNI else "Remote TTS")
+    if Tts.get_active_type() == state.project.get_tts_model_type() and Tts._selected_server_model_id:
+        s += f" {COL_DIM}{backend} server model id: {Tts._selected_server_model_id}{COL_ACCENT}"
     else:
-        s += f" {COL_ERROR}SGL-Omni offline{COL_ACCENT}"
+        s += f" {COL_ERROR}{backend}: {Tts._remote_issue or (snapshot.issue.message if snapshot.issue else 'select a server model')}{COL_ACCENT}"
     return s
 
 # ---
 
 # Project
 def make_project_label(state: State) -> str:
-    start_here = f" {COL_ERROR}<-- start here" if not state.project.dir_path else ""
-    return f"Project{start_here}"
+    suffix = ""
+    if (
+        state.project.get_tts_model_type().id == "none"
+        and len(Tts.get_available_tts_models()) >= 2
+    ):
+        suffix = f" {COL_ERROR}(requires: TTS model selection)"
+    return f"Project{suffix}"
 
 # Voice
 def make_voice_label(state: State) -> str:
     return "Voice clone and model settings"
 
 def on_voice(state: State, __) -> None:
-    Tts.update_tts_type()
-    if Tts.get_type() == TtsModelType.NONE:
+    Tts.bind_project(state.project)
+    if state.project.get_tts_model_type().id == "none":
         ask.ask_error("Requires TTS model")
         return
     if not state.project.dir_path:
@@ -195,8 +198,8 @@ def on_realtime_audiobook(state: State, _: MenuItem) -> None:
     RealTimePlaybackMenu.menu(state)
 
 def on_chat(state: State, _: MenuItem) -> None:
-    Tts.update_tts_type()
-    if Tts.get_type() == TtsModelType.NONE:
+    Tts.bind_project(state.project)
+    if state.project.get_tts_model_type().id == "none":
         ask.ask_error(REQUIRES_TTS_MODEL)
         return
     if not state.project.dir_path:
@@ -208,22 +211,6 @@ def on_chat(state: State, _: MenuItem) -> None:
 def on_quit(_: State, __: MenuItem):
     print_feedback("State saved.", extra_line=False, skip_pause=True)
     exit(0)
-
-def show_model_mismatch_hint(state: State) -> None:
-    mismatch_name = state.take_model_mismatch_name()
-    if not mismatch_name:
-        return
-    hints.show_hint(
-        Hint(
-            key="",
-            heading="FYI",
-            text=(
-                f"This project was last used with the {mismatch_name} model,\n"
-                "which differs from the model currently in use."
-            )
-        ),
-        and_prompt=False
-    )
 
 REQUIRES_PROJECT = "Requires a project"
 REQUIRES_TTS_MODEL = "Requires TTS model"

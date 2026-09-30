@@ -70,7 +70,7 @@ class LlmSettingsMenu:
 
         subheading = (
             "Configuration for the app's LLM integration, currently used for the\n"
-            "\"LLM Chat\" feature.\n"
+            "\"LLM Chat\" feature."
         )
         MenuUtil.menu(
             state,

@@ -14,12 +14,12 @@ class VoiceHiggsV2Menu:
 
         def make_items(_: State) -> list[MenuItem]:
             items = [
-                *VoiceMenuShared.make_voice_sample_items(state, TtsModelType.HIGGS_V2)
+                *VoiceMenuShared.make_voice_sample_items(state, TtsModelType.require_by_id("higgs_v2_local"))
             ]
              
             item = VoiceMenuShared.make_temperature_item(
                 state=state,
-                target=SettingRef("higgs_v2", "temperature"),
+                target=SettingRef("higgs_v2_local", "temperature"),
                 default_value=HiggsV2BaseModel.DEFAULT_TEMPERATURE,
                 min_value=0.01,
                 max_value=2.0
@@ -30,7 +30,7 @@ class VoiceHiggsV2Menu:
             items.append(
                 VoiceMenuShared.make_top_p_item(
                     state=state,
-                    target=SettingRef("higgs_v2", "top_p"),
+                    target=SettingRef("higgs_v2_local", "top_p"),
                     default_value=HiggsV2BaseModel.DEFAULT_TOP_P
                 )
             )
@@ -38,12 +38,12 @@ class VoiceHiggsV2Menu:
             items.append(
                 VoiceMenuShared.make_top_k_item(
                     state=state,
-                    target=SettingRef("higgs_v2", "top_k"),
+                    target=SettingRef("higgs_v2_local", "top_k"),
                     default_value=HiggsV2BaseModel.DEFAULT_TOP_K
                 )
             )
 
-            items.append(VoiceMenuShared.make_seed_item(state, SettingRef("higgs_v2", "seed")))
+            items.append(VoiceMenuShared.make_seed_item(state, SettingRef("higgs_v2_local", "seed")))
             return items
         
         VoiceMenuShared.menu_wrapper(state, make_items)
