@@ -319,6 +319,7 @@ class PhraseGrouper:
                 if can_merge:
                     previous.phrases.extend(group.phrases)
                     previous.invalidate_presentable_memos()
+                    PhraseGrouper._promote_heading_end(previous)
                     continue
 
             # Merge with next (which then gets processed in turn)
@@ -330,11 +331,23 @@ class PhraseGrouper:
                 if can_merge:
                     next_group.phrases[0:0] = group.phrases
                     next_group.invalidate_presentable_memos()
+                    PhraseGrouper._promote_heading_end(next_group)
                     continue
 
             result.append(group)
 
         return result
+
+    @staticmethod
+    def _promote_heading_end(group: PhraseGroup) -> None:
+        """
+        When headings were merged (eg "Chapter 1" with reason HEADING and the
+        chapter title), the merged group ends with HEADING, so that the heading
+        pause follows the title.
+        """
+        if group.last_reason == Reason.PARAGRAPH and \
+                any(phrase.reason == Reason.HEADING for phrase in group.phrases):
+            group.phrases[-1].reason = Reason.HEADING
 
     # Characters that end a sentence or a line of dialog
     _SENTENCE_END_CHARS = frozenset(".!?…:;,\"'“”„»«’‘‚›‹–—-")
@@ -344,14 +357,17 @@ class PhraseGrouper:
     @staticmethod
     def is_heading_like(group: PhraseGroup) -> bool:
         """
-        Returns True if the group's text ends without sentence-ending
-        punctuation, as headings do (eg "Chapter 1", a chapter title, or the
-        lines of a title page). Trailing ornaments (eg a dinkus) are ignored.
+        Returns True if the group ends with reason HEADING, or if its text ends
+        without sentence-ending punctuation, as headings do (eg "Chapter 1", a
+        chapter title, or the lines of a title page). Trailing ornaments (eg a
+        dinkus) are ignored.
 
         Groups that were split mid-sentence (reason below SENTENCE) are never
         heading-like. A group at the very end of the text has reason SENTENCE
         even without punctuation, so it is evaluated like a paragraph.
         """
+        if group.last_reason == Reason.HEADING:
+            return True
         if group.last_reason < Reason.SENTENCE:
             return False
         for char in reversed(group.text):

@@ -301,6 +301,47 @@ class TestPhraseGrouper(unittest.TestCase):
             ["Chapter 14\n\nWhat can we do?\n\n", "This is the first longer sentence here.\n\n"],
         )
 
+    def test_merge_short_sentences_merges_marked_heading_with_title_and_ends_with_heading(self):
+        text = "Chapter 3\n\nWins and Losses?\n\nThis is the first longer sentence here.\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE_PLUS,
+            "en",
+            heading_texts=["Chapter 3"],
+            merge_short_sentences=True,
+        )
+
+        self.assertEqual(
+            [(group.text, group.last_reason) for group in groups],
+            [
+                ("Chapter 3\n\nWins and Losses?\n\n", Reason.HEADING),
+                ("This is the first longer sentence here.\n\n", Reason.PARAGRAPH),
+            ],
+        )
+
+    def test_merge_short_sentences_does_not_merge_marked_heading_with_body_text(self):
+        text = "This is the first longer sentence here.\n\nMid-book Heading.\n\nYes.\n\nThis is another longer sentence.\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE_PLUS,
+            "en",
+            heading_texts=["Mid-book Heading."],
+            merge_short_sentences=True,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            [
+                "This is the first longer sentence here.\n\n",
+                "Mid-book Heading.\n\n",
+                "Yes.\n\nThis is another longer sentence.\n\n",
+            ],
+        )
+
     def test_merge_short_sentences_does_not_treat_leading_dialog_as_heading(self):
         text = "Chapter 12\n\nThe Explorers\n\n“Lieutenant,” said Zephyr.\n\nThis is the first longer sentence here.\n\n"
 
