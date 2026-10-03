@@ -1,4 +1,5 @@
 import re
+from collections.abc import Collection
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -22,6 +23,7 @@ class PhraseGrouper:
             strategy: SegmentationStrategy=SegmentationStrategy.SENTENCE_PLUS,
             pysbd_lang: str="en",
             dialog_segmentation: bool=False,
+            heading_texts: Collection[str] | None=None,
     ) -> list[PhraseGroup]:
         """
         Creates PhraseGroups using the passed-in raw source text.
@@ -35,6 +37,9 @@ class PhraseGrouper:
         attribution with reason PHRASE_QUOTE_END (a lowercase continuation, or
         for language code "en" a speaker name followed by a whitelisted verb).
         It does not recombine groups created by the normal segmentation passes.
+
+        heading_texts are the texts of paragraphs which are known to be headings
+        (eg, from EPUB markup). Those paragraphs end with reason HEADING.
         """
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         # This guarantees that imported text has no blank lines containing
@@ -42,6 +47,8 @@ class PhraseGrouper:
         text = re.sub(r"[ \t]+\n", "\n", text)
 
         phrases = PhraseSegmenter.text_to_phrases(text, max_words=max_words, pysbd_lang=pysbd_lang)
+        if heading_texts:
+            PhraseGrouper.mark_heading_paragraphs(phrases, heading_texts)
 
         # First group by either complete sentence or paragraph
         match strategy:
@@ -80,6 +87,24 @@ class PhraseGrouper:
         groups = PhraseGrouper.merge_ornamental_groups(groups)
 
         return groups
+
+    @staticmethod
+    def mark_heading_paragraphs(phrases: list[Phrase], heading_texts: Collection[str]) -> None:
+        """
+        Changes the reason of each paragraph-ending phrase from PARAGRAPH to
+        HEADING when the paragraph's text is one of heading_texts
+        (compared with normalized whitespace).
+        """
+        normalized_headings = {normalize_heading_text(text) for text in heading_texts}
+        normalized_headings.discard("")
+        paragraph_text = ""
+        for phrase in phrases:
+            paragraph_text += phrase.text
+            if phrase.reason < Reason.PARAGRAPH:
+                continue
+            if phrase.reason == Reason.PARAGRAPH and                     normalize_heading_text(paragraph_text) in normalized_headings:
+                phrase.reason = Reason.HEADING
+            paragraph_text = ""
 
     @staticmethod
     def merge_ornamental_groups(groups: list[PhraseGroup]) -> list[PhraseGroup]:
@@ -242,3 +267,8 @@ class PhraseGrouper:
                     s += " -----"
                 printt(f"  {repr(phrase.text)} {s}")
             printt()
+
+
+def normalize_heading_text(text: str) -> str:
+    """ Normalizes text for comparing headings: collapsed whitespace, case-insensitive """
+    return " ".join(text.split()).casefold()

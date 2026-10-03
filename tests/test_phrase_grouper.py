@@ -206,6 +206,27 @@ class TestPhraseGrouper(unittest.TestCase):
 
         self.assertEqual([group.text for group in result], [group.text for group in groups])
 
+    def test_heading_texts_end_matching_paragraphs_with_heading_reason(self):
+        text = "Chapter 1\n\nThe Planet\n\nThis is the first sentence.\n\nChapter 1\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.SENTENCE_PLUS, "en", heading_texts=["chapter  1"]
+        )
+
+        self.assertEqual(
+            [group.last_reason for group in groups],
+            [Reason.HEADING, Reason.PARAGRAPH, Reason.PARAGRAPH, Reason.HEADING],
+        )
+
+    def test_heading_paragraph_is_not_merged_with_short_sentence(self):
+        text = "Chapter 1\n\nGo.\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.MULTI_SENTENCE, "en", heading_texts=["Chapter 1"]
+        )
+
+        self.assertEqual([group.text for group in groups], ["Chapter 1\n\n", "Go.\n\n"])
+
 
 if __name__ == '__main__':
     unittest.main()
