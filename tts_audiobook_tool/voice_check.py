@@ -469,7 +469,6 @@ class VoiceCheck:
                 threshold=threshold,
                 findings=ValidationFindings(invalid_reason=ValidationInvalidReason.VOICE_MISMATCH),
             )
-        result.intra_sample_silence_trims = validation_result.intra_sample_silence_trims
         result.generated_start_trim_time = validation_result.generated_start_trim_time
         result.generated_end_trim_time = validation_result.generated_end_trim_time
         result.generated_trim_original_duration = validation_result.generated_trim_original_duration
