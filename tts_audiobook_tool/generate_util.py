@@ -42,6 +42,7 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.validator import Validator
+from tts_audiobook_tool.voice_check import VoiceCheck
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, SkippedResult, ExcessiveDurationResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.transcriber import Transcriber
 
@@ -288,7 +289,7 @@ class GenerateUtil:
 
             # Generate and validate
             gen_start_time = time.time()
-            with gen_timeout_tracker.scope() as gen_timeout_guard:
+            with gen_timeout_tracker.scope() as gen_timeout_guard, VoiceCheck.attempt_scope(project, indices, retry_counts):
                 results = GenerateUtil.generate_and_validate_batch(
                     state=state,
                     indices=indices,
@@ -377,8 +378,10 @@ class GenerateUtil:
 
                 elif validation_result:
                     consecutive_model_errors = 0
+                    validation_result, voice_check_line = VoiceCheck.apply(validation_result, index)
 
                     val_line = f"{validation_result.get_ui_message_with_extras()}"
+                    val_line += voice_check_line
                     validation_word_error_count: int | None = None
                     if isinstance(validation_result, TranscriptResult):
                         validation_word_error_count = SegmentTranscriptUtil.make_generation_word_error_count(validation_result)
@@ -417,7 +420,7 @@ class GenerateUtil:
                     # Failed or not
                     if validation_result.is_fail:
                         Tts.clear_continuation()
-                        if new_retry_count > max_retries:
+                        if new_retry_count > VoiceCheck.get_max_retries(validation_result, max_retries):
                             num_failed += 1
                             val_line += f"; {COL_ERROR}max retries reached, tagging as failed"
                         else:
@@ -448,7 +451,8 @@ class GenerateUtil:
                     word_counts[index] = phrase_group.num_words
 
                     # Save
-                    err, saved_path = GenerateUtil.save_sound_and_timing_json(
+                    keep_earlier_take = VoiceCheck.is_keeping_earlier_take(validation_result)
+                    err, saved_path = ("", "") if keep_earlier_take else GenerateUtil.save_sound_and_timing_json(
                         state,
                         phrase_group,
                         index,
@@ -457,7 +461,9 @@ class GenerateUtil:
                         voice_tag=getattr(validation_result, "voice_tag", ""),
                         stt_info=stt_info,
                     )
-                    if err:
+                    if keep_earlier_take:
+                        save_line = f"Not saved {COL_DIM}(earlier take kept){Ansi.RESET}"
+                    elif err:
                         save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
                     else:
                         saved_indices.add(index)

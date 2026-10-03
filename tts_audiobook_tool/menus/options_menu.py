@@ -4,6 +4,7 @@ from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.llm_settings_menu import LlmSettingsMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.voice_check_menu import VoiceCheckMenu
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
@@ -154,6 +155,8 @@ class OptionsMenu:
                     lambda _, __: OptionsMenu.save_debug_files_menu(state)
                 )
             )
+
+            items.append(VoiceCheckMenu.make_menu_item(state))
             return items
 
         MenuUtil.menu(state, "Options", item_maker, breadcrumb="Options")

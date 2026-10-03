@@ -11,6 +11,7 @@ class ValidationInvalidReason(str, Enum):
 
     MUSIC_DETECTED = "music_detected"
     EXCESSIVE_DURATION = "excessive_sound_duration"
+    VOICE_MISMATCH = "voice_mismatch"
 
 
 @dataclass
@@ -64,6 +65,8 @@ class ValidationFindings:
             return f"{COL_ERROR}Music detected"
         if self.invalid_reason == ValidationInvalidReason.EXCESSIVE_DURATION:
             return f"{COL_ERROR}Sound duration is excessively long"
+        if self.invalid_reason == ValidationInvalidReason.VOICE_MISMATCH:
+            return f"{COL_ERROR}Voice mismatch"
 
         base_message = f"{COL_ERROR}Word error fail" if self.is_failed(threshold) else "Passed"
         return (
