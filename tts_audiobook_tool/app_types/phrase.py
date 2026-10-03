@@ -290,12 +290,15 @@ class Reason(tuple[int, str], Enum):
     SENTENCE = 4, "s"
     # The string has been split at a paragraph break (line feed)
     PARAGRAPH = 5, "p"
+    # The string is a heading paragraph (eg, an EPUB <h1>-<h6> element, or a chapter's
+    # table-of-contents title at the start of the chapter)
+    HEADING = 6, "h"
     # The string has been split at a paragraph break *plus* one or more blank lines.
     # Related publishing/typography terms for what this represents: "space break"; "scene break"; "dinkus"
-    SPACE_BREAK = 6, "x"
+    SPACE_BREAK = 7, "x"
     # The segment was the last text at the end of a section (eg, the end of an html section of an epub).
     # Think "page break" almost.
-    SECTION_BREAK = 7, "xx"
+    SECTION_BREAK = 8, "xx"
 
     def __lt__(self, other):
         if self.__class__ is other.__class__:

@@ -495,7 +495,7 @@ class Tts:
 
     @staticmethod
     def clear_continuation_if_reason(reason: Reason) -> None:
-        if reason in { Reason.PARAGRAPH, Reason.SPACE_BREAK, Reason.SECTION_BREAK }:
+        if reason in { Reason.PARAGRAPH, Reason.HEADING, Reason.SPACE_BREAK, Reason.SECTION_BREAK }:
             Tts.clear_continuation()
 
     @staticmethod
