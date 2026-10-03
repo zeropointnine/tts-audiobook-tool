@@ -102,7 +102,8 @@ class PhraseGrouper:
             paragraph_text += phrase.text
             if phrase.reason < Reason.PARAGRAPH:
                 continue
-            if phrase.reason == Reason.PARAGRAPH and                     normalize_heading_text(paragraph_text) in normalized_headings:
+            if phrase.reason == Reason.PARAGRAPH and \
+                    normalize_heading_text(paragraph_text) in normalized_headings:
                 phrase.reason = Reason.HEADING
             paragraph_text = ""
 
