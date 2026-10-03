@@ -342,12 +342,18 @@ class PhraseGrouper:
     def _promote_heading_end(group: PhraseGroup) -> None:
         """
         When headings were merged (eg "Chapter 1" with reason HEADING and the
-        chapter title), the merged group ends with HEADING, so that the heading
-        pause follows the title.
+        chapter title), the HEADING reason moves to the end of the merged group,
+        so that the heading pause follows the title. Inner HEADING reasons
+        become PARAGRAPH.
         """
-        if group.last_reason == Reason.PARAGRAPH and \
-                any(phrase.reason == Reason.HEADING for phrase in group.phrases):
-            group.phrases[-1].reason = Reason.HEADING
+        if group.last_reason != Reason.PARAGRAPH:
+            return
+        inner_headings = [phrase for phrase in group.phrases[:-1] if phrase.reason == Reason.HEADING]
+        if not inner_headings:
+            return
+        for phrase in inner_headings:
+            phrase.reason = Reason.PARAGRAPH
+        group.phrases[-1].reason = Reason.HEADING
 
     # Characters that end a sentence or a line of dialog
     _SENTENCE_END_CHARS = frozenset(".!?…:;,\"'“”„»«’‘‚›‹–—-")

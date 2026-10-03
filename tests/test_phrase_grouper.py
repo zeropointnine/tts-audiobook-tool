@@ -320,6 +320,27 @@ class TestPhraseGrouper(unittest.TestCase):
                 ("This is the first longer sentence here.\n\n", Reason.PARAGRAPH),
             ],
         )
+        self.assertEqual(
+            [phrase.reason for phrase in groups[0].phrases],
+            [Reason.PARAGRAPH, Reason.HEADING],
+        )
+
+    def test_merge_short_sentences_keeps_single_heading_reason_when_merging_several_lines(self):
+        text = "Imprint\n\nFirst edition\n\nPublisher Name\n\nThis is the first longer sentence here.\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE_PLUS,
+            "en",
+            heading_texts=["Imprint"],
+            merge_short_sentences=True,
+        )
+
+        self.assertEqual(
+            [phrase.reason for phrase in groups[0].phrases],
+            [Reason.PARAGRAPH, Reason.PARAGRAPH, Reason.HEADING],
+        )
 
     def test_merge_short_sentences_does_not_merge_marked_heading_with_body_text(self):
         text = "This is the first longer sentence here.\n\nMid-book Heading.\n\nYes.\n\nThis is another longer sentence.\n\n"
