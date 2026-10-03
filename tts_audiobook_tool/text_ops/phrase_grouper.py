@@ -288,6 +288,10 @@ class PhraseGrouper:
         of the text, whatever its punctuation (eg "Chapter 14" followed by
         "What can we do?"). Such a title must be a short paragraph which does
         not start like dialog.
+
+        Where a paragraph without punctuation gets joined with the next one,
+        a period is added to it (see _punctuate_paragraph_join). Headings
+        without punctuation at their end get a period there as well.
         """
         title_id: int | None = None
         if len(groups) >= 2 and PhraseGrouper.is_heading_like(groups[0]):
@@ -317,6 +321,7 @@ class PhraseGrouper:
                     previous.last_reason < Reason.SPACE_BREAK and \
                     is_heading(previous) == group_is_heading
                 if can_merge:
+                    PhraseGrouper._punctuate_paragraph_join(previous.phrases[-1])
                     previous.phrases.extend(group.phrases)
                     previous.invalidate_presentable_memos()
                     PhraseGrouper._promote_heading_end(previous)
@@ -329,6 +334,7 @@ class PhraseGrouper:
                     group.last_reason < Reason.SPACE_BREAK and \
                     is_heading(next_group) == group_is_heading
                 if can_merge:
+                    PhraseGrouper._punctuate_paragraph_join(group.phrases[-1])
                     next_group.phrases[0:0] = group.phrases
                     next_group.invalidate_presentable_memos()
                     PhraseGrouper._promote_heading_end(next_group)
@@ -336,7 +342,24 @@ class PhraseGrouper:
 
             result.append(group)
 
+        # End headings with a period, too, which gives them a more natural intonation
+        for group in result:
+            if is_heading(group) and app_text.lacks_final_punctuation(group.text):
+                group.phrases[-1].text = app_text.add_period_after_last_word(group.phrases[-1].text)
+                group.invalidate_presentable_memos()
+
         return result
+
+    @staticmethod
+    def _punctuate_paragraph_join(phrase: Phrase) -> None:
+        """
+        Adds a period to a paragraph-ending phrase without punctuation which is
+        about to be joined with the following paragraph (eg "Chapter 1" and the
+        chapter title). Line breaks are removed from TTS prompts, so the model
+        would otherwise read both lines as one phrase without a pause.
+        """
+        if phrase.reason >= Reason.PARAGRAPH and app_text.lacks_final_punctuation(phrase.text):
+            phrase.text = app_text.add_period_after_last_word(phrase.text)
 
     @staticmethod
     def _promote_heading_end(group: PhraseGroup) -> None:
@@ -355,8 +378,6 @@ class PhraseGrouper:
             phrase.reason = Reason.PARAGRAPH
         group.phrases[-1].reason = Reason.HEADING
 
-    # Characters that end a sentence or a line of dialog
-    _SENTENCE_END_CHARS = frozenset(".!?…:;,\"'“”„»«’‘‚›‹–—-")
     # Characters that start a line of dialog
     _DIALOG_START_CHARS = ("\"", "“", "”", "„", "»", "«", "—", "–")
 
@@ -376,12 +397,7 @@ class PhraseGrouper:
             return True
         if group.last_reason < Reason.SENTENCE:
             return False
-        for char in reversed(group.text):
-            if char in PhraseGrouper._SENTENCE_END_CHARS:
-                return False
-            if char.isalnum():
-                return True
-        return False
+        return app_text.ends_without_punctuation(group.text)
 
     @staticmethod
     def print_groups(groups: list[PhraseGroup]) -> None:

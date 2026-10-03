@@ -67,6 +67,60 @@ def has_trailing_ornamental_line(text: str) -> bool:
     return bool(trailing_line) and not is_vocalizable(trailing_line)
 
 
+# Characters that end a sentence or a line of dialog
+SENTENCE_END_CHARS = frozenset(".!?…:;,\"'“”„»«’‘‚›‹–—-")
+
+
+def ends_without_punctuation(text: str) -> bool:
+    """
+    Whether the text's last letter/digit is not followed by sentence-ending
+    punctuation, as with headings (eg "Chapter 1"). Trailing ornaments and
+    whitespace are ignored. Returns False for text without letters/digits.
+    """
+    for char in reversed(text):
+        if char in SENTENCE_END_CHARS:
+            return False
+        if char.isalnum():
+            return True
+    return False
+
+
+# Closing quotes and brackets, which can follow the end of a sentence
+CLOSING_CHARS = frozenset("\"'“”‘’»«›‹)]}")
+
+
+def lacks_final_punctuation(text: str) -> bool:
+    """
+    Like ends_without_punctuation, but closing quotes and brackets after the
+    last letter/digit don't count as punctuation (eg "Say ‚Hello‘" -> True,
+    "„Und?“" -> False).
+    """
+    for char in reversed(text):
+        if char.isalnum():
+            return True
+        if char in CLOSING_CHARS:
+            continue
+        if char in SENTENCE_END_CHARS:
+            return False
+    return False
+
+
+def add_period_after_last_word(text: str) -> str:
+    """
+    Inserts a period after the text's last letter/digit and any closing quotes
+    or brackets directly following it, keeping whatever follows
+    (eg "Chapter 1\\n\\n" -> "Chapter 1.\\n\\n", "(2026)" -> "(2026).").
+    Returns the text unchanged if it has no letters/digits.
+    """
+    for i in range(len(text) - 1, -1, -1):
+        if text[i].isalnum():
+            end = i + 1
+            while end < len(text) and text[end] in CLOSING_CHARS:
+                end += 1
+            return text[:end] + "." + text[end:]
+    return text
+
+
 def normalize_text_general(text: str) -> str:
     """
     Text normalization operations that are common to both

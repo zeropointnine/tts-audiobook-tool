@@ -270,7 +270,7 @@ class TestPhraseGrouper(unittest.TestCase):
 
         self.assertEqual(
             [group.text for group in groups],
-            ["Chapter 1\n\nThe Planet\n\n", "This is the first longer sentence here.\n\nYes.\n\n"],
+            ["Chapter 1.\n\nThe Planet.\n\n", "This is the first longer sentence here.\n\nYes.\n\n"],
         )
 
     def test_merge_short_sentences_does_not_merge_short_sentence_into_heading(self):
@@ -284,7 +284,7 @@ class TestPhraseGrouper(unittest.TestCase):
             [group.text for group in groups],
             [
                 "This is the first longer sentence here.\n\n",
-                "Chapter 2\n\n",
+                "Chapter 2.\n\n",
                 "Yes.\n\nThis is another longer sentence.",
             ],
         )
@@ -298,7 +298,7 @@ class TestPhraseGrouper(unittest.TestCase):
 
         self.assertEqual(
             [group.text for group in groups],
-            ["Chapter 14\n\nWhat can we do?\n\n", "This is the first longer sentence here.\n\n"],
+            ["Chapter 14.\n\nWhat can we do?\n\n", "This is the first longer sentence here.\n\n"],
         )
 
     def test_merge_short_sentences_merges_marked_heading_with_title_and_ends_with_heading(self):
@@ -316,7 +316,7 @@ class TestPhraseGrouper(unittest.TestCase):
         self.assertEqual(
             [(group.text, group.last_reason) for group in groups],
             [
-                ("Chapter 3\n\nWins and Losses?\n\n", Reason.HEADING),
+                ("Chapter 3.\n\nWins and Losses?\n\n", Reason.HEADING),
                 ("This is the first longer sentence here.\n\n", Reason.PARAGRAPH),
             ],
         )
@@ -363,6 +363,46 @@ class TestPhraseGrouper(unittest.TestCase):
             ],
         )
 
+    def test_merge_short_sentences_adds_period_only_at_unpunctuated_paragraph_joins(self):
+        text = "Imprint\n\nFirst edition (2026)\n\nPublisher: Name\n\nThis is the first longer sentence here.\n\n“Well?”\n\n“Sure.”\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.SENTENCE_PLUS, "en", merge_short_sentences=True
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            [
+                "Imprint.\n\nFirst edition (2026).\n\nPublisher: Name.\n\n",
+                "This is the first longer sentence here.\n\n“Well?”\n\n“Sure.”\n\n",
+            ],
+        )
+
+    def test_merge_short_sentences_adds_period_after_closing_quote_of_heading(self):
+        text = "Chapter 21\n\n‘Hello’ means ‘Goodbye’\n\n“Well?”\n\nThis is the first longer sentence here.\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.SENTENCE_PLUS, "en", merge_short_sentences=True
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            [
+                "Chapter 21.\n\n‘Hello’ means ‘Goodbye’.\n\n",
+                "“Well?”\n\nThis is the first longer sentence here.\n\n",
+            ],
+        )
+
+    def test_merge_short_sentences_off_does_not_add_periods(self):
+        text = "Chapter 1\n\nThe Planet\n\nThis is the first longer sentence here.\n\n"
+
+        groups = PhraseGrouper.text_to_groups(text, 40, SegmentationStrategy.SENTENCE_PLUS, "en")
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["Chapter 1\n\n", "The Planet\n\n", "This is the first longer sentence here.\n\n"],
+        )
+
     def test_merge_short_sentences_does_not_treat_leading_dialog_as_heading(self):
         text = "Chapter 12\n\nThe Explorers\n\n“Lieutenant,” said Zephyr.\n\nThis is the first longer sentence here.\n\n"
 
@@ -373,7 +413,7 @@ class TestPhraseGrouper(unittest.TestCase):
         self.assertEqual(
             [group.text for group in groups],
             [
-                "Chapter 12\n\nThe Explorers\n\n",
+                "Chapter 12.\n\nThe Explorers.\n\n",
                 "“Lieutenant,” said Zephyr.\n\nThis is the first longer sentence here.\n\n",
             ],
         )
