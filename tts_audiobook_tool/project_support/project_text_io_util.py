@@ -44,6 +44,7 @@ class ProjectTextIOUtil:
             language_code: str,
             raw_text: str,
             dialog_segmentation: bool = False,
+            merge_short_sentences: bool = False,
             title: str="",
             text_source_kind: str="plain_text",
     ) -> None:
@@ -53,6 +54,7 @@ class ProjectTextIOUtil:
             max_words_per_segment=max_words,
             strategy=strategy,
             dialog_segmentation=dialog_segmentation,
+            merge_short_sentences=merge_short_sentences,
         )
         book = Book(
             title=title,
@@ -83,6 +85,7 @@ class ProjectTextIOUtil:
             language_code: str,
             raw_text: str,
             dialog_segmentation: bool = False,
+            merge_short_sentences: bool = False,
             title: str="",
             section_titles: list[str] | None=None,
     ) -> None:
@@ -92,6 +95,7 @@ class ProjectTextIOUtil:
             max_words_per_segment=max_words,
             strategy=strategy,
             dialog_segmentation=dialog_segmentation,
+            merge_short_sentences=merge_short_sentences,
         )
         book = ProjectBookUtil.make_book_from_flat_compatibility_fields(
             phrase_groups=phrase_groups,

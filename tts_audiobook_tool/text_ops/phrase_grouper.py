@@ -1,8 +1,10 @@
 import re
+from collections.abc import Collection
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.constants_config import SHORT_GROUP_MERGE_MAX_WORDS
 from tts_audiobook_tool.text_ops.phrase_segmenter import Reason, Phrase, PhraseSegmenter
 from tts_audiobook_tool.text_ops.dialog_segmenter import (
     DIALOG_VOICE_INDEX,
@@ -22,6 +24,8 @@ class PhraseGrouper:
             strategy: SegmentationStrategy=SegmentationStrategy.SENTENCE_PLUS,
             pysbd_lang: str="en",
             dialog_segmentation: bool=False,
+            heading_texts: Collection[str] | None=None,
+            merge_short_sentences: bool=False,
     ) -> list[PhraseGroup]:
         """
         Creates PhraseGroups using the passed-in raw source text.
@@ -35,6 +39,14 @@ class PhraseGrouper:
         attribution with reason PHRASE_QUOTE_END (a lowercase continuation, or
         for language code "en" a speaker name followed by a whitelisted verb).
         It does not recombine groups created by the normal segmentation passes.
+
+        heading_texts are the texts of paragraphs which are known to be headings
+        (eg, from EPUB markup). Those paragraphs end with reason HEADING.
+
+        When merge_short_sentences is enabled, a final pass merges short groups
+        into a neighboring group, across paragraph boundaries (see
+        merge_short_groups_across_paragraphs). Dialog segmentation is skipped
+        in that case.
         """
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         # This guarantees that imported text has no blank lines containing
@@ -42,6 +54,8 @@ class PhraseGrouper:
         text = re.sub(r"[ \t]+\n", "\n", text)
 
         phrases = PhraseSegmenter.text_to_phrases(text, max_words=max_words, pysbd_lang=pysbd_lang)
+        if heading_texts:
+            PhraseGrouper.mark_heading_paragraphs(phrases, heading_texts)
 
         # First group by either complete sentence or paragraph
         match strategy:
@@ -70,7 +84,11 @@ class PhraseGrouper:
             results.extend(split_groups)
         groups = results
 
-        if dialog_segmentation:
+        if merge_short_sentences:
+            groups = PhraseGrouper.merge_short_groups_across_paragraphs(
+                groups, SHORT_GROUP_MERGE_MAX_WORDS, max_words
+            )
+        elif dialog_segmentation:
             groups = DialogSegmenter.segment_groups(
                 groups,
                 dialog_voice_index=DIALOG_VOICE_INDEX,
@@ -80,6 +98,25 @@ class PhraseGrouper:
         groups = PhraseGrouper.merge_ornamental_groups(groups)
 
         return groups
+
+    @staticmethod
+    def mark_heading_paragraphs(phrases: list[Phrase], heading_texts: Collection[str]) -> None:
+        """
+        Changes the reason of each paragraph-ending phrase from PARAGRAPH to
+        HEADING when the paragraph's text is one of heading_texts
+        (compared with normalized whitespace).
+        """
+        normalized_headings = {normalize_heading_text(text) for text in heading_texts}
+        normalized_headings.discard("")
+        paragraph_text = ""
+        for phrase in phrases:
+            paragraph_text += phrase.text
+            if phrase.reason < Reason.PARAGRAPH:
+                continue
+            if phrase.reason == Reason.PARAGRAPH and \
+                    normalize_heading_text(paragraph_text) in normalized_headings:
+                phrase.reason = Reason.HEADING
+            paragraph_text = ""
 
     @staticmethod
     def merge_ornamental_groups(groups: list[PhraseGroup]) -> list[PhraseGroup]:
@@ -232,6 +269,137 @@ class PhraseGrouper:
         return new_groups            
 
     @staticmethod
+    def merge_short_groups_across_paragraphs(
+            groups: list[PhraseGroup],
+            shortness_threshold: int,
+            max_words: int
+    ) -> list[PhraseGroup]:
+        """
+        Merges each group with shortness_threshold words or fewer into the
+        previous group, or if that would exceed max_words, into the next group.
+        Unlike merge_short_sentences, this crosses paragraph boundaries, which
+        helps with texts that put every line into its own paragraph.
+        Space breaks and section breaks are not crossed.
+
+        Headings only merge with each other, so that eg "Chapter 1" and the
+        chapter title get combined, but not the chapter title and the
+        chapter's body text. Headings are heading-like groups (see
+        is_heading_like), plus a title following a heading at the very start
+        of the text, whatever its punctuation (eg "Chapter 14" followed by
+        "What can we do?"). Such a title must be a short paragraph which does
+        not start like dialog.
+
+        Where a paragraph without punctuation gets joined with the next one,
+        a period is added to it (see _punctuate_paragraph_join). Headings
+        without punctuation at their end get a period there as well.
+        """
+        title_id: int | None = None
+        if len(groups) >= 2 and PhraseGrouper.is_heading_like(groups[0]):
+            title = groups[1]
+            is_title = title.num_words <= shortness_threshold and \
+                title.last_reason >= Reason.PARAGRAPH and \
+                not title.text.lstrip().startswith(PhraseGrouper._DIALOG_START_CHARS)
+            if is_title:
+                title_id = id(title)
+
+        def is_heading(group: PhraseGroup) -> bool:
+            return id(group) == title_id or PhraseGrouper.is_heading_like(group)
+
+        result: list[PhraseGroup] = []
+
+        for i, group in enumerate(groups):
+            if group.num_words > shortness_threshold:
+                result.append(group)
+                continue
+
+            group_is_heading = is_heading(group)
+
+            # Merge with previous
+            if result:
+                previous = result[-1]
+                can_merge = previous.num_words + group.num_words <= max_words and \
+                    previous.last_reason < Reason.SPACE_BREAK and \
+                    is_heading(previous) == group_is_heading
+                if can_merge:
+                    PhraseGrouper._punctuate_paragraph_join(previous.phrases[-1])
+                    previous.phrases.extend(group.phrases)
+                    previous.invalidate_presentable_memos()
+                    PhraseGrouper._promote_heading_end(previous)
+                    continue
+
+            # Merge with next (which then gets processed in turn)
+            if i + 1 < len(groups):
+                next_group = groups[i + 1]
+                can_merge = next_group.num_words + group.num_words <= max_words and \
+                    group.last_reason < Reason.SPACE_BREAK and \
+                    is_heading(next_group) == group_is_heading
+                if can_merge:
+                    PhraseGrouper._punctuate_paragraph_join(group.phrases[-1])
+                    next_group.phrases[0:0] = group.phrases
+                    next_group.invalidate_presentable_memos()
+                    PhraseGrouper._promote_heading_end(next_group)
+                    continue
+
+            result.append(group)
+
+        # End headings with a period, too, which gives them a more natural intonation
+        for group in result:
+            if is_heading(group) and app_text.lacks_final_punctuation(group.text):
+                group.phrases[-1].text = app_text.add_period_after_last_word(group.phrases[-1].text)
+                group.invalidate_presentable_memos()
+
+        return result
+
+    @staticmethod
+    def _punctuate_paragraph_join(phrase: Phrase) -> None:
+        """
+        Adds a period to a paragraph-ending phrase without punctuation which is
+        about to be joined with the following paragraph (eg "Chapter 1" and the
+        chapter title). Line breaks are removed from TTS prompts, so the model
+        would otherwise read both lines as one phrase without a pause.
+        """
+        if phrase.reason >= Reason.PARAGRAPH and app_text.lacks_final_punctuation(phrase.text):
+            phrase.text = app_text.add_period_after_last_word(phrase.text)
+
+    @staticmethod
+    def _promote_heading_end(group: PhraseGroup) -> None:
+        """
+        When headings were merged (eg "Chapter 1" with reason HEADING and the
+        chapter title), the HEADING reason moves to the end of the merged group,
+        so that the heading pause follows the title. Inner HEADING reasons
+        become PARAGRAPH.
+        """
+        if group.last_reason != Reason.PARAGRAPH:
+            return
+        inner_headings = [phrase for phrase in group.phrases[:-1] if phrase.reason == Reason.HEADING]
+        if not inner_headings:
+            return
+        for phrase in inner_headings:
+            phrase.reason = Reason.PARAGRAPH
+        group.phrases[-1].reason = Reason.HEADING
+
+    # Characters that start a line of dialog
+    _DIALOG_START_CHARS = ("\"", "“", "”", "„", "»", "«", "—", "–")
+
+    @staticmethod
+    def is_heading_like(group: PhraseGroup) -> bool:
+        """
+        Returns True if the group ends with reason HEADING, or if its text ends
+        without sentence-ending punctuation, as headings do (eg "Chapter 1", a
+        chapter title, or the lines of a title page). Trailing ornaments (eg a
+        dinkus) are ignored.
+
+        Groups that were split mid-sentence (reason below SENTENCE) are never
+        heading-like. A group at the very end of the text has reason SENTENCE
+        even without punctuation, so it is evaluated like a paragraph.
+        """
+        if group.last_reason == Reason.HEADING:
+            return True
+        if group.last_reason < Reason.SENTENCE:
+            return False
+        return app_text.ends_without_punctuation(group.text)
+
+    @staticmethod
     def print_groups(groups: list[PhraseGroup]) -> None:
         """ For debugging """
         for group in groups:
@@ -242,3 +410,8 @@ class PhraseGrouper:
                     s += " -----"
                 printt(f"  {repr(phrase.text)} {s}")
             printt()
+
+
+def normalize_heading_text(text: str) -> str:
+    """ Normalizes text for comparing headings: collapsed whitespace, case-insensitive """
+    return " ".join(text.split()).casefold()

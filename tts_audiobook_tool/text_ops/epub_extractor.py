@@ -16,7 +16,7 @@ from tts_audiobook_tool.constants import PROJECT_TEXT_EPUB_FILE_NAME
 from tts_audiobook_tool.text_ops.epub_section_skip_detector import EpubSectionSkipDetector
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
-from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper, normalize_heading_text
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,8 @@ class EpubTextExtractionResult:
     significant_warnings: list[str] = field(default_factory=list)
     slices: list[EpubTextSlice] = field(default_factory=list)
     has_unresolved_navigation_target: bool = False
+    # Texts of the paragraphs that are headings (see find_heading_texts)
+    heading_texts: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -224,7 +226,29 @@ class BeautifulSoupEpubChapterTextExtractor:
             significant_warnings=significant_warnings,
             slices=slices,
             has_unresolved_navigation_target=has_unresolved_navigation_target,
+            heading_texts=self.find_heading_texts(root, text, chapter.title),
         )
+
+    HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"]
+
+    def find_heading_texts(self, root: Any, text: str, title: str) -> list[str]:
+        """
+        Returns the texts of the heading paragraphs of a document: <h1>-<h6>
+        elements, plus the first paragraph if it matches the document's
+        (table-of-contents) title. The latter covers EPUBs which format their
+        headings as regular paragraphs using CSS classes.
+        """
+        result: list[str] = []
+        for node in root.find_all(self.HEADING_TAGS):
+            node_text = self.normalize_output_text(self.node_to_text(node))
+            # A heading element can contain line breaks; each line is a paragraph
+            result.extend(line for line in node_text.split("\n") if line.strip())
+
+        first_paragraph = text.split("\n", 1)[0]
+        if title and normalize_heading_text(first_paragraph) == normalize_heading_text(title):
+            result.append(first_paragraph)
+
+        return result
 
     @classmethod
     def is_likely_non_reading_chapter(cls, chapter: EpubSourceChapter) -> bool:
@@ -487,6 +511,7 @@ class EpubExtractor:
             segmentation_strategy: SegmentationStrategy,
             language_code: str,
             dialog_segmentation: bool = False,
+            merge_short_sentences: bool = False,
             extractor: EpubChapterTextExtractor | None = None
     ) -> EpubImportResult:
         source_chapters, book_title, warnings, significant_warnings = EpubExtractor.load_source_chapters(epub_path)
@@ -495,6 +520,7 @@ class EpubExtractor:
         extractor = extractor or EpubExtractor.DEFAULT_EXTRACTOR
 
         extracted_chapters: list[tuple[EpubSourceChapter, EpubTextExtractionResult]] = []
+        heading_texts: set[str] = set()
         did_report_inline_whitespace_repair_warning = False
         for source_chapter in source_chapters:
             result = extractor.extract_text(source_chapter)
@@ -509,6 +535,7 @@ class EpubExtractor:
             warnings.extend(result_warnings)
             significant_warnings.extend(result_significant_warnings)
             extracted_chapters.append((source_chapter, result))
+            heading_texts.update(result.heading_texts)
 
         text_chapters = EpubExtractor.assemble_text_chapters(
             extracted_chapters,
@@ -543,6 +570,8 @@ class EpubExtractor:
                 strategy=segmentation_strategy,
                 pysbd_lang=language_code,
                 dialog_segmentation=dialog_segmentation,
+                heading_texts=heading_texts,
+                merge_short_sentences=merge_short_sentences,
             )
             if phrase_groups:
                 markers.append(len(phrase_groups))

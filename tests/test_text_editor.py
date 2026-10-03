@@ -960,6 +960,7 @@ def test_i_opens_segmentation_info_dialog() -> None:
                 "Max words per segment: 80\n"
                 "Segmentation strategy: Multiple sentences\n"
                 "Dialog segmentation: True\n"
+                "Merge short sentences across paragraphs: False\n"
                 "Language code: en"
             )
             dim_prefixes = {
@@ -972,6 +973,7 @@ def test_i_opens_segmentation_info_dialog() -> None:
                 "Max words per segment:",
                 "Segmentation strategy:",
                 "Dialog segmentation:",
+                "Merge short sentences across paragraphs:",
                 "Language code:",
             }
 

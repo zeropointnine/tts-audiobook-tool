@@ -302,6 +302,7 @@ class ProjectSerializationUtil:
         )
 
         normalize_bool('dialog_segmentation', False)
+        normalize_bool('merge_short_sentences', False)
 
         s = d.get('generate_range', '')
         if isinstance(s, str):
@@ -822,6 +823,7 @@ class ProjectSerializationUtil:
             "segmentation_strategy": project.segmentation_strategy.id,
             "max_words": project.max_words,
             "dialog_segmentation": project.dialog_segmentation,
+            "merge_short_sentences": project.merge_short_sentences,
             "word_substitutions_json_string": json.dumps(project.word_substitutions),
 
             "generate_range": project.generate_range_string,

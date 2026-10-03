@@ -110,6 +110,7 @@ class Project(BaseModel):
     segmentation_strategy: SegmentationStrategy = PROJECT_DEFAULT_SEGMENTATION_STRATEGY
     max_words: int = MAX_WORDS_PER_SEGMENT_DEFAULT
     dialog_segmentation: bool = False
+    merge_short_sentences: bool = False
     word_substitutions: dict[str, str] = Field(default_factory=dict)
 
     # Generation-range sentinels:
