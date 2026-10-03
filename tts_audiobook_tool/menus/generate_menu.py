@@ -11,6 +11,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.voice_check_menu import VoiceCheckMenu
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -392,6 +393,7 @@ def do_generate(state: State) -> None:
 
     # Print validation setting
     printt(make_validation_confirmation_line(state))
+    VoiceCheckMenu.print_confirmation_line()
 
     # Print auto-concat setting
     if state.project.gen_auto_concat:
