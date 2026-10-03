@@ -34,6 +34,7 @@ def test_get_from_std_in_segments_text_from_textual_app(monkeypatch) -> None:
                 "max_words": 42,
                 "strategy": SegmentationStrategy.SENTENCE,
                 "dialog_segmentation": True,
+                "merge_short_sentences": False,
             },
         )
     ]

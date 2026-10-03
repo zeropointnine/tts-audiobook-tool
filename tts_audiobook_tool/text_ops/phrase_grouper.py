@@ -4,6 +4,7 @@ from collections.abc import Collection
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.constants_config import SHORT_GROUP_MERGE_MAX_WORDS
 from tts_audiobook_tool.text_ops.phrase_segmenter import Reason, Phrase, PhraseSegmenter
 from tts_audiobook_tool.text_ops.dialog_segmenter import (
     DIALOG_VOICE_INDEX,
@@ -24,6 +25,7 @@ class PhraseGrouper:
             pysbd_lang: str="en",
             dialog_segmentation: bool=False,
             heading_texts: Collection[str] | None=None,
+            merge_short_sentences: bool=False,
     ) -> list[PhraseGroup]:
         """
         Creates PhraseGroups using the passed-in raw source text.
@@ -40,6 +42,11 @@ class PhraseGrouper:
 
         heading_texts are the texts of paragraphs which are known to be headings
         (eg, from EPUB markup). Those paragraphs end with reason HEADING.
+
+        When merge_short_sentences is enabled, a final pass merges short groups
+        into a neighboring group, across paragraph boundaries (see
+        merge_short_groups_across_paragraphs). Dialog segmentation is skipped
+        in that case.
         """
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         # This guarantees that imported text has no blank lines containing
@@ -77,7 +84,11 @@ class PhraseGrouper:
             results.extend(split_groups)
         groups = results
 
-        if dialog_segmentation:
+        if merge_short_sentences:
+            groups = PhraseGrouper.merge_short_groups_across_paragraphs(
+                groups, SHORT_GROUP_MERGE_MAX_WORDS, max_words
+            )
+        elif dialog_segmentation:
             groups = DialogSegmenter.segment_groups(
                 groups,
                 dialog_voice_index=DIALOG_VOICE_INDEX,
@@ -256,6 +267,99 @@ class PhraseGrouper:
                 new_groups.append(group)
 
         return new_groups            
+
+    @staticmethod
+    def merge_short_groups_across_paragraphs(
+            groups: list[PhraseGroup],
+            shortness_threshold: int,
+            max_words: int
+    ) -> list[PhraseGroup]:
+        """
+        Merges each group with shortness_threshold words or fewer into the
+        previous group, or if that would exceed max_words, into the next group.
+        Unlike merge_short_sentences, this crosses paragraph boundaries, which
+        helps with texts that put every line into its own paragraph.
+        Space breaks and section breaks are not crossed.
+
+        Headings only merge with each other, so that eg "Chapter 1" and the
+        chapter title get combined, but not the chapter title and the
+        chapter's body text. Headings are heading-like groups (see
+        is_heading_like), plus a title following a heading at the very start
+        of the text, whatever its punctuation (eg "Chapter 14" followed by
+        "What can we do?"). Such a title must be a short paragraph which does
+        not start like dialog.
+        """
+        title_id: int | None = None
+        if len(groups) >= 2 and PhraseGrouper.is_heading_like(groups[0]):
+            title = groups[1]
+            is_title = title.num_words <= shortness_threshold and \
+                title.last_reason >= Reason.PARAGRAPH and \
+                not title.text.lstrip().startswith(PhraseGrouper._DIALOG_START_CHARS)
+            if is_title:
+                title_id = id(title)
+
+        def is_heading(group: PhraseGroup) -> bool:
+            return id(group) == title_id or PhraseGrouper.is_heading_like(group)
+
+        result: list[PhraseGroup] = []
+
+        for i, group in enumerate(groups):
+            if group.num_words > shortness_threshold:
+                result.append(group)
+                continue
+
+            group_is_heading = is_heading(group)
+
+            # Merge with previous
+            if result:
+                previous = result[-1]
+                can_merge = previous.num_words + group.num_words <= max_words and \
+                    previous.last_reason < Reason.SPACE_BREAK and \
+                    is_heading(previous) == group_is_heading
+                if can_merge:
+                    previous.phrases.extend(group.phrases)
+                    previous.invalidate_presentable_memos()
+                    continue
+
+            # Merge with next (which then gets processed in turn)
+            if i + 1 < len(groups):
+                next_group = groups[i + 1]
+                can_merge = next_group.num_words + group.num_words <= max_words and \
+                    group.last_reason < Reason.SPACE_BREAK and \
+                    is_heading(next_group) == group_is_heading
+                if can_merge:
+                    next_group.phrases[0:0] = group.phrases
+                    next_group.invalidate_presentable_memos()
+                    continue
+
+            result.append(group)
+
+        return result
+
+    # Characters that end a sentence or a line of dialog
+    _SENTENCE_END_CHARS = frozenset(".!?…:;,\"'“”„»«’‘‚›‹–—-")
+    # Characters that start a line of dialog
+    _DIALOG_START_CHARS = ("\"", "“", "”", "„", "»", "«", "—", "–")
+
+    @staticmethod
+    def is_heading_like(group: PhraseGroup) -> bool:
+        """
+        Returns True if the group's text ends without sentence-ending
+        punctuation, as headings do (eg "Chapter 1", a chapter title, or the
+        lines of a title page). Trailing ornaments (eg a dinkus) are ignored.
+
+        Groups that were split mid-sentence (reason below SENTENCE) are never
+        heading-like. A group at the very end of the text has reason SENTENCE
+        even without punctuation, so it is evaluated like a paragraph.
+        """
+        if group.last_reason < Reason.SENTENCE:
+            return False
+        for char in reversed(group.text):
+            if char in PhraseGrouper._SENTENCE_END_CHARS:
+                return False
+            if char.isalnum():
+                return True
+        return False
 
     @staticmethod
     def print_groups(groups: list[PhraseGroup]) -> None:

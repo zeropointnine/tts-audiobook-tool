@@ -511,6 +511,7 @@ class EpubExtractor:
             segmentation_strategy: SegmentationStrategy,
             language_code: str,
             dialog_segmentation: bool = False,
+            merge_short_sentences: bool = False,
             extractor: EpubChapterTextExtractor | None = None
     ) -> EpubImportResult:
         source_chapters, book_title, warnings, significant_warnings = EpubExtractor.load_source_chapters(epub_path)
@@ -570,6 +571,7 @@ class EpubExtractor:
                 pysbd_lang=language_code,
                 dialog_segmentation=dialog_segmentation,
                 heading_texts=heading_texts,
+                merge_short_sentences=merge_short_sentences,
             )
             if phrase_groups:
                 markers.append(len(phrase_groups))

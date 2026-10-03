@@ -1,6 +1,7 @@
 from tts_audiobook_tool.app_support import app_text, hints
 from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
 from tts_audiobook_tool import ask, text_util
+from tts_audiobook_tool.constants_config import SHORT_GROUP_MERGE_MAX_WORDS
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
@@ -46,6 +47,8 @@ class TextMenu:
             value = f"max words {value}; {state.project.segmentation_strategy.label.lower()}"
             if state.project.dialog_segmentation:
                 value += "; dialog"
+            if state.project.merge_short_sentences:
+                value += "; merge short"
             return make_menu_label("Segmentation settings", value)
 
         def make_items(_: State) -> list[MenuItem]:
@@ -113,10 +116,19 @@ class TextMenu:
             return make_menu_label("Max words per segment", value)
 
         def make_dialog_segmentation_label(_state: State) -> str:
+            if state.project.merge_short_sentences:
+                return f"Dialog segmentation {COL_DIM}(disabled by short sentence merge)"
             if not state.project.dialog_segmentation:
                 return f"Dialog segmentation {COL_DIM}(optional)"
             return make_menu_label(
                 "Dialog segmentation", state.project.dialog_segmentation
+            )
+
+        def make_merge_short_sentences_label(_state: State) -> str:
+            if not state.project.merge_short_sentences:
+                return f"Merge short sentences across paragraphs {COL_DIM}(optional)"
+            return make_menu_label(
+                "Merge short sentences across paragraphs", state.project.merge_short_sentences
             )
 
         def items_maker(_) -> list[MenuItem]:
@@ -137,6 +149,12 @@ class TextMenu:
                 MenuItem(
                     make_dialog_segmentation_label,
                     lambda _, __: TextMenu.dialog_segmentation_menu(state)
+                )
+            )
+            items.append(
+                MenuItem(
+                    make_merge_short_sentences_label,
+                    lambda _, __: TextMenu.merge_short_sentences_menu(state)
                 )
             )
             return items
@@ -172,6 +190,13 @@ class TextMenu:
     @staticmethod
     def dialog_segmentation_menu(state: State) -> None:
 
+        if state.project.merge_short_sentences:
+            ask.ask_enter_to_continue(
+                "Dialog segmentation is not available while "
+                "\"Merge short sentences across paragraphs\" is enabled."
+            )
+            return
+
         def on_select(value: bool) -> None:
             state.project.dialog_segmentation = value
             state.project.save()
@@ -187,6 +212,29 @@ class TextMenu:
             default_value=False,
             on_select=on_select,
             breadcrumb="Dialog segmentation",
+        )
+
+    @staticmethod
+    def merge_short_sentences_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.merge_short_sentences = value
+            if value and state.project.dialog_segmentation:
+                state.project.dialog_segmentation = False
+                printt(f"{COL_DIM}Dialog segmentation has been disabled.")
+            state.project.save()
+            print_feedback("Merge short sentences across paragraphs set to:", str(value))
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Merge short sentences across paragraphs",
+            subheading=MERGE_SHORT_SENTENCES_DESC,
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.merge_short_sentences,
+            default_value=False,
+            on_select=on_select,
+            breadcrumb="Merge short sentences",
         )
 
     @staticmethod
@@ -335,7 +383,8 @@ def on_select_import(state: State, item: MenuItem) -> bool:
                 state.project.segmentation_strategy,
                 pysbd_language=state.project.language_code,
                 prefs=state.prefs,
-                dialog_segmentation=state.project.dialog_segmentation
+                dialog_segmentation=state.project.dialog_segmentation,
+                merge_short_sentences=state.project.merge_short_sentences,
             )
             if not phrase_groups:
                 return False
@@ -343,7 +392,8 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         case "manual":
             phrase_groups, raw_text = ask_phrase_groups.get_from_std_in(
                 state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code,
-                dialog_segmentation=state.project.dialog_segmentation
+                dialog_segmentation=state.project.dialog_segmentation,
+                merge_short_sentences=state.project.merge_short_sentences,
             )
             title = ""
             if not phrase_groups:
@@ -360,6 +410,7 @@ def on_select_import(state: State, item: MenuItem) -> bool:
                 segmentation_strategy=state.project.segmentation_strategy,
                 language_code=state.project.language_code,
                 dialog_segmentation=state.project.dialog_segmentation,
+                merge_short_sentences=state.project.merge_short_sentences,
             )
             if epub_import_result is None:
                 return False
@@ -395,6 +446,7 @@ def on_select_import(state: State, item: MenuItem) -> bool:
             max_words=state.project.max_words,
             language_code=state.project.language_code,
             dialog_segmentation=state.project.dialog_segmentation,
+            merge_short_sentences=state.project.merge_short_sentences,
             raw_text=raw_text,
             title=title,
             section_titles=[chapter.title for chapter in epub_import_result.chapters],
@@ -409,6 +461,7 @@ def on_select_import(state: State, item: MenuItem) -> bool:
             max_words=state.project.max_words,
             language_code=state.project.language_code,
             dialog_segmentation=state.project.dialog_segmentation,
+            merge_short_sentences=state.project.merge_short_sentences,
             raw_text=raw_text,
             title=title,
             text_source_kind=text_source_kind,
@@ -429,6 +482,7 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         printt(f"- Text segmenter max_words_per_segment: {COL_ACCENT}{segmentation_settings.max_words_per_segment}")
     printt(f"- Text segmenter strategy: {COL_ACCENT}{segmentation_settings.strategy.label}")
     printt(f"- Dialog segmentation: {COL_ACCENT}{segmentation_settings.dialog_segmentation}")
+    printt(f"- Merge short sentences across paragraphs: {COL_ACCENT}{segmentation_settings.merge_short_sentences}")
     if segmentation_settings.dialog_segmentation:
         dialog_segment_count = sum(
             group.voice_index == DIALOG_VOICE_INDEX
@@ -509,6 +563,17 @@ For example, {COL_DIM}He said, "Hello."{COL_DEFAULT} becomes {COL_DIM}He said,{C
 Dialog segments are preassigned to voice sample 2.
 
 For single-voice narration, leave this off to preserve natural flow.
+"""
+
+MERGE_SHORT_SENTENCES_DESC = f"""Text segments with {SHORT_GROUP_MERGE_MAX_WORDS} words or fewer get merged with the previous segment,
+or with the next one if "max words per segment" would be exceeded otherwise.
+Unlike the normal segmentation, this also crosses paragraph boundaries
+(but not scene breaks). Very short prompts can make TTS output unstable.
+Headings (lines without sentence-ending punctuation, eg "Chapter 1" and the
+chapter title) only get merged with each other, not with the body text.
+
+Useful for books which put every line into its own paragraph.
+Dialog segmentation is disabled while this is enabled.
 """
 
 SUBSTITUTIONS_DESC = \

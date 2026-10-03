@@ -227,6 +227,145 @@ class TestPhraseGrouper(unittest.TestCase):
 
         self.assertEqual([group.text for group in groups], ["Chapter 1\n\n", "Go.\n\n"])
 
+    def test_merge_short_sentences_merges_across_paragraphs(self):
+        text = "This is the first longer sentence here.\nYes.\nAnd this is another longer sentence."
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.SENTENCE_PLUS, "en", merge_short_sentences=True
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["This is the first longer sentence here.\nYes.\n", "And this is another longer sentence."],
+        )
+
+    def test_merge_short_sentences_off_keeps_paragraph_boundaries(self):
+        text = "This is the first longer sentence here.\nYes.\nAnd this is another longer sentence."
+
+        groups = PhraseGrouper.text_to_groups(text, 40, SegmentationStrategy.SENTENCE_PLUS, "en")
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["This is the first longer sentence here.\n", "Yes.\n", "And this is another longer sentence."],
+        )
+
+    def test_merge_short_sentences_merges_first_group_forward(self):
+        text = "Yes. This is the first longer sentence here."
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.SENTENCE, "en", merge_short_sentences=True
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["Yes. This is the first longer sentence here."],
+        )
+
+    def test_merge_short_sentences_merges_headings_only_with_each_other(self):
+        text = "Chapter 1\n\nThe Planet\n\nThis is the first longer sentence here.\n\nYes.\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.SENTENCE_PLUS, "en", merge_short_sentences=True
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["Chapter 1\n\nThe Planet\n\n", "This is the first longer sentence here.\n\nYes.\n\n"],
+        )
+
+    def test_merge_short_sentences_does_not_merge_short_sentence_into_heading(self):
+        text = "This is the first longer sentence here.\n\nChapter 2\n\nYes.\n\nThis is another longer sentence."
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.SENTENCE_PLUS, "en", merge_short_sentences=True
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            [
+                "This is the first longer sentence here.\n\n",
+                "Chapter 2\n\n",
+                "Yes.\n\nThis is another longer sentence.",
+            ],
+        )
+
+    def test_merge_short_sentences_treats_leading_short_paragraphs_as_heading(self):
+        text = "Chapter 14\n\nWhat can we do?\n\nThis is the first longer sentence here.\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.SENTENCE_PLUS, "en", merge_short_sentences=True
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["Chapter 14\n\nWhat can we do?\n\n", "This is the first longer sentence here.\n\n"],
+        )
+
+    def test_merge_short_sentences_does_not_treat_leading_dialog_as_heading(self):
+        text = "Chapter 12\n\nThe Explorers\n\n“Lieutenant,” said Zephyr.\n\nThis is the first longer sentence here.\n\n"
+
+        groups = PhraseGrouper.text_to_groups(
+            text, 40, SegmentationStrategy.SENTENCE_PLUS, "en", merge_short_sentences=True
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            [
+                "Chapter 12\n\nThe Explorers\n\n",
+                "“Lieutenant,” said Zephyr.\n\nThis is the first longer sentence here.\n\n",
+            ],
+        )
+
+    def test_merge_short_sentences_merges_forward_when_previous_would_exceed_max_words(self):
+        groups = [
+            PhraseGroup([Phrase("one two three four five six. ", Reason.PARAGRAPH)]),
+            PhraseGroup([Phrase("Yes. ", Reason.PARAGRAPH)]),
+            PhraseGroup([Phrase("seven eight nine ten.", Reason.SENTENCE)]),
+        ]
+
+        result = PhraseGrouper.merge_short_groups_across_paragraphs(groups, 1, 6)
+
+        self.assertEqual(
+            [group.text for group in result],
+            ["one two three four five six. ", "Yes. seven eight nine ten."],
+        )
+
+    def test_merge_short_sentences_keeps_group_when_both_neighbors_would_exceed_max_words(self):
+        groups = [
+            PhraseGroup([Phrase("one two three four five six ", Reason.PARAGRAPH)]),
+            PhraseGroup([Phrase("Yes no. ", Reason.PARAGRAPH)]),
+            PhraseGroup([Phrase("seven eight nine ten eleven twelve", Reason.SENTENCE)]),
+        ]
+
+        result = PhraseGrouper.merge_short_groups_across_paragraphs(groups, 5, 7)
+
+        self.assertEqual(len(result), 3)
+
+    def test_merge_short_sentences_does_not_cross_space_break(self):
+        groups = [
+            PhraseGroup([Phrase("one two three four five six ", Reason.SPACE_BREAK)]),
+            PhraseGroup([Phrase("Yes. ", Reason.SPACE_BREAK)]),
+            PhraseGroup([Phrase("seven eight nine ten eleven twelve", Reason.SENTENCE)]),
+        ]
+
+        result = PhraseGrouper.merge_short_groups_across_paragraphs(groups, 5, 40)
+
+        self.assertEqual(len(result), 3)
+
+    def test_merge_short_sentences_disables_dialog_segmentation(self):
+        text = 'He said, "Hello there, how are you doing today?" Then he left the room quietly.'
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE_PLUS,
+            "en",
+            dialog_segmentation=True,
+            merge_short_sentences=True,
+        )
+
+        self.assertTrue(all(group.voice_index == -1 for group in groups))
+
 
 if __name__ == '__main__':
     unittest.main()
