@@ -1176,6 +1176,75 @@ class TestEpubExtractor(unittest.TestCase):
             with open(dest_path, "rb") as f:
                 self.assertEqual(f.read(), b"saved epub bytes")
 
+    def test_extract_text_finds_heading_element_texts(self):
+        chapter = EpubSourceChapter(
+            title="Contents entry",
+            href="Text/chapter001.xhtml",
+            media_type="application/xhtml+xml",
+            html="""
+            <html><body>
+                <h1>Chapter 1</h1>
+                <h2>What Can We Do?</h2>
+                <p>The entire area was one massive graveyard.</p>
+            </body></html>
+            """,
+        )
+
+        result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
+
+        self.assertEqual(result.heading_texts, ["Chapter 1", "What Can We Do?"])
+
+    def test_extract_text_treats_first_paragraph_matching_title_as_heading(self):
+        chapter = EpubSourceChapter(
+            title="Chapter 14",
+            href="Text/chapter014.xhtml",
+            media_type="application/xhtml+xml",
+            html="""
+            <html><body>
+                <p class="chapter">Chapter 14</p>
+                <p class="title">What Can We Do?</p>
+                <p>Chapter 14</p>
+            </body></html>
+            """,
+        )
+
+        result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
+
+        self.assertEqual(result.heading_texts, ["Chapter 14"])
+
+    def test_import_epub_ends_heading_paragraphs_with_heading_reason(self):
+        source_chapters = [
+            EpubSourceChapter(
+                title="Chapter 1",
+                href="Text/chapter001.xhtml",
+                media_type="application/xhtml+xml",
+                html="""
+                <html><body>
+                    <h1>Chapter 1</h1>
+                    <p>The entire area was one massive graveyard.</p>
+                    <p>Nobody had survived.</p>
+                </body></html>
+                """,
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                "book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE,
+                language_code="en",
+            )
+
+        self.assertEqual(
+            [(group.text.strip(), group.last_reason) for group in result.phrase_groups],
+            [
+                ("Chapter 1", Reason.HEADING),
+                ("The entire area was one massive graveyard.", Reason.PARAGRAPH),
+                ("Nobody had survived.", Reason.SECTION_BREAK),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

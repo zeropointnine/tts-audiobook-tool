@@ -8,7 +8,7 @@ from tts_audiobook_tool.app_types.book_serialization import book_to_json_dict
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 
 
-_PRESERVED_END_REASONS = {Reason.PHRASE_QUOTE_END, Reason.SECTION_BREAK}
+_PRESERVED_END_REASONS = {Reason.PHRASE_QUOTE_END, Reason.HEADING, Reason.SECTION_BREAK}
 
 
 def _select_edited_end_reason(
