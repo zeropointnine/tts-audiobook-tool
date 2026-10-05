@@ -76,10 +76,13 @@ def normalize_text_general(text: str) -> str:
     # Normalize Unicode (fixes 'é' vs 'e'+'´' mismatches)
     text = unicodedata.normalize("NFKC", text)
 
-    # Replace fancy apost, fancy double-quotes
+    # Replace fancy apost, fancy double-quotes (incl. the low-9 quotes opening German quotes)
     text = text.replace("’", "'")
+    text = text.replace("‘", "'")
+    text = text.replace("‚", "'")
     text = text.replace("“", '"')
     text = text.replace("”", '"')
+    text = text.replace("„", '"')
 
     # Strip "bad" characters based on unicode category
     bad_categories = {

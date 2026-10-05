@@ -21,6 +21,8 @@ from tts_audiobook_tool.text_ops.prompt_normalizer import PromptNormalizer
          "Alternate format for ellipsis, not uncommon ... Ugh."),
         ("Fancy apost: I think it’s . . . unseemly.",
          "Fancy apost: I think it's ... unseemly."),
+        # German quotes: low-9 opening quotes like the other fancy quotes
+        ("„Fred?“ Er sagte: ‚Ja.‘", "\"Fred?\" Er sagte: 'Ja.'"),
         ("Multiple dots...........", "Multiple dots..."),
         ("Multiple dots with space ...........", "Multiple dots with space ..."),
         ("Multiple ellipsis characters…………", "Multiple ellipsis characters..."),
