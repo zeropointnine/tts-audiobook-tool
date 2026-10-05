@@ -40,7 +40,7 @@ The app employs various techniques to make the nondeterministic output of genera
 - Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
 - EBU R128 loudness normalization plus optional 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) generative upsampler
 
-The app can also utilize multiple voice-clone samples, which can be assigned on a line-by-line basis. Optional dialog detection can automatically assign quoted dialog to a separate voice, simplifying setup.
+The app can also utilize multiple voice-clone samples, which can be assigned on a line-by-line basis. Each project has one ordered list of voice samples and transcripts shared by all its TTS models, not an app-global list. Optional dialog detection can automatically assign quoted dialog to a separate voice, simplifying setup.
 
 It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
 
@@ -135,7 +135,7 @@ Or, if you have multiple virtual environments installed, you can use `launch.py`
     python launch.py # searches the project root for venv subdirectories by default
     python launch.py path/to/venvs-parent-dir # searches for venv subdirectories from the given path
 
-For how the app chooses a project's TTS model and exposes model-specific settings, refer to [TTS model selection rules](<docs/tts-model-selection.md>).
+For how the app chooses a project's TTS model and exposes model-specific settings, refer to [TTS model selection rules](<docs-dev/tts-model-selection.md>). Project storage and migration are documented in [Project Spec v4](<docs-dev/project-spec-v4.md>).
 
 <details>
 
@@ -619,6 +619,10 @@ Additionally, setting "chapter cut points" can be useful to generate and export 
 
 ### Voice cloning
 
+Voice samples and their transcripts belong to one shared list per project. Switching TTS models keeps the list and its order. Transcripts remain editable and are retained even for models that do not use them; each model still has its own clone support and transcript requirements. Pocket's selected predefined voice takes precedence without erasing the shared samples, and IndexTTS2's secondary emotion sample remains model-specific.
+
+Older v1/v2/v3 projects migrate to project format v4 on load. With no populated old clone lists, the new list is empty; a single source is adopted silently. Multiple independent sources require a numbered choice showing model names and all sample filenames, even when the lists are identical. An already-shared list counts once across backend variants. An explicit top-level `voice_references` list, including `[]`, wins over stale old lists. Successful migration saves immediately after backing up the original settings as `project.json.pre-v4.bak` (an unused numbered suffix is used if needed), without deleting voice or generated audio. Settings imports require the same choice before writing the destination; ambiguous noninteractive loads/imports fail with guidance rather than choosing automatically. See [Project Spec v4](<docs-dev/project-spec-v4.md>) for details.
+
 When prepping reference audio for voice cloning, it's worthwhile to prepare a few different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality, characteristics, and word error rate resulting from each sample from the same source can vary quite a bit. Some TTS models are especially sensitive to this.
 
 ### VRAM considerations
@@ -809,7 +813,12 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-10-04 to 05**
+**2026-10-06**
+
+- A project now uses a single voice clone list instead of maintaining separate lists for each TTS model used within the same project. This makes it more convenient to switch between models mid-project.
+- The `Voice clone and model settings` menu has been split into `Voice clone` and `Model settings` menus.
+
+**2026-10-04**
 
 - Added support for [audio.cpp](https://github.com/0xShug0/audio.cpp) as an alternative TTS backend, along with the following models:
     - Breeze TTS 2

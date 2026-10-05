@@ -29,6 +29,7 @@ class State:
     _prefs: Prefs
     _project: Project
     pending_tts_model_change: PendingTtsModelChange | None
+    pending_project_load_checks: bool
 
 
     def __init__(self):
@@ -38,7 +39,10 @@ class State:
         # menu has been drawn once.
         self.dont_show_scan_message = True
         self.has_shown_main_menu = False
+        # Remember successful Pocket clone access for this app run only.
+        self.pocket_voice_clone_access_validated = False
         self.pending_tts_model_change = None
+        self.pending_project_load_checks = False
 
         self.prefs = Prefs.load()
 
@@ -70,7 +74,9 @@ class State:
         state._project = None  # type: ignore[assignment]
         state.dont_show_scan_message = False
         state.has_shown_main_menu = False
+        state.pocket_voice_clone_access_validated = False
         state.pending_tts_model_change = None
+        state.pending_project_load_checks = False
         state.prefs = prefs
         return state
 
@@ -86,6 +92,7 @@ class State:
             self._project.kill()
 
         self.pending_tts_model_change = None
+        self.pending_project_load_checks = bool(value.dir_path)
         self._project = value
         self._project.sound_segments.dont_show_scan_message = self.dont_show_scan_message
 

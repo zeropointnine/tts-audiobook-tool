@@ -45,26 +45,36 @@ Before building interactive menu items and when printing the status block, compa
 | Zero (local mode) | Any ID, including `"none"` or an unknown ID | Assign `"none"`; do not prompt. |
 | Zero (server mode) | Any ID, including `"none"` or an unknown ID | Preserve the saved ID. See the edge-case policy below. |
 | One | Matches the available type | Keep it; do not prompt. |
-| One (local mode) | Does not match, including `"none"`, another model, or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking startup FYI before the first main menu; later changes are silent. |
+| One (local mode) | Does not match, including `"none"`, another model, or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking FYI at startup or when another project is loaded; other later changes are silent. |
 | One (server mode) | Does not match, including `"none"` or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking FYI for the end of the next complete menu. |
 | More than one | Matches one of the available types | Keep it; do not prompt or choose a different type. |
 | More than one | Does not match any available type | Immediately assign `"none"`; require selection from the Project menu. |
 
-A sole-model mismatch queues this notice using the standard hint formatting only when replacing a saved ID other than `"none"`: in server mode whenever reconciliation changes that selection, and in local mode only before the first main menu. A matching saved selection or an initially unselected project does not trigger a notice in either mode.
+A sole-model mismatch queues this notice using the standard hint formatting only when replacing a saved ID other than `"none"`: in server mode whenever reconciliation changes that selection, and in local mode before the first main menu or while checks for a newly loaded project are pending. A matching saved selection or an initially unselected project does not trigger a model-change notice in either mode.
 
 ```text
 🔔 FYI
-This project was previously using TTS model {old_model_name}.
-It will now use the sole currently active model, {current_name}.
+This project was last used with TTS model {old_model_name};
+It will now use the sole active audio.cpp model, {current_name}.
 ```
 
-Include `sole` only for audio.cpp. Local mode and SGL-Omni omit it because they support only one model at a time.
+Use `sole active audio.cpp model` only for audio.cpp, which can have more than one model online at a time — the notice says the single available one was chosen. Local mode and SGL-Omni say `active model` instead because they support only one model at a time.
 
 The names are the models' UI `proper_name` values, each qualified by its backend kind (`Chatterbox TTS (local)`, `Breeze TTS 2 (audio.cpp)`). The old name describes the previous saved selection, not necessarily a loaded runtime. Unknown IDs display as `Unknown model: {raw_id}`; `"none"` is not a previous model and never queues this notice. The current name is the selected catalog model, not the exact server inference ID.
 
 If runtime binding is unavailable, the second line instead reads `It is now configured to use {current_name}, but the runtime is unavailable (see TTS mode).` The selection notification does not imply successful binding or persistence; existing status errors and save-error reporting remain in effect.
 
-Reconciliation and status printing do not display or consume the FYI. In server mode it is printed once at the bottom of the next complete menu. In local mode it is printed once at the bottom of the first main menu; earlier submenus leave it pending, and subsequent local changes do not queue a notice. Rendering happens after the existing `on_shown` callback and before normal menu input. The menu loop captures whether this is the first main menu before `on_shown` marks startup complete. The notice uses `hints.print_hint()` directly: no Enter prompt, animation, or persisted hint preference. Heading-only prompt screens leave it pending.
+Reconciliation and status printing do not display or consume the FYI. In server mode it is printed once at the bottom of the next complete menu. In local mode it is printed once at the bottom of the first main menu, or the next complete menu after a runtime project load; earlier startup submenus leave it pending, and other subsequent local changes do not queue a notice. Rendering happens through the shared `MenuStatus.show_pending_project_hints()` function after the existing `on_shown` callback and before normal menu input. The menu loop captures whether this is the first main menu before `on_shown` marks startup complete. The notices use `hints.print_hint()` directly: no Enter prompt, animation, or persisted hint preference. Heading-only prompt screens leave them pending.
+
+The shared function also checks voice-clone sample durations once per project load (startup or runtime), independently of whether the model changed. This check waits for the first main menu at startup, or the next complete menu after a runtime load. It uses the reconciled selection's optional `ui.voice_sample_max_duration_s` recommendation and the model-supported shared voice list, resolving files through `ProjectVoiceUtil.resolve_voice_file_path()`. Only known, unrounded durations strictly above the recommendation count; unreadable/missing samples and models without a recommendation do not trigger this FYI. It follows any model-change notice:
+
+```text
+🔔 FYI
+The current model's recommended duration for voice clone samples is 15s,
+but there are 2 samples for this project that exceed that value.
+```
+
+For one sample, use `there is 1 sample ... that exceeds`. This is warning-only: no sample trimming, rejection, or project mutation. Project assignment arms `State.pending_project_load_checks` for projects with a directory; replacement re-arms it, reset clears it, and ordinary menu redraws do not repeat the check. Worker project assignment can set the flag but does not render menus or run these checks.
 
 Pending old/new IDs live on `State`, not in global or persisted storage. Repeated checks preserve the pending notice. Multiple automatic changes before display coalesce to the first old ID and latest new ID; a net return to the original selection cancels it. Project replacement/reset, explicit model selection, and reconciliation clearing selection to `"none"` clear the pending notice. Rendering also discards a notice whose new ID no longer matches the selection. Clearing an unavailable selection to `"none"` does not itself notify.
 
@@ -79,7 +89,7 @@ Selecting **None** in the Project menu is not a permanent opt-out: if exactly on
 - **Project > TTS model:** offer None plus the currently available distinct types. An explicit selection updates the project, saves it, and binds it. Subsequent reconciliation still applies the table above.
 - **Workers and noninteractive callers:** runtime binding does not perform interactive reconciliation, mutate the saved selection, or ask for input. They validate the selection supplied to them.
 
-Changing the selected ID does not copy or discard other models' settings or voice references. For storage ownership and migration, refer to [Project Spec v3](<project-spec-v3.md>).
+Changing the selected ID does not copy or discard other models' settings or the shared project voice list. All models use the same ordered filename/transcript pairs within that project; model-specific clone/transcript capability still controls how they are consumed. For storage ownership and migration, refer to [Project Spec v4](<project-spec-v4.md>).
 
 ## 4. Bind selection separately from choosing it
 
@@ -126,7 +136,7 @@ These distinguish explicit selection requirements from choices made for previous
 | Multiple server entries map to one type | Reject ambiguous runtime binding. | Existing behavior retained, not a new automatic-selection rule. |
 | Server backend not yet identifiable | Use gray `(server)`. | Added display fallback beyond the three explicitly requested qualifiers; do not pretend to know the protocol. |
 
-The one-model and multiple-model mismatch rules, startup-only local model-change FYI, gray known-backend qualifiers, red selection hint, and red unreachable hint were explicit requirements. The policies in this table are current behavior, not independently confirmed product decisions.
+The one-model and multiple-model mismatch rules, startup/project-load local model-change FYI, gray known-backend qualifiers, red selection hint, and red unreachable hint were explicit requirements. The policies in this table are current behavior, not independently confirmed product decisions.
 
 ## Implementation and focused tests
 

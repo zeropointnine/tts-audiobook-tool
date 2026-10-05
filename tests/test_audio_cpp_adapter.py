@@ -15,6 +15,7 @@ import soundfile as sf
 
 from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil, MAX_REFERENCE_WAV_BYTES
 from tts_audiobook_tool.constants import MAX_WORDS_PER_SEGMENT_RECO_RANGE
+from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.tts_models.audio_cpp_configured import AudioCppBackendAdapter, AudioCppModelSupport, AudioCppSettings
@@ -33,6 +34,7 @@ class FakeProject:
     language_code = "fr"
     word_substitutions = []
     book = SimpleNamespace(segmentation_settings=SimpleNamespace(max_words_per_segment=20))
+    voice_references: list[dict[str, str]] = []
 
     def __init__(self, values: dict | None = None, model_id: str = MODEL_ID, transcripts: list[str] | None = None):
         self.values = values or {}
@@ -187,16 +189,14 @@ def test_omnivoice_definition_claims_the_clone_route_with_family_defaults():
     # require a voice sample (like Breeze).
     assert not item.spec.requires_voice and not item.voice_required and not item.spec.can_stream
     assert item.spec.default_output_sample_rate == 24000 and item.spec.un_all_caps
-    # The advanced group starts at voice-design instructions, followed by
-    # Steps, Speed, guidance and seed, mirroring local `omnivoice_local`.
-    # The heading is stamped only on the group's first member (the instructions).
-    assert [(control.kind, control.parameter, control.group) for control in item.menu] == [
-        ("voice_samples", "", ""),
-        ("voice_instructions", "instruct", "advanced"),
-        ("parameter", "num_inference_steps", ""),
-        ("parameter", "speed", ""),
-        ("parameter", "guidance_scale", ""),
-        ("seed", "", ""),
+    # Instructions belong to Voice clone; numeric settings and seed stay in Model.
+    assert [(control.kind, control.target_menu, control.parameter) for control in item.menu] == [
+        ("voice_samples", None, ""),
+        ("voice_instructions", "voice", "instruct"),
+        ("parameter", "model", "num_inference_steps"),
+        ("parameter", "model", "speed"),
+        ("parameter", "model", "guidance_scale"),
+        ("seed", "model", ""),
     ]
     project = FakeProject(model_id=OMNIVOICE_ID)
     for parameter, valid, invalid in (
@@ -211,7 +211,7 @@ def test_omnivoice_definition_claims_the_clone_route_with_family_defaults():
 def test_omnivoice_numeric_menu_prompt_shows_the_default(monkeypatch, tmp_path: Path):
     """Numeric prompts follow the app convention: range plus default value."""
     from tts_audiobook_tool import text_util
-    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
 
     item = definition(OMNIVOICE_ID)
     project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": OMNIVOICE_ID})
@@ -220,14 +220,14 @@ def test_omnivoice_numeric_menu_prompt_shows_the_default(monkeypatch, tmp_path: 
     monkeypatch.setattr("tts_audiobook_tool.ask.printt",
                         lambda text: printed.append(text))
     # An empty response leaves storage untouched, so nothing needs saving.
-    monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_audio_cpp_menu.ask.ask_input",
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_audio_cpp_menu.ask.ask_input",
                         lambda **_: "")
 
     for control in item.menu:
         if control.kind != "parameter":
             continue
         parameter = item.parameters[control.parameter]
-        VoiceAudioCppMenu.make_parameter_item(state, parameter, control.label).handler(state, None)
+        ModelAudioCppMenu.make_parameter_item(state, parameter, control.label).handler(state, None)
         minimum = int(parameter.min) if parameter.type == "int" else parameter.min
         maximum = int(parameter.max) if parameter.type == "int" else parameter.max
         default = int(parameter.default) if parameter.type == "int" else parameter.default
@@ -236,30 +236,22 @@ def test_omnivoice_numeric_menu_prompt_shows_the_default(monkeypatch, tmp_path: 
         )
 
 
-def test_omnivoice_menu_renders_the_advanced_group_in_local_order(monkeypatch):
-    """The advanced block matches local OmniVoice's control order."""
+def test_omnivoice_menu_renders_settings_in_local_order_without_headings(monkeypatch):
+    """Model settings match local OmniVoice's control order without headings."""
     from tts_audiobook_tool import text_util
-    from tts_audiobook_tool.constants import VOICE_ADVANCED_SUPERLABEL
     from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
-    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
-                        lambda *_, **__: [MenuItem("Add/remove voice samples", lambda *_: None)])
-    monkeypatch.setattr(VoiceMenuShared, "make_seed_item",
+    monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("Seed (currently: random)", lambda *_: None))
     monkeypatch.setattr(Project, "save", lambda self: "")
     project = Project.model_validate({"dir_path": "", "tts_model_type": OMNIVOICE_ID})
     state = SimpleNamespace(project=project)
 
-    items = VoiceAudioCppMenu.make_items(state, definition(OMNIVOICE_ID))
-    assert [text_util.strip_ansi_codes(get_string_from(state, item.superlabel))
-            for item in items] == [
-        "", VOICE_ADVANCED_SUPERLABEL, "", "", "", "",
-    ]
+    items = ModelAudioCppMenu.make_items(state, definition(OMNIVOICE_ID))
+    assert all(not item.superlabel for item in items)
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
-        "Add/remove voice samples",
-        "Voice design instructions (optional)",
         "Steps (currently: 32 default)",
         "Speed (currently: 1.00 default)",
         "Guidance scale (currently: 2.00 default)",
@@ -267,11 +259,11 @@ def test_omnivoice_menu_renders_the_advanced_group_in_local_order(monkeypatch):
     ]
 
 
-def test_echo_menu_renders_voice_selections_then_advanced_controls(monkeypatch, tmp_path: Path):
+def test_echo_menus_partition_voice_selections_and_settings_without_headings(monkeypatch, tmp_path: Path):
     from tts_audiobook_tool import text_util
     from tts_audiobook_tool.app_types import VoiceSelectMode
-    from tts_audiobook_tool.constants import VOICE_ADVANCED_SUPERLABEL
     from tts_audiobook_tool.menus.menu_util import get_string_from
+    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
     from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
 
     monkeypatch.setattr(Project, "save", lambda self: "")
@@ -283,32 +275,38 @@ def test_echo_menu_renders_voice_selections_then_advanced_controls(monkeypatch, 
     items = VoiceAudioCppMenu.make_items(state, definition(ECHO_ID))
 
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
-        "Add/remove voice samples (currently: suzie yeung hanya 1_4.flac, +1 more)",
-        "Voice selection mode (currently: user-defined)",
-        "Edit voice selections",
+        voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_PLAY_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
+        f"{voice_menu_shared.LABEL_VOICE_SELECTION_MODE} (currently: user-defined)",
+        voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
+    ]
+    assert all(not item.superlabel for item in items)
+
+    items = ModelAudioCppMenu.make_items(state, definition(ECHO_ID))
+    assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
         "Steps (currently: 40 default)",
         "Text guidance scale (currently: 3.00 default)",
         "Speaker guidance scale (currently: 8.00 default)",
         "Seed (currently: random)",
     ]
-    assert [text_util.strip_ansi_codes(get_string_from(state, item.superlabel)) for item in items] == [
-        "", "", "", VOICE_ADVANCED_SUPERLABEL, "", "", "",
-    ]
+    assert all(not item.superlabel for item in items)
 
 
 @pytest.mark.parametrize("model_id", [MODEL_ID, HIGGS_ID, BREEZE_ID, ECHO_ID, OMNIVOICE_ID])
 def test_audio_cpp_seed_prompt_does_not_warn_about_unsupported_batch_mode(monkeypatch, model_id):
     from tts_audiobook_tool import text_util
     from tts_audiobook_tool.menus.menu_util import get_string_from
-    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", lambda *_: [])
     prompts = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_menu_shared.ask.ask_number_and_save",
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_menu_shared.ask.ask_number_and_save",
                         lambda **kwargs: prompts.append(text_util.strip_ansi_codes(kwargs["prompt"])))
     state = SimpleNamespace(project=Project(tts_model_type=model_id))
-    items = VoiceAudioCppMenu.make_items(state, definition(model_id))
+    items = ModelAudioCppMenu.make_items(state, definition(model_id))
     seed_item = next(item for item in items
                      if text_util.strip_ansi_codes(get_string_from(state, item.label)) == "Seed (currently: random)")
 
@@ -345,18 +343,16 @@ def test_breeze_definition_declares_free_form_instructions():
      "Speak Warmly and Naturally, with calm pacing."),
     (OMNIVOICE_ID, "Voice design instructions", "female, high pitch", "male, low pitch"),
 ])
+@pytest.mark.parametrize("target_menu", ["model", "voice"])
 def test_instruction_menu_prefills_saves_and_clears_with_model_specific_validation(
-        monkeypatch, model_id, label, initial, edited):
+        monkeypatch, model_id, label, initial, edited, target_menu):
     from tts_audiobook_tool import ask, text_util
-    from tts_audiobook_tool.constants import VOICE_ADVANCED_SUPERLABEL
     from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
     from tts_audiobook_tool.menus.voice import voice_instruct_util
-    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
-                        lambda *_, **__: [MenuItem("Voice samples", lambda *_: None)])
-    monkeypatch.setattr(VoiceMenuShared, "make_seed_item",
+    monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("Seed", lambda *_: None))
     monkeypatch.setattr(ask, "_clear_input_buffer", lambda: None)
     saves = []
@@ -378,15 +374,29 @@ def test_instruction_menu_prefills_saves_and_clears_with_model_specific_validati
     monkeypatch.setattr(ask.AskAdvanced, "ask", advanced_input)
     project = Project.model_validate({"dir_path": "", "tts_model_type": model_id})
     state = SimpleNamespace(project=project)
+    from dataclasses import replace
+    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
+
     item = definition(model_id)
-    menus = VoiceAudioCppMenu.make_items(state, item)
-    assert text_util.strip_ansi_codes(get_string_from(state, menus[1].label)) == f"{label} (optional)"
-    assert menus[1].superlabel == VOICE_ADVANCED_SUPERLABEL
+    item = replace(item, menu=tuple(replace(control, target_menu=target_menu)
+                                  if control.kind == "voice_instructions" else control
+                                  for control in item.menu))
+    builder = ModelAudioCppMenu if target_menu == "model" else VoiceAudioCppMenu
+    other_builder = VoiceAudioCppMenu if target_menu == "model" else ModelAudioCppMenu
+    # Isolate samples so Edit and Clear must stay adjacent in the destination.
+    item = replace(item, menu=tuple(control for control in item.menu if control.kind != "voice_samples"))
+    menus = builder.make_items(state, item)
+    assert text_util.strip_ansi_codes(get_string_from(state, menus[0].label)) == f"{label} (optional)"
+    assert all(not menu.superlabel for menu in menus)
 
     project.set_model_setting(model_id, "instruct", initial)
-    menus = VoiceAudioCppMenu.make_items(state, item)
-    assert menus[2].label == "Clear instructions" and not menus[2].superlabel
-    menus[1].handler(state, menus[1])
+    menus = builder.make_items(state, item)
+    assert menus[1].label == "Clear instructions" and not menus[1].superlabel
+    assert all(not menu.superlabel for menu in menus)
+    other_labels = [text_util.strip_ansi_codes(get_string_from(state, menu.label))
+                    for menu in other_builder.make_items(state, item)]
+    assert not any(value.startswith(label) or value == "Clear instructions" for value in other_labels)
+    menus[0].handler(state, menus[0])
     assert prefills == [initial]
     assert project.get_model_setting(model_id, "instruct") == edited
     assert validation_calls == ([edited] if model_id == OMNIVOICE_ID else [])
@@ -395,63 +405,59 @@ def test_instruction_menu_prefills_saves_and_clears_with_model_specific_validati
     # The setting also survives project serialization.
     restored = Project.model_validate(project.model_dump(exclude={"reason_pauses"}))
     assert restored.get_model_setting(model_id, "instruct") == edited
-    menus[2].handler(state, menus[2])
+    menus[1].handler(state, menus[1])
     assert project.get_model_setting(model_id, "instruct") == ""
     assert len(saves) == 2
-    menus = VoiceAudioCppMenu.make_items(state, item)
+    menus = builder.make_items(state, item)
     assert all(menu.label != "Clear instructions" for menu in menus)
 
 
 def test_chatterbox_settings_menu_displays_catalog_note(monkeypatch):
     from tts_audiobook_tool.menus.menu_util import MenuUtil, get_string_from
-    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
     item = definition()
     state = SimpleNamespace(project=Project(tts_model_type=MODEL_ID))
     captured = {}
     monkeypatch.setattr(MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
 
-    VoiceMenuShared.menu(state)
+    ModelMenuShared.menu(state)
 
+    assert captured["heading"] == "Model settings"
     assert get_string_from(state, captured["subheading"]) == item.spec.ui["settings_note"].strip()
     assert "To select Multilingual V3, use audio.cpp setting:" in item.spec.ui["settings_note"]
 
 
-def test_chatterbox_menu_renders_advanced_heading_once(monkeypatch):
-    """The synthesized catalog menu must not repeat the 'Advanced:' heading."""
-    from tts_audiobook_tool.constants import VOICE_ADVANCED_SUPERLABEL
+def test_chatterbox_menu_preserves_control_order_without_headings(monkeypatch):
+    """The catalog settings menu renders controls without group headings."""
     from tts_audiobook_tool.menus.menu_util import MenuItem
-    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
-                        lambda *_: [MenuItem("Add/remove voice samples", lambda *_: None)])
-    monkeypatch.setattr(VoiceMenuShared, "make_seed_item",
+    monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("Seed", lambda *_: None))
-    monkeypatch.setattr(VoiceAudioCppMenu, "make_parameter_item",
-                        lambda _state, _parameter, label: MenuItem(label, lambda *_: None))
+    monkeypatch.setattr(ModelAudioCppMenu, "make_parameter_item",
+                        lambda _state, _parameter, label, **_: MenuItem(label, lambda *_: None))
 
-    items = VoiceAudioCppMenu.make_items(SimpleNamespace(), definition())
+    items = ModelAudioCppMenu.make_items(SimpleNamespace(), definition())
 
     assert [item.label for item in items] == [
-        "Add/remove voice samples", "Temperature", "Exaggeration", "CFG/pace",
+        "Temperature", "Exaggeration", "CFG/pace",
         "Top-P", "Repetition penalty", "Seed",
     ]
-    assert [item.superlabel for item in items] == [
-        "", VOICE_ADVANCED_SUPERLABEL, "", "", "", "", "",
-    ]
+    assert all(not item.superlabel for item in items)
 
 
 
 def test_chatterbox_guidance_menu_label_uses_cfg_pace():
     from tts_audiobook_tool import text_util
     from tts_audiobook_tool.menus.menu_util import get_string_from
-    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
 
     item = definition()
     control = next(control for control in item.menu if control.parameter == "guidance_scale")
     state = SimpleNamespace(project=Project(tts_model_type=MODEL_ID))
-    menu_item = VoiceAudioCppMenu.make_parameter_item(
+    menu_item = ModelAudioCppMenu.make_parameter_item(
         state, item.parameters[control.parameter], control.label)
 
     assert text_util.strip_ansi_codes(get_string_from(state, menu_item.label)) == (
@@ -520,7 +526,7 @@ def test_exact_model_id_options_seed_language_order_and_no_transcript(monkeypatc
         assert payload["model"] == "custom-server-name-not-a-model-family"
         assert payload["temperature"] == .8 and payload["top_p"] == .95
         assert payload["repetition_penalty"] == 1.2 and payload["guidance_scale"] == .5
-        assert payload["options"] == {"exaggeration": .5}
+        assert payload["options"] == {"exaggeration": .5, "text_chunk_size": 100000}
         assert payload["seed"] == 4294967295 and payload["language"] == "fr"
         assert payload["response_format"] == "wav"
         assert payload["voice_ref"]["type"] == "base64"
@@ -557,6 +563,7 @@ def test_higgs_payload_carries_top_level_controls_and_reference_transcript(monke
         "model": "higgs-audio-tts", "input": "hello", "response_format": "wav",
         "seed": 7, "language": "fr", "temperature": 0.8, "top_p": 0.8, "top_k": 12,
         "reference_text": "the exact words spoken",
+        "options": {"text_chunk_size": 100000},
     }
     assert adapter.generate_using_project(FakeProject(model_id=HIGGS_ID), ["x"], on_stream_end=lambda: None) \
         == "Higgs Audio V3 does not support streaming"
@@ -580,6 +587,7 @@ def test_higgs_generates_without_a_reference_sample(monkeypatch):
     assert captured == [{
         "model": "higgs-audio-tts", "input": "hello", "response_format": "wav",
         "seed": 7, "language": "fr", "temperature": 0.8, "top_p": 0.8, "top_k": 30,
+        "options": {"text_chunk_size": 100000},
     }]
 
 
@@ -610,15 +618,16 @@ def test_breeze_payload_sends_instructions_and_the_reference_transcript(monkeypa
     payload = captured[0]
     assert payload["voice_ref"]["type"] == "base64"
     assert payload["voice_ref"]["data"].startswith("data:audio/wav;base64,")
-    # Free-form instructions ride in options alongside the required reference.
+    # Free-form instructions ride in options alongside the pinned request options.
     # Missing/cleared instructions leave the model's own default intact.
     expected = {
         "model": "breeze-clone", "input": "hello", "response_format": "wav",
         "seed": 7, "language": "en", "temperature": 0.9, "top_p": 1.0, "top_k": 0,
         "guidance_scale": 1.0, "reference_text": "the exact words spoken",
+        "options": {"text_chunk_size": 100000},
     }
     if instructions:
-        expected["options"] = {"instruction": instructions}
+        expected["options"] = {"instruction": instructions, "text_chunk_size": 100000}
     assert {key: value for key, value in payload.items() if key != "voice_ref"} == expected
     assert adapter.generate_using_project(project, ["x"], on_stream_end=lambda: None) \
         == "Breeze TTS 2 does not support streaming"
@@ -648,9 +657,9 @@ def test_breeze_generates_without_a_voice_sample(monkeypatch, instructions):
     assert payload["model"] == "breeze-tts" and payload["input"] == "hello"
     assert "voice_ref" not in payload and "reference_text" not in payload
     if instructions:
-        assert payload["options"] == {"instruction": instructions}
+        assert payload["options"] == {"instruction": instructions, "text_chunk_size": 100000}
     else:
-        assert "options" not in payload
+        assert payload["options"] == {"text_chunk_size": 100000}
 
 
 @pytest.mark.parametrize("saved_parameters", [
@@ -842,38 +851,38 @@ def test_optional_voice_requires_a_reference_transcript_when_a_voice_is_set(monk
 
 
 @pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, HIGGS_ID])
-def test_optional_voice_readiness_does_not_demand_a_voice(monkeypatch, model_id):
+def test_voice_readiness_is_lazy_for_every_audio_cpp_family(monkeypatch, model_id):
     item = definition(model_id)
     support = AudioCppModelSupport(item)
     project = FakeProject(model_id=model_id, values={"seed": -1})
 
     def local_issues() -> list:
         # The server-availability issue is the cached observation; this test is
-        # about the client-side voice requirement.
+        # about voice state, which readiness no longer inspects.
         return [issue for issue in support.get_blocking_issues(project) if issue.short != "audio.cpp server"]
 
     assert local_issues() == []
     assert support.get_voice_display_info(project).value.endswith("none")
     assert any("no voice reference" in warning for warning in support.get_warning_issues(project))
 
-    # A configured-but-missing sample is still blocking, and a present sample
-    # now needs its transcript.
+    # A configured-but-missing sample and a missing transcript are validated
+    # lazily (pre-flight/generation), not as readiness blockers.
     monkeypatch.setattr(ProjectVoiceUtil, "get_voice_values", lambda *args: ["missing.flac"])
     monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: "/nonexistent/missing.flac")
-    assert any("not found" in issue.verbose for issue in local_issues())
+    assert local_issues() == []
     monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: __file__)
-    assert any(issue.short == "voice clone transcript" for issue in local_issues())
+    assert local_issues() == []
 
-    # Other audio.cpp families keep the voice requirement.
+    # A required-voice family is equally lazy.
     monkeypatch.undo()
     other = definition()
-    assert any(issue.short == "voice sample"
-               for issue in AudioCppModelSupport(other).get_blocking_issues(FakeProject()))
+    other_issues = AudioCppModelSupport(other).get_blocking_issues(FakeProject())
+    assert not any(issue.short == "voice sample" for issue in other_issues)
 
 
 def test_omnivoice_audio_cpp_instructions_menu_item_sets_and_clears(monkeypatch, capsys):
     from tts_audiobook_tool.ask_advanced import AskAdvanced
-    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
     project = Project.model_validate({"dir_path": "", "tts_model_type": OMNIVOICE_ID})
     state = SimpleNamespace(project=project)
@@ -889,7 +898,7 @@ def test_omnivoice_audio_cpp_instructions_menu_item_sets_and_clears(monkeypatch,
     monkeypatch.setattr(Project, "save", lambda self: "")
     model_type = TtsModelType.require_by_id(OMNIVOICE_ID)
 
-    items = VoiceMenuShared.make_voice_instructions_item(state, OMNIVOICE_ID, validate_omnivoice=True)
+    items = ModelMenuShared.make_voice_instructions_item(state, OMNIVOICE_ID, validate_omnivoice=True)
     assert len(items) == 1
     assert "(optional)" in items[0].label(state)
     assert ProjectVoiceUtil.get_primary_voice_value(project, model_type) == ""
@@ -910,7 +919,7 @@ def test_omnivoice_audio_cpp_instructions_menu_item_sets_and_clears(monkeypatch,
     assert prefills[-1] == "female, young adult"
     assert "minimal effect" in capsys.readouterr().out
 
-    items = VoiceMenuShared.make_voice_instructions_item(state, OMNIVOICE_ID, validate_omnivoice=True)
+    items = ModelMenuShared.make_voice_instructions_item(state, OMNIVOICE_ID, validate_omnivoice=True)
     assert len(items) == 2 and items[1].label == "Clear instructions"
     items[1].handler(state, items[1])
     assert not project.get_model_setting(OMNIVOICE_ID, "instruct")
@@ -1022,3 +1031,65 @@ def test_values_rejected_before_network(monkeypatch):
     monkeypatch.setattr(AudioCppUtil, "generate", lambda *args, **kwargs: pytest.fail("network attempted"))
     assert "seed" in adapter.generate_using_project(FakeProject({"seed": 2**32}), ["text"])
     assert "exaggeration" in adapter.generate_using_project(FakeProject({"exaggeration": float("inf")}), ["text"])
+
+
+@pytest.mark.parametrize("model_id", tuple(load_audio_cpp_definitions().models))
+def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, model_id):
+    from tts_audiobook_tool.menus.menu_util import MenuItem
+    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
+
+    definition = load_audio_cpp_definitions().models[model_id]
+    state = SimpleNamespace(project=Project(tts_model_type=model_id))
+    voice_items = [MenuItem(label, lambda *_: None)
+                   for label in ("samples", "selection mode", "selections")]
+    voice_calls = []
+
+    def make_voice_items(current, model_type):
+        assert current is state and model_type.id == model_id
+        voice_calls.append(model_type)
+        return voice_items
+
+    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", make_voice_items)
+    monkeypatch.setattr(ModelAudioCppMenu, "make_parameter_item",
+                        lambda _state, parameter, _label, *_, **__: MenuItem(parameter.name, lambda *_: None))
+    monkeypatch.setattr(ModelMenuShared, "make_seed_item",
+                        lambda *_, **__: MenuItem("seed", lambda *_: None))
+    monkeypatch.setattr(ModelMenuShared, "make_voice_instructions_item",
+                        lambda *_, **__: [MenuItem("instructions", lambda *_: None),
+                                          MenuItem("clear instructions", lambda *_: None)])
+
+    actual_voice = VoiceAudioCppMenu.make_items(state, definition)
+    voice_control_count = sum(control.kind == "voice_samples" for control in definition.menu)
+    expected_voice = []
+    for control in definition.menu:
+        if control.kind == "voice_samples":
+            expected_voice.extend(item.label for item in voice_items)
+        elif control.target_menu == "voice":
+            if control.kind == "voice_instructions":
+                expected_voice.extend(("instructions", "clear instructions"))
+            elif control.kind == "seed":
+                expected_voice.append("seed")
+            else:
+                expected_voice.append(control.parameter)
+    assert [item.label for item in actual_voice] == expected_voice
+    assert len(voice_calls) == voice_control_count
+    assert all(not item.superlabel for item in actual_voice)
+    assert not hasattr(VoiceAudioCppMenu, "make_parameter_item")
+
+    actual_model = ModelAudioCppMenu.make_items(state, definition)
+    expected = []
+    for control in definition.menu:
+        if control.target_menu != "model":
+            continue
+        if control.kind == "seed":
+            expected.append("seed")
+        elif control.kind == "voice_instructions":
+            expected.extend(("instructions", "clear instructions"))
+        else:
+            expected.append(control.parameter)
+    assert [item.label for item in actual_model] == expected
+    assert all(not item.superlabel for item in actual_model)
+    assert len(voice_calls) == voice_control_count  # Model rendering never expands the voice group.

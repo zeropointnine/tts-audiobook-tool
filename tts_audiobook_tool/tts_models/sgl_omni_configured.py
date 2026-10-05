@@ -125,23 +125,9 @@ class ConfiguredModelSupport:
         if self.definition.language_policy == "moss":
             server_issue = _cached_server_readiness_issue(self.INFO.id)
             return [server_issue] if server_issue else []
-        voice = self.get_primary_voice_value(project)
-        if self.INFO.requires_voice and not voice:
-            issues.append(ReadinessIssue("voice sample", "A voice clone sample is required"))
-        if voice and not os.path.exists(ProjectVoiceUtil.resolve_voice_file_path(project, voice)):
-            issues.append(ReadinessIssue("voice sample", f"Voice clone sample file not found: {voice}"))
-        references = ProjectVoiceUtil.voice_reference_pairs(project, self.model_type)
-        if self.definition.transcript_policy == "required_when_voice_present" and any(
-                not (transcript.strip() if self.definition.prompt_policy == "auk_seconds" else transcript)
-                for _, transcript in references):
-            message = ("Voice clone transcript required for every AuK voice sample" if self.definition.prompt_policy == "auk_seconds"
-                       else "Voice clone transcript required when a voice clone sample is supplied")
-            issues.append(ReadinessIssue("voice clone transcript", message))
-        if self.definition.prompt_policy == "auk_seconds" and not any(issue.short == "voice sample" for issue in issues):
-            for file_name, _ in references:
-                if not os.path.exists(ProjectVoiceUtil.resolve_voice_file_path(project, file_name)):
-                    issues.append(ReadinessIssue("voice sample", f"Voice clone sample file not found: {file_name}"))
-                    break
+        # Voice-clone state (required sample, file existence, transcripts) is
+        # validated lazily by the interactive pre-flight (validate_voices) and
+        # at generation time, not by readiness.
         for parameter in self.definition.parameters.values():
             try:
                 ConfiguredSettings.get(project, parameter, self.INFO.id)

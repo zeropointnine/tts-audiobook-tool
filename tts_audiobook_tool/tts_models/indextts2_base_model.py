@@ -1,4 +1,4 @@
-from tts_audiobook_tool.app_types import ReadinessIssue, VoiceDisplayInfo
+from tts_audiobook_tool.app_types import VoiceDisplayInfo
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -27,20 +27,6 @@ class IndexTts2BaseModel(TtsBaseModel):
     ) -> tuple[int, int, str]:
         return (40, 60, "")
 
-    @classmethod
-    def get_blocking_issues(
-            cls, project: Project, instance: TtsBaseModel | None
-    ) -> list[ReadinessIssue]:
-
-        errors = super().get_blocking_issues(project, instance)
-        if errors:
-            return errors
-
-        err = cls.get_missing_voice_file_issue(project)
-        if err:
-            errors.append(err)
-
-        return errors
 
     @classmethod
     def get_menu_text(

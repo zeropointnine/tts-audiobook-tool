@@ -366,9 +366,11 @@ class TtsBaseModel(ABC):
         Some issues can only be known with a concrete instance (param `instance`).
         """
 
-        # Default implementation is for model whose only potential requirement is voice clone-related
-        item = cls._get_standard_voice_blocker(project)
-        return [item] if item else []
+        # Voice-clone state (missing sample/file/transcript) is deliberately
+        # not checked here: it is validated lazily by the interactive
+        # pre-flight (VoiceMenuShared.validate_voices) and at generation time,
+        # so menu labels don't duplicate those checks.
+        return []
 
     def get_warning_issues(self, project: Project) -> list[str]:
         """ Returns warning info based on the state of `project` and `self` """
@@ -454,31 +456,6 @@ class TtsBaseModel(ABC):
         return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id(cls.INFO.id))
 
     @classmethod
-    def get_missing_voice_file_issue(
-            cls,
-            project: Project,
-    ) -> ReadinessIssue | None:
-        """
-        Returns a blocking issue if the given configured voice filename is non-empty
-        but does not exist under the project directory.
-        """
-        if not cls._has_voice_binding(cls.INFO.id):
-            raise Exception("Logic error - must override this method")
-
-        voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id(cls.INFO.id))
-        if not voice_file_name:
-            return None
-
-        voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
-        if os.path.exists(voice_path):
-            return None
-
-        return ReadinessIssue(
-            "voice sample",
-            f"Voice clone sample file not found: {voice_file_name}"
-        )
-
-    @classmethod
     def should_trim_trailing_token_noise(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> bool:
@@ -498,21 +475,6 @@ class TtsBaseModel(ABC):
         """
         return False
 
-
-    @classmethod
-    def _get_standard_voice_blocker(cls, project: Project) -> ReadinessIssue | None:
-
-        if not cls._has_voice_binding(cls.INFO.id):
-            raise Exception("Logic error - must override this method")
-
-        if cls.INFO.requires_voice and not cls.get_primary_voice_value(project):
-            return ReadinessIssue("voice sample", "A voice clone sample is required")
-
-        err = cls.get_missing_voice_file_issue(project)
-        if err:
-            return err
-
-        return None
 
     def _get_standard_random_voice_reason(self, project: Project) -> str:
 

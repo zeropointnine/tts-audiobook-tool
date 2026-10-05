@@ -191,11 +191,11 @@ class ModelSettingsRegistry:
         return binding if binding is not None and binding.section == section else None
 
     def voice_binding(self, model_id: str) -> Binding | None:
-        """The model's voice-reference list storage, when it stores voice samples."""
+        """Voice-sample capability/legacy binding; v4 Project stores one shared list."""
         return self._section_binding(model_id, "file_name", "voice_references")
 
     def transcript_binding(self, model_id: str) -> Binding | None:
-        """The model's voice transcript storage, when transcripts are used."""
+        """Transcript-use capability/legacy binding, not v4 storage ownership."""
         return self._section_binding(model_id, "transcript", "voice_references")
 
     def orchestration_binding(self, model_id: str) -> Binding | None:

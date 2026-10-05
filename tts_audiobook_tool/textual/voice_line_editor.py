@@ -19,6 +19,9 @@ from tts_audiobook_tool.textual.textual_shared import (
 )
 from tts_audiobook_tool.util import make_error_string
 
+# The editor title intentionally matches the voice menu item label that opens it
+TITLE_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
+
 
 @dataclass(frozen=True)
 class VoiceLinePhraseGroupItem:
@@ -72,7 +75,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         self.voice_sample_count = voice_sample_count
         highest_voice_key = min(max(self.voice_sample_count, 1), 9)
         header_lines = [
-            f"{COL_ACCENT}Edit voice selections",
+            f"{COL_ACCENT}{TITLE_EDIT_VOICE_SELECTIONS}",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
             f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
             f"{COL_DIM}- Use number keys [{COL_ACCENT}1{COL_DIM}] to [{COL_ACCENT}{highest_voice_key}{COL_DIM}] to set voice sample for selected text line/s",

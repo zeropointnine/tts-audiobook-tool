@@ -15,8 +15,7 @@ from catalog_toml_support import read_catalog, write_catalog
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot
 from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
-from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -392,10 +391,6 @@ def test_moss_server_payload_uses_only_its_private_settings(model_id, prefix, se
     project = Project(dir_path=str(tmp_path), tts_model_type=model_id)
     moss_ids = ("moss_local", "moss_delay_sglomni", "moss_local_sglomni")
     for index, owner in enumerate(moss_ids, start=1):
-        filename = f"{owner}.flac"
-        (tmp_path / filename).write_bytes(b"audio")
-        project.set_model_setting(owner, "file_name", [filename])
-        project.set_model_setting(owner, "transcript", [f"voice {index}"])
         # moss_local owns one seed per preset; remote members own a single seed.
         for seed_name in (("delay_seed", "local_seed", "local_v15_seed") if owner == "moss_local" else ("seed",)):
             project.set_model_setting(owner, seed_name, index)
@@ -407,9 +402,13 @@ def test_moss_server_payload_uses_only_its_private_settings(model_id, prefix, se
                 project.set_model_setting(owner, f"{architecture}_top_k", 10 * index)
 
     selected_index = moss_ids.index(model_id) + 1
+    # V4 keeps one project-wide voice list; private sampling stays per owner.
+    filename = f"{model_id}.flac"
+    (tmp_path / filename).write_bytes(b"audio")
+    project.set_model_setting(model_id, "file_name", [filename])
+    project.set_model_setting(model_id, "transcript", [f"voice {selected_index}"])
+    assert project.voice_references == [{"file_name": filename, "transcript": f"voice {selected_index}"}]
     for index, owner in enumerate(moss_ids, start=1):
-        assert project.get_model_setting(owner, "file_name") == [f"{owner}.flac"]
-        assert project.get_model_setting(owner, "transcript") == [f"voice {index}"]
         for seed_name in (("delay_seed", "local_seed", "local_v15_seed") if owner == "moss_local" else ("seed",)):
             assert project.get_model_setting(owner, seed_name) == index
         assert project.get_model_setting(owner, "batch_size") == index
@@ -428,10 +427,9 @@ def test_moss_server_payload_uses_only_its_private_settings(model_id, prefix, se
 
 
 def test_menu_seed_and_shared_fish_edit_without_storage_mutation(server_mode, monkeypatch):
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", lambda *_: [])
     for id, size in (("auk_sglomni", 2), ("moss_delay_sglomni", 4), ("fish_s2_sglomni", 3)):
         server_mode(id)
-        items = VoiceConfiguredSglOmniMenu.make_items(SimpleNamespace(project=Project(tts_model_type=Tts.get_active_type().id)), Tts.get_configured_definition(Tts.get_active_type()))
+        items = ModelConfiguredSglOmniMenu.make_items(SimpleNamespace(project=Project(tts_model_type=Tts.get_active_type().id)), Tts.get_configured_definition(Tts.get_active_type()))
         assert len(items) == size
         if id != "fish_s2_sglomni":
             assert "Seed" in items[-1].label
@@ -445,9 +443,7 @@ def test_readiness_selected_reference_and_auk_all_samples(server_mode, capture, 
         project.set_model_setting(id, "file_name", ["first.flac", "missing.flac"])
         project.set_model_setting(id, "transcript", ["first", ""])
         issues = Tts.get_model_support(project).get_blocking_issues(project, None)
-        assert any(issue.short == "voice clone transcript" for issue in issues)
-        if id == "auk_sglomni":
-            assert any(issue.short == "voice sample" for issue in issues)
+        assert not any(issue.short in ("voice sample", "voice clone transcript") for issue in issues)
         assert "transcript" in instance.generate_using_project(project, ["hello"], voice_selection_index=1)
         project.set_model_setting(id, "transcript", ["first", "second"])
         assert "missing.flac" in instance.generate_using_project(project, ["hello"], voice_selection_index=1)
@@ -459,14 +455,13 @@ def test_fish_menu_reset_and_server_edit_reach_local_owner(server_mode, monkeypa
     project = Project(tts_model_type=Tts.get_active_type().id)
     project.set_model_setting("fish_s2_local", "top_k", 73)
     monkeypatch.setattr(Project, "save", lambda self: "")
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", lambda *_: [])
-    monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu.printt", lambda *_: None)
-    monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu.print_feedback", lambda *_: None)
-    monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu.ask.ask_input",
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.printt", lambda *_: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.print_feedback", lambda *_: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.ask.ask_input",
                         lambda **_: next(responses))
     responses = iter(("-1", "25"))
     state = SimpleNamespace(project=project)
-    item = VoiceConfiguredSglOmniMenu.make_items(state, instance.definition)[-1]
+    item = ModelConfiguredSglOmniMenu.make_items(state, instance.definition)[-1]
     item.handler(state, item)
     assert project.get_model_setting("fish_s2_local", "top_k") == -1
     item.handler(state, item)
@@ -567,3 +562,54 @@ def test_legacy_server_route_cannot_be_instantiated(model_id, server_mode):
     for name in legacy_modules:
         with pytest.raises(ModuleNotFoundError):
             importlib.import_module(f"tts_audiobook_tool.tts_models.{name}")
+
+
+@pytest.mark.parametrize("model_id", tuple(load_definitions().models))
+def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, model_id):
+    from tts_audiobook_tool.menus.menu_util import MenuItem
+    from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
+    from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
+
+    definition = load_definitions().models[model_id]
+    state = SimpleNamespace(project=Project(tts_model_type=model_id))
+    voice_items = [MenuItem(label, lambda *_: None)
+                   for label in ("samples", "selection mode", "selections")]
+    voice_calls = []
+
+    def make_voice_items(current, model_type):
+        assert current is state and model_type.id == model_id
+        voice_calls.append(model_type)
+        return voice_items
+
+    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", make_voice_items)
+    monkeypatch.setattr(ModelConfiguredSglOmniMenu, "make_parameter_item",
+                        lambda _state, parameter, _label, *_, **__: MenuItem(parameter.name, lambda *_: None))
+    monkeypatch.setattr(ModelMenuShared, "make_seed_item",
+                        lambda *_, **__: MenuItem("seed", lambda *_: None))
+    monkeypatch.setattr(ModelMenuShared, "make_voice_instructions_item",
+                        lambda *_, **__: [MenuItem("instructions", lambda *_: None),
+                                          MenuItem("clear instructions", lambda *_: None)])
+
+    actual_voice = VoiceConfiguredSglOmniMenu.make_items(state, definition)
+    voice_control_count = sum(control.kind == "voice_samples" for control in definition.menu)
+    assert actual_voice == voice_items * voice_control_count
+    assert len(voice_calls) == voice_control_count
+    assert all(not item.superlabel for item in actual_voice)
+    assert not hasattr(VoiceConfiguredSglOmniMenu, "make_parameter_item")
+
+    actual_model = ModelConfiguredSglOmniMenu.make_items(state, definition)
+    expected = []
+    for control in definition.menu:
+        if control.target_menu != "model":
+            continue
+        if control.kind == "seed":
+            expected.append("seed")
+        elif control.kind == "voice_instructions":
+            expected.extend(("instructions", "clear instructions"))
+        else:
+            expected.append(control.parameter)
+    assert [item.label for item in actual_model] == expected
+    assert all(not item.superlabel for item in actual_model)
+    assert len(voice_calls) == voice_control_count  # Model rendering never expands the voice group.

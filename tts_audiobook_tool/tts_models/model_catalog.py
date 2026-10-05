@@ -24,7 +24,8 @@ _LOCAL_SPEC_KEYS = {
     "requirements_file_name", "ui", "output_filters", "substitutions", "max_random_seed",
 }
 _SERVER_SPEC_KEYS = {"file_tag", "default_output_sample_rate", "un_all_caps", "requirements_file_name", "ui", "substitutions", "max_random_seed"}
-_UI_KEYS = {"proper_name", "short_name", "voice_path_console", "voice_path_requestor", "project_links", "settings_note"}
+_UI_KEYS = {"proper_name", "short_name", "voice_path_console", "voice_path_requestor", "project_links", "settings_note",
+            "voice_sample_max_duration_s"}
 
 
 def _fail(where: str, reason: str) -> NoReturn:
@@ -55,7 +56,6 @@ _AUDIO_CPP_MATCH_KEYS = {"task", "tasks", "family", "mode", "session_options"}
 _AUDIO_CPP_PARAMETER_KEYS = {"type", "default", "min", "max", "default_sentinel", "request_key", "target",
                              "input_prompt_suffix"}
 _AUDIO_CPP_TARGETS = ("top_level", "options")
-_AUDIO_CPP_MENU_KINDS = ({"kind": "voice_samples"}, {"kind": "seed"}, {"kind": "voice_instructions"})
 
 
 def _audio_cpp_number(param: dict[str, Any], key: str, where: str, typ: str, value_type: Any) -> int | float:
@@ -121,42 +121,45 @@ def _parse_audio_cpp_menu(value: Any, parameters: dict[str, dict[str, Any]], whe
     if not isinstance(value, list):
         _fail(where, "expected a list")
     menu: list[dict[str, str]] = []
-    for item in value:
+    for index, item in enumerate(value):
+        item_where = f"{where}[{index}]"
         if not isinstance(item, dict):
-            _fail(where, "expected controls")
-        if "kind" in item:
-            kind = item["kind"]
-            if kind != "voice_instructions":
-                if item not in _AUDIO_CPP_MENU_KINDS:
-                    _fail(where, "invalid control")
-                menu.append({"kind": kind})
-                continue
+            _fail(item_where, "expected controls")
+        kind = item.get("kind", "parameter")
+        if kind == "voice_samples":
+            _object(item, item_where, {"kind"})
+            menu.append({"kind": kind})
+            continue
+        if kind == "seed":
+            control = _object(item, item_where, {"kind", "target_menu"})
+        elif kind == "voice_instructions":
+            control = _object(item, item_where, {"kind", "parameter", "target_menu"})
+        elif "kind" not in item:
+            control = _object(item, item_where, {"parameter", "label", "target_menu"})
+        else:
+            _fail(item_where, "invalid control")
+        target_menu = _field(control, "target_menu", item_where, str)
+        if target_menu not in ("model", "voice"):
+            _fail(f"{item_where}.target_menu", "expected model or voice")
+        if kind == "seed":
+            menu.append({"kind": kind, "target_menu": target_menu})
+            continue
+        name = _field(control, "parameter", item_where, str)
+        if name not in parameters:
+            _fail(f"{item_where}.{name}", "unknown parameter")
+        if kind == "voice_instructions":
             # A text parameter is edited by its own prompt, not by the numeric
             # control, so name it explicitly rather than by position.
-            control = _object(item, where, {"kind", "parameter", "group"})
-            name = _field(control, "parameter", where, str)
-            if name not in parameters:
-                _fail(f"{where}.{name}", "unknown parameter")
             if parameters[name]["type"] != "str":
-                _fail(f"{where}.{name}", "voice_instructions requires a string parameter")
-            group = control.get("group", "")
-            if group not in ("", "advanced"):
-                _fail(f"{where}.{name}.group", "expected 'advanced' or empty")
-            menu.append({"kind": "voice_instructions", "parameter": name, "group": group})
+                _fail(f"{item_where}.{name}", "voice_instructions requires a string parameter")
+            menu.append({"kind": kind, "parameter": name, "target_menu": target_menu})
             continue
-        control = _object(item, where, {"parameter", "label", "group"})
-        name = _field(control, "parameter", where, str)
-        if name not in parameters:
-            _fail(f"{where}.{name}", "unknown parameter")
         if parameters[name]["type"] == "str":
-            _fail(f"{where}.{name}", "a string parameter requires the voice_instructions control")
-        label = _field(control, "label", where, str)
+            _fail(f"{item_where}.{name}", "a string parameter requires the voice_instructions control")
+        label = _field(control, "label", item_where, str)
         if not label:
-            _fail(f"{where}.{name}.label", "must not be empty")
-        group = control.get("group", "")
-        if group not in ("", "advanced"):
-            _fail(f"{where}.{name}.group", "expected 'advanced' or empty")
-        menu.append({"kind": "parameter", "parameter": name, "label": label, "group": group})
+            _fail(f"{item_where}.{name}.label", "must not be empty")
+        menu.append({"kind": "parameter", "parameter": name, "label": label, "target_menu": target_menu})
     if (sorted(item["parameter"] for item in menu if item["kind"] in ("parameter", "voice_instructions"))
             != sorted(parameters)):
         _fail(where, "expected each parameter exactly once")
@@ -329,6 +332,11 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
         _field(ui, "opt_in_url", f"{where}.spec.ui", str)
     if "settings_note" in ui:
         _field(ui, "settings_note", f"{where}.spec.ui", str)
+    if "voice_sample_max_duration_s" in ui:
+        duration = ui["voice_sample_max_duration_s"]
+        if (isinstance(duration, bool) or not isinstance(duration, (int, float))
+                or not math.isfinite(duration) or duration <= 0):
+            _fail(f"{where}.spec.ui.voice_sample_max_duration_s", "expected a positive finite number")
     replacements = _field(meta, "substitutions", f"{where}.spec", list)
     if not all(isinstance(pair, list) and len(pair) == 2 and all(isinstance(s, str) for s in pair) for pair in replacements):
         _fail(f"{where}.spec.substitutions", "expected [before, after] string pairs")

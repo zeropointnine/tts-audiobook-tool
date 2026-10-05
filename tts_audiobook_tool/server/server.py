@@ -77,12 +77,32 @@ class Server:
         if not project_dir:
             printt(f"{COL_ERROR}Active project required")
             printt("Run tts-audiobook-tool and set up a new project. Then re-start the server.")
-            exit(0)
-        result = ProjectLoadUtil.load_using_dir_path(project_dir)
+            exit(1)
+        from tts_audiobook_tool.project_support.voice_reference_migration import VoiceReferenceMigrationRequired
+        try:
+            result = ProjectLoadUtil.load_using_dir_path(project_dir, prompt_on_warnings=False, prompt_on_migration=False)
+        except VoiceReferenceMigrationRequired as exc:
+            printt(f"{COL_ERROR}Project requires voice clone list migration")
+            printt(str(exc))
+            printt("Run the interactive app (tts-audiobook-tool), open this project, and choose which")
+            printt("model's voice clone list to keep. The project is then saved in the current format.")
+            printt("Re-start this server afterwards.")
+            exit(1)
         if isinstance(result, str):
             printt(f"{COL_ERROR}Error: {result}")
-            exit(0)
+            exit(1)
         self._project = result
+
+        from tts_audiobook_tool.project_support.model_settings import REGISTRY
+        if (
+            REGISTRY.transcript_binding(self._project.tts_model_type) is not None
+            and self._project.voice_references
+            and not self._project.voice_references[0].get("transcript", "").strip()
+        ):
+            printt(f"{COL_ERROR}Voice clone is missing required accompanying transcript.")
+            printt("Run the interactive app (tts-audiobook-tool), open this project, and add")
+            printt("a transcript for the first voice clone. Then re-start this server.")
+            exit(1)
 
         Tts.bind_project(self._project, refresh=True)
 

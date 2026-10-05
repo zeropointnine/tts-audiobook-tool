@@ -724,53 +724,54 @@ def test_generation_app_waits_for_enter_after_terminal_summary(monkeypatch, tmp_
     assert "Press [ENTER] to continue" in text
 
 
-def test_generation_app_plays_done_sound_for_completion_and_automatic_abort(
-    monkeypatch,
-) -> None:
-    app = GenerationApp(
-        make_state(),
-        {0},
-        1,
-        False,
-        GenerationTranscript("", enabled=False),
-    )
-    sound_calls: list[None] = []
+def test_generation_app_selects_terminal_sound(monkeypatch) -> None:
+    sound_calls: list[str] = []
     monkeypatch.setattr(
         generation_app_module.app_support,
         "play_done_sound",
-        lambda: sound_calls.append(None),
+        lambda: sound_calls.append("done"),
+    )
+    monkeypatch.setattr(
+        generation_app_module.app_support,
+        "play_fatal_gen_sound",
+        lambda: sound_calls.append("fatal"),
     )
 
-    statuses_that_alert = {
-        GenerationTerminalStatus.COMPLETED,
-        GenerationTerminalStatus.ABORTED,
-    }
-    reset_causes = (
-        None,
-        HardResetCause.USER_ESCALATION,
-        HardResetCause.GENERATION_TIMEOUT,
-        HardResetCause.MODEL_UNHEALTHY,
-        HardResetCause.INTERFACE_FAILURE,
-    )
-    for status in GenerationTerminalStatus:
-        for reset_cause in reset_causes:
-            sound_calls.clear()
-            result = GenerationModalResult(
-                status,
-                "",
-                "",
-                hard_reset_cause=reset_cause,
-            )
+    for is_regen in (False, True):
+        app = GenerationApp(
+            make_state(),
+            {0},
+            1,
+            is_regen,
+            GenerationTranscript("", enabled=False),
+        )
+        for status in GenerationTerminalStatus:
+            for reset_cause in (None, *HardResetCause):
+                sound_calls.clear()
+                result = GenerationModalResult(
+                    status,
+                    "",
+                    "",
+                    hard_reset_cause=reset_cause,
+                )
 
-            app._post_terminal_summary(result)
+                app._post_terminal_summary(result)
 
-            reset_should_alert = (
-                status is GenerationTerminalStatus.WORKER_RESET
-                and reset_cause is not None
-                and reset_cause.should_alert
-            )
-            expected = status in statuses_that_alert or reset_should_alert
-            assert bool(sound_calls) is expected
+                expected: list[str] = []
+                if not is_regen:
+                    if status is GenerationTerminalStatus.COMPLETED:
+                        expected = ["done"]
+                    elif status in (
+                        GenerationTerminalStatus.ABORTED,
+                        GenerationTerminalStatus.FAILED,
+                    ):
+                        expected = ["fatal"]
+                    elif status is GenerationTerminalStatus.WORKER_RESET and reset_cause in (
+                        HardResetCause.GENERATION_TIMEOUT,
+                        HardResetCause.MODEL_UNHEALTHY,
+                    ):
+                        expected = ["fatal"]
+                assert sound_calls == expected, (is_regen, status, reset_cause)
 
 
 def test_quick_generation_auto_returns_without_concatenation_message() -> None:

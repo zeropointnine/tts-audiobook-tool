@@ -21,7 +21,7 @@ As a reminder, you can accept connections from other machines on your local netw
 
 If the optional `--project <path>` argument is provided, the server will use that project for the duration of the run instead of the active project path stored in your tts-audiobook-tool preferences (without changing the stored value). If the given path is not a valid project directory, the server prints an error and exits.
 
-The server otherwise uses the TTS settings from your currently active tts-audiobook-tool project (and in particular, those found in the `Voice clone and model settings` submenu).
+The server otherwise uses the TTS settings from your currently active tts-audiobook-tool project (and in particular, those found in the `Voice clone` and `Model settings` submenus).
 
 
 ## Usage notes

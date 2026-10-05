@@ -27,6 +27,7 @@ def make_state(model: TtsModelType = TtsModelType.require_by_id("none")) -> Stat
     state._prefs = Prefs()
     state._project = Project(dir_path="", tts_model_type=model.id)
     state.pending_tts_model_change = None
+    state.pending_project_load_checks = False
     state.has_shown_main_menu = False
     return state
 
@@ -87,7 +88,7 @@ def test_audio_cpp_omnivoice_voice_line_is_optional(monkeypatch):
 
     display = Tts.get_model_support_for_type(model_type).get_voice_display_info(state.project)
     assert display.value.endswith("none")
-    assert make_voice_label(state) == "Voice clone and model settings"
+    assert make_voice_label(state) == "Voice clone"
 
 
 def test_menus_omit_absent_voice_display_info(monkeypatch, capsys):
@@ -102,7 +103,7 @@ def test_menus_omit_absent_voice_display_info(monkeypatch, capsys):
     MenuStatus.print_block(state)
 
     assert "Voice clone:" not in capsys.readouterr().out
-    assert make_voice_label(state) == "Voice clone and model settings"
+    assert make_voice_label(state) == "Voice clone"
 
 
 def test_status_block_local_mode_none_shows_tts_model_line(capsys):
@@ -391,10 +392,11 @@ def test_status_auto_selects_sole_model_and_defers_hint_until_menu(
         return
     old_name = (_display_name(TtsModelType.require_by_id("mira_local")) if saved == "mira_local" else
                 f"Unknown model: {saved}")
-    sole = "sole " if model.value.backend_kind is TtsBackendKind.AUDIO_CPP else ""
+    qualifier = ("sole active audio.cpp" if model.value.backend_kind is TtsBackendKind.AUDIO_CPP
+                 else "active")
     assert output == (
-        f"🔔 FYI\nThis project was previously using TTS model {old_name}.\n"
-        f"It will now use the {sole}currently active model, {_display_name(model)}\n\n"
+        f"🔔 FYI\nThis project was last used with TTS model {old_name};\n"
+        f"It will now use the {qualifier} model, {_display_name(model)}\n\n"
     )
     assert state.pending_tts_model_change is None
 
@@ -417,7 +419,7 @@ def test_model_change_hint_reports_binding_failure(monkeypatch, capsys, sole_rem
     MenuStatus.show_pending_tts_model_hint(state)
 
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    assert "previously using TTS model Chatterbox TTS" in output
+    assert "last used with TTS model Chatterbox TTS" in output
     assert f"It is now configured to use {sole_remote_model.value.ui['proper_name']}" in output
     assert "runtime is unavailable (see TTS mode)" in output
     assert "currently active model" not in output
@@ -450,8 +452,8 @@ def test_model_change_hint_coalesces_to_first_old_and_latest_new(monkeypatch, ca
     assert state.pending_tts_model_change == PendingTtsModelChange("chatterbox_local", latest.id)
     MenuStatus.show_pending_tts_model_hint(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    assert "previously using TTS model Chatterbox TTS" in output
-    assert f"currently active model, {_display_name(latest)}" in output
+    assert "last used with TTS model Chatterbox TTS" in output
+    assert f"active model, {_display_name(latest)}" in output
     assert sole_remote_model.value.ui["proper_name"] not in output
 
 
@@ -504,8 +506,8 @@ def test_local_startup_notice_waits_for_first_main_menu(monkeypatch, capsys):
     MenuStatus.show_pending_tts_model_hint(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
     assert output.count("FYI") == 1
-    assert "previously using TTS model Echo-TTS" in output
-    assert "currently active model, Chatterbox TTS" in output
+    assert "last used with TTS model Echo-TTS" in output
+    assert "active model, Chatterbox TTS" in output
     assert state.pending_tts_model_change is None
 
 
@@ -550,6 +552,120 @@ def test_interactive_state_initializes_without_pending_notice(monkeypatch):
     monkeypatch.setattr(Prefs, "load", lambda: Prefs())
     state = State()
     assert state.pending_tts_model_change is None
+
+
+@pytest.mark.parametrize("runtime", [False, True])
+@pytest.mark.parametrize("saved", ["qwen3tts_local", "omnivoice_local"])
+@pytest.mark.parametrize("durations, expected", [
+    ([15.01, 15.0, 14.6, None], "is 1 sample for this project that exceeds"),
+    ([15.01, 16.0, 15.0, None], "are 2 samples for this project that exceed"),
+    ([15.0, 14.6, None], None),
+    ([], None),
+])
+def test_shared_project_load_hints_at_startup_and_runtime(
+    monkeypatch, capsys, runtime, saved, durations, expected,
+):
+    from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
+    from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
+
+    project = Project(tts_model_type=saved, voice_references=[
+        {"file_name": f"voice-{index}.flac", "transcript": ""}
+        for index in range(len(durations))
+    ])
+    project.dir_path = "/example/book"
+    monkeypatch.setattr(Prefs, "load", lambda: Prefs(project_dir=project.dir_path))
+    monkeypatch.setattr(Prefs, "save", lambda _: "")
+    monkeypatch.setattr(Project, "save", lambda _: "")
+    monkeypatch.setattr(Project, "kill", lambda _: None)
+    monkeypatch.setattr(ProjectLoadUtil, "load_using_dir_path", lambda _: project)
+    model = TtsModelType.require_by_id("omnivoice_local")
+    monkeypatch.setattr(Tts, "_available_local_models", (model,))
+    monkeypatch.setattr(Tts, "get_active_type", lambda: model)
+    monkeypatch.setattr("tts_audiobook_tool.ask.ask_enter_to_continue",
+                        lambda *_: pytest.fail("Project-load FYIs must not pause"))
+    probes = []
+    remaining = iter(durations)
+
+    def get_duration(path):
+        probes.append(path)
+        return next(remaining)
+
+    monkeypatch.setattr(AudioMetaUtil, "get_audio_duration", get_duration)
+    if runtime:
+        state = State.for_worker(Prefs())
+        state.project = Project()
+        state.mark_main_menu_shown()
+        state.set_existing_project(project.dir_path)
+    else:
+        state = State()
+    assert state.pending_project_load_checks
+    MenuStatus.prepare_tts(state)
+    MenuStatus.prepare_tts(state)
+    assert project.tts_model_type == model.id
+    assert "FYI" not in capsys.readouterr().out
+
+    if not runtime:
+        MenuStatus.show_pending_project_hints(state)  # Early startup submenu.
+        assert probes == []
+        assert state.pending_project_load_checks
+        assert capsys.readouterr().out == ""
+        state.mark_main_menu_shown()  # on_shown precedes footer rendering.
+    MenuStatus.show_pending_project_hints(state, is_first_main_menu=not runtime)
+    output = text_util.strip_ansi_codes(capsys.readouterr().out)
+    assert ("last used with TTS model Qwen3-TTS" in output) == (saved != model.id)
+    if expected:
+        assert "The current model's recommended duration for voice clone samples is 15s,\n" in output
+        assert f"but there {expected} that value." in output
+    else:
+        assert "recommended duration" not in output
+    assert output.count("FYI") == int(saved != model.id) + int(expected is not None)
+    assert len(probes) == len(durations)
+    assert not state.pending_project_load_checks
+    MenuStatus.prepare_tts(state)
+    MenuStatus.show_pending_project_hints(state, is_first_main_menu=True)
+    assert capsys.readouterr().out == ""
+    assert len(probes) == len(durations)
+
+
+@pytest.mark.parametrize("model_id", ["none", "chatterbox_local", "qwen3tts_local"])
+def test_project_load_skips_samples_without_duration_recommendation(monkeypatch, capsys, model_id):
+    from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
+
+    state = make_state(TtsModelType.require_by_id(model_id))
+    state.pending_project_load_checks = True
+    state.project.voice_references = [{"file_name": "voice.flac", "transcript": ""}]
+    monkeypatch.setattr(AudioMetaUtil, "get_audio_duration",
+                        lambda _: pytest.fail("No recommendation: do not probe sample durations"))
+    MenuStatus.show_pending_project_hints(state, is_first_main_menu=True)
+    assert capsys.readouterr().out == ""
+    assert not state.pending_project_load_checks
+
+
+def test_project_replacement_rearms_duration_check_and_reset_clears_it(monkeypatch, capsys):
+    from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
+
+    monkeypatch.setattr(Project, "kill", lambda _: None)
+    monkeypatch.setattr(Prefs, "save", lambda _: "")
+    monkeypatch.setattr(AudioMetaUtil, "get_audio_duration", lambda _: 16.0)
+    state = State.for_worker(Prefs())
+    state.has_shown_main_menu = True
+    for path in ("/example/first", "/example/second"):
+        project = Project(tts_model_type="omnivoice_local", voice_references=[
+            {"file_name": "voice.flac", "transcript": ""},
+        ])
+        project.dir_path = path
+        state.project = project
+        assert state.pending_project_load_checks
+        MenuStatus.show_pending_project_hints(state)
+        assert capsys.readouterr().out.count("FYI") == 1
+        assert not state.pending_project_load_checks
+    project = Project(tts_model_type="omnivoice_local")
+    project.dir_path = "/example/third"
+    state.project = project
+    state.reset()
+    assert not state.pending_project_load_checks
+    MenuStatus.show_pending_project_hints(state)
+    assert capsys.readouterr().out == ""
 
 
 def test_status_clears_and_saves_local_selection_when_no_model_is_available(monkeypatch):

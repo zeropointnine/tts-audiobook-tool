@@ -154,9 +154,7 @@ class Qwen3BaseModel(TtsBaseModel):
             case "voice_design":
                 ... # # has no requirements bc "instruction" is optional
             case "base" | _:
-                err = cls._get_standard_voice_blocker(project)
-                if err:
-                    items.append(err)
+                ... # voice-clone state is validated lazily (validate_voices)
 
         return items
 

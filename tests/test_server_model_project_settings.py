@@ -28,9 +28,11 @@ def test_higgs_v3_server_spec_and_project_voice_fields():
 
     payload = ProjectSerializationUtil.to_project_json_dict(project)
     model = payload["model_settings"]["models"]["higgs_v3_sglomni"]
-    assert model["voice_references"] == [
+    # V4: one project-wide list, no scoped clone storage.
+    assert payload["voice_references"] == [
         {"file_name": "voice.flac", "transcript": "reference transcript"}
     ]
+    assert "voice_references" not in model
     assert "higgs_v3_voice_target" not in payload["model_settings"]
     assert "higgs_v3_voice_file_path" not in payload["model_settings"]
 
@@ -54,9 +56,10 @@ def test_fish_s2_server_spec_shares_local_voice_fields():
 
     payload = ProjectSerializationUtil.to_project_json_dict(project)
     shared = payload["model_settings"]["shared"]["fish_s2"]
-    assert shared["voice_references"] == [
+    assert payload["voice_references"] == [
         {"file_name": "voice.flac", "transcript": "reference transcript"}
     ]
+    assert "voice_references" not in shared
     assert "fish_s2_server_voice_target" not in payload["model_settings"]
     assert "fish_s2_server_voice_transcript" not in payload["model_settings"]
 
@@ -96,7 +99,8 @@ def test_zonos2_project_fields_normalize_and_serialize():
 
     payload = ProjectSerializationUtil.to_project_json_dict(project)
     model = payload["model_settings"]["models"]["zonos2_sglomni"]
-    assert model["voice_references"] == [{"file_name": "voice.flac", "transcript": ""}]
+    assert payload["voice_references"] == [{"file_name": "voice.flac", "transcript": ""}]
+    assert "voice_references" not in model
     # Zonos2 declares no transcript storage.
     assert "zonos2_voice_transcript" not in payload["model_settings"]
     # The concurrency value normalized to its default, so nothing is stored.

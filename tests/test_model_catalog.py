@@ -56,6 +56,36 @@ def test_settings_note_can_be_omitted():
     assert "settings_note" not in parse_spec(entry).ui
 
 
+@pytest.mark.parametrize("model_id", ["dots_local", "echo_tts_audiocpp", "auk_sglomni"])
+@pytest.mark.parametrize("duration", [5, 15.5])
+def test_optional_voice_sample_max_duration_is_generic_and_roundtrips(tmp_path, model_id, duration):
+    path = _copy_catalog(tmp_path, lambda data: _entry(data, model_id)["spec"]["ui"].update(
+        voice_sample_max_duration_s=duration,
+    ))
+    specs, _, _ = load_catalog(path)
+    assert next(spec for spec in specs if spec.id == model_id).ui["voice_sample_max_duration_s"] == duration
+
+
+@pytest.mark.parametrize("duration", [None, True, "15", 0, -1, float("inf"), float("nan")])
+def test_voice_sample_max_duration_must_be_positive_and_finite(duration):
+    entry = _entry(read_catalog(CATALOG_PATH), "echo_tts_audiocpp")
+    entry["spec"]["ui"]["voice_sample_max_duration_s"] = duration
+    with pytest.raises(ValueError, match=r"spec\.ui\.voice_sample_max_duration_s: expected a positive finite number"):
+        parse_spec(entry)
+
+
+def test_shipped_voice_sample_duration_recommendations():
+    specs, _, _ = load_catalog()
+    assert {spec.id: spec.ui["voice_sample_max_duration_s"]
+            for spec in specs if "voice_sample_max_duration_s" in spec.ui} == {
+        "dots_local": 10, "fish_s1_local": 10, "fish_s2_local": 30,
+        "higgs_v2_local": 15, "mira_local": 8, "omnivoice_local": 15, "pocket_local": 15,
+        "auk_sglomni": 5, "auk_flash_sglomni": 5, "cosyvoice3_sglomni": 30,
+        "fish_s2_sglomni": 30, "zonos2_sglomni": 20,
+        "echo_tts_audiocpp": 15, "omnivoice_audiocpp": 15,
+    }
+
+
 def test_catalog_random_seed_cap_defaults_and_int32_limits():
     raw = read_catalog(CATALOG_PATH)
     specs, _, _ = load_catalog()
@@ -571,27 +601,27 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
 
 @pytest.mark.parametrize("model_id, expected", [
     ("breeze_tts_2_audiocpp", [
-        ("voice_samples", "", "", ""),
-        ("voice_instructions", "instruct", "", "advanced"),
-        ("parameter", "temperature", "Temperature", "advanced"),
-        ("parameter", "guidance_scale", "Guidance scale", "advanced"),
-        ("parameter", "top_p", "Top-P", ""),
-        ("parameter", "top_k", "Top-K", ""),
-        ("seed", "", "", ""),
+        ("voice_samples", None, "", ""),
+        ("voice_instructions", "voice", "instruct", ""),
+        ("parameter", "model", "temperature", "Temperature"),
+        ("parameter", "model", "guidance_scale", "Guidance scale"),
+        ("parameter", "model", "top_p", "Top-P"),
+        ("parameter", "model", "top_k", "Top-K"),
+        ("seed", "model", "", ""),
     ]),
     ("higgs_v3_audiocpp", [
-        ("voice_samples", "", "", ""),
-        ("parameter", "temperature", "Temperature", "advanced"),
-        ("parameter", "top_p", "Top-P", ""),
-        ("parameter", "top_k", "Top-K", ""),
-        ("seed", "", "", ""),
+        ("voice_samples", None, "", ""),
+        ("parameter", "model", "temperature", "Temperature"),
+        ("parameter", "model", "top_p", "Top-P"),
+        ("parameter", "model", "top_k", "Top-K"),
+        ("seed", "model", "", ""),
     ]),
 ])
 def test_explicit_audio_cpp_menus_use_catalog_control_order_and_labels(model_id, expected):
     from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
 
     menu = load_audio_cpp_definitions().models[model_id].menu
-    assert [(item.kind, item.parameter, item.label, item.group) for item in menu] == expected
+    assert [(item.kind, item.target_menu, item.parameter, item.label) for item in menu] == expected
 
 
 @pytest.mark.parametrize("model_id", [
@@ -655,8 +685,8 @@ def test_audio_cpp_menu_is_required(model_id):
      lambda entry: entry["audio_cpp"]["parameters"]["top_k"].update(default=200),
      "expected min <= default <= max"),
     ("higgs_v3_audiocpp",
-     lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed"},
-                                                   {"parameter": "missing", "label": "Missing"}]),
+     lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed", "target_menu": "model"},
+                                                   {"parameter": "missing", "label": "Missing", "target_menu": "model"}]),
      "unknown parameter"),
     ("echo_tts_audiocpp",
      lambda entry: entry["audio_cpp"].update(max_words_range_reco=[50, 20]),
@@ -677,12 +707,12 @@ def test_audio_cpp_menu_is_required(model_id):
      lambda entry: entry["audio_cpp"]["parameters"]["instruct"].update(target="top_level"),
      "a string parameter must travel in options"),
     ("omnivoice_audiocpp",
-     lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed"},
-                                                   {"parameter": "instruct", "label": "Instruct"}]),
+     lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed", "target_menu": "model"},
+                                                   {"parameter": "instruct", "label": "Instruct", "target_menu": "model"}]),
      "requires the voice_instructions control"),
     ("omnivoice_audiocpp",
-     lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed"},
-                                                   {"kind": "voice_instructions", "parameter": "speed"}]),
+     lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed", "target_menu": "model"},
+                                                   {"kind": "voice_instructions", "parameter": "speed", "target_menu": "model"}]),
      "requires a string parameter"),
 ])
 def test_audio_cpp_catalog_rejects_invalid_declarations(tmp_path, entry_id, mutate, match):

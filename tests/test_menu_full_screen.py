@@ -115,12 +115,20 @@ def test_dont_clear_suppresses_clear_and_status(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("is_submenu", [False, True])
-def test_deferred_tts_hint_follows_menu_and_on_shown_without_pausing(monkeypatch, capsys, is_submenu):
+@pytest.mark.parametrize("with_long_sample", [False, True])
+def test_deferred_tts_hint_follows_menu_and_on_shown_without_pausing(
+    monkeypatch, capsys, is_submenu, with_long_sample,
+):
     model = TtsModelType.require_by_id("echo_tts_audiocpp")
     state = cast(State, SimpleNamespace(
         prefs=Prefs(), project=Project(tts_model_type="chatterbox_local"),
-        pending_tts_model_change=None,
+        pending_tts_model_change=None, pending_project_load_checks=with_long_sample,
+        has_shown_main_menu=True,
     ))
+    if with_long_sample:
+        from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
+        state.project.voice_references = [{"file_name": "voice.flac", "transcript": ""}]
+        monkeypatch.setattr(AudioMetaUtil, "get_audio_duration", lambda _: 16.0)
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [model])
     monkeypatch.setattr(Tts, "bind_project", lambda _: None)
@@ -150,9 +158,14 @@ def test_deferred_tts_hint_follows_menu_and_on_shown_without_pausing(monkeypatch
     assert first.index("Existing on_shown output") < first.index("🔔 FYI")
     if is_submenu:
         assert first.index("to go back one level") < first.index("🔔 FYI")
-    assert "previously using TTS model Chatterbox TTS" in first
-    assert f"currently active model, {model.value.ui['proper_name']}" in first
+    assert "last used with TTS model Chatterbox TTS" in first
+    assert f"sole active audio.cpp model, {model.value.ui['proper_name']}" in first
     assert "Press enter:" not in first
+    if with_long_sample:
+        assert first.index("last used with") < first.index("recommended duration")
+        assert "recommended duration for voice clone samples is 15s," in first
+        assert "but there is 1 sample for this project that exceeds that value." in first
+        assert not state.pending_project_load_checks
     assert "FYI" not in rendered[1]
     assert state.pending_tts_model_change is None
 
@@ -199,8 +212,8 @@ def test_local_fyi_skips_submenu_and_shows_once_at_first_main_menu(monkeypatch, 
     assert len(rendered) == 3
     assert rendered[1].index("Quit") < rendered[1].index("Main menu on_shown output")
     assert rendered[1].index("Main menu on_shown output") < rendered[1].index("🔔 FYI")
-    assert "previously using TTS model Echo-TTS" in rendered[1]
-    assert "currently active model, Chatterbox TTS" in rendered[1]
+    assert "last used with TTS model Echo-TTS" in rendered[1]
+    assert "active model, Chatterbox TTS" in rendered[1]
     assert "Press enter:" not in rendered[1]
     assert "FYI" not in rendered[2]
     assert state.project.tts_model_type == "chatterbox_local"

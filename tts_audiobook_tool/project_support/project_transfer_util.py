@@ -19,7 +19,6 @@ from tts_audiobook_tool.constants import (
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
-from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
@@ -89,7 +88,7 @@ class ProjectTransferUtil:
         return Project.model_validate(parse_dict)
 
     @staticmethod
-    def validate_abr_snapshot(project_snapshot: dict) -> Project:
+    def validate_abr_snapshot(project_snapshot: dict, *, prompt_on_migration: bool = False) -> Project:
         """Validate an ABR snapshot before creating or selecting a destination.
 
         Pydantic ignores unknown top-level keys, so a nonempty but unrelated
@@ -99,6 +98,7 @@ class ProjectTransferUtil:
         from tts_audiobook_tool.project import Project
         from tts_audiobook_tool.project_support.model_settings_declarations import BUILTIN_LEGACY_FIELDS
         from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+        from tts_audiobook_tool.project_support.voice_reference_migration import prepare_project_voice_references
 
         version = project_snapshot.get('version')
         if version is not None and (type(version) is not int or version < 1):
@@ -114,10 +114,23 @@ class ProjectTransferUtil:
         if 'model_settings' in project_snapshot:
             if not isinstance(project_snapshot['model_settings'], dict):
                 raise ValueError('ABR project snapshot model_settings must be an object')
-            settings = REGISTRY.reconcile(project_snapshot['model_settings'])
-            has_settings |= bool(settings.models or settings.shared)
+            # Recognize only the container shape here. Reconciliation must run
+            # after preparation removes stale scoped clone data superseded by
+            # an authoritative top-level list (including an explicit []).
+            for section in ('models', 'shared'):
+                objects = project_snapshot['model_settings'].get(section, {})
+                if not isinstance(objects, dict):
+                    raise ValueError(f'ABR project snapshot model_settings.{section} must be an object')
+                has_settings |= bool(objects)
         if not has_settings:
             raise ValueError('ABR project snapshot contains no recognizable project settings')
+        # Check the original payload before preparation inserts voice_references
+        # and stamps a version, so unrelated or invalid snapshots cannot pass.
+        project_snapshot = prepare_project_voice_references(project_snapshot, prompt=prompt_on_migration)
+        if 'model_settings' in project_snapshot:
+            # Preserve ABR's strict validation of remaining model settings, but
+            # only after obsolete scoped clone lists have been removed.
+            REGISTRY.reconcile(project_snapshot['model_settings'])
         # An empty dir_path prevents validation from creating the destination's
         # sound-segments directory. The destination is set only at commit time.
         return ProjectTransferUtil.make_project_from_snapshot('', project_snapshot)
@@ -257,11 +270,11 @@ class ProjectTransferUtil:
             PROJECT_TEXT_RAW_FILE_NAME,
             PROJECT_TEXT_EPUB_FILE_NAME,
         ]
-        raw_voice_file_names: list[object] = []
+        # The clone list is project-wide. Collect it once, then independently
+        # collect catalog-declared secondary files such as IndexTTS emo_voice.
+        raw_voice_file_names: list[object] = [entry.get("file_name") for entry in project.voice_references]
         seen_owners: set[tuple[str, str]] = set()
         for model_type in TtsModelType.all():
-            if REGISTRY.voice_binding(model_type.id) is not None:
-                raw_voice_file_names.extend(ProjectVoiceUtil.get_voice_values(project, model_type))
             for binding in REGISTRY.for_model(model_type.id):
                 if binding.section != "files":
                     continue

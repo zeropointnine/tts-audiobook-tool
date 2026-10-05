@@ -20,6 +20,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
 
 class MainMenu:
@@ -55,6 +56,9 @@ class MainMenu:
             )
             items.append(
                 MenuItem(make_voice_label, on_voice, hotkey="v")
+            )
+            items.append(
+                MenuItem("Model settings", on_model, hotkey="m")
             )
             items.append(
                 MenuItem(
@@ -157,7 +161,7 @@ def make_project_label(state: State) -> str:
 
 # Voice
 def make_voice_label(state: State) -> str:
-    return "Voice clone and model settings"
+    return "Voice clone"
 
 def on_voice(state: State, __) -> None:
     Tts.bind_project(state.project)
@@ -168,6 +172,17 @@ def on_voice(state: State, __) -> None:
         ask.ask_error(REQUIRES_PROJECT)
         return
     VoiceMenuShared.menu(state)
+
+# Model settings
+def on_model(state: State, __: MenuItem) -> None:
+    Tts.bind_project(state.project)
+    if state.project.get_tts_model_type().id == "none":
+        ask.ask_error(REQUIRES_TTS_MODEL)
+        return
+    if not state.project.dir_path:
+        ask.ask_error(REQUIRES_PROJECT)
+        return
+    ModelMenuShared.menu(state)
 
 # Text
 def make_text_label(state: State) -> str:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_DEFAULT, PROJECT_BATCH_SIZE_MAX
@@ -22,32 +22,6 @@ def _settings_registry():
     # so the Chatterbox base class can import this module during its startup.
     from tts_audiobook_tool.project_support.model_settings import REGISTRY
     return REGISTRY
-
-
-class VoiceFileVerificationResult(NamedTuple):
-    """
-    Outcome of `ProjectVoiceUtil.verify_voice_files_exist`.
-
-    Saved references are split by why they were reported. A reference whose
-    file is merely missing is kept, in memory and on disk alike: the file may
-    be one that has not been copied over yet, as when a project's settings
-    arrive from another computer, and generation is blocked with a clear
-    message until it shows up. Only a reference to a file that exists but
-    cannot be decoded is dropped, and that drop is persisted.
-
-    Truthy when anything was reported, which keeps the older boolean usage
-    working.
-    """
-    not_found: dict[str, list[str]]
-    corrupt: dict[str, list[str]]
-    warnings: list[tuple[str, str, str]]
-
-    @property
-    def did_report_any(self) -> bool:
-        return bool(self.not_found or self.corrupt)
-
-    def __bool__(self) -> bool:
-        return self.did_report_any
 
 
 class ProjectVoiceUtil:
@@ -107,31 +81,17 @@ class ProjectVoiceUtil:
 
     @staticmethod
     def get_voice_values(project: Project, tts_model_type: TtsModelType) -> list[str]:
-        """ Returns the project's voice sample file names for the given model type """
+        """Return the shared clone list for a model that supports voice samples."""
         if _settings_registry().voice_binding(tts_model_type.id) is None:
             return []
-        value = project.get_model_setting(tts_model_type.id, "file_name")
-        if not value:
-            return []
-        if isinstance(value, str):
-            return [value]
-        if isinstance(value, list):
-            return value
-        raise Exception(f"Bad value for {tts_model_type.id}.file_name: {value}")
+        return [entry["file_name"] for entry in project.voice_references]
 
     @staticmethod
     def get_voice_transcript_values(project: Project, tts_model_type: TtsModelType) -> list[str]:
-        """ Returns the project's voice transcript values for the given model type """
-        if _settings_registry().transcript_binding(tts_model_type.id) is None:
+        """Return paired transcripts, even if this model does not require them."""
+        if _settings_registry().voice_binding(tts_model_type.id) is None:
             return []
-        value = project.get_model_setting(tts_model_type.id, "transcript")
-        if not value:
-            return []
-        if isinstance(value, str):
-            return [value]
-        if isinstance(value, list):
-            return value
-        raise Exception(f"Bad value for {tts_model_type.id}.transcript: {value}")
+        return [entry.get("transcript", "") for entry in project.voice_references]
 
     @staticmethod
     def get_primary_voice_value(project: Project, tts_model_type: TtsModelType) -> str:
@@ -199,18 +159,14 @@ class ProjectVoiceUtil:
 
     @staticmethod
     def get_used_voice_file_names(project: Project, exclude_owner: tuple[str, str] | None, *, exclude_secondary: bool=False) -> set[str]:
-        """Collect names outside the voice storage being edited.
+        """Collect names outside the storage being edited.
 
-        Shared variants have the same owner, so exclude them together. Editing
-        the secondary emotion voice instead excludes only that scalar file,
-        not IndexTTS 2's primary voice list.
+        All catalog voice bindings now identify one shared list; any primary
+        owner excludes that whole list. Secondary edits exclude only emo_voice.
         """
         used: set[str] = set()
-        for model_type in TtsModelType.all():
-            binding = _settings_registry().voice_binding(model_type.id)
-            if binding is None or (binding.group or binding.model_id, binding.name) == exclude_owner:
-                continue
-            used.update(ProjectVoiceUtil.get_voice_values(project, model_type))
+        if exclude_owner is None:
+            used.update(entry["file_name"] for entry in project.voice_references)
         emo_voice = project.get_model_setting("indextts2_local", "emo_voice")
         if not exclude_secondary and emo_voice:
             used.add(emo_voice)
@@ -252,31 +208,13 @@ class ProjectVoiceUtil:
         if err:
             return err
 
-        has_transcript_storage = _settings_registry().transcript_binding(tts_type.id) is not None
-
-        # Read the existing transcripts before the voice list grows, so appending
-        # one sample pairs its transcript positionally with its file name.
-        appended_transcripts: list[str] | None = None
-        if has_transcript_storage and append:
-            appended_transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_type)
-
-        if tts_type.id == "indextts2_local" and is_secondary:
+        if secondary:
             project.set_model_setting("indextts2_local", "emo_voice", dest_file_name)
         else:
-            if _settings_registry().voice_binding(tts_type.id) is None:
-                raise Exception(f"Unsupported tts type {tts_type}")
-            if append:
-                values = ProjectVoiceUtil.get_voice_values(project, tts_type)
-                project.set_model_setting(tts_type.id, "file_name", values + [dest_file_name])
-            else:
-                project.set_model_setting(tts_type.id, "file_name", [dest_file_name])
-
-        if has_transcript_storage:
-            if append:
-                assert appended_transcripts is not None
-                project.set_model_setting(tts_type.id, "transcript", appended_transcripts + [transcript])
-            else:
-                project.set_model_setting(tts_type.id, "transcript", [transcript] if transcript else [])
+            if binding is None:
+                raise ValueError(f"Unsupported tts type {tts_type}")
+            entry = {"file_name": dest_file_name, "transcript": transcript}
+            project.voice_references = project.voice_references + [entry] if append else [entry]
 
         if tts_type.id == "pocket_local":
             project.set_model_setting('pocket_local', 'predefined_voice', "")
@@ -292,20 +230,27 @@ class ProjectVoiceUtil:
         if index < 0 or index >= len(voices):
             raise IndexError(f"Voice sample index out of range: {index}")
 
-        removed = voices.pop(index)
-        project.set_model_setting(tts_type.id, "file_name", voices)
-
-        if _settings_registry().transcript_binding(tts_type.id) is not None:
-            transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_type)
-            if index < len(transcripts):
-                transcripts.pop(index)
-            project.set_model_setting(tts_type.id, "transcript", transcripts)
-
-        if tts_type.id == "pocket_local" and not voices:
-            project.set_model_setting('pocket_local', 'predefined_voice', "")
+        removed = voices[index]
+        project.voice_references = project.voice_references[:index] + project.voice_references[index + 1:]
 
         project.save()
         return removed
+
+    @staticmethod
+    def move_voice_at_index_and_save(project: Project, index: int, new_index: int) -> str:
+        """Reorder paired references; per-line numeric selections stay unchanged."""
+        previous = project.voice_references
+        if not (0 <= index < len(previous) and 0 <= new_index < len(previous)):
+            raise IndexError("Voice sample index out of range")
+        if index == new_index:
+            return ""
+        entries = list(previous)
+        entries.insert(new_index, entries.pop(index))
+        project.voice_references = entries
+        error = project.save()
+        if error:
+            project.voice_references = previous
+        return error
 
     @staticmethod
     def clear_voice_and_save(project: Project, tts_type: TtsModelType, is_secondary: bool=False) -> None:
@@ -314,15 +259,19 @@ class ProjectVoiceUtil:
         else:
             if _settings_registry().voice_binding(tts_type.id) is None:
                 raise ValueError(f"Unsupported tts_type: {tts_type}")
-            project.set_model_setting(tts_type.id, "file_name", [])
-
-        if _settings_registry().transcript_binding(tts_type.id) is not None:
-            project.set_model_setting(tts_type.id, "transcript", [])
-
-        if tts_type.id == "pocket_local":
-            project.set_model_setting('pocket_local', 'predefined_voice', "")
+            project.voice_references = []
 
         project.save()
+
+    @staticmethod
+    def set_voice_transcript_at_index_and_save(project: Project, index: int, transcript: str) -> str:
+        """Edit exactly one shared entry without capability-dependent storage."""
+        if index < 0 or index >= len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        entries = list(project.voice_references)
+        entries[index] = {**entries[index], "transcript": transcript}
+        project.voice_references = entries
+        return project.save()
 
     @staticmethod
     def get_voice_label(project: Project) -> str:
@@ -356,75 +305,6 @@ class ProjectVoiceUtil:
             string = f"{item:.1f}".replace(".0", "")
             strings.append(string)
         return ",".join(strings)
-
-    @staticmethod
-    def verify_voice_files_exist(project: Project) -> VoiceFileVerificationResult:
-        model_type = project.get_tts_model_type()
-        info = model_type.value
-
-        has_voice_storage = _settings_registry().voice_binding(model_type.id) is not None
-        has_emo_voice = model_type.id == "indextts2_local"
-        if not has_voice_storage and not has_emo_voice:
-            return VoiceFileVerificationResult({}, {}, [])
-
-        warnings = []
-        not_found_by_attr: dict[str, list[str]] = {}
-        corrupt_by_attr: dict[str, list[str]] = {}
-        # Labels are display-only grouping keys for the report below.
-        file_names_by_attr: list[tuple[str, list[str]]] = []
-        if has_voice_storage:
-            file_names_by_attr.append(("voice samples", ProjectVoiceUtil.get_voice_values(project, model_type)))
-        if has_emo_voice:
-            value = project.get_model_setting(model_type.id, "emo_voice")
-            file_names_by_attr.append(("emotion voice sample", [value] if value else []))
-
-        for attrib, file_names in file_names_by_attr:
-            kept_file_names = []
-            kept_indices = []
-            for index, file_name in enumerate(file_names):
-                file_path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
-                if not os.path.exists(file_path):
-                    # Deliberately kept as saved. The file may simply not have
-                    # been copied over yet, as when a project's settings arrive
-                    # from another computer; clearing it here would lose the
-                    # reference on the next save. Generation is blocked with a
-                    # clear message by `get_missing_voice_file_issue` until the
-                    # file shows up.
-                    warnings.append((attrib, file_name, "file not found"))
-                    not_found_by_attr.setdefault(attrib, []).append(file_name)
-                    kept_file_names.append(file_name)
-                    kept_indices.append(index)
-                    continue
-
-                err = SoundFileUtil.is_valid_sound_file(file_path)
-                if err:
-                    warnings.append((attrib, file_name, err))
-                    corrupt_by_attr.setdefault(attrib, []).append(file_name)
-                    continue
-
-                kept_file_names.append(file_name)
-                kept_indices.append(index)
-
-            if len(kept_file_names) != len(file_names):
-                if attrib == "voice samples":
-                    transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, model_type)
-                    project.set_model_setting(model_type.id, "file_name", kept_file_names)
-                    if _settings_registry().transcript_binding(model_type.id) is not None:
-                        project.set_model_setting(model_type.id, "transcript", [transcripts[i] for i in kept_indices if i < len(transcripts)])
-                else:
-                    # Named secondary voice files are scalar strings, not voice lists.
-                    project.set_model_setting(model_type.id, "emo_voice", kept_file_names[0] if kept_file_names else "")
-
-        if warnings:
-            printt(f"{COL_ERROR}Warning/info: {COL_DEFAULT}Problem with saved voice clone file(s) for current model {COL_ACCENT}{info.ui['proper_name']}{COL_DEFAULT}")
-            for attrib, file_name, reason in warnings:
-                printt(f"- {COL_ACCENT}{attrib}{COL_DEFAULT}: {file_name}")
-                printt(f"  {COL_DIM}{reason}{COL_DEFAULT}")
-            printt("Saved reference(s) whose file could not be read are dropped.")
-            printt("Reference(s) whose file is simply missing are kept.")
-            printt()
-
-        return VoiceFileVerificationResult(not_found_by_attr, corrupt_by_attr, warnings)
 
     @staticmethod
     def get_batch_size(project: Project) -> int:

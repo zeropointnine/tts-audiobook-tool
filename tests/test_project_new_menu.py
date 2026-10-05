@@ -348,6 +348,43 @@ def test_abr_import_prefs_failure_keeps_previous_project_selected(monkeypatch, t
     assert state.project is previous and state.prefs.project_dir == ""
 
 
+def test_abr_import_voice_choice_blocks_before_destination_creation(monkeypatch, tmp_path):
+    state = _make_state()
+    _stub_abr_snapshot(monkeypatch, tmp_path, {
+        "version": 3,
+        "glm_voice_file_name": "glm.flac",
+        "glm_voice_transcript": "glm text",
+        "mira_voice_file_name": "mira.flac",
+    })
+    errors, _ = _collect_exits(monkeypatch)
+    def choose(_message):
+        assert not (tmp_path / "dest").exists()
+        return "1"
+    monkeypatch.setattr(ask, "ask_input", choose)
+    with _quiet_project_setter():
+        assert ProjectNewMenu.make_new_project_using_abr(state) is True
+    assert not errors
+    assert state.project.voice_references == [{"file_name": "glm.flac", "transcript": "glm text"}]
+    saved = json.loads((tmp_path / "dest" / "project.json").read_text())
+    assert saved["version"] == 4
+    assert saved["voice_references"] == state.project.voice_references
+    assert not (tmp_path / "dest" / "project.json.pre-v4.bak").exists()
+
+
+def test_abr_import_cancelled_voice_choice_keeps_destination_and_selection_untouched(monkeypatch, tmp_path):
+    state = _make_state()
+    previous = state.project
+    _stub_abr_snapshot(monkeypatch, tmp_path, {
+        "version": 3, "glm_voice_file_name": "glm.flac", "mira_voice_file_name": "mira.flac",
+    })
+    errors, _ = _collect_exits(monkeypatch)
+    monkeypatch.setattr(ask, "ask_input", lambda _message: "0")
+    assert ProjectNewMenu.make_new_project_using_abr(state) is False
+    assert "cancelled" in errors[0]
+    assert not (tmp_path / "dest").exists()
+    assert state.project is previous and state.prefs.project_dir == ""
+
+
 # --- Console-fallback path normalization ---
 
 def _no_gui_dialog(*_args, **_kwargs):

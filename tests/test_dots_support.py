@@ -5,6 +5,8 @@ from typing import cast
 import tts_audiobook_tool.tts as tts_module
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
+from tts_audiobook_tool.menus.model.model_dots_menu import ModelDotsMenu
+from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 from tts_audiobook_tool.menus.voice import VoiceDotsMenu
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
@@ -94,9 +96,11 @@ def test_dots_project_fields_normalize_and_serialize():
     dots_object = payload["model_settings"]["models"]["dots_local"]
     parameters = dots_object["parameters"]
     assert parameters["target"] == DotsBaseModel.MF_REPO_ID
-    assert dots_object["voice_references"] == [
+    # V4: one project-wide list, no scoped clone storage.
+    assert payload["voice_references"] == [
         {"file_name": "voice.flac", "transcript": "reference words"}
     ]
+    assert "voice_references" not in dots_object
     assert parameters["seed"] == 12
     assert parameters["speaker_scale"] == 2.0
     assert parameters["num_steps_soar"] == 6
@@ -156,12 +160,6 @@ def test_dots_menu_sampling_controls_visibility_by_target(monkeypatch):
     state = cast(State, SimpleNamespace(project=Project()))
     captured: list[list[str]] = []
 
-    monkeypatch.setattr(
-        VoiceMenuShared,
-        "make_voice_sample_items",
-        staticmethod(lambda *_: [MenuItem("voice", lambda *_: None)]),
-    )
-
     def capture_wrapper(actual_state, item_maker, subheading=None):
         items = item_maker(actual_state)
         captured.append(
@@ -171,31 +169,31 @@ def test_dots_menu_sampling_controls_visibility_by_target(monkeypatch):
             ]
         )
 
-    monkeypatch.setattr(VoiceMenuShared, "menu_wrapper", staticmethod(capture_wrapper))
+    monkeypatch.setattr(ModelMenuShared, "menu_wrapper", staticmethod(capture_wrapper))
 
-    VoiceDotsMenu.menu(state)  # SOAR default
+    ModelDotsMenu.menu(state)  # SOAR default
     set_setting(state.project, "dots_target", DotsBaseModel.MF_REPO_ID)
-    VoiceDotsMenu.menu(state)
+    ModelDotsMenu.menu(state)
     set_setting(state.project, "dots_target", DotsBaseModel.MF_2STEPS_REPO_ID)
-    VoiceDotsMenu.menu(state)
+    ModelDotsMenu.menu(state)
 
     soar, mf, mf_2steps = captured
 
     # SOAR: full flow-matching; both NFE and CFG are live knobs
     assert any(label.startswith("Select dots.tts model") for label in soar)
     assert any(label.startswith("Compile") for label in soar)
-    assert any(label.startswith("Num steps (soar)") for label in soar)
+    assert any(label.startswith("Steps (soar)") for label in soar)
     assert any(label.startswith("Speaker scale") for label in soar)
     assert any(label.startswith("CFG") for label in soar)
     assert any(label.startswith("Seed") for label in soar)
 
     # Meanflow: NFE is live, but CFG is distilled into the model and the
     # solver drops the parameter, so the item must not be offered
-    assert any(label.startswith("Num steps (mf)") for label in mf)
+    assert any(label.startswith("Steps (mf)") for label in mf)
     assert not any(label.startswith("CFG") for label in mf)
 
     # Fixed-step artifacts lock the whole sampling contract
-    assert not any(label.startswith("Num steps") for label in mf_2steps)
+    assert not any(label.startswith("Steps (") for label in mf_2steps)
     assert not any(label.startswith("CFG") for label in mf_2steps)
 
 
@@ -204,12 +202,7 @@ def test_dots_menu_num_steps_branches_by_variant(monkeypatch):
     number_items: list[dict] = []
 
     monkeypatch.setattr(
-        VoiceMenuShared,
-        "make_voice_sample_items",
-        staticmethod(lambda *_: []),
-    )
-    monkeypatch.setattr(
-        VoiceMenuShared,
+        ModelMenuShared,
         "menu_wrapper",
         staticmethod(lambda actual_state, item_maker, subheading=None: item_maker(actual_state)),
     )
@@ -219,11 +212,11 @@ def test_dots_menu_num_steps_branches_by_variant(monkeypatch):
         return MenuItem("num", lambda *_: None)
 
     monkeypatch.setattr(
-        "tts_audiobook_tool.menus.voice.voice_dots_menu.MenuUtil.make_number_item",
+        "tts_audiobook_tool.menus.model.model_dots_menu.MenuUtil.make_number_item",
         staticmethod(fake_number_item),
     )
 
-    VoiceDotsMenu.menu(state)  # SOAR default
+    ModelDotsMenu.menu(state)  # SOAR default
     # Number items are ordered: num steps (directly under Compile),
     # speaker scale, CFG
     soar = number_items[0]
@@ -241,7 +234,7 @@ def test_dots_menu_num_steps_branches_by_variant(monkeypatch):
 
     number_items.clear()
     set_setting(state.project, "dots_target", DotsBaseModel.MF_REPO_ID)
-    VoiceDotsMenu.menu(state)
+    ModelDotsMenu.menu(state)
     mf = number_items[0]
     assert mf["target"] == SettingRef("dots_local", "num_steps_mf")
     assert mf["default_value"] == DotsBaseModel.NUM_STEPS_MF_DEFAULT
@@ -262,16 +255,16 @@ def test_dots_target_submenu_has_only_presets_and_invalidates_worker(monkeypatch
     clears: list[bool] = []
 
     monkeypatch.setattr(
-        "tts_audiobook_tool.menus.voice.voice_dots_menu.MenuUtil.options_menu",
+        "tts_audiobook_tool.menus.model.model_dots_menu.MenuUtil.options_menu",
         lambda **kwargs: captured.update(kwargs),
     )
     monkeypatch.setattr(Project, "save", lambda self: saves.append(True) or "")
     monkeypatch.setattr(
-        "tts_audiobook_tool.menus.voice.voice_dots_menu.ModelWorker.clear_models_if_running_blocking",
+        "tts_audiobook_tool.menus.model.model_dots_menu.ModelWorker.clear_models_if_running_blocking",
         lambda: clears.append(True) or "",
     )
 
-    VoiceDotsMenu.target_submenu(state)
+    ModelDotsMenu.target_submenu(state)
 
     assert captured["labels"] == DotsBaseModel.PRESET_REPO_IDS
     assert captured["values"] == DotsBaseModel.PRESET_REPO_IDS
@@ -289,16 +282,16 @@ def test_dots_compile_submenu_options_and_invalidates_worker(monkeypatch):
     clears: list[bool] = []
 
     monkeypatch.setattr(
-        "tts_audiobook_tool.menus.voice.voice_dots_menu.MenuUtil.options_menu",
+        "tts_audiobook_tool.menus.model.model_dots_menu.MenuUtil.options_menu",
         lambda **kwargs: captured.update(kwargs),
     )
     monkeypatch.setattr(Project, "save", lambda self: saves.append(True) or "")
     monkeypatch.setattr(
-        "tts_audiobook_tool.menus.voice.voice_dots_menu.ModelWorker.clear_models_if_running_blocking",
+        "tts_audiobook_tool.menus.model.model_dots_menu.ModelWorker.clear_models_if_running_blocking",
         lambda: clears.append(True) or "",
     )
 
-    VoiceDotsMenu.compile_submenu(state)
+    ModelDotsMenu.compile_submenu(state)
 
     modes = list(DotsCompileMode)
     assert captured["labels"] == [mode.name.title() for mode in modes]

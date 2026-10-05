@@ -1,7 +1,6 @@
 """Project settings, metadata and inference adapter for audio.cpp families."""
 from __future__ import annotations
 
-import os
 import random
 from typing import TYPE_CHECKING
 
@@ -112,19 +111,10 @@ class AudioCppModelSupport:
 
     def get_blocking_issues(self, project: Project, instance: object = None) -> list[ReadinessIssue]:
         issues: list[ReadinessIssue] = []
-        voice = self.get_primary_voice_value(project)
-        if not voice:
-            if self.definition.voice_required:
-                issues.append(ReadinessIssue("voice sample", "A voice clone sample is required"))
-        else:
-            path = ProjectVoiceUtil.resolve_voice_file_path(project, voice)
-            if not os.path.isfile(path):
-                issues.append(ReadinessIssue("voice sample", f"Voice clone sample file not found: {voice}"))
-            # WAV conversion/size checks happen during generation, not redraw.
-        if self.definition.reference_transcript and voice:
-            transcript = ProjectVoiceUtil.primary_voice_transcript(project, self.model_type)
-            if not transcript:
-                issues.append(ReadinessIssue("voice clone transcript", "Voice clone transcript required when a voice clone sample is supplied"))
+        # Voice-clone state (required sample, file existence, transcripts) is
+        # validated lazily by the interactive pre-flight (validate_voices) and
+        # at generation time; WAV conversion/size checks also happen during
+        # generation, not redraw.
         for parameter in self.definition.parameters.values():
             try:
                 AudioCppSettings.get(project, parameter)

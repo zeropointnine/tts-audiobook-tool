@@ -27,16 +27,18 @@ def test_project_voice_and_batch_helpers_ignore_active_model(monkeypatch):
     assert saves == [project]
 
 
-def test_base_voice_display_count_uses_support_model_identity(monkeypatch):
+def test_base_voice_display_count_uses_project_wide_list(monkeypatch):
     monkeypatch.setattr(Tts, "_type", TtsModelType.require_by_id("none"))
-    project = Project(tts_model_type="mira_local")
-    set_setting(project, "mira_voice_file_name", ["mira-only.flac"])
-    set_setting(project, "omnivoice_voice_file_name", ["one.flac", "two.flac"])
+    project = Project(tts_model_type="mira_local", voice_references=[
+        {"file_name": "one.flac", "transcript": "One"},
+        {"file_name": "two.flac", "transcript": "Two"},
+    ])
 
-    support = Tts.get_model_support_for_type(TtsModelType.require_by_id("omnivoice_local"))
-    info = support.get_voice_display_info(project, None)
-    assert info is not None
-    assert "+1 more" in info.value
+    for model_id in ("mira_local", "omnivoice_local"):
+        support = Tts.get_model_support_for_type(TtsModelType.require_by_id(model_id))
+        info = support.get_voice_display_info(project, None)
+        assert info is not None
+        assert "+1 more" in info.value
 
 
 def test_segment_file_tag_and_fallback_voice_use_same_explicit_model(monkeypatch):

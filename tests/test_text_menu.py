@@ -8,6 +8,7 @@ from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
 from tts_audiobook_tool.constants_hints import HINT_DIALOG_VOICE, HINT_TOLERANCE_FIRST_CLASS
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.text_menu import TextMenu, on_select_import
+from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_ops.epub_extractor import EpubImportResult
@@ -710,6 +711,9 @@ def test_edit_word_substitutions_previews_then_reopens_with_staged_state(
 
     monkeypatch.setattr(text_menu_module, "WordSubstitutionsApp", make_editor)
     monkeypatch.setattr(
+        VoiceMenuShared, "validate_voices", staticmethod(lambda _state: True)
+    )
+    monkeypatch.setattr(
         text_menu_module,
         "run_content_textual_app",
         lambda _: next(run_results),
@@ -742,6 +746,65 @@ def test_edit_word_substitutions_previews_then_reopens_with_staged_state(
                 "staged": {"Ariekei": "AriaKay", "other": "value"},
                 "restore_original": "Ariekei",
                 "preview_sound": sound,
+            },
+        ),
+    ]
+
+
+def test_edit_word_substitutions_blocked_preview_reopens_editor_without_running(
+    monkeypatch,
+) -> None:
+    state = make_state()
+    constructed: list[tuple[State, dict[str, object]]] = []
+    run_results = iter(
+        [
+            ContentAppCompleted(
+                WordSubstitutionPreviewRequested(
+                    "Ariekei", "AriaKay", (("Ariekei", "AriaKay"),)
+                )
+            ),
+            ContentAppCompleted(EditorSaved()),
+        ]
+    )
+    preview_calls: list[object] = []
+
+    def make_editor(passed_state: State, **kwargs):
+        constructed.append((passed_state, kwargs))
+        return object()
+
+    monkeypatch.setattr(text_menu_module, "WordSubstitutionsApp", make_editor)
+    monkeypatch.setattr(
+        VoiceMenuShared, "validate_voices", staticmethod(lambda _state: False)
+    )
+    monkeypatch.setattr(
+        text_menu_module,
+        "run_content_textual_app",
+        lambda _: next(run_results),
+    )
+    monkeypatch.setattr(
+        text_menu_module,
+        "run_tts_preview_app",
+        lambda *_args, **_kwargs: preview_calls.append(object()),
+    )
+
+    assert TextMenu.edit_word_substitutions(state) is True
+    assert preview_calls == []
+    assert constructed == [
+        (
+            state,
+            {
+                "staged": None,
+                "restore_original": None,
+                "preview_sound": None,
+            },
+        ),
+        # The editor reopens with the staged substitutions kept and no sound.
+        (
+            state,
+            {
+                "staged": {"Ariekei": "AriaKay"},
+                "restore_original": "Ariekei",
+                "preview_sound": None,
             },
         ),
     ]

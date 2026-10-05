@@ -1,3 +1,7 @@
+from types import SimpleNamespace
+
+import pytest
+
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.server.server import get_blocking_issues_error
@@ -54,3 +58,61 @@ def test_server_readiness_includes_unavailable_project_binding():
     assert issue is not None
     assert issue.verbose in get_blocking_issues_error(project, None)
     assert project.tts_model_type == "glm_local"
+
+
+@pytest.mark.parametrize(
+    "model_id, transcripts, should_exit",
+    [
+        ("higgs_v3_sglomni", [""], True),
+        ("higgs_v3_sglomni", ["   "], True),
+        ("higgs_v3_sglomni", ["", "second transcript"], True),
+        ("higgs_v3_sglomni", ["first transcript", ""], False),
+        ("higgs_v3_sglomni", [], False),
+        ("zonos2_sglomni", [""], False),
+    ],
+)
+def test_server_startup_requires_first_voice_transcript(
+    monkeypatch, tmp_path, capsys, model_id, transcripts, should_exit,
+):
+    from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+    from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
+    from tts_audiobook_tool.prefs import Prefs
+    from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
+    from tts_audiobook_tool.server.server import Server
+
+    project = Project.model_validate({
+        "dir_path": str(tmp_path),
+        "tts_model_type": model_id,
+        "voice_references": [
+            {"file_name": f"voice-{index}.wav", "transcript": transcript}
+            for index, transcript in enumerate(transcripts)
+        ],
+    })
+    monkeypatch.setattr(Prefs, "load", lambda: SimpleNamespace(
+        project_dir=str(tmp_path), remote_tts_url="",
+    ))
+    for utility in (AudioCppUtil, RemoteTtsDiscovery, SglOmniUtil):
+        monkeypatch.setattr(utility, "set_base_url", lambda url: None)
+    monkeypatch.setattr(ProjectLoadUtil, "load_using_dir_path", lambda *args, **kwargs: project)
+
+    class ModelBindingReached(Exception):
+        pass
+
+    def bind_project(*args, **kwargs):
+        raise ModelBindingReached
+
+    monkeypatch.setattr(Tts, "bind_project", bind_project)
+    if should_exit:
+        with pytest.raises(SystemExit) as exc:
+            Server()
+        assert exc.value.code == 1
+        output = capsys.readouterr().out
+        assert "Voice clone is missing required accompanying transcript." in output
+        assert "Run the interactive app" in output
+        assert "first voice clone" in output
+    else:
+        # Stop before model/audio initialization: passing the guard is enough.
+        with pytest.raises(ModelBindingReached):
+            Server()
+        assert "Voice clone is missing accompanying transcript." not in capsys.readouterr().out

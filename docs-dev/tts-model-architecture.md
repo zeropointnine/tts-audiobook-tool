@@ -87,11 +87,11 @@ Key fields of `TtsModelSpec` most relevant to integration:
 | `requires_ffmpeg_libs` | Whether the model requires FFmpeg shared libraries, not just the executable (usually because of TorchCodec) |
 | `un_all_caps` | Force lowercase on all-caps prompts; set for models that perform poorly on them |
 | `requirements_file_name` | The `requirements-<model>.txt` filename for this model |
-| `ui` | Dict of UI strings: `proper_name`, `short_name`, `voice_path_console`, `voice_path_requestor`, `project_links` |
+| `ui` | Dict of UI strings/values: `proper_name`, `short_name`, `voice_path_console`, `voice_path_requestor`, `project_links`; optional positive `voice_sample_max_duration_s` is a warning-only recommendation, matching the upper duration in voice-path guidance |
 | `output_filters` | Case-sensitive worker console substrings filtered out of output history |
 | `substitutions` | List of `(before, after)` string pairs applied to prompts before inference |
 
-Voice/transcript storage, parameters and batch size are declared in the catalog and exposed through the settings registry (`REGISTRY.voice_binding()`, `.transcript_binding()`, `.orchestration_binding()`); `TtsModelType.can_batch()` derives from the orchestration binding.
+Primary voice/transcript pairs are stored once in top-level `Project.voice_references`, shared by every model in that project. Catalog/registry voice and transcript bindings (`REGISTRY.voice_binding()`, `.transcript_binding()`) remain compatibility/capability metadata, not separate clone-list owners; model-specific support and transcript requirements still govern consumption. Parameters and batch size retain catalog-declared model/group storage, and `TtsModelType.can_batch()` derives from the orchestration binding. See [Project Spec v4](<project-spec-v4.md>) for storage and v1/v2/v3 migration.
 
 The effective output sample rate is exposed via `TtsBaseModel.get_output_sample_rate(project, instance)`. Its default implementation returns `INFO.default_output_sample_rate`; models whose rate depends on project configuration can override it (currently GLM, for its selectable samplerate). It is used for playback/export paths; it deliberately does not affect voice clone audio — every model resamples reference audio internally, so imported voice clones are simply resampled to the app-native 48 kHz (`SoundPipeline.apply_voice_clone_post_processing()`), peak-normalized, and saved under the project's `voice/` subdir as `<stem>.flac` (no model tag; `ProjectVoiceUtil.resolve_voice_file_path()` prefers the subdir and falls back to the legacy project-root location for older projects).
 
@@ -128,12 +128,11 @@ Defines the interface all models must satisfy:
 Classmethods and helpers with default implementations (override when the defaults don't apply):
 
 - `get_menu_text(project, instance) -> str`
-- `get_blocking_issues(project, instance) -> list[ReadinessIssue]` (default: standard voice-clone blocker)
+- `get_blocking_issues(project, instance) -> list[ReadinessIssue]` (default: no voice-clone checks; voice state is validated by the interactive pre-flight `VoiceMenuShared.validate_voices` and at generation time)
 - `get_warning_issues(project) -> list[str]` — instance method (default: random-voice warning)
 - `get_voice_tag(project) -> str`
 - `get_voice_display_info(project, instance) -> VoiceDisplayInfo | None`
 - `get_primary_voice_value(project) -> str`
-- `get_missing_voice_file_issue(project) -> ReadinessIssue | None`
 - `should_trim_trailing_token_noise(project, instance) -> bool`
 - `can_hallucinate_music(project, instance) -> bool`
 
@@ -209,56 +208,34 @@ Fake-library tests for the mechanism live in `tests/test_<model>_voice_clone_cac
 
 ---
 
-## Voice Menus
+## Voice and Model Menus
 
-**Directory:** [tts_audiobook_tool/menus/voice/](tts_audiobook_tool/menus/voice/)
+The main menu separates **[V] Voice clone** from **[M] Model settings**. Both require a project and a selected TTS model; neither requires an existing voice sample. Selecting the catalog TTS model remains under **Project > TTS model**.
 
-Local models have dedicated voice menu modules. All SGL-Omni variants use one definition-driven module:
+- [`menus/voice/`](<../tts_audiobook_tool/menus/voice/>) contains the per-model `voice_*_menu.py` modules and [`VoiceMenuShared`](<../tts_audiobook_tool/menus/voice/voice_menu_shared.py>). These menus display the enumerated sample list directly above the shared sample-management group: **Add voice sample**, **Remove voice sample**, **Edit voice sample transcript** when samples exist and the active model uses reference transcripts, conditional **Voice selection mode** for 2+ samples, and **Edit voice selections**. There is no intermediate Add/remove submenu; Add is hidden at nine samples. Sample-specific callbacks/hints remain here, including Pocket's clone-access validation (skipped after its first success in an app run) and Mira's unload-on-clear callback. Local voice controls also live here: IndexTTS2's emotion reference/vector/strength under **Emotion**, OmniVoice's voice-design instructions, Pocket's predefined voice selection, VibeVoice's LoRA selection, and Qwen3's checkpoint-specific speaker/instruction controls. Conditional clear actions follow their corresponding controls.
+- [`menus/model/`](<../tts_audiobook_tool/menus/model/>) contains parallel `model_*_menu.py` modules and [`ModelMenuShared`](<../tts_audiobook_tool/menus/model/model_menu_shared.py>). Local models keep inference controls here: checkpoint/variant selection, sampling, seed, continuation, and compile/precision/sample-rate settings. Server models explicitly choose each settings control's menu in the catalog, as described below. MOSS's architecture-specific numeric helpers live in `model_moss_shared.py`.
 
-```
-menus/voice/
-  voice_menu_shared.py
-  voice_configured_sgl_omni_menu.py
-  voice_chatterbox_menu.py
-  voice_fish_s1_menu.py
-  voice_fish_s2_menu.py
-  voice_glm_menu.py
-  voice_higgs_v2_menu.py
-  voice_indextts2_menu.py
-  voice_mira_menu.py
-  voice_moss_menu.py
-  voice_moss_shared.py       # local MOSS architecture settings controls
-  voice_omnivoice_menu.py
-  voice_pocket_menu.py
-  voice_qwen3_menu.py
-  voice_vibevoice_menu.py
-```
+Both shared classes route local models through literal catalog IDs and remote models through the selected definition. Their wrappers have separate headings/breadcrumbs and stop sample playback on exit; only the model wrapper adds the selected model's `settings_note`. Model controls retain their existing validation, reset/default semantics, storage ownership, and worker reload/rollback behavior.
 
-### `VoiceMenuShared`
+### Definition-driven server menus
 
-**File:** [tts_audiobook_tool/menus/voice/voice_menu_shared.py](tts_audiobook_tool/menus/voice/voice_menu_shared.py)
+SGL-Omni and audio.cpp each have one voice renderer and one parallel model renderer. Every settings control (numeric parameter, seed, or audio.cpp voice instructions) requires `target_menu = "model"` for Model settings or `target_menu = "voice"` for Voice clone. Breeze TTS 2's audio.cpp Instructions and OmniVoice's audio.cpp Voice design instructions controls target `"voice"`; other shipped settings currently target `"model"`. The special `voice_samples` control has no `target_menu` and always expands in Voice clone; validators still require it exactly once in the combined declaration.
 
-Contains shared operations used by most model menus:
+Both renderers preserve the catalog order of controls assigned to their destination and share each backend's settings-control expansion, so editors, hints, validation, and storage do not change with menu location. An instruction control's conditional Clear row follows its Edit row into the same menu. Menu `group` declarations and the Advanced heading are no longer supported; unrelated catalog storage groups remain supported. Both shared `make_remote_items()` factories resolve the currently selected model/backend on every redraw, after menu/status reconciliation, and return no stale controls for None/unknown selections.
 
-- `menu(state)` — selects the configured menu when a SGL-Omni definition is active; otherwise dispatches to a local per-model menu via `match state.project.get_tts_model_type().id` with literal string cases
-- `menu_wrapper(state, items, subheading)` — standardized menu heading and exit callback
-- `make_resolved_voice_label(state)` — "Add voice sample …" status label
-- `ask_and_set_voice_file(state, tts_type, is_secondary, message_override, append)` — prompts for a voice audio file, optionally gets its transcript, resamples it, and calls `ProjectVoiceUtil.set_voice_and_save()` (`append` adds to a multi-voice list rather than replacing)
-- `ask_voice_file(default_dir_path, tts_type, message_override)` — prompts for the file path; uses `tts_type.value.ui` for display strings
-- `make_clear_voice_item(state, info_item, callback)` — builds a menu item to clear the voice setting
-- `make_seed_item(state, attr, prompt_override, add_batch_warning)` — builds a seed control menu item
+### Qwen3 checkpoint types
 
-### Per-model menu pattern
+The voice menu always offers shared sample/selection management, including CustomVoice and VoiceDesign checkpoints; opening it does not inspect/load a model. The stored checkpoint type controls whether CustomVoice's **Set speaker** and **Instructions**, or VoiceDesign's **Instructions**, appear after the sample controls. Selecting **Set speaker** inspects the current checkpoint on demand for supported speakers; inspection errors do not block sample management. Once inspected, speaker labels retain single-speaker resolution and invalid-ID warnings. Instructions and their clear action do not need a loaded model. The model menu still obtains worker inspection metadata for checkpoint type and generation defaults. Checkpoint changes refresh its captured metadata; clearing a custom target restores Base metadata before redraw. Managing samples does not change which inputs a checkpoint consumes.
 
-Each local `VoiceAbcMenu.menu(state)` builds a list of `MenuItem`s and passes them to `VoiceMenuShared.menu_wrapper()`. Model-specific options (e.g. sample rate for GLM, emotion clip for IndexTTS2, model target/variant for MOSS) are added inline alongside the shared voice clone item. The SGL-Omni menu builds its items from the selected definition instead of dispatching to server-specific menus. Shared operations like `ask_and_set_voice_file` and `make_clear_voice_item` accept a `TtsModelType` argument rather than being baked into the menu class.
+### Storage remains independent of menu location
 
-Note that voice settings are multi-valued for most models: voice clone filenames (and transcripts) are stored as lists on `Project`, and the app auto-advances through them across generation calls via `voice_selection_index` (see `ProjectVoiceUtil` and `Tts.get_next_voice_selection_index()`).
+Primary voice settings remain one ordered list of `{file_name, transcript}` pairs in `Project.voice_references`, not separate per-model filename/transcript lists. Append, replace, reorder and clear preserve pair alignment, and transcripts stay retained for models that do not consume them; transcript editing is offered only for models that use them. Pocket's selected preset takes precedence without clearing the list; adding a Pocket clone clears its preset. IndexTTS2's secondary emotion clip remains model-specific. Non-voice controls continue using `SettingRef` and the settings registry; this UI split introduces no storage migration.
 
 ---
 
 ## Integration Points — Where New Models Must Be Wired In
 
-Implementing the class hierarchy and voice menu is necessary but not sufficient. The following locations contain explicit per-model dispatching that does not auto-discover new additions. Each must be updated when adding a new model (Consider devising abstraction patterns for some of these).
+Implementing the class hierarchy and voice/model menus is necessary but not sufficient. The following locations contain explicit per-model dispatching that does not auto-discover new additions. Each must be updated when adding a new model (Consider devising abstraction patterns for some of these).
 
 ### Model catalog
 
@@ -275,19 +252,19 @@ If the model has any constructor parameters sourced from `Project` (device flags
 - **`Tts.get_model_params_using_project()`** ([tts.py](tts_audiobook_tool/tts.py)) — extract the relevant project fields into `model_params`
 - **`Tts.set_model_params()`** ([tts.py](tts_audiobook_tool/tts.py)) — add a dirty-check comparison so that changing the param invalidates the cached instance
 
-### `tts_audiobook_tool/menus/voice/voice_menu_shared.py`
+### Shared menu dispatchers
 
-Add a literal ID case to `VoiceMenuShared.menu()` (for example `case "glm_local":` under `match state.project.get_tts_model_type().id`) ([voice_menu_shared.py](tts_audiobook_tool/menus/voice/voice_menu_shared.py)) that imports and calls the new `VoiceAbcMenu.menu(state)`.
+Add a literal ID case to `VoiceMenuShared.menu()` (for example `case "glm_local":` under `match state.project.get_tts_model_type().id`) ([voice_menu_shared.py](tts_audiobook_tool/menus/voice/voice_menu_shared.py)) that imports and calls the new `VoiceAbcMenu.menu(state)`. Add the matching settings dispatch in [`ModelMenuShared.menu()`](<../tts_audiobook_tool/menus/model/model_menu_shared.py>) for `ModelAbcMenu.menu(state)`.
 
 ### `tts_audiobook_tool/menus/voice/__init__.py`
 
-Export the new menu class.
+Export the new voice menu class, and export its parallel model class from `menus/model/__init__.py`.
 
 ### Project storage (`tts_audiobook_tool/tts_models/model_catalog.toml`)
 
-Declare the model's persisted storage in its catalog entry. `catalog_settings.parse_model_settings()` derives voice-reference, transcript, seed and orchestration storage from the entry's backend/parameter tables plus the explicit `settings` array, and `ModelSettingsRegistry.register_model_settings()` installs the bindings. Voice references are then detected through `REGISTRY.voice_binding()` / `.transcript_binding()`. Version 3 stores these under `Project.model_settings`; there are no new top-level `Project` fields and no spec attribute names to match.
+Declare the model's non-voice persisted storage and voice/transcript capability in its catalog entry. `catalog_settings.parse_model_settings()` derives declarations from the entry's backend/parameter tables plus the explicit `settings` array, and `ModelSettingsRegistry.register_model_settings()` installs the bindings. `REGISTRY.voice_binding()` / `.transcript_binding()` remain compatibility/capability metadata; primary clone access uses the same project-wide ordered pairs for every model. V4 keeps non-voice overrides under `Project.model_settings`, with primary clones in top-level `Project.voice_references`; do not add another authoritative model-scoped clone list.
 
-Voice set/clear is not a per-model `match` block in `Project`: `ProjectVoiceUtil.set_voice_and_save()` / `clear_voice_and_save()` ([project_voice_util.py](tts_audiobook_tool/project_support/project_voice_util.py)) apply changes generically through `Project.set_model_setting()` using those bindings. Only true special cases need explicit branches there (e.g. IndexTTS2's secondary emotion clip, and Pocket's predefined-voice reset).
+`ProjectVoiceUtil.set_voice_and_save()` / `clear_voice_and_save()` ([project_voice_util.py](<../tts_audiobook_tool/project_support/project_voice_util.py>)) edit the shared project list for primary clones, including through compatibility model-setting accessors. Only true special cases remain model-specific (e.g. IndexTTS2's secondary emotion clip and Pocket's predefined-voice state). Selecting a Pocket preset must not clear shared references.
 
 ### SGL-Omni variants (server mode only)
 

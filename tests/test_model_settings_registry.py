@@ -248,6 +248,13 @@ def test_current_bindings_retain_frozen_legacy_storage_contracts() -> None:
              "enum:chatterbox": (ChatterboxType, object)}
     for attr, legacy in REGISTRY.legacy.items():
         kind, default = BUILTIN_LEGACY_FIELDS[attr]
+        if attr == "moss_seed":
+            # Local MOSS replaced its historical seed with one per preset.
+            assert ("moss_local", "seed") not in REGISTRY.bindings
+            for name in ("delay_seed", "local_seed", "local_v15_seed"):
+                current = REGISTRY.get(legacy.model_id, name)
+                assert replace(current, name=legacy.name, group=legacy.group) == legacy, name
+            continue
         current = REGISTRY.get(legacy.model_id, legacy.name)
         if legacy.group == "moss":
             # Historical sharing remains frozen; current MOSS ownership forked.

@@ -251,7 +251,7 @@ The upstream V3-era library additionally trims the final speech token's approxim
 
 ## Menu and labeling behavior
 
-The Voice menu's model selector lists V3, V2, and Turbo using their enum labels. V3 appears first. CFG and exaggeration remain visible for either multilingual version, while Turbo retains its separate `top_k` setting.
+The Model settings menu's model selector lists V3, V2, and Turbo using their enum labels. V3 appears first. CFG and exaggeration remain visible for either multilingual version, while Turbo retains its separate `top_k` setting.
 
 The repetition-penalty menu label includes the selected multilingual version and displays that version's resolved default. V2 and V3 use independent serialized custom-value fields (`chatterbox_ml_v2_repetition_penalty` and `chatterbox_ml_v3_repetition_penalty`), so switching versions never carries an explicit override across operating points. Loading an older project file remaps the former shared key `chatterbox_ml_repetition_penalty` into the V2 field only (see `ProjectLoadUtil.remap_legacy_keys()`); V3 then resolves to its default unless set explicitly.
 

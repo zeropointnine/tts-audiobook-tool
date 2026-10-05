@@ -349,6 +349,8 @@ def test_validation_confirmation_line_reflects_whisper_setting() -> None:
 
 
 def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(lambda _state: True))
     sound_segments = SimpleNamespace(
         num_generated=lambda: 0,
         num_generated_in_current_range=lambda: 0,
@@ -476,6 +478,9 @@ def make_empty_queue_env(
     Returns (state, calls) where calls records confirm prompts, printed output,
     saves, run_generation_app kwargs, and ask_error messages.
     """
+
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(lambda _state: True))
     generated_indices = set(generated_indices or [])
     calls: dict[str, Any] = {
         "confirms": [],

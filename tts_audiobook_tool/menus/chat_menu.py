@@ -35,6 +35,11 @@ class ChatMenu:
         )
 
         def start_conversation(_: State, __: MenuItem) -> None:
+            # Pre-flight: verify shared voice samples (and transcripts) before
+            # the full-screen conversation app takes over the console.
+            from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+            if not VoiceMenuShared.validate_voices(state):
+                return
             run_conversation_app(state)
 
         def make_items(_: State) -> list[MenuItem]:

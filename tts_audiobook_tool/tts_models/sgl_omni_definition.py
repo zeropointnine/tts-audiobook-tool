@@ -61,9 +61,10 @@ class NumericParameter:
 @dataclass(frozen=True)
 class MenuControl:
     kind: str
+    # Voice samples are implicitly routed; settings always declare a target.
+    target_menu: str | None
     parameter: str = ""
     label: str = ""
-    group: str = ""
 
 
 @dataclass(frozen=True)
@@ -253,14 +254,23 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
         controls = []
         for i, data in enumerate(menu_data):
             menu_where = f"{where}.menu[{i}]"
-            control = _object(data, menu_where, {"kind", "parameter", "label", "group"})
+            control = _object(data, menu_where, {"kind", "parameter", "label", "target_menu"})
             if "kind" in control:
                 kind = control["kind"]
-                if control != {"kind": kind} or kind not in ("voice_samples", "seed"):
+                if kind == "voice_samples":
+                    _object(control, menu_where, {"kind"})
+                    controls.append(MenuControl(kind, None))
+                    continue
+                if kind != "seed":
                     _fail(menu_where, "unsupported menu control")
-                if kind == "seed" and seed != "resolved":
+                _object(control, menu_where, {"kind", "target_menu"})
+                if seed != "resolved":
                     _fail(menu_where, "seed control requires resolved seed")
-                controls.append(MenuControl(kind))
+            target_menu = _required(control, "target_menu", menu_where, str)
+            if target_menu not in ("model", "voice"):
+                _fail(f"{menu_where}.target_menu", "expected model or voice")
+            if "kind" in control:
+                controls.append(MenuControl("seed", target_menu))
             else:
                 name = _required(control, "parameter", menu_where, str)
                 if name not in parameters:
@@ -268,10 +278,7 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
                 label = _required(control, "label", menu_where, str)
                 if not label:
                     _fail(f"{menu_where}.label", "must not be empty")
-                group = control.get("group", "")
-                if group not in ("", "advanced"):
-                    _fail(f"{menu_where}.group", "expected advanced or empty")
-                controls.append(MenuControl("parameter", name, label, group))
+                controls.append(MenuControl("parameter", target_menu, name, label))
         declared = [c.parameter for c in controls if c.kind == "parameter"]
         if (sum(c.kind == "voice_samples" for c in controls) != 1
                 or sorted(declared) != sorted(parameters)

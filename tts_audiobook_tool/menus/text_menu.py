@@ -216,6 +216,14 @@ class TextMenu:
             if isinstance(editor_result, WordSubstitutionPreviewRequested):
                 staged = dict(editor_result.staged_items)
                 restore_original = editor_result.original
+                # Pre-flight: verify shared voice samples (and transcripts)
+                # before the full-screen preview app takes over the console.
+                from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+                if not VoiceMenuShared.validate_voices(state):
+                    # Keep the editor session (and staged substitutions) alive
+                    # instead of dropping the user back to the Text menu.
+                    preview_sound = None
+                    continue
                 preview_result = run_tts_preview_app(
                     state,
                     make_word_substitution_preview_prompt(

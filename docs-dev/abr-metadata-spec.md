@@ -126,9 +126,12 @@ The embedded value is a JSON object.
     }
   ],
   "project_snapshot": {
-    "dir_path": "/abs/path/to/original/project",
-    "version": 2,
-    "language_code": "en"
+    "source_dir_display": "/abs/path/to/original/project",
+    "version": 4,
+    "language_code": "en",
+    "voice_references": [
+      {"file_name": "sample.flac", "transcript": "Reference text."}
+    ]
   }
 }
 ```
@@ -208,8 +211,9 @@ Important notes:
   resolvable location
 - older files carry the value as `dir_path` instead; consumers should accept
   either key, treat both as optional and untrusted, and never resolve them
-- model-specific voice filename fields are resolved relative to the importing
-  project's own directory, not to either key
+- voice filenames in the project-wide `voice_references` pairs (or legacy
+  model-specific fields) are resolved relative to the importing project's own
+  directory, not to either key
 - this key difference is not a version change. The ABR version moves only when a
   reader must change to handle a file; a producer-side change to the snapshot's
   field set does not qualify
@@ -219,6 +223,19 @@ settings snapshot rather than a complete project backup. In particular, the proj
 book and its sections/phrase groups are not part of this object; synchronized text and
 section ranges are carried separately by `text_segments` and `sections`; subdivision
 nesting does not represent project section structure.
+
+Current snapshots use [project settings v4](<project-spec-v4.md>): one ordered
+`voice_references` list of `{file_name, transcript}` pairs shared by all models
+within the project, plus non-voice model settings. This does **not** change the ABR
+format. Imports still accept v1/v2/v3 snapshots. An explicit top-level list,
+including `[]`, wins over stale clone lists; otherwise zero populated legacy
+sources become empty, one is adopted silently, and multiple independent sources
+require the same numbered model-name/all-filenames choice as project loading.
+An existing shared storage source counts once across backend variants, but
+identical independently stored lists remain ambiguous. Resolve that choice before
+any destination writes/supporting-file copies; cancellation or noninteractive
+ambiguity must not partially write the destination, and migration does not delete
+audio.
 
 ### `text_segments` (required)
 

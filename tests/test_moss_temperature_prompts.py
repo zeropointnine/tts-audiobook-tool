@@ -7,10 +7,9 @@ from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import HINT_MOSS_TEMPERATURE
 from tts_audiobook_tool.menus.menu_util import get_string_from
-from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
-from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-from tts_audiobook_tool.menus.voice.voice_moss_shared import VoiceMossShared
+from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
+from tts_audiobook_tool.menus.model.model_moss_shared import ModelMossShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
@@ -36,13 +35,13 @@ def make_temperature_item(state, backend, architecture):
             "local_v15": MossConfigs.LOCAL_V15,
         }[architecture]
         state.project.set_model_setting("moss_local", "target", config.value.repo_id)
-        return VoiceMossShared.make_temperature_item(state, config)
+        return ModelMossShared.make_temperature_item(state, config)
     model_id = state.project.tts_model_type
     if backend == "sgl_omni":
         definition = load_definitions().models[model_id]
-        return VoiceConfiguredSglOmniMenu.make_items(state, definition)[0]
+        return ModelConfiguredSglOmniMenu.make_items(state, definition)[0]
     definition = load_audio_cpp_definitions().models[model_id]
-    return VoiceAudioCppMenu.make_items(state, definition)[0]
+    return ModelAudioCppMenu.make_items(state, definition)[0]
 
 
 @pytest.fixture
@@ -53,7 +52,6 @@ def numeric_ui(monkeypatch):
     monkeypatch.setattr(ask, "print_feedback", lambda *_: None)
     monkeypatch.setattr(Project, "save", lambda self: saves.append(self))
     monkeypatch.setattr(hints, "show_hint_if_necessary", lambda prefs, hint: shown_hints.append(hint))
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", lambda *_: [])
     return prompts, errors, saves, shown_hints
 
 

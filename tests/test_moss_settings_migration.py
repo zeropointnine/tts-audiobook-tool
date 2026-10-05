@@ -96,14 +96,19 @@ def test_private_voice_list_seed_and_orchestration_win_without_merging():
     }
     new_references = [{"file_name": "new.flac", "transcript": "new"}]
     source["models"]["moss_local_sglomni"] = {"voice_references": new_references}
+    # V4 counts each independent legacy scoped list as its own source, so this
+    # combination is an ambiguity rather than something to merge.
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="model-list choice"):
+        Project.model_validate({"version": 3, "model_settings": deepcopy(source)})
+    # With the historical shared list out of the picture, the remaining private
+    # list is adopted as the single project list, and private non-voice
+    # settings still win over the shared group's.
+    source["shared"]["moss"].pop("voice_references")
     project = Project.model_validate({"version": 3, "model_settings": source})
-    assert project.get_model_setting("moss_delay_sglomni", "file_name") == []
+    assert project.voice_references == new_references
     assert project.get_model_setting("moss_delay_sglomni", "seed") == -1
     assert project.get_model_setting("moss_delay_sglomni", "batch_size") == 1
-    assert project.model_settings.models["moss_local_sglomni"]["voice_references"] == new_references
-    assert project.model_settings.models["moss_local"]["voice_references"] == REFERENCES
-    restored = Project.model_validate(ProjectSerializationUtil.to_project_json_dict(project))
-    assert restored.get_model_setting("moss_delay_sglomni", "file_name") == []
 
 
 @pytest.mark.parametrize("version", [1, 2])
@@ -126,10 +131,11 @@ def test_flat_moss_fields_and_aliases_fork_with_private_target_and_continuation(
         else:
             assert project.get_model_setting(model_id, "seed") == -1
         assert project.get_model_setting(model_id, "batch_size") == 3
-        assert project.model_settings.models[model_id]["voice_references"] == REFERENCES
         for name, value in SAMPLING.items():
             if (model_id, name) in REGISTRY.bindings:
                 assert project.get_model_setting(model_id, name) == value
+    # The flat list is one source even though three models historically read it.
+    assert project.voice_references == REFERENCES
     saved = ProjectSerializationUtil.to_project_json_dict(project)
     assert "moss" not in saved["model_settings"]["shared"]
     assert not any(key.startswith("moss_") for key in saved)
@@ -175,14 +181,20 @@ def test_flat_fallback_fills_only_missing_private_keys_without_mutation():
               "moss_voice_transcript": "old", "moss_target": "stale-checkpoint", "moss_rolling_cont": 1}
     before = deepcopy((source, legacy))
     settings = REGISTRY.reconcile(source, legacy=legacy)
-    project = Project(model_settings=settings)
+    # The scoped fork this direct call performs is legacy storage, so supply
+    # the authoritative list explicitly to avoid a migration ambiguity.
+    project = Project(model_settings=settings, voice_references=[])
     assert project.get_model_setting("moss_local", "delay_top_k") == 32
     assert project.get_model_setting("moss_local", "target") == "new-checkpoint"
     # Preserve existing whole-private-object precedence for legacy local-only fields.
     assert project.get_model_setting("moss_local", "rolling_cont") == 0
     assert project.get_model_setting("moss_delay_sglomni", "delay_top_k") == -1
+    # V4 project voice access reads only the project-wide list; the scoped
+    # fork that reconcile still performs for this direct call is not
+    # authoritative project storage.
     assert project.get_model_setting("moss_delay_sglomni", "file_name") == []
-    assert project.get_model_setting("moss_local_sglomni", "file_name") == ["old.flac"]
+    assert project.get_model_setting("moss_local_sglomni", "file_name") == []
+    assert project.voice_references == []
     assert (source, legacy) == before
 
 
@@ -206,27 +218,21 @@ def test_stored_private_seed_forks_to_per_preset_seeds():
 
 def test_edits_and_resets_after_fork_are_independent_and_do_not_resurrect():
     project = Project.model_validate({"version": 3, "model_settings": old_source()})
-    # Direct nested mutation also proves that migration deep-copied references.
-    project.model_settings.models["moss_local"]["voice_references"][0]["transcript"] = "changed"
+    assert project.voice_references == REFERENCES
+    assert project.get_model_setting("moss_delay_sglomni", "transcript") == ["one", ""]
     project.set_model_setting("moss_local", "local_seed", 123)
     project.set_model_setting("moss_local", "batch_size", 1)
     project.set_model_setting("moss_local", "delay_top_k", 80)
     project.set_model_setting("moss_delay_sglomni", "delay_temperature", None, reset=True)
-    assert project.get_model_setting("moss_delay_sglomni", "transcript") == ["one", ""]
+    # The shared voice list is project-wide: clearing it clears transcripts too.
     project.set_model_setting("moss_delay_sglomni", "file_name", [])
+    assert project.voice_references == []
     assert project.get_model_setting("moss_delay_sglomni", "transcript") == []
-    assert project.get_model_setting("moss_local_sglomni", "transcript") == ["one", ""]
-    assert project.get_model_setting("moss_delay_sglomni", "delay_top_k") == 32
-    for model_id in IDS[1:]:
-        assert project.get_model_setting(model_id, "seed") == 0
-        assert project.get_model_setting(model_id, "batch_size") == 3
     saved = ProjectSerializationUtil.to_project_json_dict(project)
-    # Existing reconciliation canonicalizes empty reference lists to absence.
-    saved["model_settings"]["models"]["moss_delay_sglomni"].pop("voice_references")
     for _ in range(2):
         project = Project.model_validate(deepcopy(saved))
         assert project.get_model_setting("moss_delay_sglomni", "delay_temperature") == -1.0
-        assert project.get_model_setting("moss_delay_sglomni", "file_name") == []
+        assert project.voice_references == []
         assert "moss" not in project.model_settings.shared
         assert ProjectSerializationUtil.to_project_json_dict(project) == saved
 
@@ -314,26 +320,28 @@ def test_snapshot_migration_round_trip_and_portable_voice_paths():
     assert ProjectSerializationUtil.to_snapshot_dict(restored) == snapshot
 
 
-def test_disk_worker_load_migrates_in_memory_then_save_removes_group(tmp_path, monkeypatch):
-    # Workers and interactive loading use this same on-disk load funnel.
+def test_disk_worker_load_migrates_and_saves_v4_with_backup(tmp_path):
+    # Workers and interactive loading use this same on-disk load funnel, which
+    # now migrates the retired MOSS group and the voice list and saves v4.
     payload = ProjectSerializationUtil.to_project_json_dict(Project(tts_model_type="moss_delay_sglomni"))
     for model_id in IDS:
         payload["model_settings"]["models"].pop(model_id)
     payload["model_settings"]["shared"]["moss"] = old_source()["shared"]["moss"]
+    payload["version"] = 3
+    payload.pop("voice_references", None)
     path = tmp_path / "project.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     before = path.read_text(encoding="utf-8")
-    with monkeypatch.context() as patch:
-        patch.setattr(Project, "save", lambda _: pytest.fail("fork migration must not add an automatic save"))
-        project = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
+    project = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(project, Project)
     assert project.tts_model_type == "moss_delay_sglomni"
     assert project.get_model_setting("moss_delay_sglomni", "delay_top_k") == 32
-    assert path.read_text(encoding="utf-8") == before
-    assert project.save() == ""
+    assert project.voice_references == REFERENCES
+    assert (tmp_path / "project.json.pre-v4.bak").read_text(encoding="utf-8") == before
     saved = json.loads(path.read_text(encoding="utf-8"))
-    assert saved["version"] == 3
+    assert saved["version"] == 4
     assert "moss" not in saved["model_settings"]["shared"]
+    assert saved["voice_references"] == REFERENCES
     restored = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(restored, Project)
     assert restored.model_settings.to_dict() == project.model_settings.to_dict()

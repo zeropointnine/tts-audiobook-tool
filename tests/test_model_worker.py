@@ -632,10 +632,13 @@ def test_state_for_worker_mirrors_init_attribute_set() -> None:
         "_prefs",
         "dont_show_scan_message",
         "has_shown_main_menu",
+        "pocket_voice_clone_access_validated",
+        "pending_project_load_checks",
         "pending_tts_model_change",
     }
     assert state.project is None
     assert state.dont_show_scan_message is False
+    assert state.pocket_voice_clone_access_validated is False
 
 def test_clear_models_if_running_does_not_spawn_worker(monkeypatch) -> None:
     monkeypatch.setattr(

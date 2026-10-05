@@ -118,7 +118,7 @@ APP_META_MP4_TAG = "audiobook-data"
 # favor of the display-only 'source_dir_display' — are not version bumps:
 # no reader is required to treat those snapshots any differently.
 ABR_VERSION = 4
-PROJECT_SPEC_VERSION = 3
+PROJECT_SPEC_VERSION = 4
 
 AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]
 
@@ -158,8 +158,6 @@ SOUND_SEGMENT_FILE_NAME_PATTERN = re.compile(pattern)
 # App uses this format for including 64-bit hash values in filenames.
 pattern = r'\[([0-9a-fA-F]{16})\]'
 HASH_PATTERN = re.compile(pattern)
-
-VOICE_ADVANCED_SUPERLABEL = "Advanced:"
 
 SGL_OMNI_URL_DEFAULT = "http://localhost:8000"
 

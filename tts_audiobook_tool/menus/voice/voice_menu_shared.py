@@ -1,12 +1,14 @@
 import os
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.app_types import Hint, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types import SttVariant, VoiceSelectMode
 from tts_audiobook_tool import ask
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, get_string_from
-from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
     EditorSaveFailed,
@@ -14,25 +16,29 @@ from tts_audiobook_tool.textual.content_textual_app import (
     run_content_textual_app,
 )
 from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
-from tts_audiobook_tool.menus.voice import voice_instruct_util
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.project_support.model_settings import REGISTRY, SettingRef
+from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
+from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool import target_util
-from tts_audiobook_tool.constants import VOICE_ADVANCED_SUPERLABEL
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.transcriber import Transcriber
 
-# Maps a definition-driven menu control's declared group name to the superlabel
-# rendered above that group. See VoiceMenuShared.apply_group_superlabels(...).
-VOICE_GROUP_SUPERLABELS: dict[str, str] = {"advanced": VOICE_ADVANCED_SUPERLABEL}
+# Menu item labels shared by per-model voice menus; tests reference these.
+LABEL_ADD_VOICE_SAMPLE = "Add voice sample"
+LABEL_REMOVE_VOICE_SAMPLE = "Remove voice sample"
+LABEL_MOVE_VOICE_SAMPLE = "Move voice sample position"
+LABEL_PLAY_VOICE_SAMPLE = "Play voice sample"
+LABEL_EDIT_VOICE_TRANSCRIPTION = "Edit voice sample transcription"
+LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
+LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
+
 
 class VoiceMenuShared:
 
@@ -89,22 +95,8 @@ class VoiceMenuShared:
                 VoicePocketMenu.menu(state)
 
             case "qwen3tts_local":
-                # Special case: Qwen voice menu requires loaded model
-                snapshot, _ = ModelWorker.get_model_state_blocking()
-                already_loaded = (
-                    snapshot is not None
-                    and snapshot.tts_loaded
-                    and snapshot.tts_type_id == state.project.get_tts_model_type().value.id
-                )
-                if not already_loaded:
-                    printt(f"{COL_DIM_ITALICS}Initializing TTS model...")
-                    printt()
-                inspection, error = ModelWorker.inspect_tts_blocking(state)
-                if error or inspection is None:
-                    ask.ask_error(error or "Couldn't inspect Qwen3-TTS model")
-                    return
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
-                VoiceQwen3Menu.menu(state, inspection)
+                VoiceQwen3Menu.menu(state)
 
             case "vibevoice_local":
                 from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
@@ -137,48 +129,22 @@ class VoiceMenuShared:
             items: MenuItemListOrMaker,
             subheading: StringOrMaker | None = None,
     ) -> None:
-        """
-        Simple wrapper with standardized heading, model note and exit callback
-        """
+        """Show sample management independently of model settings."""
         def make_subheading(current: State) -> str:
-            note = current.project.get_tts_model_type().value.ui.get("settings_note", "").strip()
-            existing = get_string_from(current, subheading) if subheading else ""
-            return "\n\n".join(part for part in (note, existing) if part)
+            samples = VoiceMenuShared.make_voice_samples_subheading(
+                current.project, current.project.get_tts_model_type()
+            )
+            existing = get_string_from(current, subheading).rstrip("\r\n") if subheading else ""
+            return "\n\n".join(part for part in (samples, existing) if part)
 
         MenuUtil.menu(
             state=state,
-            heading="Voice clone and model settings",
+            heading="Voice clone",
             items=items,
             subheading=make_subheading,
             on_exit=lambda: PlaySoundUtil.stop_sound_async(),
             breadcrumb="Voice",
         )
-
-    @staticmethod
-    def apply_group_superlabels(items: list[MenuItem], groups: list[str]) -> None:
-        """
-        Renders each declared group's superlabel once, above that group's first item.
-
-        MenuItem.superlabel is a per-item decoration, not a section header: the menu
-        renderer reprints it before every item that carries one. Menus built from a
-        model definition therefore must not stamp every member of a group, or the
-        heading reappears between members that are not adjacent. Later members render
-        beneath the single heading, which is the intended grouping.
-
-        :param items: menu items in display order
-        :param groups: parallel list of group names ("" for ungrouped items)
-        """
-        if len(items) != len(groups):
-            raise ValueError("items and groups must be parallel lists")
-        labelled: set[str] = set()
-        for item, group in zip(items, groups):
-            if not group or group in labelled:
-                continue
-            label = VOICE_GROUP_SUPERLABELS.get(group)
-            if label is None:
-                raise ValueError(f"No superlabel mapped for menu group {group!r}")
-            labelled.add(group)
-            item.superlabel = label
 
     @staticmethod
     def make_resolved_voice_label(state: State) -> str:
@@ -188,7 +154,7 @@ class VoiceMenuShared:
             currently = make_currently_string("none", color_code=COL_ERROR)
         else:
             currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
-        return f"Add voice sample {currently}"
+        return f"{LABEL_ADD_VOICE_SAMPLE} {currently}"
 
     @staticmethod
     def ask_and_set_voice_file(
@@ -208,7 +174,13 @@ class VoiceMenuShared:
         if REGISTRY.voice_binding(tts_type.id) is None:
             raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
-        if REGISTRY.transcript_binding(tts_type.id) is not None:
+        secondary = tts_type.id == "indextts2_local" and is_secondary
+        # Transcripts are always collected for primary samples (sidecar text
+        # or STT), so the shared list is complete for any model; whether a
+        # model actually sends the transcript at generation time remains a
+        # model-specific capability.
+        requires_transcript = not secondary
+        if requires_transcript:
             hints.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
 
         if state.prefs.last_voice_dir and not os.path.exists(state.prefs.last_voice_dir):
@@ -247,9 +219,10 @@ class VoiceMenuShared:
         force_enter_prompt = False
 
         transcript = ""
-        if REGISTRY.transcript_binding(tts_type.id) is not None:
+        if not secondary:
 
-            # [1] Get transcript from 'parallel text file' if possible
+            # Retain sidecar text for every primary sample, so switching to a
+            # transcript-requiring model does not lose available reference text.
             transcript_path = Path(path).with_suffix(".txt")
             if transcript_path.exists():
                 transcript = text_util.load_text_file(str(transcript_path), errors="replace").strip()
@@ -260,32 +233,11 @@ class VoiceMenuShared:
                     printt()
 
             if not transcript:
-                # [2] Transcribe sound file using STT
-                printt(f"Transcribing... {COL_DIM}(language code: {state.project.language_code or 'none'})")
-                printt()
-
-                if state.prefs.stt_variant == SttVariant.DISABLED:
-                    stt_variant = SttVariant.LARGE_V3
-                else:
-                    stt_variant = state.prefs.stt_variant
-                sound_result = Transcriber.transcribe_to_words(
-                    sound,
-                    state.project.language_code,
-                    stt_variant,
-                    state.prefs.stt_config,
-                    state,
-                )
-
-                if isinstance(sound_result, str):
-                    err = sound_result
+                # [2] No sidecar text: transcribe every primary sample.
+                transcript, err = VoiceMenuShared.transcribe_voice_sample_to_text(state, sound)
+                if err:
                     ask.ask_error(err)
                     return
-
-                words = sound_result
-                transcript = Transcriber.get_flat_text_filtered_by_probability(words, VOICE_CLONE_TRANSCRIBE_MIN_PROBABILITY)
-                print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
-                printt(f"{COL_DIM_ITALICS}{transcript}")
-                printt()
 
                 force_enter_prompt = True
 
@@ -311,117 +263,98 @@ class VoiceMenuShared:
             ask.ask_enter_to_continue()
 
     @staticmethod
-    def make_manage_voice_samples_item(
-            state: State,
-            tts_type: TtsModelType,
-            no_samples_label: StringOrMaker | None = None,
-            on_before_set_callback: Callable | None = None,
-            on_set_callback: Callable | None = None,
-            on_clear_callback: Callable | None = None,
-    ) -> MenuItem:
+    def transcribe_voice_sample_to_text(state: State, sound: "Sound") -> tuple[str, str]:
+        """Shared STT step for voice sample flows.
 
-        def make_label(s: State) -> str:
-            voices = ProjectVoiceUtil.get_voice_values(s.project, tts_type)
-            if not voices:
-                if no_samples_label:
-                    return get_string_from(s, no_samples_label)
-                return VoiceMenuShared.make_resolved_voice_label(s)
-
-            first_label = ProjectVoiceUtil.make_voice_sample_display_label(s.project, voices[0], tts_type.value)
-            suffix = first_label
-            if len(voices) > 1:
-                suffix += f", +{len(voices) - 1} more"
-            currently = make_currently_string(suffix)
-            return f"Add/remove voice samples {currently}"
-
-        def on_item(s: State, __: MenuItem) -> None:
-            voices = ProjectVoiceUtil.get_voice_values(s.project, tts_type)
-            if not voices:
-                if on_before_set_callback:
-                    on_before_set_callback()
-                VoiceMenuShared.ask_and_set_voice_file(s, tts_type)
-                if on_set_callback:
-                    on_set_callback()
-                return
-            # Remote availability may change while the nested menu is open.
-            # Local menus can also manage explicit secondary/model references.
-            sample_type = tts_type if tts_type.value.backend_kind is TtsBackendKind.LOCAL else None
-            VoiceMenuShared.manage_voice_samples_submenu(
-                s, sample_type, on_before_set_callback, on_set_callback, on_clear_callback
-            )
-
-        return MenuItem(make_label, on_item)
-
-    @staticmethod
-    def make_voice_instructions_item(
-            state: State,
-            model_id: str,
-            name: str = "instruct",
-            label: str = "Voice design instructions",
-            validate_omnivoice: bool = False,
-    ) -> list[MenuItem]:
+        Returns (transcript, error); exactly one is non-empty. A successful
+        transcript can still be empty when every word was filtered out.
         """
-        Makes the voice-design/edit item for a string instruction setting, plus
-        its "Clear" item while a value is stored.
+        printt(f"Transcribing... {COL_DIM}(language code: {state.project.language_code or 'none'})")
+        printt()
 
-        Shared by local and audio.cpp models. OmniVoice callers opt into their
-        tag-based validation; other models accept free-form instructions.
-        """
-        def make_label(current: State) -> str:
-            value = current.project.get_model_setting(model_id, name)
-            if not value:
-                suffix = f"{COL_DIM}(optional)"
-            else:
-                suffix = make_currently_string(truncate_pretty(value, 40, content_color=COL_ACCENT))
-            return f"{label} {suffix}"
-
-        def on_clear(current: State, _: MenuItem) -> None:
-            current.project.set_model_setting(model_id, name, None, reset=True)
-            current.project.save()
-            print_feedback("Instructions cleared")
-
-        def on_edit(current: State, _: MenuItem) -> None:
-            no_voice_note = ""
-            if validate_omnivoice and ProjectVoiceUtil.get_primary_voice_value(current.project, TtsModelType.require_by_id(model_id)):
-                no_voice_note = "Note: When used alongside voice cloning, instructions may have minimal effect"
-            VoiceMenuShared.ask_instruct(
-                current.project, model_id, name, no_voice_note,
-                label=label, validate_omnivoice=validate_omnivoice)
-
-        items = [MenuItem(make_label, on_edit)]
-        if state.project.get_model_setting(model_id, name):
-            items.append(MenuItem("Clear instructions", on_clear))
-        return items
-
-    @staticmethod
-    def ask_instruct(
-            project: Project, model_id: str, name: str = "instruct", no_voice_note: str = "",
-            *, label: str = "Voice design instructions", validate_omnivoice: bool = False,
-    ) -> None:
-        """Edit instructions with the current value prefilled.
-
-        Only OmniVoice callers use its best-effort tag validation. Free-form
-        instructions must not be checked against OmniVoice's vocabulary.
-        """
-
-        def validator(value: str) -> str:
-            error, _ = voice_instruct_util.validate_instruct(value)
-            return error
-
-        prompt = [f"Enter {label.lower()}"]
-        if validate_omnivoice:
-            prompt.append(f"{COL_DIM}Eg: \"male, british accent, low pitch\" / \"female, young adult, high pitch\"")
+        if state.prefs.stt_variant == SttVariant.DISABLED:
+            stt_variant = SttVariant.LARGE_V3
         else:
-            prompt.append(f"{COL_DIM}Eg: \"Speak warmly and naturally, with calm pacing.\"")
-        if no_voice_note:
-            prompt.append(f"{COL_DIM}{no_voice_note}")
-        ask.ask_string_and_save(
-            project,
-            "\n".join(prompt),
-            SettingRef(model_id, name),
-            "Set instructions:",
-            validator=validator if validate_omnivoice else None,
+            stt_variant = state.prefs.stt_variant
+        words = Transcriber.transcribe_to_words(
+            sound,
+            state.project.language_code,
+            stt_variant,
+            state.prefs.stt_config,
+            state,
         )
+        if isinstance(words, str):
+            return "", words
+        transcript = Transcriber.get_flat_text_filtered_by_probability(words, VOICE_CLONE_TRANSCRIBE_MIN_PROBABILITY)
+        print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
+        printt(f"{COL_DIM_ITALICS}{transcript}")
+        printt()
+        return transcript, ""
+
+    @staticmethod
+    def validate_voices(state: State) -> bool:
+        """Pre-flight check before full-screen TTS features (main process only).
+
+        Verifies every shared voice sample file and, when the active model
+        uses transcripts, auto-transcribes entries whose transcript is empty
+        (migrated projects may have none). Prints the collected problems,
+        then returns False when the feature must not launch.
+        """
+        project = state.project
+        model_type = project.get_tts_model_type()
+        if REGISTRY.voice_binding(model_type.id) is None:
+            return True
+        if model_type.id == "pocket_local" and project.get_model_setting(model_type.id, "predefined_voice"):
+            return True
+        # Qwen3 needs a clone sample only for its "base" checkpoint type;
+        # custom_voice uses a speaker id and voice_design uses instructions,
+        # so those model types launch without any voice samples. An unset
+        # model_type defaults to "base".
+        if model_type.id == "qwen3tts_local" and project.get_model_setting(model_type.id, "model_type") in (
+            "custom_voice", "voice_design",
+        ):
+            return True
+        if not project.voice_references:
+            # Readiness no longer blocks a required voice; this pre-flight is
+            # the single interactive place that does.
+            if model_type.value.requires_voice:
+                message = (
+                    "A voice clone sample or predefined voice is required"
+                    if model_type.id == "pocket_local"
+                    else "A voice clone sample is required"
+                )
+                ask.ask_error(message)
+                return False
+            return True
+        requires_transcript = REGISTRY.transcript_binding(model_type.id) is not None
+
+        errors: list[str] = []
+        for index, entry in enumerate(project.voice_references):
+            file_name = entry["file_name"]
+            file_path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
+            if not os.path.exists(file_path):
+                errors.append(f"Voice file {file_name} not found")
+                continue
+            sound_result = SoundFileUtil.load(file_path)
+            if isinstance(sound_result, str):
+                errors.append(f"Voice file {file_name} is invalid")
+                continue
+            if requires_transcript and not entry.get("transcript", "").strip():
+                transcript, err = VoiceMenuShared.transcribe_voice_sample_to_text(state, sound_result)
+                if err or not transcript:
+                    errors.append(f"Voice file {file_name} could not be transcribed")
+                    continue
+                save_err = ProjectVoiceUtil.set_voice_transcript_at_index_and_save(project, index, transcript)
+                if save_err:
+                    errors.append(f"Could not save transcript for voice file {file_name}: {save_err}")
+
+        if errors:
+            for error in errors:
+                printt(f"{COL_ERROR}{error}{COL_DEFAULT}")
+            printt()
+            ask.ask_error("Replace problem voice clone file")
+            return False
+        return True
 
     @staticmethod
     def make_voice_sample_items(
@@ -432,30 +365,51 @@ class VoiceMenuShared:
             on_set_callback: Callable | None = None,
             on_clear_callback: Callable | None = None,
     ) -> list[MenuItem]:
-        """
-        Makes the manage-samples item and, when applicable, its selection-mode item.
-        """
-        items = [
-            VoiceMenuShared.make_manage_voice_samples_item(
-                state,
-                tts_type,
-                no_samples_label,
-                on_before_set_callback,
-                on_set_callback,
-                on_clear_callback,
-            )
-        ]
+        """Make direct sample-management and selection controls."""
+        def make_add_label(s: State) -> str:
+            if ProjectVoiceUtil.get_voice_values(s.project, tts_type):
+                return LABEL_ADD_VOICE_SAMPLE
+            if no_samples_label:
+                return get_string_from(s, no_samples_label)
+            return VoiceMenuShared.make_resolved_voice_label(s)
+
+        def add_voice(s: State, _: MenuItem) -> None:
+            if on_before_set_callback:
+                on_before_set_callback()
+            VoiceMenuShared.ask_and_set_voice_file(s, tts_type, append=True)
+            if on_set_callback:
+                on_set_callback()
+
+        def remove_voice(s: State, _: MenuItem) -> None:
+            had_samples = bool(ProjectVoiceUtil.get_voice_values(s.project, tts_type))
+            is_empty = VoiceMenuShared.remove_voice_sample_from_menu(s, tts_type)
+            if had_samples and is_empty and on_clear_callback:
+                on_clear_callback()
+            # The helper's True means empty, not that Voice clone should exit.
+
         voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+        items: list[MenuItem] = []
+        if len(voices) < 9:
+            items.append(MenuItem(make_add_label, add_voice))
+        items.append(MenuItem(LABEL_REMOVE_VOICE_SAMPLE, remove_voice))
+        items.extend([
+            MenuItem(LABEL_MOVE_VOICE_SAMPLE, lambda s, _: VoiceMenuShared.move_voice_sample_from_menu(s)),
+            MenuItem(LABEL_PLAY_VOICE_SAMPLE, lambda s, _: VoiceMenuShared.play_voice_sample_from_menu(s, tts_type)),
+            MenuItem(LABEL_EDIT_VOICE_TRANSCRIPTION, lambda s, _: VoiceMenuShared.edit_voice_sample_transcript(s)),
+        ])
+        selection_items = []
         if len(voices) > 1:
-            items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
-        items.append(VoiceMenuShared.make_assign_voice_samples_to_text_lines_item(tts_type))
+            selection_items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
+        selection_items.append(VoiceMenuShared.make_assign_voice_samples_to_text_lines_item(tts_type))
+        selection_items[0].blank_line_before = True
+        items.extend(selection_items)
         return items
 
     @staticmethod
     def make_voice_sample_selection_mode_item() -> MenuItem:
         def make_label(state: State) -> str:
             return make_menu_label(
-                "Voice selection mode",
+                LABEL_VOICE_SELECTION_MODE,
                 state.project.voice_select_mode.current_label,
             )
 
@@ -467,7 +421,7 @@ class VoiceMenuShared:
     @staticmethod
     def make_assign_voice_samples_to_text_lines_item(tts_type: TtsModelType) -> MenuItem:
         def make_label(state: State) -> str:
-            label = "Edit voice selections"
+            label = LABEL_EDIT_VOICE_SELECTIONS
             voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
             if len(voices) < 2:
                 label += f" {COL_DIM}(optional; requires 2+ voice samples)"
@@ -523,61 +477,117 @@ class VoiceMenuShared:
     @staticmethod
     def make_voice_samples_subheading(project: Project, tts_type: TtsModelType) -> str:
         voices = ProjectVoiceUtil.get_voice_values(project, tts_type)
+        max_duration = tts_type.value.ui.get("voice_sample_max_duration_s")
         lines = []
+        has_long_sample = False
         for i, voice in enumerate(voices, start=1):
             label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, tts_type.value)
+            path = ProjectVoiceUtil.resolve_voice_file_path(project, voice)
+            duration = AudioMetaUtil.get_audio_duration(str(path))
+            if duration is not None:
+                label += f"{COL_DIM} ({duration_string(duration, include_tenth=True)}){COL_DEFAULT}"
+                if max_duration is not None and duration > max_duration:
+                    label += f"{COL_ERROR}*{COL_DEFAULT}"
+                    has_long_sample = True
             lines.append(f"{COL_DIM}- Voice sample {i}: {COL_DEFAULT}{label}")
+        if has_long_sample:
+            lines.append(
+                f"  {COL_ERROR}* {COL_DEFAULT}{COL_DIM_ITALICS}Sample exceeds recommended duration for the current model "
+                f"({max_duration:g}s){COL_DEFAULT}"
+            )
         return "\n".join(lines)
 
     @staticmethod
-    def manage_voice_samples_submenu(
-            state: State,
-            tts_type: TtsModelType | None,
-            on_before_set_callback: Callable | None=None,
-            on_set_callback: Callable | None=None,
-            on_clear_callback: Callable | None=None,
-    ) -> None:
+    def ask_voice_sample_position(prompt: str, count: int) -> int | None:
+        """Read a one-based position, returning a zero-based index or cancellation."""
+        printt(prompt)
+        value = ask.ask_input()
+        if not value:
+            return None
+        try:
+            index = int(value) - 1
+        except ValueError:
+            ask.ask_error(f"Enter a number between 1 and {count}")
+            return None
+        if not 0 <= index < count:
+            ask.ask_error(f"Enter a number between 1 and {count}")
+            return None
+        return index
 
-        def selected_type(s: State) -> TtsModelType:
-            return tts_type if tts_type is not None else s.project.get_tts_model_type()
+    @staticmethod
+    def move_voice_sample_from_menu(state: State) -> None:
+        count = len(state.project.voice_references)
+        if not count:
+            print_feedback("No voice samples")
+            return
+        index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to move", count)
+        if index is None:
+            return
+        new_index = VoiceMenuShared.ask_voice_sample_position("Enter new position", count)
+        if new_index is None:
+            return
+        if index == new_index:
+            print_feedback("Voice sample position unchanged")
+            return
+        error = ProjectVoiceUtil.move_voice_at_index_and_save(state.project, index, new_index)
+        if error:
+            ask.ask_error(error)
+        else:
+            print_feedback(f"Moved voice sample {index + 1} to position {new_index + 1}")
 
-        def add_voice(s: State) -> None:
-            if on_before_set_callback:
-                on_before_set_callback()
-            VoiceMenuShared.ask_and_set_voice_file(s, selected_type(s), append=True)
-            if on_set_callback:
-                on_set_callback()
+    @staticmethod
+    def play_voice_sample_from_menu(state: State, tts_type: TtsModelType) -> None:
+        voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+        if not voices:
+            print_feedback("No voice samples")
+            return
+        index = 0
+        if len(voices) > 1:
+            index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to play", len(voices))
+            if index is None:
+                return
+        path = ProjectVoiceUtil.resolve_voice_file_path(state.project, voices[index])
+        sound = SoundFileUtil.load(path)
+        if isinstance(sound, str):
+            ask.ask_error(sound)
+            return
+        duration_s = len(sound.data) / sound.sr
+        printt(f"{COL_DIM}Playing selected sound sample ({duration_s:.1f}s)...")
+        printt()
+        PlaySoundUtil.play_sound_async(sound)
 
-        def remove_voice(s: State) -> bool:
-            is_empty = VoiceMenuShared.remove_voice_sample_from_menu(s, selected_type(s))
-            if is_empty and on_clear_callback:
-                on_clear_callback()
-            return is_empty
-
-        def make_items(s: State) -> list[MenuItem]:
-            model_type = selected_type(s)
-            if REGISTRY.voice_binding(model_type.id) is None:
-                return []
-            items = []
-            voices = ProjectVoiceUtil.get_voice_values(s.project, model_type)
-            if len(voices) < 9:
-                items.append(MenuItem(
-                    "Add voice sample",
-                    lambda state, __: add_voice(state),
-                ))
-            items.append(MenuItem(
-                "Remove voice sample",
-                lambda state, __: remove_voice(state),
-            ))
-            return items
-
-        MenuUtil.menu(
-            state=state,
-            heading="Add/remove voice sample",
-            items=make_items,
-            subheading=lambda s: VoiceMenuShared.make_voice_samples_subheading(s.project, selected_type(s)),
-            breadcrumb="Voice samples",
-        )
+    @staticmethod
+    def edit_voice_sample_transcript(state: State) -> None:
+        entries = state.project.voice_references
+        if not entries:
+            print_feedback("No voice samples")
+            return
+        index = 0
+        if len(entries) > 1:
+            printt("Enter voice sample number to edit")
+            value = ask.ask_input()
+            if not value:
+                return
+            try:
+                index = int(value) - 1
+            except ValueError:
+                ask.ask_error("Bad value")
+                return
+            if index < 0 or index >= len(entries):
+                ask.ask_error("Bad value")
+                return
+        current = entries[index].get("transcript", "")
+        printt('Enter voice sample transcript (or "/clear" to clear)')
+        transcript = ask.ask_input(prefill=current, lower=False)
+        if not transcript or transcript == current:
+            return
+        if transcript == "/clear":
+            transcript = ""
+        err = ProjectVoiceUtil.set_voice_transcript_at_index_and_save(state.project, index, transcript)
+        if err:
+            ask.ask_error(err)
+        else:
+            print_feedback("Transcript saved")
 
     @staticmethod
     def remove_voice_sample_from_menu(state: State, tts_type: TtsModelType) -> bool:
@@ -663,300 +673,3 @@ class VoiceMenuShared:
             print_feedback("Cleared")
 
         return MenuItem("Clear voice clone sample", on_clear_voice, data=info_item)
-
-    # ---
-
-    @staticmethod
-    def ask_temperature(
-            state: State,
-            target: str | SettingRef,
-            prompt: str,
-            min_value: float,
-            max_value: float,
-            default_value: float,
-            hint: Hint | None = None
-    ) -> None:
-        if hint:
-            hints.show_hint_if_necessary(state.prefs, hint)
-
-        ask.ask_number_and_save(
-            state.project,
-            target,
-            prompt,
-            min_value,
-            max_value,
-            default_value,
-            "Value set:",
-            is_int=False,
-            is_minus_one_default=True,
-        )
-
-    @staticmethod
-    def make_temperature_item(
-            state: State,
-            target: str | SettingRef,
-            default_value: float,
-            min_value: float,
-            max_value: float,
-            base_label: str="Temperature",
-            hint: Hint | None = None
-    ) -> MenuItem:
-
-        prompt = "Enter temperature"
-
-        def on_item(_: State, __: MenuItem) -> None:
-            VoiceMenuShared.ask_temperature(
-                state=state,
-                target=target,
-                prompt=prompt,
-                min_value=min_value,
-                max_value=max_value,
-                default_value=default_value,
-                hint=hint
-            )
-
-        label = MenuUtil.make_number_label(
-            project=state.project,
-            target=target,
-            base_label=base_label,
-            default_value=default_value,
-            is_minus_one_default=True,
-            num_decimals=2
-        )
-
-        return MenuItem(label, on_item)
-
-    @staticmethod
-    def make_top_k_item(
-            state: State,
-            target: str | SettingRef,
-            default_value: int,
-            min_value: int=TOP_K_MIN_DEFAULT,
-            max_value: int=TOP_K_MAX_DEFAULT
-    ) -> MenuItem:
-
-        return MenuUtil.make_number_item(
-            state=state,
-            target=target,
-            base_label="Top_K",
-            default_value=default_value,
-            is_minus_one_default=True,
-            num_decimals=0,
-            prompt=f"Enter Top-K {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
-            min_value=min_value,
-            max_value=max_value
-        )
-
-    @staticmethod
-    def make_top_p_item(
-            state: State,
-            target: str | SettingRef,
-            default_value: float
-    ) -> MenuItem:
-
-        min_value = TOP_P_MIN_DEFAULT
-        max_value = TOP_P_MAX_DEFAULT
-
-        return MenuUtil.make_number_item(
-            state=state,
-            target=target,
-            base_label="Top-P",
-            default_value=default_value,
-            is_minus_one_default=True,
-            num_decimals=2,
-            prompt=f"Enter Top-P {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
-            min_value=min_value,
-            max_value=max_value
-        )
-
-    @staticmethod
-    def make_repetition_penalty_item(
-            state: State,
-            target: str | SettingRef,
-            default_value: float,
-            min_value = REPETITION_PENALTY_MIN_DEFAULT,
-            max_value = REPETITION_PENALTY_MAX_DEFAULT
-    ) -> MenuItem:
-
-        return MenuUtil.make_number_item(
-            state=state,
-            target=target,
-            base_label="Repetition penalty",
-            default_value=default_value,
-            is_minus_one_default=True,
-            num_decimals=2,
-            prompt=f"Enter repetition penalty {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
-            min_value=min_value,
-            max_value=max_value
-        )
-
-    @staticmethod
-    def make_seed_item(
-            state: State,
-            target: str | SettingRef,
-            prompt_override: str="",
-            add_batch_warning: bool=False
-    ) -> MenuItem:
-        """ Makes "self-contained" menu item for seed setting, including handler """
-
-        if prompt_override:
-            prompt = prompt_override
-        else:
-            prompt = f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}"
-            if not add_batch_warning:
-                prompt += ": "
-
-        if add_batch_warning:
-            prompt += f"\n{COL_DIM}(Note, audio generations are not idempotent when using batch mode): "
-
-        def on_item(_: State, __: MenuItem) -> None:
-            ask.ask_number_and_save(
-                saveable=state.project,
-                target=target,
-                prompt=prompt,
-                min_value=-1,
-                max_value=2**32-1,
-                default_value=-1,
-                success_prefix="Seed set:",
-                is_int=True,
-                print_range_info=False
-            )
-
-        seed_value: int | None = ask._get_saveable_attr(state.project, target)
-        if seed_value is None:
-            raise ValueError(f"Attribute doesn't exist: {target}")
-
-        suffix = str(seed_value) if seed_value != -1 else "random"
-        label = make_menu_label("Seed", suffix)
-        return MenuItem(label, on_item)
-
-    @staticmethod
-    def ask_target(
-            project: Project,
-            prompt: str,
-            current_target: str,
-            callback: Callable[[Project, str], None]
-    ) -> None:
-        """ Gets line text input from user for a so-called "target" (ie, repo id or concrete file path) """
-        printt(prompt)
-        new_target = ask.ask_input(prefill=current_target, lower=False)
-        if not new_target:
-            return
-
-        if target_util.is_same_target(current_target, new_target):
-            print_feedback("Already set")
-            return
-
-        _, err = target_util.exist_test(new_target)
-        if err:
-            ask.ask_error(err)
-            return
-
-        callback(project, new_target)
-
-    @staticmethod
-    def make_target_label(
-            label_prefix: str,
-            target: str,
-            default_target: str,
-            remove_prefixes: list[str] | None = None,
-            extra_suffix: str = "",
-    ) -> str:
-        value = target or default_target
-        default_value = default_target
-
-        for prefix in remove_prefixes or []:
-            value = value.removeprefix(prefix)
-            default_value = default_value.removeprefix(prefix)
-
-        value = ellipsize_path_for_menu(value)
-        default_value = ellipsize_path_for_menu(default_value)
-        label = make_currently_string(value, default=default_value)
-        return f"{label_prefix} {label}{extra_suffix}"
-
-    @staticmethod
-    def target_submenu(
-            state: State,
-            heading: str,
-            preset_targets: list[str],
-            current_target: str,
-            default_target: str,
-            ask_custom_target: Callable[[], None],
-            apply_target: Callable[[str], None],
-            sublabels: list[str] | None = None,
-            custom_label: str = "Enter custom hf repo id or local path",
-            breadcrumb: str | None = None,
-    ) -> None:
-        if sublabels and len(sublabels) != len(preset_targets):
-            raise ValueError("sublabels and preset_targets lists must have same size")
-
-        def make_preset_label(target: str) -> str:
-            label = target
-            if target == default_target:
-                label += f" {COL_DIM}(default)"
-            if target == current_target:
-                label += f" {COL_ACCENT}(selected)"
-            return label
-
-        def make_custom_label() -> str:
-            label = custom_label
-            is_custom = bool(current_target) and not any(
-                target_util.is_same_target(current_target, target) for target in preset_targets
-            )
-            if is_custom:
-                value = ellipsize_path_for_menu(current_target)
-                label += f" {COL_DIM}(currently: {COL_ACCENT}{value}{COL_DIM})"
-            return label
-
-        def apply_preset_if_changed(target: str) -> None:
-            if target_util.is_same_target(current_target, target):
-                return
-            apply_target(target)
-
-        items = []
-        for i, target in enumerate(preset_targets):
-            item = MenuItem(
-                make_preset_label(target),
-                lambda _, __, target=target: apply_preset_if_changed(target),
-            )
-            if sublabels:
-                item.sublabel = sublabels[i]
-            items.append(item)
-
-        items.append(MenuItem(make_custom_label(), lambda _, __: ask_custom_target()))
-
-        MenuUtil.menu(
-            state=state,
-            heading=heading,
-            items=items,
-            one_shot=True,
-            breadcrumb=breadcrumb,
-        )
-
-    @staticmethod
-    def make_rolling_continuation_label(value: int) -> str:
-        if value > 0:
-            val = f"enabled, length {value}"
-        else:
-            val = f"disabled {COL_DIM}default"
-        return "Rolling continuation " + make_currently_string(val)
-
-    @staticmethod
-    def ask_rolling_continuation(state: State, target: str | SettingRef, max_value: int, qualifier_line: str="") -> None:
-        """
-        :param qualifier_line: Should describe any prereqs (eg, batch size 1)
-        """
-        subheading = ROLLING_CONTINUATION_DESC
-        if qualifier_line:
-            subheading += f"\n\n{qualifier_line}"
-
-        MenuUtil.print_screen_heading(
-            state,
-            f"Rolling continuation {COL_DIM}(experimental)",
-            subheading=subheading
-        )
-        ask.ask_number_and_save(
-            state.project, target, "Enter value",
-            min_value=0, max_value=max_value, default_value=0,
-            success_prefix="Rolling continuation num segments set to", is_int=True
-        )

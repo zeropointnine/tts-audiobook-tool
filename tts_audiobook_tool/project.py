@@ -30,14 +30,17 @@ class Project(BaseModel):
     - version 2: project text stored externally in `project_text.json`
     - version 3: model-specific settings stored in model-keyed `model_settings`
       objects; version-2 flat fields are converted on load
+    - version 4: one project-wide ordered voice_references list
 
-    On save, `version` is always normalized to `CURRENT_PROJECT_VERSION`.
+    On save, `version` is always normalized to `PROJECT_SPEC_VERSION`.
     """
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=False,
         populate_by_name=True,
+        # Allow model_settings with older Pydantic versions that protect all model_* names.
+        protected_namespaces=("model_validate", "model_dump"),
     )
 
     _sound_segments: Any = PrivateAttr(default=None)
@@ -99,6 +102,13 @@ class Project(BaseModel):
     # Persist the opaque catalog ID, including IDs unknown to this installation.
     tts_model_type: str = "none"
     model_settings: ModelSettings = Field(default_factory=ModelSettings)
+    voice_references: list[dict[str, str]] = Field(default_factory=list)
+
+    @field_validator("voice_references", mode="before")
+    @classmethod
+    def _validate_voice_references(cls, value: Any) -> list[dict[str, str]]:
+        from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
+        return normalize_voice_references(value)
 
     def get_tts_model_type(self) -> TtsModelType:
         """Resolve the saved selection without changing it or auto-detecting."""
@@ -113,12 +123,31 @@ class Project(BaseModel):
         return REGISTRY.reconcile(value)
 
     def get_model_setting(self, model_id: str, name: str) -> Any:
-        """Read a declared setting; absent overrides follow the declared default."""
-        return REGISTRY.resolve(self.model_settings, REGISTRY.get(model_id, name))
+        """Read a declared setting; legacy voice access reads the project list."""
+        binding = REGISTRY.get(model_id, name)
+        if binding.section == "voice_references":
+            return [ref.get(name, "") for ref in self.voice_references]
+        return REGISTRY.resolve(self.model_settings, binding)
 
     def set_model_setting(self, model_id: str, name: str, value: Any, *, reset: bool = False) -> None:
-        """Write (or remove) a declared override in this project's store."""
+        """Write an override; legacy voice access never creates scoped copies."""
         binding = REGISTRY.get(model_id, name)
+        if binding.section == "voice_references":
+            value = [] if reset else value
+            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                raise ValueError(f"{model_id}.{name}: expected a list of strings")
+            if name == "transcript":
+                self.voice_references = [
+                    {"file_name": ref["file_name"], "transcript": value[i] if i < len(value) else ""}
+                    for i, ref in enumerate(self.voice_references)
+                ]
+            else:
+                from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
+                self.voice_references = normalize_voice_references([
+                    {"file_name": item, "transcript": self.voice_references[i].get("transcript", "") if i < len(self.voice_references) else ""}
+                    for i, item in enumerate(value)
+                ])
+            return
         if reset or (binding.has_sentinel and value == binding.sentinel):
             REGISTRY.assign(self.model_settings, binding, value, reset=True)
         else:
@@ -177,8 +206,7 @@ class Project(BaseModel):
         from tts_audiobook_tool.project_support.project_sound_segments import ProjectSoundSegments
         self._sound_segments = ProjectSoundSegments(self)
 
-        if self.get_model_setting("pocket_local", "file_name") and self.get_model_setting("pocket_local", "predefined_voice"):
-            self.set_model_setting("pocket_local", "predefined_voice", "", reset=True)
+        # A Pocket preset can coexist with shared samples and takes precedence.
 
     @property
     def markers(self) -> set[int]:

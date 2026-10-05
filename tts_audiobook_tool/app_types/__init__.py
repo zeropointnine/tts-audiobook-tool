@@ -1,7 +1,7 @@
 """
 Shared structural data types for the application
 
-Foundational value-like types, lightweight domain structures 
+Foundational value-like types, lightweight domain structures
 used across subsystems.
 
 Intentionally excludes heavier stateful/persistent orchestrators such as
@@ -40,7 +40,7 @@ class SingletonBase:
 class Saveable(Protocol):
     """
     An object that can save its own data (`Project`, `Prefs`)
-    """    
+    """
     def save(self) -> str:
         """ Returns error string if any """
         ...
@@ -255,7 +255,7 @@ class SttConfig(tuple[str, str, str], Enum):
 
 class Strictness(tuple[str, int, str], Enum):
 
-    LOW = ("low", 1, "Loose") 
+    LOW = ("low", 1, "Loose")
     MODERATE = ("moderate", 2, "Moderate")
     HIGH = ("high", 3, "Strict")
     INTOLERANT = ("intolerant", 4, "Intolerant")
@@ -305,7 +305,7 @@ class VoiceSelectMode(tuple[str, str, str, str], Enum):
         "disabled",
         "disabled",
         "Disabled",
-        "Uses the first voice sample for every generation",
+        "Uses voice sample 1 for every generation",
     )
 
     @property
@@ -330,10 +330,10 @@ class VoiceSelectMode(tuple[str, str, str, str], Enum):
             if id == item.id:
                 return item
         return None
-    
+
     @staticmethod
     def get_default() -> VoiceSelectMode:
-        return VoiceSelectMode.AUTO_ADVANCE
+        return VoiceSelectMode.DISABLED
 
 # ---
 
@@ -390,12 +390,12 @@ class SectionMarkerMode(tuple[str, str, str], Enum):
             if id == item.id:
                 return item
         return None
-    
+
 # ---
 
 SS_SENTENCE_DESC = \
-"""    Text is segmented by sentence. Produces predictable caesuras between sentences. 
-      Relatively short resulting word length may help some models maintain 
+"""    Text is segmented by sentence. Produces predictable caesuras between sentences.
+      Relatively short resulting word length may help some models maintain
       a more natural speaking pace."""
 
 SS_SENTENCE_PLUS_DESC = \
@@ -409,14 +409,14 @@ SS_MULTI_DESC = \
       single-sentence segmentation."""
 
 SS_MAX_LEN_DESC = \
-"""    Text is segmented by paragraph, and within each paragraph, segmented by 
+"""    Text is segmented by paragraph, and within each paragraph, segmented by
       \"max words per segment\" to the nearest sentence or phrase boundary.
       This maximizes text length per TTS generation."""
 
 class SegmentationStrategy(tuple[str, str, str], Enum):
 
     SENTENCE = "sentence", "Sentence", SS_SENTENCE_DESC
-    SENTENCE_PLUS = "normal", "Sentence+", SS_SENTENCE_PLUS_DESC 
+    SENTENCE_PLUS = "normal", "Sentence+", SS_SENTENCE_PLUS_DESC
     MULTI_SENTENCE = "multi", "Multiple sentences", SS_MULTI_DESC
     MAX_LEN = "max_len", "Maximized word count", SS_MAX_LEN_DESC
 
@@ -427,7 +427,7 @@ class SegmentationStrategy(tuple[str, str, str], Enum):
     @property
     def label(self) -> str:
         return self.value[1]
-    
+
     @property
     def description(self) -> str:
         return self.value[2]
@@ -571,7 +571,7 @@ class SoundSegment(NamedTuple):
     file_name: str
 
     # Zero-based index
-    idx: int 
+    idx: int
     # Hash of the source text used to generate the sound file
     hash: str
     num_errors: int
@@ -584,8 +584,8 @@ class DeviceType(Enum):
     CPU = "cpu"
 
 class VoiceDisplayInfo(NamedTuple):
-    """ 
-    Used to construct voice clone related info in menus 
+    """
+    Used to construct voice clone related info in menus
     Values may include color formatting
     """
 
@@ -596,7 +596,7 @@ class VoiceDisplayInfo(NamedTuple):
     # Main menu (no clear-screen) - voice line prefix
     # Eg, "current voice clone"
     main_prefix: str
-    
+
     # Is typically the abbreviated text of the voice reference filename
     # Eg, "some_character_2a (+2 more)"
     value: str

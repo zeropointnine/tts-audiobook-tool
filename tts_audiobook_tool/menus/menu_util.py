@@ -191,7 +191,7 @@ class MenuUtil:
 
                 if on_shown:
                     on_shown()
-                MenuStatus.show_pending_tts_model_hint(state, is_first_main_menu=is_first_main_menu)
+                MenuStatus.show_pending_project_hints(state, is_first_main_menu=is_first_main_menu)
 
                 while True:
                     # Prompt

@@ -85,10 +85,13 @@ def set_seed(seed: int) -> None:
 
 def play_done_sound() -> None:
     from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
+    path = make_assets_file_path("done.wav")
+    PlaySoundUtil.play_sound_file_async(path)
 
-    done_wav_path = make_assets_file_path("done.wav")
-    PlaySoundUtil.play_sound_file_async(done_wav_path)
-
+def play_fatal_gen_sound() -> None:
+    from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
+    path = make_assets_file_path("error.wav")
+    PlaySoundUtil.play_sound_file_async(path)
 
 def make_memory_string(base_color=COL_DIM, accent_color=COL_ACCENT, always_one_decimal=False) -> str:
     """ Makes ANSI-formatted memory string"""

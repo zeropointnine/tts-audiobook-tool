@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.app_types import ReadinessIssue, VoiceDisplayInfo
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -59,7 +59,16 @@ class PocketBaseModel(TtsBaseModel):
 
     @classmethod
     def get_primary_voice_value(cls, project: Project) -> str:
-        return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local")) or project.get_model_setting('pocket_local', 'predefined_voice')
+        return project.get_model_setting('pocket_local', 'predefined_voice') or ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local"))
+
+    @classmethod
+    def get_voice_display_info(
+        cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> VoiceDisplayInfo | None:
+        preset = project.get_model_setting('pocket_local', 'predefined_voice')
+        if preset:
+            return VoiceDisplayInfo("Predefined voice", "current predefined voice", preset)
+        return super().get_voice_display_info(project, instance)
 
     @classmethod
     def get_menu_text(
@@ -79,9 +88,6 @@ class PocketBaseModel(TtsBaseModel):
                 errors.append(ReadinessIssue("ungated model", verbose_ui_message))
                 return errors # don't bother adding any other errors at this point
 
-        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local")) and not project.get_model_setting('pocket_local', 'predefined_voice'):
-            errors.append(ReadinessIssue("voice clone", "Setting a voice clone file or predefined voice is required"))
-
         return errors
 
     # ---
@@ -94,6 +100,8 @@ class PocketBaseModel(TtsBaseModel):
 
         Rem, use "make_gated_error_message_ui" for user-facing error message with remediation info
         """
+        if project.get_model_setting('pocket_local', 'predefined_voice'):
+            return ""
         voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local"))
         if not voice_file_name:
             return ""

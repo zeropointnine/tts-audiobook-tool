@@ -358,17 +358,20 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         super()._pre_terminal_summary(result)
 
     def _post_terminal_summary(self, result: GenerationModalResult) -> None:
-        statuses_that_alert = {
-            GenerationTerminalStatus.COMPLETED,
+        fatal_statuses = {
             GenerationTerminalStatus.ABORTED,
+            GenerationTerminalStatus.FAILED,
         }
         reset_should_alert = (
             result.status is GenerationTerminalStatus.WORKER_RESET
             and result.hard_reset_cause is not None
             and result.hard_reset_cause.should_alert
         )
-        if (result.status in statuses_that_alert or reset_should_alert) and not self.is_regen:
-            app_support.play_done_sound()
+        if not self.is_regen:
+            if result.status in fatal_statuses or reset_should_alert:
+                app_support.play_fatal_gen_sound()
+            elif result.status is GenerationTerminalStatus.COMPLETED:
+                app_support.play_done_sound()
 
         # Return immediately, with no ceremony and no ENTER wait, so the
         # caller's flow (editor reopen or concatenation) continues.

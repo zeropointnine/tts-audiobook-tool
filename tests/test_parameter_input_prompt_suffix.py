@@ -4,10 +4,9 @@ from types import SimpleNamespace
 import pytest
 
 from catalog_toml_support import read_catalog, write_catalog
-from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM
 from tts_audiobook_tool.menus.menu_util import get_string_from
-from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
+from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.text_util import strip_ansi_codes
@@ -23,13 +22,14 @@ def test_breeze_top_k_has_prompt_only_disabled_hint(monkeypatch):
     assert parameter.input_prompt_suffix == "(0=disabled)"
     assert control.label == "Top-K"
     state = SimpleNamespace(project=Project())
-    item = VoiceAudioCppMenu.make_parameter_item(state, parameter, control.label)
+    item = ModelAudioCppMenu.make_parameter_item(state, parameter, control.label)
     prompts = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_audio_cpp_menu.printt", prompts.append)
-    monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_audio_cpp_menu.ask.ask_input", lambda **_: "")
+    monkeypatch.setattr("tts_audiobook_tool.ask.printt", prompts.append)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_audio_cpp_menu.ask.ask_input", lambda **_: "")
     assert strip_ansi_codes(get_string_from(state, item.label)) == "Top-K (currently: 50 default)"
     item.handler(state, item)
-    assert prompts == [f"Enter Top-K (valid range: 0-100; default: 50) {COL_DIM}(0=disabled){COL_DEFAULT}:"]
+    assert [strip_ansi_codes(prompt) for prompt in prompts] == [
+        "Enter Top-K (0=disabled): (valid range: 0-100; default: 50)"]
     saved = ProjectSerializationUtil.to_project_json_dict(state.project)
     assert "input_prompt_suffix" not in saved["model_settings"]["models"][parameter.model_id]["parameters"]
 
@@ -50,24 +50,25 @@ def _load_parameter(tmp_path, backend, suffix):
 
 @pytest.mark.parametrize("backend", ["audio_cpp", "sgl_omni"])
 @pytest.mark.parametrize("suffix", [None, "", "(sampling hint)"])
-def test_optional_suffix_is_loaded_and_inserted_only_after_range(tmp_path, monkeypatch, backend, suffix):
+def test_optional_suffix_is_loaded_and_inserted_only_in_edit_prompt(tmp_path, monkeypatch, backend, suffix):
     parameter = _load_parameter(tmp_path, backend, suffix)
     assert parameter.input_prompt_suffix == (suffix or "")
     state = SimpleNamespace(project=Project())
-    menu = VoiceAudioCppMenu if backend == "audio_cpp" else VoiceConfiguredSglOmniMenu
-    module = "voice_audio_cpp_menu" if backend == "audio_cpp" else "voice_configured_sgl_omni_menu"
+    menu = ModelAudioCppMenu if backend == "audio_cpp" else ModelConfiguredSglOmniMenu
+    module = "model_audio_cpp_menu" if backend == "audio_cpp" else "model_configured_sgl_omni_menu"
     prompts = []
-    monkeypatch.setattr(f"tts_audiobook_tool.menus.voice.{module}.printt", prompts.append)
-    monkeypatch.setattr(f"tts_audiobook_tool.menus.voice.{module}.ask.ask_input", lambda **_: "")
+    prompt_module = "tts_audiobook_tool.ask" if backend == "audio_cpp" else f"tts_audiobook_tool.menus.model.{module}"
+    monkeypatch.setattr(f"{prompt_module}.printt", prompts.append)
+    monkeypatch.setattr(f"tts_audiobook_tool.menus.model.{module}.ask.ask_input", lambda **_: "")
     item = menu.make_parameter_item(state, parameter, "Top k")
     assert "sampling hint" not in get_string_from(state, item.label)
     item.handler(state, item)
-    hint = f" {COL_DIM}{suffix}{COL_DEFAULT}" if suffix else ""
+    hint = f" {suffix}" if suffix else ""
     if backend == "audio_cpp":
-        expected = f"Enter Top k (valid range: 0-100; default: 50){hint}:"
+        expected = f"Enter Top k{hint}: (valid range: 0-100; default: 50)"
     else:
         expected = f"Enter Top k (valid range: 1-200; -1 resets to default 100){hint}:"
-    assert prompts == [expected]
+    assert [strip_ansi_codes(prompt) for prompt in prompts] == [expected]
 
 
 @pytest.mark.parametrize("backend", ["audio_cpp", "sgl_omni"])

@@ -7,6 +7,8 @@ from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import ModelStateSnapshot
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.state import PendingTtsModelChange, State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -31,6 +33,7 @@ class MenuStatus:
         Tts.bind_project(state.project)
         local_startup_finished = (
             not Tts.is_remote_mode() and getattr(state, "has_shown_main_menu", False)
+            and not getattr(state, "pending_project_load_checks", False)
         )
         if local_startup_finished or (changed is not None and changed.id == "none"):
             state.pending_tts_model_change = None
@@ -45,8 +48,36 @@ class MenuStatus:
             )
 
     @staticmethod
+    def show_pending_project_hints(state: State, *, is_first_main_menu: bool = False) -> None:
+        """Run shared project-load checks once, after rendering a complete menu."""
+        MenuStatus.show_pending_tts_model_hint(state, is_first_main_menu=is_first_main_menu)
+        if not getattr(state, "pending_project_load_checks", False):
+            return
+        if not is_first_main_menu and not getattr(state, "has_shown_main_menu", False):
+            return
+        state.pending_project_load_checks = False
+
+        model = state.project.get_tts_model_type()
+        max_duration = model.value.ui.get("voice_sample_max_duration_s")
+        if max_duration is None:
+            return
+        count = 0
+        for voice in ProjectVoiceUtil.get_voice_values(state.project, model):
+            path = ProjectVoiceUtil.resolve_voice_file_path(state.project, voice)
+            duration = AudioMetaUtil.get_audio_duration(path)
+            if duration is not None and duration > max_duration:
+                count += 1
+        if count:
+            samples = "is 1 sample" if count == 1 else f"are {count} samples"
+            verb = "exceeds" if count == 1 else "exceed"
+            hints.print_hint(Hint("", "FYI", (
+                f"The current model's recommended duration for voice clone samples is {max_duration:g}s,\n"
+                f"but there {samples} for this project that {verb} that value."
+            )))
+
+    @staticmethod
     def show_pending_tts_model_hint(state: State, *, is_first_main_menu: bool = False) -> None:
-        """Consume a deferred notice; local changes appear only at the first main menu."""
+        """Consume a deferred notice at startup or when another project is loaded."""
         from tts_audiobook_tool.tts import Tts
 
         pending = getattr(state, "pending_tts_model_change", None)
@@ -55,7 +86,11 @@ class MenuStatus:
         if state.project.tts_model_type != pending.new_model_id:
             state.pending_tts_model_change = None
             return
-        if not Tts.is_remote_mode() and not is_first_main_menu:
+        runtime_project_load = (
+            getattr(state, "pending_project_load_checks", False)
+            and getattr(state, "has_shown_main_menu", False)
+        )
+        if not Tts.is_remote_mode() and not is_first_main_menu and not runtime_project_load:
             if getattr(state, "has_shown_main_menu", False):
                 state.pending_tts_model_change = None
             return
@@ -63,11 +98,12 @@ class MenuStatus:
 
         old_name = _make_model_name(pending.old_model_id)
         current_name = _make_model_name(pending.new_model_id)
-        text = f"This project was previously using TTS model {old_name}.\n"
+        text = f"This project was last used with TTS model {old_name};\n"
         active = Tts.get_active_type()
         if active.id == pending.new_model_id:
-            sole = "sole " if active.value.backend_kind is TtsBackendKind.AUDIO_CPP else ""
-            text += f"It will now use the {sole}currently active model, {current_name}"
+            qualifier = ("sole active audio.cpp" if active.value.backend_kind is TtsBackendKind.AUDIO_CPP
+                         else "active")
+            text += f"It will now use the {qualifier} model, {current_name}"
         else:
             text += (f"It is now configured to use {current_name}, "
                      "but the runtime is unavailable (see TTS mode).")

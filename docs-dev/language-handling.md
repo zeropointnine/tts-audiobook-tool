@@ -9,9 +9,9 @@ It closes with some musings on the problems and tradeoffs of relying on this sin
 field as a "source of truth" for everything it does, and on the question of
 language code normalization.
 
-Related docs: `docs/project-spec-v3.md` (project schema), `docs/epub-import-flow.md`
-(import path), `docs/tts-validation-architecture.md` (validation), and
-`docs/word-equivalence.md` (one of the language-keyed subsystems).
+Related docs: [Project Spec v4](<project-spec-v4.md>) (project schema), [EPUB import flow](<epub-import-flow.md>)
+(import path), [TTS validation architecture](<tts-validation-architecture.md>) (validation), and
+[word equivalence](<word-equivalence.md>) (one of the language-keyed subsystems).
 
 ---
 

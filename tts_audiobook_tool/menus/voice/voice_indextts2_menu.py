@@ -1,25 +1,21 @@
-from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.constants_hints import *
+from tts_audiobook_tool.constants_hints import HINT_INDEX_SAMPLE_LEN
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.util import *
-from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.menus.voice import VoiceMenuShared
+from tts_audiobook_tool.util import COL_DEFAULT, COL_DIM, COL_ERROR, make_currently_string, print_feedback, printt
+from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 
 class VoiceIndexTts2Menu:
 
     @staticmethod
     def menu(state: State) -> None:
-        """
-        """
         project = state.project
 
         def voice_label(_) -> str:
@@ -28,10 +24,6 @@ class VoiceIndexTts2Menu:
             else:
                 currently = f"{COL_DIM}({COL_ERROR}required{COL_DIM})" # nb
             return f"Select voice clone sample {currently}"
-
-        def on_voice(_: State, __: MenuItem) -> None:
-            hints.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
-            VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.require_by_id("indextts2_local"))
 
         def make_emo_voice_label(_) -> str:
             if project.get_model_setting('indextts2_local', 'emo_voice'):
@@ -64,25 +56,17 @@ class VoiceIndexTts2Menu:
                 current = f"{COL_DIM}(optional){COL_DEFAULT}"
             return f"Emotion vector {current}"
 
-        def make_fp16_item(_) -> str:
-            value = make_parameter_value_string(project.get_model_setting('indextts2_local', 'use_fp16'), IndexTts2BaseModel.DEFAULT_USE_FP16)
-            return f"FP16 (smaller memory footprint) {make_currently_string(value)}"
-
-        # Menu
         def make_items(_: State) -> list[MenuItem]:
-            items = []
-            items.extend(
-                VoiceMenuShared.make_voice_sample_items(
-                    state,
-                    TtsModelType.require_by_id("indextts2_local"),
-                    no_samples_label=voice_label,
-                    on_before_set_callback=lambda: hints.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN),
-                )
+            items = VoiceMenuShared.make_voice_sample_items(
+                state,
+                TtsModelType.require_by_id("indextts2_local"),
+                no_samples_label=voice_label,
+                on_before_set_callback=lambda: hints.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN),
             )
             items.append(
-                MenuItem(make_emo_voice_label, on_emo_voice, superlabel=VOICE_ADVANCED_SUPERLABEL)
+                MenuItem(make_emo_voice_label, on_emo_voice, superlabel="Emotion")
             )
-            if state.project.get_model_setting('indextts2_local', 'emo_voice'):
+            if project.get_model_setting('indextts2_local', 'emo_voice'):
                 items.append(
                     MenuItem("Clear emotion voice sample", on_clear_emo)
                 )
@@ -102,65 +86,10 @@ class VoiceIndexTts2Menu:
                     max_value=1.0
                 )
             )
-            items.append(
-                MenuItem(make_fp16_item, lambda _, __: VoiceIndexTts2Menu.fp16_menu(state))
-            )
-
-            item = VoiceMenuShared.make_temperature_item(
-                state=state,
-                target=SettingRef("indextts2_local", "temperature"),
-                default_value=IndexTts2BaseModel.DEFAULT_TEMPERATURE,
-                min_value=0.01,
-                max_value=2.0
-            )
-            items.append(item)
-
-            items.append(
-                VoiceMenuShared.make_top_p_item(
-                    state=state,
-                    target=SettingRef("indextts2_local", "top_p"),
-                    default_value=IndexTts2BaseModel.DEFAULT_TOP_P
-                )
-            )
-
-            items.append(
-                VoiceMenuShared.make_top_k_item(
-                    state=state,
-                    target=SettingRef("indextts2_local", "top_k"),
-                    default_value=IndexTts2BaseModel.DEFAULT_TOP_K
-                )
-            )
-
-            items.append(VoiceMenuShared.make_seed_item(state, SettingRef("indextts2_local", "seed")))
-
             return items
 
         VoiceMenuShared.menu_wrapper(state, make_items)
 
-    @staticmethod
-    def fp16_menu(state: State) -> None:
-
-        def on_item(_: State, item: MenuItem) -> bool:
-            if state.project.get_model_setting('indextts2_local', 'use_fp16') != item.data:
-                state.project.set_model_setting('indextts2_local', 'use_fp16', item.data)
-                state.project.save()
-                # Sync static value
-                Tts.set_model_params_using_project(state.project)
-            print_feedback(f"FP16 set to:", str(state.project.get_model_setting('indextts2_local', 'use_fp16')))
-            return True
-
-        items = [
-            MenuItem("True", on_item, data=True),
-            MenuItem("False", on_item, data=False)
-        ]
-        MenuUtil.menu(
-            state,
-            "FP16",
-            items,
-            one_shot=True
-        )
-
-# ---
 
 def ask_vector(project: Project) -> None:
 

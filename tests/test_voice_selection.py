@@ -37,27 +37,27 @@ def test_voice_select_mode_ids_and_project_default() -> None:
     assert VoiceSelectMode.AUTO_ADVANCE.id == "auto_advance"
     assert VoiceSelectMode.USER_DEFINED.id == "custom"
     assert VoiceSelectMode.DISABLED.description == (
-        "Uses the first voice sample for every generation"
+        "Uses voice sample 1 for every generation"
     )
     assert VoiceSelectMode.AUTO_ADVANCE.current_label == "auto-advance"
     assert VoiceSelectMode.AUTO_ADVANCE.label == "Auto-advance"
     assert VoiceSelectMode.AUTO_ADVANCE.description == (
         "Cycles through voice samples in order, on each batch generation"
     )
-    assert VoiceSelectMode.get_default() == VoiceSelectMode.AUTO_ADVANCE
+    assert VoiceSelectMode.get_default() == VoiceSelectMode.DISABLED
     assert VoiceSelectMode.get_by_id("disabled") == VoiceSelectMode.DISABLED
     assert VoiceSelectMode.get_by_id("custom") == VoiceSelectMode.USER_DEFINED
     assert VoiceSelectMode.get_by_id("invalid") is None
-    assert project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE
+    assert project.voice_select_mode == VoiceSelectMode.DISABLED
 
 
 @pytest.mark.parametrize("raw_value", [None, "invalid", 3])
-def test_project_invalid_or_missing_voice_select_mode_defaults_to_auto_advance(raw_value: object) -> None:
+def test_project_invalid_or_missing_voice_select_mode_defaults_to_disabled(raw_value: object) -> None:
     payload = {} if raw_value is None else {"voice_select_mode": raw_value}
 
     project = Project.model_validate(payload)
 
-    assert project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE
+    assert project.voice_select_mode == VoiceSelectMode.DISABLED
 
 
 def test_project_voice_select_mode_json_round_trip() -> None:

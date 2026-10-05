@@ -59,15 +59,17 @@ def test_cosyvoice_definition_registers_and_detects(cosyvoice):
     assert not [name for name in Project.model_fields if name.startswith("fun_cosyvoice3_")]
 
 
-def test_cosyvoice_readiness_requires_reference_not_transcript(cosyvoice, monkeypatch, tmp_path):
+def test_cosyvoice_readiness_ignores_voice_state(cosyvoice, monkeypatch, tmp_path):
     monkeypatch.setattr(SglOmniUtil, "check_readiness", staticmethod(lambda _: None))
     project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": MODEL_ID})
     project.tts_model_type = cosyvoice.id
     support = Tts.get_model_support(project)
-    assert [issue.short for issue in support.get_blocking_issues(project)] == ["voice sample"]
+    # Voice/transcript state is validated lazily (pre-flight, generation), not
+    # by readiness. Generation itself still requires a reference.
+    assert support.get_blocking_issues(project) == []
 
     project.set_model_setting(MODEL_ID, "file_name", ["missing.wav"])
-    assert [issue.short for issue in support.get_blocking_issues(project)] == ["voice sample"]
+    assert support.get_blocking_issues(project) == []
     (tmp_path / "reference.wav").write_bytes(b"audio")
     project.set_model_setting(MODEL_ID, "file_name", ["reference.wav"])
     assert not support.get_blocking_issues(project)
@@ -116,7 +118,9 @@ def test_cosyvoice_buffered_and_streamed_payloads(cosyvoice, monkeypatch, tmp_pa
     saved = ProjectSerializationUtil.to_project_json_dict(project)
     settings = saved["model_settings"]["models"][MODEL_ID]
     assert settings["parameters"] == {"temperature": 0.6, "top_p": None, "top_k": 32, "repetition_penalty": None}
-    assert settings["voice_references"] == [{"file_name": "reference.wav", "transcript": "Reference transcript"}]
+    # V4: the pair lives in the project-wide list, not the model object.
+    assert "voice_references" not in settings
+    assert saved["voice_references"] == [{"file_name": "reference.wav", "transcript": "Reference transcript"}]
     restored = Project.model_validate(saved)
     assert restored.get_model_setting(MODEL_ID, "top_k") == 32
     assert restored.get_model_setting(MODEL_ID, "transcript") == ["Reference transcript"]

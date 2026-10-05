@@ -149,6 +149,12 @@ def do_start(state: State) -> None:
         if not b:
             return
 
+    # Pre-flight: verify shared voice samples (and transcripts) before the
+    # full-screen playback app takes over the console.
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    if not VoiceMenuShared.validate_voices(state):
+        return
+
     run_real_time_playback_modal(
         state=state,
         phrase_groups=text_groups,

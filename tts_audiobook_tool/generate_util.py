@@ -997,6 +997,11 @@ class GenerateUtil:
     @staticmethod
     def do_quick_generate(state: State, phrase_index: int) -> None:
         """Regenerate exactly one project item."""
+        # Main-process UI flow only; the worker never runs this method, and
+        # the lazy import keeps this module importable without the UI chain.
+        from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+        if not VoiceMenuShared.validate_voices(state):
+            return
         from tts_audiobook_tool.textual.generation_app import run_generation_app
         run_generation_app(
             state=state,
@@ -1016,6 +1021,11 @@ class GenerateUtil:
         # Show pre-inference hint/warning if necessary
         should_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
         if not should_continue:
+            return
+
+        # Main-process UI flow only; see the lazy-import note above.
+        from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+        if not VoiceMenuShared.validate_voices(state):
             return
 
         from tts_audiobook_tool.textual.generation_app import run_generation_app

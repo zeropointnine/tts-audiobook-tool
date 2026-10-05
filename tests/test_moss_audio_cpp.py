@@ -12,8 +12,11 @@ from catalog_toml_support import read_catalog
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
+from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
 from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
+from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -61,7 +64,8 @@ def test_definitions_use_native_defaults_and_existing_moss_ui(model_id, prefix, 
     other = TtsModelType.require_by_id(f"moss_{prefix}_sglomni").value
     assert item.family == family and item.tasks == ("tts", "clon") and item.mode == "offline"
     assert item.session_options == {}
-    assert item.request_options == ({"max_tokens": 1024} if prefix == "local" else {})
+    assert item.request_options == ({"max_tokens": 1024, "text_chunk_size": 100000}
+                                    if prefix == "local" else {"text_chunk_size": 100000})
     assert item.spec.backend_kind is TtsBackendKind.AUDIO_CPP
     assert item.spec.default_output_sample_rate == rate
     assert not item.voice_required and not item.spec.requires_voice and not item.spec.can_stream
@@ -144,11 +148,12 @@ def test_payload_defaults_overrides_language_and_sequential_order(
             "seed": 2**32 - 1, "temperature": values[0], "top_p": values[1], "top_k": values[2],
         }
         if prefix == "delay":
-            expected["options"] = {"language": "French"}
+            expected["options"] = {"text_chunk_size": 100000, "language": "French"}
         else:
             expected["language"] = "French"
-            expected["options"] = {"max_tokens": 1024}
-        assert payload == expected  # Only Local pins a generation limit; no transcript/repetition/chunk controls.
+            expected["options"] = {"max_tokens": 1024, "text_chunk_size": 100000}
+        # Both disable internal text splitting; only Local pins a generation limit.
+        assert payload == expected
     assert adapter.generate_using_project(project, [], on_stream_end=None) == []
     assert adapter.generate_using_project(project, ["stream"], on_stream_end=lambda: None).endswith(
         "does not support streaming")
@@ -164,9 +169,9 @@ def test_unknown_language_is_omitted_from_both_payload_locations(capture, model_
     assert "language" not in capture[0]
     assert "language" not in capture[0].get("options", {})
     if model_id == IDS[1]:
-        assert capture[0]["options"] == {"max_tokens": 1024}
+        assert capture[0]["options"] == {"max_tokens": 1024, "text_chunk_size": 100000}
     else:
-        assert "options" not in capture[0]
+        assert capture[0]["options"] == {"text_chunk_size": 100000}
     assert "Using MOSS-TTS language value: None" in AudioCppModelSupport(
         definition(model_id)).get_warning_issues(project)
 
@@ -265,8 +270,10 @@ def test_readiness_optional_voice_and_local_only_postprocessing(monkeypatch, tmp
     assert "Using MOSS-TTS language value: English" in support.get_warning_issues(project)
     assert support.can_hallucinate_music(project) is (model_id == IDS[1])
     assert support.should_trim_trailing_token_noise(project) is (model_id == IDS[1])
+    # Voice/file/transcript state is not a readiness concern any more; it is
+    # validated lazily by the interactive pre-flight and at generation time.
     project.set_model_setting(model_id, "file_name", ["missing.flac"])
-    assert any("not found" in issue.verbose for issue in local_issues())
+    assert local_issues() == []
     (tmp_path / "missing.flac").write_bytes(b"reference")
     assert local_issues() == []  # No unused transcript requirement.
     project.set_model_setting("moss_local", "rolling_cont", 3)
@@ -274,16 +281,23 @@ def test_readiness_optional_voice_and_local_only_postprocessing(monkeypatch, tmp
 
 
 @pytest.mark.parametrize("model_id,prefix,family,rate,defaults,arch", VARIANTS)
-def test_menu_has_only_voice_sampling_and_seed_controls(
+def test_menus_partition_voice_sampling_and_seed_controls(
         monkeypatch, model_id, prefix, family, rate, defaults, arch):
     monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
-                        lambda *_, **__: [MenuItem("Add/remove voice samples", lambda *_: None)])
-    monkeypatch.setattr(VoiceMenuShared, "make_seed_item",
+                        lambda *_, **__: [MenuItem(label, lambda *_: None)
+                                          for label in (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
+                                                        voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
+                                                        voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)])
+    monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("Seed (currently: random)", lambda *_: None))
     state = SimpleNamespace(project=Project(tts_model_type=model_id))
-    items = VoiceAudioCppMenu.make_items(state, definition(model_id))
+    voice_items = VoiceAudioCppMenu.make_items(state, definition(model_id))
+    assert [item.label for item in voice_items] == [voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
+                                                    voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
+                                                    voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS]
+    assert all(not item.superlabel for item in voice_items)
+    items = ModelAudioCppMenu.make_items(state, definition(model_id))
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
-        "Add/remove voice samples",
         f"Temperature (currently: {defaults[0]:.2f} default)",
         f"Top-P (currently: {defaults[1]:.2f} default)",
         f"Top-K (currently: {defaults[2]} default)",
@@ -317,7 +331,7 @@ def test_numeric_menu_uses_standard_prompt_validation_and_save(
     monkeypatch.setattr("tts_audiobook_tool.ask.ask_input", answer)
     state = SimpleNamespace(project=project)
     label = f"MossTTS{prefix.title()} temperature"
-    control = VoiceAudioCppMenu.make_parameter_item(state, parameter, label)
+    control = ModelAudioCppMenu.make_parameter_item(state, parameter, label)
     control.handler(state, control)
     assert text_util.strip_ansi_codes(printed[0]) == (
         f"Enter {label}: (valid range: 0.8-3.0; default: {parameter.default})")
@@ -345,7 +359,7 @@ def test_numeric_menu_prefills_native_default_without_reset_input_or_saving(
 
     monkeypatch.setattr("tts_audiobook_tool.ask.ask_input", answer)
     state = SimpleNamespace(project=project)
-    control = VoiceAudioCppMenu.make_parameter_item(state, parameter, "Value")
+    control = ModelAudioCppMenu.make_parameter_item(state, parameter, "Value")
     control.handler(state, control)
     assert float(prefills[0]) == parameter.default
     assert project.get_model_setting(model_id, parameter.name) == -1
@@ -355,10 +369,10 @@ def test_numeric_menu_prefills_native_default_without_reset_input_or_saving(
 def test_sampling_and_voices_remain_private_and_roundtrip_without_pinning_defaults():
     project = Project(tts_model_type=IDS[0])
     project.set_model_setting(IDS[0], "delay_temperature", 2.0)
-    project.set_model_setting(IDS[0], "file_name", ["delay.flac"])
+    # One project-wide voice list, independent of the private sampling owners.
+    project.set_model_setting(IDS[0], "file_name", ["shared.flac"])
     project.set_model_setting(IDS[0], "seed", 12)
     project.set_model_setting(IDS[1], "local_top_k", 70)
-    project.set_model_setting(IDS[1], "file_name", ["local.flac"])
     project.set_model_setting("moss_local", "delay_temperature", 2.7)
     project.set_model_setting("moss_delay_sglomni", "delay_temperature", 2.5)
     payload = ProjectSerializationUtil.to_project_json_dict(project)
@@ -377,8 +391,7 @@ def test_sampling_and_voices_remain_private_and_roundtrip_without_pinning_defaul
     for owner in (*IDS, "moss_local", "moss_delay_sglomni"):
         for binding in REGISTRY.for_model(owner):
             assert restored.get_model_setting(owner, binding.name) == project.get_model_setting(owner, binding.name)
-    assert restored.get_model_setting(IDS[0], "file_name") == ["delay.flac"]
-    assert restored.get_model_setting(IDS[1], "file_name") == ["local.flac"]
+    assert restored.voice_references == [{"file_name": "shared.flac", "transcript": ""}]
     for owner, prefix in zip(IDS, ("delay", "local")):
         parameter = definition(owner).parameters[f"{prefix}_top_p"]
         assert AudioCppSettings.get(restored, parameter) == parameter.default

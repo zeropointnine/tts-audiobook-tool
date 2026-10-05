@@ -17,25 +17,25 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
     # written by another operating system still names a file that may have been
     # copied into the source project, and dropping it would lose the copy.
     project = Project.model_validate({
-        'chatterbox_voice_file_name': ['primary-a.flac', 'shared.flac'],
-        'mira_voice_file_name': ['primary-b.flac', 'shared.flac'],
+        'voice_references': [
+            {'file_name': name, 'transcript': ''}
+            for name in ['primary-a.flac', 'shared.flac', 'primary-b.flac', 'shared.flac', 'fish-s2.flac', 'higgs-v3.flac']
+        ],
         'indextts2_emo_voice_file_name': 'emotion.flac',
-        'fish_s2_voice_file_name': ['fish-s2.flac'],
         'fish_s2_server_voice_target': ['server-target.flac'],
-        'higgs_v3_voice_file_name': ['higgs-v3.flac'],
         'higgs_v3_voice_target': ['https://example.com/voice.flac'],
     })
     # A project object that never passed through the load funnel can still
     # hold malformed entries; the collector must skip them rather than crash.
-    project.model_settings.models['pocket_local'] = cast(Any, {
-        'voice_references': [
-            {'file_name': ''},
-            {'file_name': 123},
-            {'file_name': str(tmp_path / 'absolute.flac')},
-            {'file_name': 'C:\\Users\\lee\\mybook\\voice\\narrator.flac'},
-            {'file_name': 'primary-c.flac'},
-        ],
-    })
+    project.voice_references.extend(cast(Any, [
+        {'file_name': ''},
+        {'file_name': 123},
+        {'file_name': str(tmp_path / 'absolute.flac')},
+        {'file_name': 'C:\\Users\\lee\\mybook\\voice\\narrator.flac'},
+        {'file_name': 'primary-c.flac'},
+    ]))
+    # Scoped copies are obsolete and must not become a second source of files.
+    project.model_settings.models['pocket_local'] = {'voice_references': [{'file_name': 'obsolete.flac'}]}
 
     result = ProjectTransferUtil.make_supporting_project_file_names(project)
 
@@ -45,14 +45,15 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
         PROJECT_TEXT_EPUB_FILE_NAME,
         'primary-a.flac',
         'shared.flac',
-        'fish-s2.flac',
-        'emotion.flac',
         'primary-b.flac',
+        'fish-s2.flac',
+        'higgs-v3.flac',
         'absolute.flac',
         'narrator.flac',
         'primary-c.flac',
-        'higgs-v3.flac',
+        'emotion.flac',
     ]
+    assert 'obsolete.flac' not in result
     assert 'server-target.flac' not in result
     assert 'https://example.com/voice.flac' not in result
 

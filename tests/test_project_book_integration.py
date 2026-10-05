@@ -166,27 +166,31 @@ class TestProjectBookIntegration(unittest.TestCase):
         orchestration = payload["model_settings"]["models"]["qwen3tts_sglomni"]["orchestration"]
         self.assertEqual(orchestration["concurrent_requests"], 3)
 
-    def test_project_model_validate_normalizes_legacy_voice_strings_to_lists(self):
-        project = Project.model_validate({
-            "fish_s1_voice_file_name": "sample_s1.flac",
-            "fish_s1_voice_text": "sample text",
-            "glm_voice_file_name": "sample_glm.flac",
-            "glm_voice_text": "glm text",
-        })
+    def test_project_model_validate_normalizes_legacy_voice_strings_to_shared_list(self):
+        for prefix, name, transcript in (
+            ("fish_s1", "sample_s1.flac", "sample text"),
+            ("glm", "sample_glm.flac", "glm text"),
+        ):
+            with self.subTest(prefix=prefix):
+                project = Project.model_validate({
+                    f"{prefix}_voice_file_name": name,
+                    f"{prefix}_voice_text": transcript,
+                })
+                self.assertEqual(get_setting(project, "fish_s1_voice_file_name"), [name])
+                self.assertEqual(get_setting(project, "glm_voice_file_name"), [name])
+                self.assertEqual(project.voice_references, [{"file_name": name, "transcript": transcript}])
 
-        self.assertEqual(get_setting(project, "fish_s1_voice_file_name"), ["sample_s1.flac"])
-        self.assertEqual(get_setting(project, "fish_s1_voice_transcript"), ["sample text"])
-        self.assertEqual(get_setting(project, "glm_voice_file_name"), ["sample_glm.flac"])
-        self.assertEqual(get_setting(project, "glm_voice_transcript"), ["glm text"])
-
-    def test_project_model_validate_preserves_voice_lists_and_filters_invalid_items(self):
+    def test_project_model_validate_tolerates_malformed_legacy_voice_lists(self):
+        # Legacy flat fields were permissively flattened on load: non-string
+        # and empty entries are dropped rather than failing the project.
         project = Project.model_validate({
             "moss_voice_file_name": ["one.flac", "", 3, "two.flac"],
             "moss_voice_transcript": ["one", None, "two"],
         })
-
-        self.assertEqual(get_setting(project, "moss_voice_file_name"), ["one.flac", "two.flac"])
-        self.assertEqual(get_setting(project, "moss_voice_transcript"), ["one", "two"])
+        self.assertEqual(project.voice_references, [
+            {"file_name": "one.flac", "transcript": "one"},
+            {"file_name": "two.flac", "transcript": "two"},
+        ])
 
     def test_project_model_validate_collects_warnings_only_with_explicit_context(self):
         warnings: list[str] = []
@@ -229,26 +233,19 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertIsInstance(result, Project)
         self.assertNotIn("current_model_type", Project.model_fields)
 
-    def test_project_to_dict_serializes_single_voice_item_as_string_and_multiple_as_list(self):
-        project = Project.model_validate({
-            "qwen3_voice_file_name": ["one.flac"],
-            "qwen3_voice_transcript": ["one"],
-            "fish_s2_voice_file_name": ["one.flac", "two.flac"],
-            "fish_s2_voice_transcript": ["one", "two"],
-        })
-
-        payload = ProjectSerializationUtil.to_project_json_dict(project)
-
-        # Version 3 keeps one reference object per voice sample for both the
-        # single-item and multi-item cases; a lone item is never collapsed.
-        shared = payload["model_settings"]["shared"]
-        self.assertEqual(shared["qwen3"]["voice_references"], [
-            {"file_name": "one.flac", "transcript": "one"},
-        ])
-        self.assertEqual(shared["fish_s2"]["voice_references"], [
+    def test_project_to_dict_keeps_single_and_multiple_voice_references_as_arrays(self):
+        references = [
             {"file_name": "one.flac", "transcript": "one"},
             {"file_name": "two.flac", "transcript": "two"},
-        ])
+        ]
+        for count in (1, 2):
+            with self.subTest(count=count):
+                project = Project(voice_references=references[:count])
+                payload = ProjectSerializationUtil.to_project_json_dict(project)
+                self.assertEqual(payload["version"], 4)
+                self.assertEqual(payload["voice_references"], references[:count])
+                for obj in payload["model_settings"]["shared"].values():
+                    self.assertNotIn("voice_references", obj)
 
     def test_project_normalizes_qwen3_server_concurrent_requests(self):
         project = Project.model_validate({

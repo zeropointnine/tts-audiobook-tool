@@ -411,6 +411,12 @@ def do_generate(state: State) -> None:
     if not b:
         return
 
+    # Pre-flight: verify shared voice samples (and transcripts) before the
+    # full-screen generation app takes over the console.
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    if not VoiceMenuShared.validate_voices(state):
+        return
+
     # Generate in full-screen modal.
     # The model worker remains alive after the modal app exits.
     generation_result = run_generation_app(

@@ -172,7 +172,14 @@ class ProjectSerializationUtil:
         if not isinstance(d, dict):
             return d
 
-        # Version 3 projects carry model settings in `model_settings`; the flat
+        # Resolve legacy voices before permissive flat-field cleanup or MOSS
+        # ownership conversion can drop/duplicate sources. No UI in validators.
+        from tts_audiobook_tool.project_support.voice_reference_migration import prepare_project_voice_references
+        prepared = prepare_project_voice_references(d)
+        d.clear()
+        d.update(prepared)
+
+        # Version 3+ projects carry model settings in `model_settings`; the flat
         # model fields are then legacy remnants, not expected-but-missing
         # properties, so their absence must not warn.
         has_model_settings = isinstance(d.get("model_settings"), dict)
@@ -475,7 +482,7 @@ class ProjectSerializationUtil:
 
         d['chapter_mode'] = value
 
-        normalize_by_id('voice_select_mode', VoiceSelectMode.get_by_id, VoiceSelectMode.AUTO_ADVANCE)
+        normalize_by_id('voice_select_mode', VoiceSelectMode.get_by_id, VoiceSelectMode.get_default())
 
         s = d.get('chatterbox_type', '')
         chatterbox_type = ChatterboxType.get_by_id(s)
@@ -866,6 +873,14 @@ class ProjectSerializationUtil:
             if warnings is not None:
                 warnings.append(f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Problem reading model settings objects:\n{exc}\n")
 
+        if not reconciliation_failed:
+            # V4 keeps exactly one project-wide list. A historical fork may have
+            # re-created scoped clone storage during reconciliation, and the
+            # serializer never writes it; drop it in memory too so a loaded
+            # project matches its saved form.
+            for obj in (*settings.models.values(), *settings.shared.values()):
+                obj.pop("voice_references", None)
+
         if normalize_paths(settings) and warnings is not None:
             s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Rewrote project-local path(s) in this project's "
             s += "saved model settings to the app's portable form."
@@ -891,6 +906,9 @@ class ProjectSerializationUtil:
         Applied to the finished dict rather than at each emission site, so a
         newly added voice field is covered automatically.
         """
+        from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
+        if "voice_references" in d:
+            d["voice_references"] = normalize_voice_references(d["voice_references"])
         for key in ProjectSerializationUtil.get_project_local_path_field_names():
             value = d.get(key, None)
             if isinstance(value, list):
@@ -907,8 +925,9 @@ class ProjectSerializationUtil:
             # Never trusted when read back: both load paths overwrite it with
             # the directory actually being opened.
             "dir_path": project.dir_path,
-            "version": project.version,
+            "version": PROJECT_SPEC_VERSION,
             "tts_model_type": project.tts_model_type,
+            "voice_references": deepcopy(project.voice_references),
 
             "language_code": project.language_code,
 
@@ -951,7 +970,17 @@ class ProjectSerializationUtil:
         # the old flat-field behavior for values that never passed through the
         # load funnel.
         normalize_paths(project.model_settings)
-        return REGISTRY.serialize(project.model_settings)
+        result = REGISTRY.serialize(project.model_settings)
+        from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
+        for section in ("models", "shared"):
+            for key, obj in result[section].items():
+                if section == "shared" and key in SHARED_MEMBERS and key not in REGISTRY.members:
+                    # A retired historical group only survives here when
+                    # reconciliation failed and the object was retained
+                    # non-destructively; keep it verbatim.
+                    continue
+                obj.pop("voice_references", None)
+        return result
 
     @staticmethod
     def to_snapshot_dict(project: Project) -> dict:

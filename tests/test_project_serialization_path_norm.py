@@ -6,8 +6,8 @@ the load side must reduce them to the app's portable form and the write side
 must not persist anything machine-local. These tests pin both directions, and
 pin the completeness of the field list that drives them.
 
-Version 3 stores model-scoped values in `model_settings`; the flat voice fields
-are accepted on load (the legacy migration) and never written back.
+Version 4 stores ordered voice references at project level; legacy model-scoped
+and flat voice fields are accepted on load and never written back.
 """
 
 from pathlib import Path
@@ -58,14 +58,14 @@ def test_normalize_loaded_project_dict_reduces_a_foreign_voice_list() -> None:
 
     ProjectSerializationUtil.normalize_loaded_project_dict(d, warnings=warnings)
 
-    references = d["model_settings"]["models"]["chatterbox_local"]["voice_references"]
+    references = d["voice_references"]
     assert references == [
         {"file_name": "narrator.flac", "transcript": ""},
         {"file_name": "voice/second.flac", "transcript": ""},
     ]
     assert "chatterbox_voice_file_name" not in d
-    assert len(path_warnings(warnings)) == 1
-    assert "chatterbox_voice_file_name" in path_warnings(warnings)[0]
+    # A single legacy source is migrated silently, including canonical paths.
+    assert path_warnings(warnings) == []
 
 
 def test_normalize_loaded_project_dict_reduces_scalar_path_fields() -> None:
@@ -111,7 +111,7 @@ def test_normalize_loaded_project_dict_leaves_transcript_text_alone() -> None:
 
     ProjectSerializationUtil.normalize_loaded_project_dict(d)
 
-    references = d["model_settings"]["models"]["fish_s1_local"]["voice_references"]
+    references = d["voice_references"]
     assert references == [{"file_name": "voice.flac", "transcript": text}]
 
 
@@ -129,7 +129,7 @@ def test_normalize_loaded_project_dict_leaves_aliased_transcript_text_alone() ->
 
     ProjectSerializationUtil.normalize_loaded_project_dict(d)
 
-    references = d["model_settings"]["models"]["glm_local"]["voice_references"]
+    references = d["voice_references"]
     assert references == [{"file_name": "voice.flac", "transcript": text}]
     assert "glm_voice_text" not in d
     assert "glm_voice_transcript" not in d
@@ -150,7 +150,7 @@ def test_to_project_json_dict_canonicalizes_values_never_loaded() -> None:
 
     result = ProjectSerializationUtil.to_project_json_dict(project)
 
-    references = result["model_settings"]["models"]["chatterbox_local"]["voice_references"]
+    references = result["voice_references"]
     assert [reference["file_name"] for reference in references] == [
         "narrator.flac",
         "other.flac",

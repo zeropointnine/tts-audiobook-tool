@@ -106,11 +106,13 @@ def test_auk_project_fields_are_shared_normalized_and_serialized():
 
     # AuK and AuK-Flash share one storage group.
     payload = ProjectSerializationUtil.to_project_json_dict(project)
-    shared = payload["model_settings"]["shared"]["auk"]
-    assert shared["model_ids"] == ["auk_sglomni", "auk_flash_sglomni"]
-    assert shared["voice_references"] == [
+    # V4 keeps one project-wide voice list; scoped clone storage is not emitted.
+    assert payload["voice_references"] == [
         {"file_name": "voice.flac", "transcript": "reference transcript"}
     ]
+    shared = payload["model_settings"]["shared"]["auk"]
+    assert shared["model_ids"] == ["auk_sglomni", "auk_flash_sglomni"]
+    assert "voice_references" not in shared
     # Unset speed is documented as null; seeds stay explicit by design.
     # Default concurrency remains absent from the orchestration section.
     assert shared["parameters"] == {"speed": None, "seed": -1}

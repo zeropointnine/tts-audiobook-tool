@@ -64,9 +64,10 @@ AudioCppParameterTypes = AudioCppParameter | AudioCppTextParameter
 @dataclass(frozen=True)
 class AudioCppMenuControl:
     kind: str
+    # Voice samples are implicitly routed; settings always declare a target.
+    target_menu: str | None
     parameter: str = ""
     label: str = ""
-    group: str = ""
 
 
 @dataclass(frozen=True)
@@ -128,7 +129,7 @@ def load_audio_cpp_definitions(path: Path = CATALOG_PATH) -> AudioCppDefinitions
                     raw["default_sentinel"], raw["request_key"], raw["target"], raw["input_prompt_suffix"],
                 )
         menu = tuple(
-            AudioCppMenuControl(item["kind"], item.get("parameter", ""), item.get("label", ""), item.get("group", ""))
+            AudioCppMenuControl(item["kind"], item.get("target_menu"), item.get("parameter", ""), item.get("label", ""))
             for item in declaration["menu"]
         )
         models[spec.id] = AudioCppModelDefinition(

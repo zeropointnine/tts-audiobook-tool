@@ -8,9 +8,8 @@ from typing import TYPE_CHECKING
 from tts_audiobook_tool.app_types import Book, BookSegmentationSettings, SegmentationStrategy
 from tts_audiobook_tool.app_types.book_serialization import BOOK_FORMAT, book_from_project_text_json_dict, get_project_text_format
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME, PROJECT_SPEC_VERSION
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.util import printt
 
@@ -34,6 +33,7 @@ class ProjectLoadUtil:
         dir_path: str,
         *,
         prompt_on_warnings: bool = True,
+        prompt_on_migration: bool | None = None,
     ) -> Project | str:
         from tts_audiobook_tool import ask
         from tts_audiobook_tool.project import Project
@@ -43,13 +43,49 @@ class ProjectLoadUtil:
 
         project_dict_path = os.path.join(dir_path, PROJECT_JSON_FILE_NAME)
         try:
-            with open(project_dict_path, 'r', encoding='utf-8') as f:
-                d = json.load(f)
+            with open(project_dict_path, 'rb') as f:
+                original_settings = f.read()
+                d = json.loads(original_settings)
         except Exception as e:
             return f"Error loading project settings: {e}"
 
         if not isinstance(d, dict):
             return f"Project settings file bad type: {type(d)}"
+
+        from tts_audiobook_tool.project_support.voice_reference_migration import (
+            prepare_project_voice_references,
+            VoiceReferenceMigrationRequired,
+        )
+        from tts_audiobook_tool.project_support.model_settings import REGISTRY
+        from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
+        settings = d.get('model_settings', {})
+        # Scoped voice lists that the v4 migration actually removes. Retired
+        # historical shared groups are retained verbatim by both the migration
+        # and the serializer, so counting them here would flag needs_v4_save
+        # on every open and create a new numbered backup each time.
+        had_scoped_voices = isinstance(settings, dict) and any(
+            isinstance(objects, dict) and any(
+                isinstance(obj, dict) and 'voice_references' in obj
+                for key, obj in objects.items()
+                if section != 'shared' or key not in SHARED_MEMBERS or key in REGISTRY.members
+            )
+            for section, objects in (('models', settings.get('models', {})), ('shared', settings.get('shared', {})))
+        )
+        needs_v4_save = (
+            d.get('version') != PROJECT_SPEC_VERSION or 'voice_references' not in d or had_scoped_voices
+            or any(attr in d for attr, binding in REGISTRY.legacy.items() if binding.section == 'voice_references')
+        )
+        try:
+            d = prepare_project_voice_references(
+                d, prompt=prompt_on_warnings if prompt_on_migration is None else prompt_on_migration,
+                dir_name=os.path.basename(os.path.normpath(dir_path)) or dir_path,
+            )
+        except VoiceReferenceMigrationRequired:
+            # Surfaced as a distinct exception so noninteractive callers (e.g.
+            # the server) can fail with targeted remediation steps.
+            raise
+        except ValueError as exc:
+            return str(exc)
 
         had_legacy_applied_fields = any(
             key in d for key in (
@@ -82,6 +118,24 @@ class ProjectLoadUtil:
         except Exception as e:
             return f"Failed to parse project: {e}"
 
+        if needs_v4_save:
+            # No load-time migration may overwrite settings before their exact
+            # original bytes are backed up. Never clobber an earlier backup.
+            backup_path = project_dict_path + '.pre-v4.bak'
+            suffix = 1
+            while True:
+                try:
+                    with open(backup_path, 'xb') as f:
+                        f.write(original_settings)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    break
+                except FileExistsError:
+                    suffix += 1
+                    backup_path = project_dict_path + f'.pre-v4.bak.{suffix}'
+                except OSError as exc:
+                    return f'Could not back up project settings before v4 migration: {exc}'
+
         if inline_text_source:
             err = ProjectTextIOUtil.save_book(project)
             if not err:
@@ -104,22 +158,27 @@ class ProjectLoadUtil:
                 f"to {BOOK_FORMAT}: {dir_path}"
             )
 
+        if needs_v4_save and not inline_text_source and not (external_text_source and external_text_source != BOOK_FORMAT):
+            err = project.save()
+            if err:
+                return err
+
         if had_legacy_applied_fields and not inline_text_source and external_text_source == BOOK_FORMAT:
             err = project.save()
             if err:
                 return err
             L.i(f"Removed legacy applied text fields from {PROJECT_JSON_FILE_NAME}: {dir_path}")
 
-        # Persist path canonicalization and defaulted values. The voice check
-        # below drops only references whose file exists but cannot be decoded,
-        # so this save never costs anything a saved reference.
+        # Persist path canonicalization and defaulted values.
         if pending_warnings:
-            project.save()
+            err = project.save()
+            if err:
+                return err
 
-        voice_result = ProjectVoiceUtil.verify_voice_files_exist(project)
-
-        if voice_result.corrupt:
-            project.save()
+        # Voice sample files are deliberately not verified at load time:
+        # missing references are kept for later, and problems surface through
+        # readiness blockers and the pre-feature validate_voices flow instead
+        # of a load-time interruption.
 
         from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
         foreign_targets = ProjectTransferUtil.find_foreign_path_targets(project)
@@ -132,7 +191,7 @@ class ProjectLoadUtil:
             s += "Re-enter the path in this menu's model settings to fix it."
             pending_warnings.append(s)
 
-        if pending_warnings or voice_result:
+        if pending_warnings:
             for warning in pending_warnings:
                 printt(warning)
             if prompt_on_warnings:

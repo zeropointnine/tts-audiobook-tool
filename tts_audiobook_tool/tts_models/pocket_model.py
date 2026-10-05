@@ -125,11 +125,10 @@ class PocketModel(PocketBaseModel):
             print_params: bool = False,
             max_random_seed: int = -1,
     ) -> list[Sound] | str:
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("pocket_local"), voice_selection_index)
-        if voice_file_name:
-            voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
-        else:
-            voice_path = project.get_model_setting('pocket_local', 'predefined_voice')
+        voice_path = project.get_model_setting('pocket_local', 'predefined_voice')
+        if not voice_path:
+            voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("pocket_local"), voice_selection_index)
+            voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
 
         temperature = project.get_model_setting('pocket_local', 'temperature')
         if temperature == -1:

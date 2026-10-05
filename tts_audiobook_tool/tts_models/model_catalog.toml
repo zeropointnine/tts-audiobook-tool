@@ -6,10 +6,14 @@
 # require_by_id(id) is strict; get_by_id(id) falls back to none for unknown external IDs.
 # Order: none, then local/sglomni/audiocpp groups sorted by model name.
 # `spec` holds model metadata; backend tables hold matching and request configuration.
+# Optional `spec.ui.voice_sample_max_duration_s` is the upper duration advised by
+# the voice-path guidance (including "up to" limits); it only warns, never rejects samples.
 # audio.cpp `match` accepts either `task = "<token>"` or, when a family's routes are the
 # same inference path, `tasks = [...]` of the tokens a server may advertise.
 # `settings` declares persisted values separately from request defaults.
 # audio.cpp requires an explicit `menu`; numeric controls require a nonempty `label`.
+# Both server backends require `target_menu = "model"` or "voice" on settings controls.
+# `voice_samples` has no target: it always expands in Voice clone.
 # audio.cpp `request_options` pins constants into every request's `options` object;
 # they are not persisted and have no menu control, unlike `parameters` entries.
 # Shared settings use explicit `setting_groups`; their declarations must agree.
@@ -132,6 +136,7 @@ substitutions = []
 [models.spec.ui]
 proper_name = "dots.tts"
 short_name = "dots.tts"
+voice_sample_max_duration_s = 10
 voice_path_console = "Enter voice clone audio clip file path (up to 10s recommended): "
 voice_path_requestor = "Select voice clone audio clip (up to 10s recommended)"
 project_links = [
@@ -172,6 +177,7 @@ substitutions = [["—", ", "], ["─", ", "]]
 [models.spec.ui]
 proper_name = "Fish S1-mini"
 short_name = "S1-mini"
+voice_sample_max_duration_s = 10
 voice_path_console = "Enter voice clone audio clip file path (up to 10s): "
 voice_path_requestor = "Select voice clone audio clip (up to 10s)"
 project_links = [
@@ -212,6 +218,7 @@ substitutions = [["—", ", "], ["─", ", "]]
 [models.spec.ui]
 proper_name = "Fish S2-Pro"
 short_name = "S2-Pro"
+voice_sample_max_duration_s = 30
 voice_path_console = "Enter voice clone audio clip file path (10-30s): "
 voice_path_requestor = "Select voice clone audio clip (10-30s)"
 project_links = [
@@ -288,6 +295,7 @@ substitutions = [["—", ", "], ["─", ", "]]
 [models.spec.ui]
 proper_name = "Higgs Audio V2"
 short_name = "Higgs v2"
+voice_sample_max_duration_s = 15
 voice_path_console = "Enter voice clone audio clip file path (~15 seconds recommended): "
 voice_path_requestor = "Select voice clone audio clip"
 project_links = [
@@ -371,6 +379,7 @@ substitutions = []
 [models.spec.ui]
 proper_name = "MiraTTS"
 short_name = "Mira"
+voice_sample_max_duration_s = 8
 voice_path_console = "Enter voice clone audio clip file path (recommended up to 8s): "
 voice_path_requestor = "Select voice clone audio clip (recommended up to 8s)"
 project_links = [
@@ -461,6 +470,7 @@ substitutions = []
 [models.spec.ui]
 proper_name = "OmniVoice"
 short_name = "OmniVoice"
+voice_sample_max_duration_s = 15
 voice_path_console = "Enter voice clone audio clip file path (3-10s recommended, up to 15s): "
 voice_path_requestor = "Select voice clone audio clip (3-10s recommended, up to 15s)"
 project_links = [
@@ -498,6 +508,7 @@ substitutions = []
 [models.spec.ui]
 proper_name = "Pocket TTS"
 short_name = "Pocket"
+voice_sample_max_duration_s = 15
 voice_path_console = "Enter voice clone audio clip file path (5-10s, up to 15s): "
 voice_path_requestor = "Select voice clone audio clip (5-10s, up to 15s)"
 project_links = [
@@ -624,6 +635,7 @@ requirements_file_name = "requirements-remote.txt"
 [models.spec.ui]
 proper_name = "AuK"
 short_name = "AuK"
+voice_sample_max_duration_s = 5
 voice_path_console = "Enter voice clone audio clip file path (~5s recommended): "
 voice_path_requestor = "Select voice clone audio clip (~5s recommended)"
 project_links = [
@@ -659,11 +671,12 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "speed"
+target_menu = "model"
 label = "Speech speed"
-group = "advanced"
 
 [[models.sgl_omni.menu]]
 kind = "seed"
+target_menu = "model"
 
 # ------------------------------------------------------------------------
 # AuK-Flash shares the AuK request shape but has its own identity and upstream match.
@@ -691,6 +704,7 @@ requirements_file_name = "requirements-remote.txt"
 [models.spec.ui]
 proper_name = "AuK-Flash"
 short_name = "AuK-Flash"
+voice_sample_max_duration_s = 5
 voice_path_console = "Enter voice clone audio clip file path (~5s recommended): "
 voice_path_requestor = "Select voice clone audio clip (~5s recommended)"
 project_links = [
@@ -726,11 +740,12 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "speed"
+target_menu = "model"
 label = "Speech speed"
-group = "advanced"
 
 [[models.sgl_omni.menu]]
 kind = "seed"
+target_menu = "model"
 
 # ------------------------------------------------------------------------
 [[models]]
@@ -759,6 +774,7 @@ requirements_file_name = "requirements-remote.txt"
 [models.spec.ui]
 proper_name = "Fun-CosyVoice3"
 short_name = "CosyVoice3"
+voice_sample_max_duration_s = 30
 voice_path_console = "Enter voice clone audio clip file path (up to 30s): "
 voice_path_requestor = "Select voice clone audio clip (up to 30s)"
 project_links = [
@@ -812,19 +828,22 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "temperature"
+target_menu = "model"
 label = "Temperature"
-group = "advanced"
 
 [[models.sgl_omni.menu]]
 parameter = "top_p"
+target_menu = "model"
 label = "Top-P"
 
 [[models.sgl_omni.menu]]
 parameter = "top_k"
+target_menu = "model"
 label = "Top-K"
 
 [[models.sgl_omni.menu]]
 parameter = "repetition_penalty"
+target_menu = "model"
 label = "Repetition penalty"
 
 # ------------------------------------------------------------------------
@@ -858,6 +877,7 @@ requirements_file_name = "requirements-remote.txt"
 [models.spec.ui]
 proper_name = "Fish S2-Pro"
 short_name = "S2-Pro"
+voice_sample_max_duration_s = 30
 voice_path_console = "Enter voice clone audio clip file path (10-30s): "
 voice_path_requestor = "Select voice clone audio clip (10-30s)"
 project_links = [
@@ -906,15 +926,17 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "temperature"
+target_menu = "model"
 label = "Temperature"
-group = "advanced"
 
 [[models.sgl_omni.menu]]
 parameter = "top_p"
+target_menu = "model"
 label = "Top-P"
 
 [[models.sgl_omni.menu]]
 parameter = "top_k"
+target_menu = "model"
 label = "Top-K"
 
 # ------------------------------------------------------------------------
@@ -993,15 +1015,17 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "temperature"
+target_menu = "model"
 label = "Temperature"
-group = "advanced"
 
 [[models.sgl_omni.menu]]
 parameter = "top_p"
+target_menu = "model"
 label = "Top-P"
 
 [[models.sgl_omni.menu]]
 parameter = "top_k"
+target_menu = "model"
 label = "Top-K"
 
 # ------------------------------------------------------------------------
@@ -1085,18 +1109,22 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "delay_temperature"
+target_menu = "model"
 label = "Temperature"
 
 [[models.sgl_omni.menu]]
 parameter = "delay_top_p"
+target_menu = "model"
 label = "Top-P"
 
 [[models.sgl_omni.menu]]
 parameter = "delay_top_k"
+target_menu = "model"
 label = "Top-K"
 
 [[models.sgl_omni.menu]]
 kind = "seed"
+target_menu = "model"
 
 # ------------------------------------------------------------------------
 # moss_local_sglomni: The more specific moss-tts-local match wins over moss when both match.
@@ -1179,18 +1207,22 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "local_temperature"
+target_menu = "model"
 label = "Temperature"
 
 [[models.sgl_omni.menu]]
 parameter = "local_top_p"
+target_menu = "model"
 label = "Top-P"
 
 [[models.sgl_omni.menu]]
 parameter = "local_top_k"
+target_menu = "model"
 label = "Top-K"
 
 [[models.sgl_omni.menu]]
 kind = "seed"
+target_menu = "model"
 
 # ------------------------------------------------------------------------
 # Server Qwen uses stream-request defaults separately from ordinary request defaults.
@@ -1283,19 +1315,22 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "temperature"
+target_menu = "model"
 label = "Temperature"
-group = "advanced"
 
 [[models.sgl_omni.menu]]
 parameter = "top_p"
+target_menu = "model"
 label = "Top-P"
 
 [[models.sgl_omni.menu]]
 parameter = "top_k"
+target_menu = "model"
 label = "Top-K"
 
 [[models.sgl_omni.menu]]
 parameter = "repetition_penalty"
+target_menu = "model"
 label = "Repetition penalty"
 
 # ------------------------------------------------------------------------
@@ -1324,6 +1359,7 @@ requirements_file_name = "requirements-remote.txt"
 [models.spec.ui]
 proper_name = "ZONOS2"
 short_name = "ZONOS2"
+voice_sample_max_duration_s = 20
 voice_path_console = "Enter voice clone audio clip file path (~10-20 seconds recommended): "
 voice_path_requestor = "Select voice clone audio clip (~10-20 seconds recommended)"
 project_links = [
@@ -1377,15 +1413,17 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "temperature"
+target_menu = "model"
 label = "Temperature"
-group = "advanced"
 
 [[models.sgl_omni.menu]]
 parameter = "top_k"
+target_menu = "model"
 label = "Top-K"
 
 [[models.sgl_omni.menu]]
 parameter = "repetition_penalty"
+target_menu = "model"
 label = "Repetition penalty"
 
 
@@ -1426,12 +1464,12 @@ project_links = [
 [models.audio_cpp]
 menu = [
     { kind = "voice_samples" },
-    { kind = "voice_instructions", parameter = "instruct", group = "advanced" },
-    { parameter = "temperature", label = "Temperature", group = "advanced" },
-    { parameter = "guidance_scale", label = "Guidance scale", group = "advanced" },
-    { parameter = "top_p", label = "Top-P" },
-    { parameter = "top_k", label = "Top-K" },
-    { kind = "seed" },
+    { kind = "voice_instructions", parameter = "instruct", target_menu = "voice" },
+    { parameter = "temperature", label = "Temperature", target_menu = "model" },
+    { parameter = "guidance_scale", label = "Guidance scale", target_menu = "model" },
+    { parameter = "top_p", label = "Top-P", target_menu = "model" },
+    { parameter = "top_k", label = "Top-K", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
 ]
 # Cloning requires a transcript only when a reference clip is supplied.
 reference_transcript = true
@@ -1525,12 +1563,12 @@ project_links = [
 [models.audio_cpp]
 menu = [
     { kind = "voice_samples" },
-    { parameter = "temperature", label = "Temperature", group = "advanced" },
-    { parameter = "exaggeration", label = "Exaggeration", group = "advanced" },
-    { parameter = "guidance_scale", label = "CFG/pace", group = "advanced" },
-    { parameter = "top_p", label = "Top-P" },
-    { parameter = "repetition_penalty", label = "Repetition penalty" },
-    { kind = "seed" },
+    { parameter = "temperature", label = "Temperature", target_menu = "model" },
+    { parameter = "exaggeration", label = "Exaggeration", target_menu = "model" },
+    { parameter = "guidance_scale", label = "CFG/pace", target_menu = "model" },
+    { parameter = "top_p", label = "Top-P", target_menu = "model" },
+    { parameter = "repetition_penalty", label = "Repetition penalty", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
 ]
 
 # Native default text_chunk_size is 128 codepoints (~20 words), which silently
@@ -1601,6 +1639,7 @@ substitutions = []
 [models.spec.ui]
 proper_name = "Echo-TTS"
 short_name = "Echo-TTS"
+voice_sample_max_duration_s = 15
 voice_path_console = "Enter voice clone audio clip file path (~10s recommended, up to 15s): "
 voice_path_requestor = "Select voice clone audio clip (~10s recommended, up to 15s)"
 project_links = [
@@ -1649,19 +1688,22 @@ kind = "voice_samples"
 
 [[models.audio_cpp.menu]]
 parameter = "num_inference_steps"
+target_menu = "model"
 label = "Steps"
-group = "advanced"
 
 [[models.audio_cpp.menu]]
 parameter = "text_guidance_scale"
+target_menu = "model"
 label = "Text guidance scale"
 
 [[models.audio_cpp.menu]]
 parameter = "speaker_guidance_scale"
+target_menu = "model"
 label = "Speaker guidance scale"
 
 [[models.audio_cpp.menu]]
 kind = "seed"
+target_menu = "model"
 
 # ------------------------------------------------------------------------
 [[models]]
@@ -1696,10 +1738,10 @@ project_links = [
 [models.audio_cpp]
 menu = [
     { kind = "voice_samples" },
-    { parameter = "temperature", label = "Temperature", group = "advanced" },
-    { parameter = "top_p", label = "Top-P" },
-    { parameter = "top_k", label = "Top-K" },
-    { kind = "seed" },
+    { parameter = "temperature", label = "Temperature", target_menu = "model" },
+    { parameter = "top_p", label = "Top-P", target_menu = "model" },
+    { parameter = "top_k", label = "Top-K", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
 ]
 # audio.cpp injects this as reference_text when the caller supplies one.
 reference_transcript = true
@@ -1780,10 +1822,10 @@ language_policy = "moss"
 language_target = "options"
 menu = [
     { kind = "voice_samples" },
-    { parameter = "delay_temperature", label = "Temperature", group = "advanced" },
-    { parameter = "delay_top_p", label = "Top-P" },
-    { parameter = "delay_top_k", label = "Top-K" },
-    { kind = "seed" },
+    { parameter = "delay_temperature", label = "Temperature", target_menu = "model" },
+    { parameter = "delay_top_p", label = "Top-P", target_menu = "model" },
+    { parameter = "delay_top_k", label = "Top-K", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
 ]
 # Leave audio.cpp's other defaults (including repetition penalty and duration
 # bounds) untouched, but disable its internal text chunking: the native
@@ -1860,10 +1902,10 @@ language_target = "top_level"
 music_and_trim = true
 menu = [
     { kind = "voice_samples" },
-    { parameter = "local_temperature", label = "Temperature", group = "advanced" },
-    { parameter = "local_top_p", label = "Top-P" },
-    { parameter = "local_top_k", label = "Top-K" },
-    { kind = "seed" },
+    { parameter = "local_temperature", label = "Temperature", target_menu = "model" },
+    { parameter = "local_top_p", label = "Top-P", target_menu = "model" },
+    { parameter = "local_top_k", label = "Top-K", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
 ]
 # Match the local/SGL-Omni 1024-token budget: audio.cpp counts audio frames
 # per internal text chunk (about 81.92 seconds). This is not an app control.
@@ -1927,6 +1969,7 @@ substitutions = []
 [models.spec.ui]
 proper_name = "OmniVoice"
 short_name = "OmniVoice audio.cpp"
+voice_sample_max_duration_s = 15
 voice_path_console = "Enter voice clone audio clip file path (3-10s recommended, up to 15s): "
 voice_path_requestor = "Select voice clone audio clip (3-10s recommended, up to 15s)"
 project_links = [
@@ -1996,29 +2039,31 @@ default = ""
 request_key = "instruction"
 target = "options"
 
-# Menu order mirrors local `omnivoice_local`: voice samples, then the advanced
-# block led by the voice-design instructions. The `Advanced:` heading is
-# stamped above the group's first rendered member, so `voice_instructions`
-# carries the marker.
+# Menu order mirrors local `omnivoice_local`: voice samples, then settings
+# led by the voice-design instructions.
 [[models.audio_cpp.menu]]
 kind = "voice_samples"
 
 [[models.audio_cpp.menu]]
 kind = "voice_instructions"
+target_menu = "voice"
 parameter = "instruct"
-group = "advanced"
 
 [[models.audio_cpp.menu]]
 parameter = "num_inference_steps"
+target_menu = "model"
 label = "Steps"
 
 [[models.audio_cpp.menu]]
 parameter = "speed"
+target_menu = "model"
 label = "Speed"
 
 [[models.audio_cpp.menu]]
 parameter = "guidance_scale"
+target_menu = "model"
 label = "Guidance scale"
 
 [[models.audio_cpp.menu]]
 kind = "seed"
+target_menu = "model"

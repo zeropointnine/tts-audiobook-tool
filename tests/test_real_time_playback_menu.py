@@ -73,6 +73,8 @@ def test_line_range_uses_project_text_and_persists_selection(monkeypatch) -> Non
 
 
 def test_start_always_passes_project_text_and_range(monkeypatch) -> None:
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(lambda _state: True))
     phrase_groups = [object(), object()]
     state = _make_state(phrase_groups=phrase_groups, realtime_line_range=(2, 2))
     calls: list[tuple[State, list[object], tuple[int, int] | None]] = []

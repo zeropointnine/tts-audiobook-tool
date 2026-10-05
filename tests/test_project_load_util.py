@@ -67,7 +67,7 @@ def test_load_reduces_paths_saved_by_another_os_and_persists_the_upgrade(
     project = load(dir_path)
 
     assert get_setting(project, "chatterbox_voice_file_name") == ["narrator.flac", "second.flac"]
-    saved = read_saved(dir_path)["model_settings"]["models"]["chatterbox_local"]
+    saved = read_saved(dir_path)
     assert saved["voice_references"] == [
         {"file_name": "narrator.flac", "transcript": ""},
         {"file_name": "second.flac", "transcript": ""},
@@ -88,14 +88,19 @@ def test_load_keeps_a_reference_whose_file_has_not_arrived_yet(
     project = load(dir_path)
 
     assert get_setting(project, "chatterbox_voice_file_name") == ["gone.flac"]
-    saved = read_saved(dir_path)["model_settings"]["models"]["chatterbox_local"]
+    saved = read_saved(dir_path)
     assert saved["voice_references"] == [{"file_name": "gone.flac", "transcript": ""}]
     project.kill()
 
 
-def test_load_persists_a_cleared_reference_for_a_corrupt_file(
+def test_load_keeps_a_corrupt_reference_for_lazy_validation(
         tmp_path: Path,
 ) -> None:
+    """
+    Load-time voice verification is gone: a reference to an undecodable file
+    survives loading untouched and surfaces through the pre-feature
+    validate_voices flow instead of being dropped at open time.
+    """
     dir_path = make_chatterbox_project_dir(tmp_path, {"chatterbox_voice_file_name": ["bad.flac"]})
     voice_dir = Path(dir_path) / PROJECT_VOICE_SUBDIR
     voice_dir.mkdir()
@@ -103,8 +108,8 @@ def test_load_persists_a_cleared_reference_for_a_corrupt_file(
 
     project = load(dir_path)
 
-    assert get_setting(project, "chatterbox_voice_file_name") == []
-    assert "bad.flac" not in json.dumps(read_saved(dir_path))
+    assert get_setting(project, "chatterbox_voice_file_name") == ["bad.flac"]
+    assert "bad.flac" in json.dumps(read_saved(dir_path))
     project.kill()
 
 
@@ -142,6 +147,7 @@ def test_load_ignores_a_dir_path_written_by_another_os(tmp_path: Path) -> None:
     assert not os.path.exists("C:\\Users\\lee\\mybook")
     assert sorted(item.name for item in Path(dir_path).iterdir()) == [
         PROJECT_JSON_FILE_NAME,
+        PROJECT_JSON_FILE_NAME + '.pre-v4.bak',
         PROJECT_SOUND_SEGMENTS_SUBDIR,
     ]
     project.kill()

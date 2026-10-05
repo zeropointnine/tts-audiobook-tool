@@ -151,7 +151,7 @@ class ProjectNewMenu:
                 return False
 
             try:
-                snapshot_project = ProjectTransferUtil.validate_abr_snapshot(project_snapshot)
+                snapshot_project = ProjectTransferUtil.validate_abr_snapshot(project_snapshot, prompt_on_migration=True)
             except Exception as exc:
                 ask.ask_error(f"Invalid ABR project snapshot: {make_error_string(exc)}")
                 return False
