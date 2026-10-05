@@ -15,6 +15,7 @@ from tts_audiobook_tool.constants import SEED_MAX
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.tts_models.moss_attention import configure_moss_local_v15_attention
 from tts_audiobook_tool.tts_models.moss_base_model import MossArchType, MossConfigs, MossBaseModel
 from tts_audiobook_tool.util import *
 
@@ -77,6 +78,7 @@ class MossModel(MossBaseModel):
         # Rem, this can raise exception (eg OOM), which should handled properly by instantiator
         self.model = self.load_model(local_path, attn_implementation)
         self.model.eval()
+        configure_moss_local_v15_attention(self.model)
 
         printt(f"MOSS loaded arch type: {self.get_loaded_arch_type().value}")
 

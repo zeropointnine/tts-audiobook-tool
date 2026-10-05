@@ -73,10 +73,12 @@ class ProjectNewMenu:
 
         if migrate_current_settings and old_project.dir_path:
             ProjectTransferUtil.apply_project_settings(state.project, old_project)
+            text_file_names, voice_file_names = ProjectTransferUtil.collect_supporting_project_file_names(old_project)
             missing_paths = ProjectTransferUtil.copy_supporting_project_files(
                 state.project,
                 old_project.dir_path,
-                ProjectTransferUtil.make_supporting_project_file_names(old_project)
+                text_file_names,
+                voice_file_names,
             )
             state.project.save()
             state.set_existing_project(state.project.dir_path)
@@ -169,10 +171,12 @@ class ProjectNewMenu:
             source_dir = ProjectTransferUtil.get_snapshot_source_dir(project_snapshot, abr_path)
             missing_paths = []
             if source_dir:
+                text_file_names, voice_file_names = ProjectTransferUtil.collect_supporting_project_file_names(snapshot_project)
                 missing_paths = ProjectTransferUtil.copy_supporting_project_files(
                     new_project,
                     source_dir,
-                    ProjectTransferUtil.make_supporting_project_file_names(snapshot_project),
+                    text_file_names,
+                    voice_file_names,
                     strict_copy_errors=True,
                 )
             # With no source directory, never search the process's current
@@ -243,7 +247,7 @@ class ProjectNewMenu:
             return
 
         printt(
-            f"{COL_ERROR}Note that following supporting project files do not exist and were not copied over:{COL_DEFAULT}"
+            f"{COL_ERROR}The following supporting project files do not exist and were not copied over:{COL_DEFAULT}"
         )
         for path in missing_paths:
             printt(f"- {path}")

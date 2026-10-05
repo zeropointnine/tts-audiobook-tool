@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any, cast
 
@@ -55,6 +56,12 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
     assert 'server-target.flac' not in result
     assert 'https://example.com/voice.flac' not in result
 
+    # The classified view drives copy destinations: text at the root, voice
+    # files in the voice subdir.
+    text_file_names, voice_file_names = ProjectTransferUtil.collect_supporting_project_file_names(project)
+    assert text_file_names == result[:3]
+    assert voice_file_names == result[3:]
+
 
 def test_copy_supporting_project_files_copies_all_discovered_voice_files_and_reports_missing(
         tmp_path: Path,
@@ -77,23 +84,33 @@ def test_copy_supporting_project_files_copies_all_discovered_voice_files_and_rep
         'voice-b.flac': b'voice b',
         'emotion.flac': b'emotion voice',
     }
+    contents_voice_subdir = {'voice-a.flac', 'voice-b.flac', 'emotion.flac'}
     for file_name, content in contents.items():
         (source_dir / file_name).write_bytes(content)
 
-    file_names = ProjectTransferUtil.make_supporting_project_file_names(source_project)
+    text_file_names, voice_file_names = ProjectTransferUtil.collect_supporting_project_file_names(source_project)
     missing_paths = ProjectTransferUtil.copy_supporting_project_files(
         Project(dir_path=str(dest_dir)),
         str(source_dir),
-        file_names,
+        text_file_names,
+        voice_file_names,
     )
 
     assert missing_paths == [str(source_dir / 'missing.flac')]
     for file_name, content in contents.items():
-        assert (dest_dir / file_name).read_bytes() == content
+        if file_name in contents_voice_subdir:
+            assert (dest_dir / PROJECT_VOICE_SUBDIR / file_name).read_bytes() == content
+        else:
+            assert (dest_dir / file_name).read_bytes() == content
     assert not (dest_dir / 'missing.flac').exists()
 
 
-def test_copy_supporting_project_files_keeps_the_voice_subdir_layout(tmp_path: Path) -> None:
+def test_copy_supporting_project_files_upgrades_legacy_root_voice_files(tmp_path: Path) -> None:
+    """
+    Voice files found at a legacy project root are copied into the destination
+    project's voice subdir. Bare saved references resolve against the voice
+    subdir first, so the new project works on the current layout alone.
+    """
     source_dir = tmp_path / 'source'
     dest_dir = tmp_path / 'destination'
     (source_dir / PROJECT_VOICE_SUBDIR).mkdir(parents=True)
@@ -109,7 +126,7 @@ def test_copy_supporting_project_files_keeps_the_voice_subdir_layout(tmp_path: P
     missing_paths = ProjectTransferUtil.copy_supporting_project_files(
         Project(dir_path=str(dest_dir)),
         str(source_dir),
-        ProjectTransferUtil.make_supporting_project_file_names(source_project),
+        *ProjectTransferUtil.collect_supporting_project_file_names(source_project),
     )
 
     assert missing_paths == [
@@ -118,7 +135,14 @@ def test_copy_supporting_project_files_keeps_the_voice_subdir_layout(tmp_path: P
         str(source_dir / PROJECT_TEXT_EPUB_FILE_NAME),
     ]
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == b'narrator'
-    assert (dest_dir / 'root.flac').read_bytes() == b'root'
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'root.flac').read_bytes() == b'root'
+    assert not (dest_dir / 'root.flac').exists()
+
+    # The bare saved reference resolves in the new project via the voice subdir.
+    from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+    dest_project = Project(dir_path=str(dest_dir), chatterbox_voice_file_name=['root.flac'])
+    resolved = ProjectVoiceUtil.resolve_voice_file_path(dest_project, 'root.flac')
+    assert os.path.exists(resolved) and resolved == str(dest_dir / PROJECT_VOICE_SUBDIR / 'root.flac')
 
 
 def test_copy_supporting_project_files_recovers_names_saved_by_another_os(tmp_path: Path) -> None:
@@ -140,7 +164,7 @@ def test_copy_supporting_project_files_recovers_names_saved_by_another_os(tmp_pa
     missing_paths = ProjectTransferUtil.copy_supporting_project_files(
         Project(dir_path=str(dest_dir)),
         str(source_dir),
-        ProjectTransferUtil.make_supporting_project_file_names(source_project),
+        *ProjectTransferUtil.collect_supporting_project_file_names(source_project),
     )
 
     assert missing_paths == [
@@ -169,7 +193,7 @@ def test_copy_supporting_project_files_does_not_escape_the_project_dir(tmp_path:
     missing_paths = ProjectTransferUtil.copy_supporting_project_files(
         Project(dir_path=str(dest_dir)),
         str(source_dir),
-        ProjectTransferUtil.make_supporting_project_file_names(source_project),
+        *ProjectTransferUtil.collect_supporting_project_file_names(source_project),
     )
 
     assert missing_paths == [
@@ -177,7 +201,7 @@ def test_copy_supporting_project_files_does_not_escape_the_project_dir(tmp_path:
         str(source_dir / PROJECT_TEXT_RAW_FILE_NAME),
         str(source_dir / PROJECT_TEXT_EPUB_FILE_NAME),
     ]
-    assert (dest_dir / 'escaped.flac').read_bytes() == b'escaped'
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'escaped.flac').read_bytes() == b'escaped'
 
 
 def test_get_snapshot_source_dir_falls_back_to_the_abr_files_own_directory(tmp_path: Path) -> None:

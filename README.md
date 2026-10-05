@@ -772,8 +772,8 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 Listed below are some anecdotal TTS inference speeds (locally hosted models only). The app adopts each respective model's reference implementation logic as much as possible. Note how CUDA inference speeds on Linux are typically significantly faster than on Windows.
 
-| TTS Model               | Setup                | Speed           | Notes |
-| ----------------------- | -------------------- | --------------- | ----- |
+| TTS Model               | Setup                | Speed           | Notes                       |
+| ----------------------- | -------------------- | --------------- | --------------------------- |
 | Chatterbox Multilingual | RTX 4090, Windows    | 200% realtime   |
 | Chatterbox Multilingual | GTX 3080 Ti, Linux   | 250% realtime (yes really) |
 | Chatterbox Multilingual | Macbook Pro M1 (MPS) | 20-35% realtime |
@@ -788,9 +788,8 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 | IndexTTS2               | RTX 4090, Windows    | ~150% realtime  |
 | IndexTTS2               | GTX 3080 Ti, Windows | ~90% realtime   |
 | IndexTTS2               | Macbook Pro M1 (MPS) | ~20% realtime   |
-| MOSS-TTS v1.5           | GTS 4090, Windows    | ~45% realtime (yes really) | batch size=1, flash attn
-| MOSS-TTS v1.5           | GTS 4090, Windows    | ~80% realtime   | batch size=2, flash attn
-| MOSS-TTS-Local-Transformer-v1.5           | GTS 4090, Windows    | 500% realtime   | batch size=20, flash attn
+| MOSS-TTS v1.5           | GTS 4090, Windows    | ~50% realtime   | batch size=1, flash attn
+| MOSS-TTS-Local-Transformer-v1.5 | GTS 4090, Windows | 1000% realtime | batch size=20, flash attn
 | OmniVoice TTS           | GTX 3080 Ti, Linux   | 300% realtime   | default steps
 | OmniVoice TTS           | Macbook Pro M1 (MPS) | 20% realtime    | default steps
 | Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  |

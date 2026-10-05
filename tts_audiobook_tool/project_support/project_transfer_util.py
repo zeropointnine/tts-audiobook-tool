@@ -239,23 +239,48 @@ class ProjectTransferUtil:
 
     @staticmethod
     def make_supporting_project_file_names(project: Project) -> list[str]:
-        raw_file_names: list[object] = [
+        text_file_names, voice_file_names = ProjectTransferUtil.collect_supporting_project_file_names(project)
+        return text_file_names + voice_file_names
+
+    @staticmethod
+    def collect_supporting_project_file_names(project: Project) -> tuple[list[str], list[str]]:
+        """
+        The project's supporting files, classified by where they belong in a
+        destination project: `(text file names, voice sample file names)`.
+
+        Text files live at the project root; voice sample files live in the
+        project's voice subdir, wherever the source project happened to keep
+        them.
+        """
+        raw_text_file_names: list[object] = [
             PROJECT_TEXT_FILE_NAME,
             PROJECT_TEXT_RAW_FILE_NAME,
             PROJECT_TEXT_EPUB_FILE_NAME,
         ]
+        raw_voice_file_names: list[object] = []
         seen_owners: set[tuple[str, str]] = set()
         for model_type in TtsModelType.all():
             if REGISTRY.voice_binding(model_type.id) is not None:
-                raw_file_names.extend(ProjectVoiceUtil.get_voice_values(project, model_type))
+                raw_voice_file_names.extend(ProjectVoiceUtil.get_voice_values(project, model_type))
             for binding in REGISTRY.for_model(model_type.id):
                 if binding.section != "files":
                     continue
                 owner = (binding.group or binding.model_id, binding.name)
                 if owner not in seen_owners:
                     seen_owners.add(owner)
-                    raw_file_names.append(project.get_model_setting(model_type.id, binding.name))
+                    raw_voice_file_names.append(project.get_model_setting(model_type.id, binding.name))
 
+        return (
+            ProjectTransferUtil.filter_project_file_names(raw_text_file_names),
+            ProjectTransferUtil.filter_project_file_names(raw_voice_file_names),
+        )
+
+    @staticmethod
+    def filter_project_file_names(raw_file_names: list[object]) -> list[str]:
+        """
+        Reduces raw collected file settings to a deduplicated list of
+        project-local file names.
+        """
         filtered_file_names: list[str] = []
         for raw_file_name in raw_file_names:
             if not isinstance(raw_file_name, str) or not raw_file_name:
@@ -268,39 +293,59 @@ class ProjectTransferUtil:
             file_name, _ = path_norm.normalize_stored_relative_path(raw_file_name)
             if not file_name:
                 continue
-            if file_name in filtered_file_names:
-                continue
-            filtered_file_names.append(file_name)
+            if file_name not in filtered_file_names:
+                filtered_file_names.append(file_name)
 
         return filtered_file_names
 
     @staticmethod
     def copy_supporting_project_files(
-        project: Project, source_dir: str, file_names: list[str], *, strict_copy_errors: bool = False,
+        project: Project,
+        source_dir: str,
+        text_file_names: list[str],
+        voice_file_names: list[str],
+        *,
+        strict_copy_errors: bool = False,
     ) -> list[str]:
+        """
+        Copies text files to the destination project root and voice sample
+        files into its voice subdir — wherever in the source project the files
+        happened to be found, including the legacy project-root layout.
+        """
         if not isinstance(source_dir, str):
             source_dir = ''
 
         missing_paths: list[str] = []
 
-        for file_name in file_names:
-            match = ProjectTransferUtil.find_supporting_project_file_source_path(source_dir, file_name)
-            if not match.path:
-                missing_paths.append(
-                    path_norm.join_project_relative(source_dir, file_name) if source_dir else file_name
-                )
-                continue
+        for file_names, is_voice_file in ((text_file_names, False), (voice_file_names, True)):
+            for file_name in file_names:
+                match = ProjectTransferUtil.find_supporting_project_file_source_path(source_dir, file_name)
+                if not match.path:
+                    missing_paths.append(
+                        path_norm.join_project_relative(source_dir, file_name) if source_dir else file_name
+                    )
+                    continue
 
-            dest_path = path_norm.join_project_relative(project.dir_path, match.relative_path)
-            try:
-                dest_dir = os.path.dirname(dest_path)
-                if dest_dir:
-                    os.makedirs(dest_dir, exist_ok=True)
-                shutil.copy(match.path, dest_path)
-            except Exception as exc:
-                if strict_copy_errors:
-                    raise OSError(f"Could not copy supporting file {match.path} to {dest_path}: {exc}") from exc
-                missing_paths.append(match.path)
+                if is_voice_file:
+                    # Saved voice references are bare names, which resolve
+                    # against the voice subdir first, so the copy's place in
+                    # the destination is the voice subdir regardless of where
+                    # the source project kept it.
+                    base_name = path_norm.split_relative(match.relative_path)[-1]
+                    relative_path = f"{PROJECT_VOICE_SUBDIR}/{base_name}"
+                else:
+                    relative_path = match.relative_path
+
+                dest_path = path_norm.join_project_relative(project.dir_path, relative_path)
+                try:
+                    dest_dir = os.path.dirname(dest_path)
+                    if dest_dir:
+                        os.makedirs(dest_dir, exist_ok=True)
+                    shutil.copy(match.path, dest_path)
+                except Exception as exc:
+                    if strict_copy_errors:
+                        raise OSError(f"Could not copy supporting file {match.path} to {dest_path}: {exc}") from exc
+                    missing_paths.append(match.path)
 
         return missing_paths
 
@@ -311,10 +356,11 @@ class ProjectTransferUtil:
 
         Searches the source root and its voice subdir, in the canonical
         relative form and by bare file name, so a file laid out by either
-        operating system is found. The returned `relative_path` says where the
-        copy belongs in the destination project, which is what preserves the
-        voice-subdir layout — previously derived with `os.path.commonpath`,
-        which raises when the two paths belong to different path grammars.
+        operating system is found. The returned `relative_path` reflects where
+        the file was found; `copy_supporting_project_files` upgrades legacy
+        root-level voice files into the destination's voice subdir —
+        previously derived with `os.path.commonpath`, which raises when the
+        two paths belong to different path grammars.
         """
         name_parts = path_norm.split_relative(file_name)
         if not name_parts:
