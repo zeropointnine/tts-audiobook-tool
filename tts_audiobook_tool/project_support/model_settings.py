@@ -137,6 +137,21 @@ class ModelSettingsRegistry:
             for name, parameter in entry.get(entry.get("backend_kind", ""), {}).get("parameters", {}).items():
                 if parameter["type"] in ("int", "float"):
                     pending.parameter_bounds[(model_id, name)] = (parameter["min"], parameter["max"])
+        # The local MOSS implementation uses the same architecture-specific UI
+        # bounds as the catalog's server controls. Keep validating local saved
+        # values after retiring their shared storage, without coupling overrides.
+        for (model_id, name), bounds in tuple(pending.parameter_bounds.items()):
+            if model_id in ("moss_delay_sglomni", "moss_local_sglomni") and ("moss_local", name) in pending.bindings:
+                pending.parameter_bounds[("moss_local", name)] = bounds
+        # The v1.5 Local Transformer preset has no server counterpart to copy
+        # bounds from, so its local-only settings carry the preset's own.
+        from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
+        v15 = MossConfigs.LOCAL_V15.value
+        pending.parameter_bounds.update({
+            ("moss_local", "local_v15_temperature"): (v15.temperature_min, v15.temperature_max),
+            ("moss_local", "local_v15_top_p"): (v15.audio_top_p_min, v15.audio_top_p_max),
+            ("moss_local", "local_v15_top_k"): (v15.audio_top_k_min, v15.audio_top_k_max),
+        })
         # Migration defaults/owners are frozen separately from current defaults.
         legacy = legacy_bindings()
         self.bindings, self.members, self.legacy = pending.bindings, pending.members, legacy
@@ -283,6 +298,14 @@ class ModelSettingsRegistry:
         raw_shared = source.get("shared", {})
         if not isinstance(raw_models, dict) or not isinstance(raw_shared, dict):
             raise ValueError("model_settings.models and model_settings.shared must be objects")
+        # Fork retired ownership before current cleaning removes raw nulls and
+        # empty lists. Remember the originally supplied private objects for the
+        # existing whole-object precedence of flat private fields (e.g. target).
+        provided_models = raw_models
+        from tts_audiobook_tool.project_support.model_settings_compat import fork_moss_settings, split_moss_local_seed
+        source, legacy = fork_moss_settings(source, legacy, self.legacy, self.bindings)
+        source = split_moss_local_seed(source, self.bindings)
+        raw_models, raw_shared = source.get("models", {}), source.get("shared", {})
         result = ModelSettings()
         known_models = {id for id, _ in self.bindings}
         for model_id, raw in raw_models.items():
@@ -314,7 +337,7 @@ class ModelSettingsRegistry:
                 binding = self.legacy.get(attr)
                 if binding is None:
                     continue
-                if binding.group and binding.group in raw_shared or not binding.group and binding.model_id in raw_models:
+                if binding.group and binding.group in raw_shared or not binding.group and binding.model_id in provided_models:
                     continue
                 if binding.section == "voice_references":
                     continue
@@ -330,7 +353,7 @@ class ModelSettingsRegistry:
             for attr, binding in self.legacy.items():
                 if binding.section != "voice_references" or binding.name != "file_name" or attr not in legacy:
                     continue
-                if binding.group and binding.group in raw_shared or not binding.group and binding.model_id in raw_models:
+                if binding.group and binding.group in raw_shared or not binding.group and binding.model_id in provided_models:
                     continue
                 voices = legacy[attr]
                 voices = [voices] if isinstance(voices, str) and voices else voices

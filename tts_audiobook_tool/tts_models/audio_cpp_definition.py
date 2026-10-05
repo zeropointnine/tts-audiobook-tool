@@ -89,6 +89,11 @@ class AudioCppModelDefinition:
     # Constants pinned into every request's `options`; not project settings.
     request_options: dict[str, int | float] = field(default_factory=dict)
     settings: tuple[dict[str, Any], ...] = ()
+    # MOSS prompt templates use full language names; other families keep ISO codes.
+    language_policy: str = "project_code"
+    # Community MOSS reads options.language, while Local reads Transcript.language.
+    language_target: str = "top_level"
+    music_and_trim: bool = False
 
 
 @dataclass(frozen=True)
@@ -132,5 +137,8 @@ def load_audio_cpp_definitions(path: Path = CATALOG_PATH) -> AudioCppDefinitions
             declaration["voice_required"],
             declaration["max_words_range_reco"], declaration["request_options"],
             parse_model_settings(entry),
+            language_policy=declaration["language_policy"],
+            language_target=declaration["language_target"],
+            music_and_trim=declaration["music_and_trim"],
         )
     return AudioCppDefinitions(models, fingerprint)

@@ -210,13 +210,14 @@ def test_omnivoice_definition_claims_the_clone_route_with_family_defaults():
 
 def test_omnivoice_numeric_menu_prompt_shows_the_default(monkeypatch, tmp_path: Path):
     """Numeric prompts follow the app convention: range plus default value."""
+    from tts_audiobook_tool import text_util
     from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
 
     item = definition(OMNIVOICE_ID)
     project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": OMNIVOICE_ID})
     state = SimpleNamespace(project=project)
     printed: list[str] = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_audio_cpp_menu.printt",
+    monkeypatch.setattr("tts_audiobook_tool.ask.printt",
                         lambda text: printed.append(text))
     # An empty response leaves storage untouched, so nothing needs saving.
     monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_audio_cpp_menu.ask.ask_input",
@@ -227,9 +228,11 @@ def test_omnivoice_numeric_menu_prompt_shows_the_default(monkeypatch, tmp_path: 
             continue
         parameter = item.parameters[control.parameter]
         VoiceAudioCppMenu.make_parameter_item(state, parameter, control.label).handler(state, None)
-        assert printed[-1] == (
-            f"Enter {control.label} (valid range: {parameter.min}-{parameter.max}; "
-            f"default: {parameter.default}):"
+        minimum = int(parameter.min) if parameter.type == "int" else parameter.min
+        maximum = int(parameter.max) if parameter.type == "int" else parameter.max
+        default = int(parameter.default) if parameter.type == "int" else parameter.default
+        assert text_util.strip_ansi_codes(printed[-1]) == (
+            f"Enter {control.label}: (valid range: {minimum}-{maximum}; default: {default})"
         )
 
 

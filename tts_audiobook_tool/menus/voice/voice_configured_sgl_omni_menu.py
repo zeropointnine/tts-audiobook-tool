@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM
+from tts_audiobook_tool.constants_hints import HINT_MOSS_TEMPERATURE
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.state import State
@@ -31,13 +33,17 @@ class VoiceConfiguredSglOmniMenu:
                 groups.append("")
                 continue
             parameter = definition.parameters[control.parameter]
-            items.append(VoiceConfiguredSglOmniMenu.make_parameter_item(state, parameter, control.label, definition.spec.id))
+            items.append(VoiceConfiguredSglOmniMenu.make_parameter_item(
+                state, parameter, control.label, definition.spec.id,
+                standard_prompt=definition.language_policy == "moss" and parameter.request_key == "temperature",
+            ))
             groups.append(control.group)
         VoiceMenuShared.apply_group_superlabels(items, groups)
         return items
 
     @staticmethod
-    def make_parameter_item(state: State, parameter: NumericParameter, label: str, model_id: str | None = None) -> MenuItem:
+    def make_parameter_item(state: State, parameter: NumericParameter, label: str, model_id: str | None = None,
+                            *, standard_prompt: bool = False) -> MenuItem:
         def display(current: State) -> str:
             try:
                 effective = ConfiguredSettings.get(current.project, parameter, model_id)
@@ -53,8 +59,24 @@ class VoiceConfiguredSglOmniMenu:
                 ask.ask_error(str(exc))
                 effective = parameter.default
             ceiling = parameter.max_request_value if parameter.max_request_value is not None else parameter.max
-            reset = f"; {parameter.default_sentinel} resets to default {parameter.default}" if parameter.default_sentinel is not None else ""
             suffix = f" {COL_DIM}{parameter.input_prompt_suffix}{COL_DEFAULT}" if parameter.input_prompt_suffix else ""
+            # MOSS temperatures use the stock bounded-number editor. Keep other
+            # controls' existing reset and server-specific validation behavior.
+            if standard_prompt:
+                hints.show_hint_if_necessary(current.prefs, HINT_MOSS_TEMPERATURE)
+                ask.ask_number_and_save(
+                    saveable=current.project,
+                    target=SettingRef(model_id or parameter.model_id, parameter.name),
+                    prompt=f"Enter {label}{suffix}",
+                    min_value=parameter.min,
+                    max_value=ceiling,
+                    default_value=parameter.default,
+                    success_prefix="Value set:",
+                    is_int=parameter.type == "int",
+                    prefill_value=effective,
+                )
+                return
+            reset = f"; {parameter.default_sentinel} resets to default {parameter.default}" if parameter.default_sentinel is not None else ""
             printt(f"Enter {label} (valid range: {parameter.min}-{ceiling}{reset}){suffix}:")
             response = ask.ask_input(prefill=str(effective))
             if not response or response == str(effective):

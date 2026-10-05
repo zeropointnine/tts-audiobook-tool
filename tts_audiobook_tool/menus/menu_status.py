@@ -38,8 +38,10 @@ class MenuStatus:
             pending = getattr(state, "pending_tts_model_change", None)
             old_id = (pending.old_model_id if pending is not None
                       and pending.new_model_id == previous_id else previous_id)
+            # An unselected project has no previous model to announce replacing.
             state.pending_tts_model_change = (
-                PendingTtsModelChange(old_id, changed.id) if old_id != changed.id else None
+                PendingTtsModelChange(old_id, changed.id)
+                if old_id not in ("none", changed.id) else None
             )
 
     @staticmethod
@@ -62,8 +64,10 @@ class MenuStatus:
         old_name = _make_model_name(pending.old_model_id)
         current_name = _make_model_name(pending.new_model_id)
         text = f"This project was previously using TTS model {old_name}.\n"
-        if Tts.get_active_type().id == pending.new_model_id:
-            text += f"It will now use the currently active model, {current_name}"
+        active = Tts.get_active_type()
+        if active.id == pending.new_model_id:
+            sole = "sole " if active.value.backend_kind is TtsBackendKind.AUDIO_CPP else ""
+            text += f"It will now use the {sole}currently active model, {current_name}"
         else:
             text += (f"It is now configured to use {current_name}, "
                      "but the runtime is unavailable (see TTS mode).")
@@ -174,18 +178,18 @@ def _make_server_tts_text(state: State) -> str:
 
     snapshot = RemoteTtsDiscovery.get_snapshot()
     selected = state.project.get_tts_model_type()
-    # Process mode wins over a saved local selection. While offline, a saved
-    # remote type can still identify the backend without changing modes.
-    backend_kind = snapshot.backend_kind
-    if backend_kind is None and selected.value.backend_kind is not TtsBackendKind.LOCAL:
-        backend_kind = selected.value.backend_kind
+    # The qualifier identifies the saved model, not the connected server.
+    # Only an unselected/unknown model falls back to the discovered backend.
+    backend_kind = (selected.value.backend_kind if selected.id != "none"
+                    else snapshot.backend_kind)
     backend = _BACKEND_KIND_LABELS.get(backend_kind, "server")
     base_url = RemoteTtsDiscovery.get_base_url()
-    if backend_kind is TtsBackendKind.AUDIO_CPP and base_url:
+    server_matches_backend = snapshot.backend_kind in (None, backend_kind)
+    if backend_kind is TtsBackendKind.AUDIO_CPP and base_url and server_matches_backend:
         backend = text_util.make_terminal_hyperlink(
             f"{base_url}/v1/models?include_session_options=true", backend
         )
-    elif backend_kind is TtsBackendKind.SGL_OMNI and base_url:
+    elif backend_kind is TtsBackendKind.SGL_OMNI and base_url and server_matches_backend:
         backend = text_util.make_terminal_hyperlink(f"{base_url}/v1/models", backend)
     model = selected.value.ui["proper_name"]
     if selected.id == "none":
@@ -196,6 +200,7 @@ def _make_server_tts_text(state: State) -> str:
     # Use server residency from cached metadata, not the worker's adapter state.
     if (
         snapshot.backend_kind is TtsBackendKind.AUDIO_CPP
+        and backend_kind is TtsBackendKind.AUDIO_CPP
         and snapshot.issue is None
         and Tts._binding_issue is None
         and selected.id != "none"
@@ -211,8 +216,13 @@ def _make_server_tts_text(state: State) -> str:
     if snapshot.issue is not None:
         if server_unreachable:
             text += f" {COL_ERROR}(server unreachable)"
+        elif snapshot.issue.code == "no_supported_models":
+            server_backend = _BACKEND_KIND_LABELS.get(snapshot.backend_kind, "server")
+            text += f" {COL_ERROR}(server mode; {server_backend} has no supported models)"
         else:
             text += f" {COL_ERROR}({snapshot.issue.message})"
+    elif selected.id != "none" and backend_kind is TtsBackendKind.LOCAL:
+        text += f" {COL_ERROR}(unavailable in server mode)"
     elif selected.id != "none" and Tts._binding_issue is not None:
         text += f" {COL_ERROR}({Tts._binding_issue.verbose})"
     return text

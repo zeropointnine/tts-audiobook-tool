@@ -208,8 +208,8 @@ Be aware of the risks before continuing."""
 HINT_MOSS_TEMPERATURE = Hint(
     "moss_temperature",
     "Note",
-"""MOSS-TTS is susceptible to failing to properly terminate generations when
-temperature is set too low. Use low values with caution..."""
+"""MOSS models are sensitive to sampling settings. If generation becomes repetitive
+or fails to stop normally, try adjusting values closer to their recommended defaults."""
 )
 
 HINT_SGL_OMNI_DORMANT = Hint(

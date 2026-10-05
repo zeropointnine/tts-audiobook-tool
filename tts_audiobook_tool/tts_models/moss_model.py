@@ -219,6 +219,10 @@ class MossModel(MossBaseModel):
             if not message.audio_codes_list:
                 return "No audio output"
             audio = message.audio_codes_list[0]
+            # The v1.5 Local Transformer codec returns stereo audio as
+            # [channels, samples]; the app works with mono waveforms.
+            if isinstance(audio, torch.Tensor) and audio.ndim == 2 and audio.shape[0] in (1, 2):
+                audio = audio.mean(dim=0) if audio.shape[0] == 2 else audio.squeeze(0)
             audio_tensors.append(audio.detach().cpu() if isinstance(audio, torch.Tensor) else torch.as_tensor(audio))
             audio_np = audio.to(torch.float32).cpu().numpy().astype(np.float32, copy=False)
             sounds.append(Sound(audio_np, sample_rate))
@@ -341,7 +345,8 @@ class MossModel(MossBaseModel):
 
         temperature, audio_top_p, audio_top_k = self.get_generation_params(project, config)
 
-        seed = -1 if force_random_seed else project.get_model_setting('moss_local', 'seed')
+        seed_setting_name = MossBaseModel.get_seed_setting_name(config)
+        seed = -1 if force_random_seed else project.get_model_setting('moss_local', seed_setting_name)
         if seed == -1:
             seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
         language = MossBaseModel.get_language_name(project.language_code) if project.language_code else ""

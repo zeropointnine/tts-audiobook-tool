@@ -66,6 +66,11 @@ from tts_audiobook_tool.model_worker_protocol import (
 WORKER_START_TIMEOUT_SECONDS = 20.0
 WORKER_SHUTDOWN_TIMEOUT_SECONDS = 5.0
 STT_TRANSCRIPTION_TIMEOUT_ERROR = "STT transcription timed out"
+MODEL_CATALOG_MISMATCH_ERROR = (
+    "TTS model catalog (model_catalog.toml) differs between the application and "
+    "worker; restart the application to reload it. This catalog is shared by "
+    "local and remote TTS. A hard reset only restarts the worker."
+)
 STT_WORKER_STACK_LOG_PATH = os.path.join(
     tempfile.gettempdir(), "tts-audiobook-tool-worker-stacks.log"
 )
@@ -822,7 +827,11 @@ def _model_worker_main(
         Tts.init_local_model_type()
         signature = Tts._config_fingerprint
         if expected_config_signature is not None and signature != expected_config_signature:
-            raise RuntimeError("Remote TTS configuration differs between main and worker; restart the application")
+            # Expected when the on-disk catalog was edited during this session.
+            # Keep the consistency guard, but report an actionable startup error
+            # rather than printing a misleading remote-only traceback.
+            event_queue.put(WorkerCommandFailed("", MODEL_CATALOG_MISMATCH_ERROR))
+            return
         event_queue.put(WorkerReady(os.getpid(), signature))
     except Exception as exception:
         traceback.print_exc()
@@ -1344,7 +1353,7 @@ class ModelWorker:
                     with cls._lock:
                         cls._force_stop_process(process)
                         cls._discard_process_state()
-                    return "SGL-Omni configuration changed between main and worker; restart the application"
+                    return MODEL_CATALOG_MISMATCH_ERROR
                 with cls._lock:
                     cls._status = WorkerStatus.RUNNING
                 for output in startup_output:
@@ -1841,11 +1850,16 @@ class ModelWorker:
 
     @classmethod
     def get_model_state_blocking(cls) -> tuple[ModelStateSnapshot | None, str]:
-        """Return the worker model inventory, never parent static state."""
-        error = cls.start()
-        if error:
-            return None, error
+        """Query resident models without starting or resurrecting a worker.
+
+        An absent/dead process cannot hold models. In particular, menu redraws
+        must not retry a failed replacement startup after a hard reset.
+        """
         with cls._lock:
+            if cls._status is WorkerStatus.STARTING:
+                return None, "Model worker is starting"
+            if not cls.is_alive():
+                return ModelStateSnapshot(), ""
             if cls._active_operation_id is not None:
                 return None, "Model worker is busy"
             operation_id = uuid.uuid4().hex

@@ -50,7 +50,7 @@ def _field(obj: dict, key: str, where: str, typ: type) -> Any:
 # audio.cpp entries name their own request controls; the backend detector and
 # adapter interpret whatever a family declares here.
 _AUDIO_CPP_GROUP_KEYS = {"match", "parameters", "menu", "reference_transcript", "max_words_range_reco",
-                         "request_options", "voice_required"}
+                         "request_options", "voice_required", "language_policy", "language_target", "music_and_trim"}
 _AUDIO_CPP_MATCH_KEYS = {"task", "tasks", "family", "mode", "session_options"}
 _AUDIO_CPP_PARAMETER_KEYS = {"type", "default", "min", "max", "default_sentinel", "request_key", "target",
                              "input_prompt_suffix"}
@@ -265,6 +265,15 @@ def parse_audio_cpp_declaration(entry: dict[str, Any], where: str) -> dict[str, 
     voice_required = group.get("voice_required", True)
     if type(voice_required) is not bool:
         _fail(f"{where}.audio_cpp.voice_required", "expected a boolean")
+    language_policy = group.get("language_policy", "project_code")
+    if language_policy not in ("project_code", "moss"):
+        _fail(f"{where}.audio_cpp.language_policy", "expected project_code or moss")
+    language_target = group.get("language_target", "top_level")
+    if language_target not in _AUDIO_CPP_TARGETS:
+        _fail(f"{where}.audio_cpp.language_target", "expected top_level or options")
+    music_and_trim = group.get("music_and_trim", False)
+    if type(music_and_trim) is not bool:
+        _fail(f"{where}.audio_cpp.music_and_trim", "expected a boolean")
     parameters = _parse_audio_cpp_parameters(group.get("parameters", {}), f"{where}.audio_cpp.parameters")
     menu = _parse_audio_cpp_menu(group.get("menu"), parameters, f"{where}.audio_cpp.menu")
     word_range = _parse_audio_cpp_word_range(
@@ -274,6 +283,8 @@ def parse_audio_cpp_declaration(entry: dict[str, Any], where: str) -> dict[str, 
     return {"family": match["family"], "tasks": tasks, "mode": match["mode"],
             "session_options": dict(session_options), "reference_transcript": reference_transcript,
             "voice_required": voice_required,
+            "language_policy": language_policy, "language_target": language_target,
+            "music_and_trim": music_and_trim,
             "parameters": parameters, "menu": menu, "max_words_range_reco": word_range,
             "request_options": request_options}
 

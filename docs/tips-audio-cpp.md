@@ -58,6 +58,50 @@ audiocpp_server --config server.json
 
 After adding or changing config entries, restart the server to apply them.
 
+## MOSS-TTS Delay and Local
+
+The model selector uses the same names as SGL-Omni: **MOSS-TTS Delay** and **MOSS-TTS Local**. These correspond to different audio.cpp families:
+
+| App name | audio.cpp family | Output | Temperature / top-p / top-k defaults |
+|---|---|---|---|
+| MOSS-TTS Delay | `moss_tts_v15` | 24 kHz mono | `1.5 / 0.6 / 50` |
+| MOSS-TTS Local | `moss_tts_local` | 48 kHz | `1.7 / 0.8 / 25` |
+
+Delay is audio.cpp's experimental community implementation of the 8B v1.5 model, with English and Chinese advertised. “Local” identifies the Local Transformer architecture, not whether the server runs on the same computer.
+
+For example, use these entries in your server config's `models` array:
+
+```json
+[
+  {
+    "id": "my-moss-delay",
+    "family": "moss_tts_v15",
+    "path": "/path/to/models/MOSS-TTS-v1.5-GGUF",
+    "task": "tts",
+    "mode": "offline"
+  },
+  {
+    "id": "my-moss-local",
+    "family": "moss_tts_local",
+    "path": "/path/to/models/MOSS-TTS-Local-v1.5-GGUF",
+    "task": "tts",
+    "mode": "offline"
+  }
+]
+```
+
+The IDs can be arbitrary: discovery matches the declared family, task, and mode. Both models also accept `"task": "clon"`. **Configure one entry per variant**, not separate `tts` and `clon` entries for the same variant; otherwise the app cannot bind an unambiguous server entry.
+
+- Both models can generate without a voice sample, or clone from an optional sample even under task `tts`. Without a sample, the generated voice may vary between segments.
+- Neither implementation consumes a reference transcript. Unlike the existing local/SGL-Omni MOSS voice-import workflow, these audio.cpp variants do not request transcription or send reference text.
+- Editable controls are temperature, top-p, top-k, and seed. The project's language is automatically mapped to a full MOSS language name when recognized.
+- Community Delay parses seeds as signed 32-bit integers: its catalog `max_random_seed = 2147483647` keeps random seeds in range, like Echo. Fixed seeds are not clamped by this policy; use `0`–`2147483647` to avoid the server's `stoi argument out of range` error. Local's seed range is unchanged.
+- Other model parameters stay at audio.cpp/server defaults and are not app controls: this includes repetition penalty and Local's default ceiling of 4096 audio frames per chunk. The app leaves both server-side text chunkers enabled with their native defaults.
+- Requests are offline and sequential, without streaming, batching, concurrent requests, or rolling continuation. Local retains the app's music detection and trailing token-noise trimming behavior.
+- Local caches prepared reference codes in its server session, with one slot by default; the server-side `moss_tts_local.reference_cache_slots` session option controls this. Community Delay encodes the reference again for each request. The app does not manage either cache.
+
+Voice samples and generation settings belong to each backend variant independently; switching from local or SGL-Omni does not copy them into audio.cpp.
+
 ## Keep one TTS model loaded at a time
 
 **For most single-GPU setups, start with `"max_loaded_models": 1`.** You can set this directly at the top level of the JSON config, as shown above (or, alternatively, as a command-line option).

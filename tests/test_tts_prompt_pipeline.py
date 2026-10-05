@@ -82,6 +82,11 @@ def test_server_prompt_is_prepared_exactly_once_and_can_bypass_substitutions(
     ("echo_tts_audiocpp", 10, 10),
     ("echo_tts_audiocpp", 0, 0),
     ("echo_tts_audiocpp", 2**32 - 1, 2147483647),
+    ("moss_delay_audiocpp", -1, 2147483647),
+    ("moss_delay_audiocpp", 10, 10),
+    ("moss_delay_audiocpp", 0, 0),
+    ("moss_delay_audiocpp", 2**32 - 1, 2147483647),
+    ("moss_local_audiocpp", -1, -1),
 ])
 def test_dispatch_forwards_catalog_and_caller_random_seed_caps(monkeypatch, model_id, caller_cap, expected):
     model_type = TtsModelType.require_by_id(model_id)

@@ -263,8 +263,12 @@ def ask_number_and_save(
     is_int: bool=False,
     print_range_info: bool=True,
     is_minus_one_default: bool=False,
+    prefill_value: float | None=None,
 ) -> None:
-    """
+    """Ask and save a bounded number using the standard prompt format.
+
+    An optional prefill_value displays an effective value without changing the
+    stored setting or enabling special reset inputs.
     """
     from tts_audiobook_tool.prefs import Prefs
     from tts_audiobook_tool.project import Project
@@ -281,7 +285,8 @@ def ask_number_and_save(
 
     stored_value = _get_saveable_attr(saveable, target)
     is_effective_default_prefill = is_minus_one_default and stored_value == -1
-    prefill = default_value if is_effective_default_prefill else stored_value
+    prefill = prefill_value if prefill_value is not None else (
+        default_value if is_effective_default_prefill else stored_value)
     if is_int:
         prefill = int(prefill) # for good measure
     prefill = str(prefill)

@@ -146,11 +146,15 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
-        parameters = payload["model_settings"]["shared"]["moss"]["parameters"]
+        settings = payload["model_settings"]
+        self.assertNotIn("moss", settings["shared"])
+        parameters = settings["models"]["moss_local"]["parameters"]
         self.assertEqual(parameters["delay_top_p"], 0.72)
         self.assertEqual(parameters["delay_top_k"], 37)
         self.assertEqual(parameters["local_top_p"], 0.82)
         self.assertEqual(parameters["local_top_k"], 47)
+        self.assertEqual(settings["models"]["moss_delay_sglomni"]["parameters"]["delay_top_k"], 37)
+        self.assertEqual(settings["models"]["moss_local_sglomni"]["parameters"]["local_top_k"], 47)
 
     def test_project_to_dict_includes_qwen3_server_concurrent_requests(self):
         project = Project.model_validate({

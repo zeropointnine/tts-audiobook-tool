@@ -90,6 +90,32 @@ def test_spawned_model_worker_can_hard_reset() -> None:
     assert ModelWorker._process is not first_process
 
 
+def test_local_hard_reset_reports_catalog_change_without_menu_restart_loop(monkeypatch, capsys) -> None:
+    assert not Tts.is_remote_mode()
+    assert ModelWorker.start() == ""
+    # Simulate the main process retaining a fingerprint that no longer matches
+    # the catalog a freshly spawned worker reads (including local metadata).
+    monkeypatch.setattr(Tts, "_config_fingerprint", "0" * 64)
+
+    error = ModelWorker.reset()
+
+    assert error == model_worker_module.MODEL_CATALOG_MISMATCH_ERROR
+    assert "restart the application" in error
+    assert "local and remote" in error
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.out + captured.err
+    assert ModelWorker.status() is WorkerStatus.ABSENT
+    assert not ModelWorker.is_alive()
+    monkeypatch.setattr(
+        ModelWorker, "start",
+        classmethod(lambda cls: pytest.fail("menu status must not retry failed startup")),
+    )
+    for _ in range(3):
+        snapshot, state_error = ModelWorker.get_model_state_blocking()
+        assert state_error == ""
+        assert snapshot is not None and not snapshot.any_loaded
+
+
 def test_blocking_wait_stops_when_hard_reset_invalidates_operation(
     monkeypatch,
 ) -> None:
@@ -324,8 +350,13 @@ def test_worker_exited_is_synthesized_once_on_death() -> None:
     assert ModelWorker.status() is WorkerStatus.RUNNING
     process = ModelWorker._process
 
-    # Simulate a crash of the worker process tree.
+    # Simulate a crash of the worker process tree. An inventory query must not
+    # resurrect it, even before the event drainer observes its death.
     ModelWorker._force_stop_process(process)
+    snapshot, error = ModelWorker.get_model_state_blocking()
+    assert error == ""
+    assert snapshot is not None and not snapshot.any_loaded
+    assert ModelWorker._process is process
     events = ModelWorker.drain_events()
 
     exited = [event for event in events if isinstance(event, WorkerExited)]
@@ -616,7 +647,33 @@ def test_clear_models_if_running_does_not_spawn_worker(monkeypatch) -> None:
     assert ModelWorker.clear_models_if_running_blocking() == ""
 
 
+@pytest.mark.parametrize("status", [WorkerStatus.ABSENT, WorkerStatus.DEAD])
+def test_model_inventory_does_not_spawn_absent_or_dead_worker(monkeypatch, status) -> None:
+    monkeypatch.setattr(ModelWorker, "_status", status)
+    monkeypatch.setattr(
+        ModelWorker, "start",
+        classmethod(lambda cls: pytest.fail("inventory must not start worker")),
+    )
+
+    for _ in range(3):
+        snapshot, error = ModelWorker.get_model_state_blocking()
+        assert error == ""
+        assert snapshot == model_worker_module.ModelStateSnapshot()
+    assert ModelWorker.status() is status
+
+
+def test_model_inventory_does_not_query_starting_worker(monkeypatch) -> None:
+    monkeypatch.setattr(ModelWorker, "_status", WorkerStatus.STARTING)
+
+    snapshot, error = ModelWorker.get_model_state_blocking()
+
+    assert snapshot is None
+    assert error == "Model worker is starting"
+    assert not ModelWorker.is_busy()
+
+
 def test_worker_reports_its_own_empty_model_inventory() -> None:
+    assert ModelWorker.start() == ""
     snapshot, error = ModelWorker.get_model_state_blocking()
 
     assert error == ""

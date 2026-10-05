@@ -148,6 +148,10 @@ class AudioCppModelSupport:
 
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = []
+        if self.definition.language_policy == "moss":
+            from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
+            language = MossBaseModel.get_language_name(project.language_code)
+            warnings.append(f"Using MOSS-TTS language value: {language or 'None'}")
         if not self.definition.voice_required and not self.get_primary_voice_value(project):
             warnings.append("Note: Generated voices may vary because no voice reference has been configured.")
         warning = self.get_max_words_exceed_warning(project)
@@ -156,10 +160,10 @@ class AudioCppModelSupport:
         return warnings
 
     def should_trim_trailing_token_noise(self, project: Project, instance: object = None) -> bool:
-        return False
+        return self.definition.music_and_trim
 
     def can_hallucinate_music(self, project: Project, instance: object = None) -> bool:
-        return False
+        return self.definition.music_and_trim
 
 
 class AudioCppBackendAdapter:
@@ -264,13 +268,23 @@ class AudioCppBackendAdapter:
         """
         payload: dict = {
             "model": self.server_model_id, "input": prompt,
-            "response_format": "wav", "seed": seed, "language": language,
+            "response_format": "wav", "seed": seed,
         }
         if voice_ref is not None:
             payload["voice_ref"] = voice_ref
         # Family-pinned constants first, then the user's declared controls; a
         # parameter targeting the same key wins over a pinned one.
         options: dict[str, int | float | str] = dict(self.definition.request_options)
+        if self.definition.language_policy == "moss":
+            from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
+            language = MossBaseModel.get_language_name(language)
+        # Keep other families' existing empty/ISO language fields, but omit an
+        # unknown MOSS hint instead of inserting a tag the model wasn't trained on.
+        if language or self.definition.language_policy == "project_code":
+            if self.definition.language_target == "options":
+                options["language"] = language
+            else:
+                payload["language"] = language
         for name, parameter in self.definition.parameters.items():
             value = values[name]
             if isinstance(parameter, AudioCppTextParameter) and value == "":

@@ -80,7 +80,9 @@ def test_shared_group_owns_only_declared_fields() -> None:
     assert REGISTRY.get("fish_s2_local", "compile_enabled").group == ""
     assert REGISTRY.get("fish_s2_sglomni", "concurrent_requests").group == ""
     assert REGISTRY.get("auk_flash_sglomni", "speed").group == "auk"
-    assert REGISTRY.get("moss_delay_sglomni", "local_top_k").group == "moss"
+    assert REGISTRY.get("moss_delay_sglomni", "delay_top_k").group == ""
+    with pytest.raises(ValueError, match="Unknown setting"):
+        REGISTRY.get("moss_delay_sglomni", "local_top_k")
     assert REGISTRY.get("qwen3tts_sglomni", "temperature").group == "qwen3"
     with pytest.raises(ValueError, match="Unknown setting"):
         REGISTRY.get("qwen3tts_sglomni", "rolling_cont")
@@ -247,7 +249,13 @@ def test_current_bindings_retain_frozen_legacy_storage_contracts() -> None:
     for attr, legacy in REGISTRY.legacy.items():
         kind, default = BUILTIN_LEGACY_FIELDS[attr]
         current = REGISTRY.get(legacy.model_id, legacy.name)
-        assert current == legacy, attr
+        if legacy.group == "moss":
+            # Historical sharing remains frozen; current MOSS ownership forked.
+            assert "moss" not in REGISTRY.members
+            assert current.group == ""
+            assert replace(current, group="moss") == legacy, attr
+        else:
+            assert current == legacy, attr
         assert (current.value_type, current.list_item_type) == types[kind], attr
         assert current.default == default, attr
         assert current.has_sentinel == (default == -1 and not attr.endswith("_seed")), attr

@@ -174,6 +174,69 @@ def test_status_block_remote_selected_model_uses_gray_backend(capsys, monkeypatc
     assert "server model id:" not in tts_lines[0]
 
 
+@pytest.mark.parametrize("server_backend", [TtsBackendKind.AUDIO_CPP, TtsBackendKind.SGL_OMNI])
+def test_status_block_local_selection_with_unsupported_server(capsys, monkeypatch, server_backend):
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+        backend_kind=server_backend,
+        issue=RemoteTtsIssue("no_supported_models", "No configured server models match supported catalog variants")))
+    state = make_state(TtsModelType.require_by_id("moss_local"))
+    state._prefs = Prefs(remote_tts_url="http://example.test")
+
+    MenuStatus.print_block(state)
+
+    lines = capsys.readouterr().out.splitlines()
+    tts_lines = [line for line in lines if "TTS model:" in line]
+    assert len(tts_lines) == 1
+    backend = _BACKEND_LABELS[server_backend]
+    expected_status = f"(server mode; {backend} has no supported models)"
+    assert text_util.strip_ansi_codes(tts_lines[0]).split(":", 1)[1].strip() == (
+        f"MOSS-TTS (local) {expected_status}"
+    )
+    assert f"{COL_DIM}(local)" in tts_lines[0]
+    assert f"{COL_ERROR}{expected_status}" in tts_lines[0]
+    assert not any("TTS server:" in line for line in lines)
+    assert state.project.tts_model_type == "moss_local"
+
+
+@pytest.mark.parametrize("server_backend", [TtsBackendKind.AUDIO_CPP, TtsBackendKind.SGL_OMNI])
+def test_server_status_local_selection_is_unavailable(monkeypatch, server_backend):
+    from tts_audiobook_tool.menus.menu_status import _make_server_tts_text
+
+    RemoteTtsDiscovery.set_base_url("http://example.test")
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+        backend_kind=server_backend))
+
+    output = _make_server_tts_text(make_state(TtsModelType.require_by_id("moss_local")))
+
+    assert text_util.strip_ansi_codes(output) == "MOSS-TTS (local) (unavailable in server mode)"
+    assert f"{COL_DIM}(local)" in output
+    assert f"{COL_ERROR}(unavailable in server mode)" in output
+    assert "\x1b]8;;" not in output
+
+
+@pytest.mark.parametrize("model_id,server_backend", [
+    ("auk_sglomni", TtsBackendKind.AUDIO_CPP),
+    ("chatterbox_audiocpp", TtsBackendKind.SGL_OMNI),
+])
+def test_server_status_mismatched_remote_backend_preserves_model_identity(monkeypatch, model_id, server_backend):
+    from tts_audiobook_tool.menus.menu_status import _make_server_tts_text
+
+    model = TtsModelType.require_by_id(model_id)
+    RemoteTtsDiscovery.set_base_url("http://example.test")
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+        backend_kind=server_backend,
+        issue=RemoteTtsIssue("no_supported_models", "No configured server models match supported catalog variants")))
+
+    output = _make_server_tts_text(make_state(model))
+
+    assert text_util.strip_ansi_codes(output) == (
+        f"{_display_name(model)} (server mode; {_BACKEND_LABELS[server_backend]} has no supported models)"
+    )
+    # Do not link the selected backend to a different server's model list.
+    assert "\x1b]8;;" not in output
+
+
 @pytest.mark.parametrize("model_id,models_path", [
     ("chatterbox_audiocpp", "/v1/models?include_session_options=true"),
     ("auk_sglomni", "/v1/models"),
@@ -281,6 +344,7 @@ def test_server_status_hides_loaded_when_binding_or_snapshot_is_unsuitable(monke
 
 
 @pytest.mark.parametrize("model", [TtsModelType.require_by_id("chatterbox_local"), TtsModelType.require_by_id("omnivoice_local"),
+                                   TtsModelType.require_by_id("moss_local"),
                                    TtsModelType.require_by_id("auk_sglomni"), TtsModelType.require_by_id("chatterbox_audiocpp"),
                                    TtsModelType.require_by_id("echo_tts_audiocpp")])
 @pytest.mark.parametrize("saved", ["none", "mira_local",
@@ -316,16 +380,21 @@ def test_status_auto_selects_sole_model_and_defers_hint_until_menu(
     assert f"{COL_DIM}({backend})" in status_output
     assert "FYI" not in status_output
 
-    assert state.pending_tts_model_change == PendingTtsModelChange(saved, model.id)
+    expected_pending = None if saved == "none" else PendingTtsModelChange(saved, model.id)
+    assert state.pending_tts_model_change == expected_pending
     MenuStatus.show_pending_tts_model_hint(state, is_first_main_menu=True)
     MenuStatus.show_pending_tts_model_hint(state, is_first_main_menu=True)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    old_name = ("None (unselected)" if saved == "none" else
-                _display_name(TtsModelType.require_by_id("mira_local")) if saved == "mira_local" else
+    if saved == "none":
+        assert output == ""
+        assert state.pending_tts_model_change is None
+        return
+    old_name = (_display_name(TtsModelType.require_by_id("mira_local")) if saved == "mira_local" else
                 f"Unknown model: {saved}")
+    sole = "sole " if model.value.backend_kind is TtsBackendKind.AUDIO_CPP else ""
     assert output == (
         f"🔔 FYI\nThis project was previously using TTS model {old_name}.\n"
-        f"It will now use the currently active model, {_display_name(model)}\n\n"
+        f"It will now use the {sole}currently active model, {_display_name(model)}\n\n"
     )
     assert state.pending_tts_model_change is None
 

@@ -6,34 +6,39 @@ MOSS has two independent axes that both use the word “local” in different wa
 
 1. **Application backend**
    - `TtsBackendKind.LOCAL`: the audiobook tool imports and runs `moss_tts` in its own model worker, normally from `venv-moss`.
-   - `TtsBackendKind.SGL_OMNI`: the audiobook tool sends HTTP requests to an external SGL-Omni server, normally while running from `venv-sgl-omni`.
+   - `TtsBackendKind.SGL_OMNI`: the audiobook tool sends HTTP requests to an external SGL-Omni server, normally while running from `venv-client`.
+   - `TtsBackendKind.AUDIO_CPP`: the audiobook tool sends HTTP requests to an external audio.cpp server, using the same remote-client environment.
 
 2. **MOSS model architecture**
    - **Delay**: upstream `MossTTSDelay`, represented by `MossConfigs.DELAY`.
    - **Local Transformer**: upstream `MossTTSLocal`, represented by `MossConfigs.LOCAL`.
 
-“MOSS Local” therefore means the upstream Local Transformer architecture. It does **not** necessarily mean in-process execution. The Local Transformer can be loaded directly by the app or served remotely through SGL-Omni.
+“MOSS Local” therefore means the upstream Local Transformer architecture. It does **not** necessarily mean in-process execution. The Local Transformer can be loaded directly by the app or served remotely through SGL-Omni or audio.cpp.
 
 ## Supported combinations
 
 | Application backend | MOSS architecture | Catalog ID | Runtime implementation | Output rate |
 |---|---|---|---|---:|
-| Local/in-process | Delay or Local Transformer, selected by `project.moss_target` | `moss_local` | `MossModel` | 24 kHz or 48 kHz |
+| Local/in-process | Delay or Local Transformer, selected by its private `target` setting | `moss_local` | `MossModel` | 24 kHz or 48 kHz |
 | SGL-Omni | Delay | `moss_delay_sglomni` | `SglOmniBackendAdapter` with the `moss_delay_sglomni` TOML definition | 24 kHz |
 | SGL-Omni | Local Transformer | `moss_local_sglomni` | `SglOmniBackendAdapter` with the `moss_local_sglomni` TOML definition | 48 kHz |
+| audio.cpp | Community v1.5 8B Delay | `moss_delay_audiocpp` | `AudioCppBackendAdapter`, family `moss_tts_v15` | 24 kHz |
+| audio.cpp | Local Transformer v1.5 | `moss_local_audiocpp` | `AudioCppBackendAdapter`, family `moss_tts_local` | 48 kHz |
 
-The local/in-process catalog entry remains one `moss_local` type because its Hugging Face target is a project-level model setting and the loaded architecture is discovered from that target. SGL-Omni exposes the two architectures as formal model types because the server selection needs architecture-specific metadata even when no local model target is configured.
+The local/in-process catalog entry remains one `moss_local` type because its Hugging Face target is a private model setting and the loaded architecture is discovered from that target. Each remote backend exposes the two architectures as formal model types because server selection needs architecture-specific metadata even when no local model target is configured. The audio.cpp UI names mirror SGL-Omni: `MOSS-TTS Delay` and `MOSS-TTS Local`; Delay's community implementation is experimental and advertises English/Chinese support.
 
-## Catalog identities and SGL-Omni selection
+## Catalog identities and remote selection
 
-The single [`model_catalog.toml`](<../tts_audiobook_tool/tts_models/model_catalog.toml>) (`schema_version = 1`) declares the built-in local `moss_local` spec, both built-in server variants, and the `"none"` placeholder alongside other model specs. It supplies stable IDs, backend kinds and metadata; server entries also carry model-ID matching, behavior, request defaults, parameters and menu definitions. The MOSS server catalog IDs are:
+The single [`model_catalog.toml`](<../tts_audiobook_tool/tts_models/model_catalog.toml>) (`schema_version = 1`) declares the built-in local `moss_local` spec, four built-in remote variants, and the `"none"` placeholder alongside other model specs. It supplies stable IDs, backend kinds and metadata; remote entries also carry matching, behavior, parameters and menu definitions. The MOSS remote catalog IDs are:
 
 - `moss_delay_sglomni`
 - `moss_local_sglomni`
+- `moss_delay_audiocpp`
+- `moss_local_audiocpp`
 
-Both have `TtsBackendKind.SGL_OMNI`, share the same registry-declared MOSS voice/project storage fields, and use the `moss` file tag. Their output sample rates and UI identities differ. [`tts_model_type.py`](<../tts_audiobook_tool/tts_models/tts_model_type.py>) installs canonical handles for every shipped entry in exact TOML order, including data-only models, without model-named class attributes or a Python declaration inventory. Use `TtsModelType.require_by_id("moss_delay_sglomni")` for a hardcoded ID (unknown IDs raise `ValueError`); use `TtsModelType.get_by_id(saved_id)` for persisted/external IDs (unknown IDs return the registered `"none"` handle, leaving the original string untouched). Both lookups return the same handle for a known ID; metadata is accessed through `.value`.
+The first pair has `TtsBackendKind.SGL_OMNI`; the second has `TtsBackendKind.AUDIO_CPP`. All use the `moss` file tag, but each owns private voice and generation settings. Shared implementation and file tags do not imply shared state. Output sample rates and UI identities follow the selected architecture. [`tts_model_type.py`](<../tts_audiobook_tool/tts_models/tts_model_type.py>) installs canonical handles for every shipped entry in exact TOML order, including data-only models, without model-named class attributes or a Python declaration inventory. Use `TtsModelType.require_by_id("moss_delay_sglomni")` for a hardcoded ID (unknown IDs raise `ValueError`); use `TtsModelType.get_by_id(saved_id)` for persisted/external IDs (unknown IDs return the registered `"none"` handle, leaving the original string untouched). Both lookups return the same handle for a known ID; metadata is accessed through `.value`.
 
-### Detection and matching
+### SGL-Omni detection and matching
 
 Remote discovery ([`remote_tts_discovery.py`](../tts_audiobook_tool/app_support/remote_tts_discovery.py)) queries the configured server and matches each served model ID to catalog types through [`sgl_omni_detection.py`](../tts_audiobook_tool/tts_models/sgl_omni_detection.py) using the catalog's `sgl_omni.match.model_id_substring`. Matching is case-insensitive and prefers the longest match:
 
@@ -47,51 +52,76 @@ For example:
 
 An unrecognized non-MOSS model ID does not resolve to either MOSS type. The compatibility helper `TtsModelType.find_tts_type_using_sgl_omni_model_id()` delegates to the same detector.
 
+### audio.cpp detection and matching
+
+[`audio_cpp_detection.py`](<../tts_audiobook_tool/tts_models/audio_cpp_detection.py>) matches structured server metadata, never model-ID substrings:
+
+- `moss_tts_v15` + task `tts` or `clon` + mode `offline` resolves to `moss_delay_audiocpp`.
+- `moss_tts_local` + task `tts` or `clon` + mode `offline` resolves to `moss_local_audiocpp`.
+
+Server IDs are arbitrary operator-configured strings. No quantization/session-option hint is required, and the discovery API does not verify checkpoint revisions. Both families accept optional reference audio under either task token. Unrelated MOSS families and unsupported modes/tasks are not candidates.
+
 ### Selection and binding
 
 The project stores a catalog ID; refer to [TTS model selection rules](<tts-model-selection.md>) for the canonical reconciliation and binding rules. For a remote selection, `Tts.bind_project()` requires exactly one server entry matching the selected type: zero matches, an unreachable server, or several matches block binding and leave the saved ID untouched.
 
-Generation settings, output metadata, and architecture-dependent behavior come from the selected catalog definition (`moss_delay_sglomni` or `moss_local_sglomni`); the runtime never probes the served model ID a second time. The status UI still shows the exact server model ID as diagnostics, so a selection that disagrees with what the server serves is visible as a configuration error rather than silently overridden.
+Generation settings, output metadata, and architecture-dependent behavior come from the selected catalog definition; the runtime never reclassifies the served model from its ID during generation. The status UI still shows the exact server model ID as diagnostics, so a selection that disagrees with what the server serves is visible as a configuration error rather than silently overridden. Configure only one audio.cpp server entry per variant: separate `tts` and `clon` entries for the same family create an ambiguous binding, not separate app model types.
 
 ### Pre-release IDs
 
-Older pre-release builds persisted architecture-ambiguous IDs such as `server_moss`, plus a separate `sgl_omni_type` preference. Both are gone: those builds were never deployed, so no migration is provided. The shipped MOSS IDs are `moss_local`, `moss_delay_sglomni`, and `moss_local_sglomni`.
+Older pre-release builds persisted architecture-ambiguous IDs such as `server_moss`, plus a separate `sgl_omni_type` preference. Both are gone: those builds were never deployed, so no migration is provided. The current MOSS IDs are the five catalog types listed above; the new audio.cpp types do not rename any existing selection.
 
 ## Local model and configured server runtime
 
 The in-process class hierarchy is `TtsBaseModel` → `MossBaseModel` → `MossModel`. `MossBaseModel` retains the MOSS configs, language-name mapping, local sampling and architecture behavior, and the local batch/rolling-continuation readiness rule. `MossConfigs.get_by_target()` identifies the architecture of a local target; the local `MossModel` loads it and runs inference.
 
-Server generation does **not** subclass `MossBaseModel`. Each server variant's behavior and request definition lives alongside its spec in the v2 [`model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml), selected by its stable catalog ID. In SGL-Omni mode the complete catalog is validated before server specs are overlaid; optional validated server entries may add supported IDs with private registry settings, while built-in MOSS bindings stay fixed. `ConfiguredModelSupport` provides metadata, readiness, output rate, music/trimming decisions and menu settings; one `SglOmniBackendAdapter` constructs the `/speech` request and calls `SglOmniUtil.generate_concurrent()`. Local MOSS inference still uses `MossModel`.
+Server generation does **not** subclass `MossBaseModel`. Each server variant's behavior and request definition lives alongside its spec in the schema-1 [`model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml), selected by its stable catalog ID. In SGL-Omni mode the complete catalog is validated before server specs are overlaid; optional validated server entries may add supported IDs with private registry settings. `ConfiguredModelSupport` provides metadata, readiness, output rate, music/trimming decisions and menu settings; one `SglOmniBackendAdapter` constructs the `/speech` request and calls `SglOmniUtil.generate_concurrent()`. Local MOSS inference still uses `MossModel`.
 
-The Delay and Local definitions use their own sampling parameter keys and defaults, the existing shared MOSS voice/seed ownership, a resolved seed and a fixed token limit. They do not inherit the local batch/rolling-continuation blocker. Architecture-dependent server behavior follows the selected definition, never a second probe of the server model ID.
+The SGL-Omni Delay and Local definitions use their own private sampling parameters, voices and seed, a resolved seed and a fixed 1024-token limit. Their defaults and request semantics are unchanged. They do not inherit the local batch/rolling-continuation blocker. Architecture-dependent remote behavior follows the selected definition, never a second probe of the server model ID.
+
+For audio.cpp, [`AudioCppModelSupport`](<../tts_audiobook_tool/tts_models/audio_cpp_configured.py>) supplies metadata/readiness and one `AudioCppBackendAdapter` sends sequential requests to `/v1/audio/speech`, bound to the exact discovered server ID. The model-specific controls map to top-level `temperature`, `top_p`, `top_k`, and `seed`; audio.cpp does not accept `audio_top_p`/`audio_top_k` as aliases on this path. Both variants support reference-less speech and optional base64 WAV references, including under task `tts`. Neither requests, requires, or transmits a reference transcript; this differs from the existing local/SGL-Omni voice-import workflow.
+
+Both audio.cpp variants keep their native sampling and internal chunking defaults. Repetition penalty is not exposed or overridden. Local pins `options.max_tokens = 1024` in every request, matching the local/SGL-Omni token budget numerically; audio.cpp counts audio frames per internal text chunk (about 81.92 seconds), rather than necessarily the same generation steps as the other backends. This fixed limit replaces the native 4096-frame default and is not a project/menu setting. Community Delay does not consume generic `max_tokens`, and its separate automatic duration bounds remain server-managed. No audio.cpp MOSS setting enables streaming, batching, concurrency, or rolling continuation.
+
+Language hints reuse `MossBaseModel.get_language_name()` to map the project code to a full name. Delay reads `options.language`; Local reads top-level `language`. Unrecognized/empty MOSS hints are omitted. Local's server session caches prepared reference codes with one slot by default, configurable via the `moss_tts_local.reference_cache_slots` session option; community Delay reencodes each request. Neither cache is managed by the app.
 
 ## Project settings
 
-No additional project hyperparameter fields are required. Both architectures already have separate settings:
+MOSS settings are private under `model_settings.models.<catalog ID>`; there is no current `shared.moss` group. The audio.cpp additions leave existing IDs, project version 3 and catalog schema 1 unchanged. AuK, Fish S2 and Qwen3 sharing is unchanged.
 
-| Setting | Delay field | Local Transformer field |
-|---|---|---|
-| Temperature | `moss_delay_temperature` | `moss_local_temperature` |
-| Audio top-p | `moss_delay_top_p` | `moss_local_top_p` |
-| Audio top-k | `moss_delay_top_k` | `moss_local_top_k` |
+| Owner | Private sampling settings |
+|---|---|
+| `moss_local` | All of `delay_temperature`, `delay_top_p`, `delay_top_k`, `local_temperature`, `local_top_p`, `local_top_k` and `local_v15_temperature`, `local_v15_top_p`, `local_v15_top_k` — one set per preset (`delay` = Delay 8B, `local` = Local Transformer v1.0, `local_v15` = Local Transformer v1.5) |
+| `moss_delay_sglomni` | Only `delay_temperature`, `delay_top_p`, `delay_top_k` |
+| `moss_local_sglomni` | Only `local_temperature`, `local_top_p`, `local_top_k` |
+| `moss_delay_audiocpp` | Only `delay_temperature`, `delay_top_p`, `delay_top_k` |
+| `moss_local_audiocpp` | Only `local_temperature`, `local_top_p`, `local_top_k` |
 
-A value of `-1` means “use the architecture default.” The canonical defaults and supported bounds live in `MossConfigs`:
+Every type independently owns voice references. `moss_local` owns one seed per preset (`delay_seed`, `local_seed`, `local_v15_seed`); its retired shared `seed` migrates to all three on load, as does any historical `shared.moss`/flat `moss_seed` value. Remote types each own `parameters.seed`. Local/in-process and SGL-Omni types store voice filenames/transcripts and `orchestration.batch_size`; audio.cpp types store voice filenames without a transcript binding or orchestration setting. Only `moss_local` owns `parameters.target` and `parameters.rolling_cont`; neither selects the remote architecture. Switching types or presets does not synchronize settings. Common MOSS controls and configured adapters reuse code, not storage.
 
-| Architecture | Temperature default | Audio top-p default | Audio top-k default | Output rate |
-|---|---:|---:|---:|---:|
-| Delay | 1.7 | 0.8 | 25 | 24 kHz |
-| Local Transformer | 1.0 | 0.95 | 50 | 48 kHz |
+Sampling `-1` still means “use this variant's default”; seed `-1` retains its random-seed meaning. Existing local/SGL-Omni defaults are unchanged, while audio.cpp uses its own native defaults:
 
-The following project storage is shared between architectures and is used by both local and server generation:
+| Backend | Architecture | Temperature default | Audio top-p default | Audio top-k default | Output rate |
+|---|---|---:|---:|---:|---:|
+| Local/in-process or SGL-Omni | Delay | 1.7 | 0.8 | 25 | 24 kHz |
+| Local/in-process or SGL-Omni | Local Transformer v1.0 | 1.0 | 0.95 | 50 | 48 kHz |
+| Local/in-process | Local Transformer v1.5 | 1.7 | 0.8 | 25 | 48 kHz |
+| audio.cpp | Community Delay | 1.5 | 0.6 | 50 | 24 kHz |
+| audio.cpp | Local Transformer | 1.7 | 0.8 | 25 | 48 kHz |
 
-- `moss_voice_file_name`
-- `moss_voice_transcript`
-- `moss_seed`
-- `moss_batch_size`
+Only temperature, audio top-p, audio top-k, and seed are editable generation controls for the audio.cpp variants. Other native settings, including repetition penalty (Delay 1.1, Local 1.0), are left to the server and are not persisted app controls.
 
-`moss_rolling_cont` applies only to local/in-process generation; the SGL-Omni request implementation does not perform local rolling continuation. `moss_target` likewise selects the model only for local/in-process execution. Neither field selects the SGL-Omni architecture; the project's server catalog ID does that.
+Community Delay parses request seeds with `std::stoi` before casting to `uint32_t`, so positive seeds above `2147483647` fail. Its spec uses the existing `max_random_seed = 2147483647` policy (as Echo does), applied by `Tts.generate_using_project()` before adapter dispatch. Caller caps can tighten but not widen this range; fixed seeds are not clamped or rewritten, so users must keep them within the server's accepted range. Local's seed range is unchanged.
 
-The configured server settings menu uses the selected catalog definition and its registry-declared storage bindings, so it cannot preview one architecture while editing the other architecture’s fields. [`ModelSettingsRegistry`](../tts_audiobook_tool/project_support/model_settings.py) owns setting types, defaults and shared/private ownership; the built-in declarations and old flat project-field mappings remain in [`model_settings_declarations.py`](../tts_audiobook_tool/project_support/model_settings_declarations.py), not in the TOML catalog. The flat names above are legacy input mappings, not new top-level project fields.
+The schema-1 [`model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml) owns current persisted defaults, types and bindings, as well as server request defaults. [`ModelSettingsRegistry`](../tts_audiobook_tool/project_support/model_settings.py) resolves those bindings for menus and runtime consumers. Local architecture behavior remains in `MossConfigs`. [`model_settings_declarations.py`](../tts_audiobook_tool/project_support/model_settings_declarations.py) and [`model_settings_compat.py`](../tts_audiobook_tool/project_support/model_settings_compat.py) contain frozen history for migration only; flat names such as `moss_target` are legacy input, not current project attributes.
+
+### Load compatibility
+
+The load path explicitly converts old `shared.moss` and pre-v3 flat MOSS fields using frozen historical mappings. It copies voices/transcripts, seed and batch size to the original three private types (`moss_local`, `moss_delay_sglomni`, `moss_local_sglomni`), both sampling sets to `moss_local`, and only the relevant architecture's set to each SGL-Omni type. Target and rolling continuation remain local-only. These frozen mappings are not extended to audio.cpp: its new types start with their own defaults, with no cross-backend settings/voice copy or new migration.
+
+Only missing private keys are filled: current raw keys win even when their value is `null`, a default or a sentinel. `voice_references` is one atomic list; an existing list, including `[]`, wins without item-level merging. Conversion consumes `shared.moss` only after success; malformed groups remain non-destructively through existing load-error handling. Unknown whole objects for other models/groups remain preserved.
+
+A subsequent save of successfully migrated settings omits `shared.moss`. Conversion changes neither save timing nor defaults/request behavior; see [project spec v3](<project-spec-v3.md>) for persistence logistics.
 
 ## Architecture-dependent behavior
 
@@ -101,17 +131,22 @@ The Local Transformer and Delay variants differ beyond sampling defaults:
 - Local Transformer is treated as capable of music hallucination.
 - Local Transformer enables MOSS trailing token-noise trimming; Delay does not.
 
-For local/in-process execution these decisions follow `moss_target` or the loaded model. For SGL-Omni execution they follow the selected server definition.
+For local/in-process execution these decisions follow the private `target` setting or the loaded model. For SGL-Omni and audio.cpp they follow the selected server definition. Native audio.cpp Local output is stereo at 48 kHz and community Delay output is mono at 24 kHz; the existing WAV adapter downmixes returned audio to the app's mono `Sound` representation.
 
 ## Main implementation files
 
 - [`tts_audiobook_tool/tts_models/model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml): sole v1 TOML source for built-in local/server/placeholder specs and MOSS server definitions; also supports validated additional server entries.
 - [`tts_audiobook_tool/tts_models/tts_model_type.py`](../tts_audiobook_tool/tts_models/tts_model_type.py): canonical handle installation, strict/tolerant ID lookup, and model-ID matching entry point.
-- `tts_audiobook_tool/tts_models/moss_base_model.py`: architecture configs and local behavior.
-- `tts_audiobook_tool/tts_models/moss_model.py`: local/in-process implementation.
+- [`moss_base_model.py`](../tts_audiobook_tool/tts_models/moss_base_model.py): architecture configs and local behavior.
+- [`moss_model.py`](../tts_audiobook_tool/tts_models/moss_model.py): local/in-process implementation.
 - [`tts_audiobook_tool/tts_models/sgl_omni_definition.py`](../tts_audiobook_tool/tts_models/sgl_omni_definition.py): server-definition validation from the shared catalog.
-- `tts_audiobook_tool/tts_models/sgl_omni_configured.py`: shared server support and adapter.
-- `tts_audiobook_tool/tts.py`: configured server runtime and local factories.
-- `tts_audiobook_tool/menus/voice/voice_moss_shared.py`: common local MOSS settings controls.
-- `tts_audiobook_tool/menus/voice/voice_configured_sgl_omni_menu.py`: configured server settings menu.
-- `tts_audiobook_tool/app_support/sgl_omni_util.py`: server model-ID and HTTP/audio utilities.
+- [`sgl_omni_configured.py`](../tts_audiobook_tool/tts_models/sgl_omni_configured.py): common server support and adapter, with type-private MOSS state.
+- [`tts.py`](../tts_audiobook_tool/tts.py): configured server runtime and local factories.
+- [`voice_moss_shared.py`](../tts_audiobook_tool/menus/voice/voice_moss_shared.py): reusable local MOSS settings controls, not shared persistence.
+- [`voice_configured_sgl_omni_menu.py`](../tts_audiobook_tool/menus/voice/voice_configured_sgl_omni_menu.py): configured server settings menu.
+- [`sgl_omni_util.py`](../tts_audiobook_tool/app_support/sgl_omni_util.py): server model-ID and HTTP/audio utilities.
+- [`audio_cpp_definition.py`](<../tts_audiobook_tool/tts_models/audio_cpp_definition.py>): validated audio.cpp definitions from the same catalog.
+- [`audio_cpp_detection.py`](<../tts_audiobook_tool/tts_models/audio_cpp_detection.py>): metadata-based family/task/mode matching, independent of server IDs.
+- [`audio_cpp_configured.py`](<../tts_audiobook_tool/tts_models/audio_cpp_configured.py>): lightweight support and sequential HTTP adapter, including MOSS language routing and Local music/trimming behavior.
+- [`voice_audio_cpp_menu.py`](<../tts_audiobook_tool/menus/voice/voice_audio_cpp_menu.py>): definition-driven voice and sampling settings menu.
+- [`audio_cpp_util.py`](<../tts_audiobook_tool/app_support/audio_cpp_util.py>): reference WAV encoding, HTTP transport, and response downmixing.

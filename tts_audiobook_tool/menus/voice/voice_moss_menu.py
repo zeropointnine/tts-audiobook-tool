@@ -60,7 +60,7 @@ class VoiceMossMenu:
 
             items.append(VoiceMossShared.make_audio_top_k_item(state, config))
 
-            item = VoiceMenuShared.make_seed_item(state, SettingRef("moss_local", "seed"), add_batch_warning=True)
+            item = VoiceMenuShared.make_seed_item(state, VoiceMossShared.get_seed_ref(config), add_batch_warning=True)
             items.append(item)
 
             return items

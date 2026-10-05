@@ -138,3 +138,50 @@ def test_unsupported_models_issue_preserves_saved_project(remote_mode):
     assert "No configured server models match supported catalog variants" in Tts._remote_issue
     assert not Tts._selected_server_model_id
     assert project.tts_model_type == MODEL.id
+
+
+def test_moss_audio_cpp_architectures_bind_their_exact_opaque_server_entries(remote_mode, monkeypatch):
+    from tts_audiobook_tool.tts_models.audio_cpp_detection import detect_audio_cpp_models
+
+    models = [
+        {"id": "operator-a", "family": "moss_tts_v15", "task": "tts", "mode": "offline"},
+        {"id": "operator-b", "family": "moss_tts_local", "task": "clon", "mode": "offline"},
+    ]
+    candidates = tuple(detect_audio_cpp_models(models))
+    RemoteTtsDiscovery._store(RemoteTtsSnapshot(
+        TtsBackendKind.AUDIO_CPP, models=tuple(models), candidates=candidates), URL)
+    monkeypatch.setattr(RemoteTtsDiscovery, "_probe", lambda *args: pytest.fail("unexpected network probe"))
+    assert [model.id for model in Tts.get_available_tts_models()] == [
+        "moss_delay_audiocpp", "moss_local_audiocpp",
+    ]
+    for model, server_id in candidates:
+        project = Project(tts_model_type=model.id)
+        assert Tts.bind_project(project) is None
+        assert Tts.get_active_type() is model
+        adapter = Tts.get_instance()
+        assert isinstance(adapter, AudioCppBackendAdapter)
+        assert adapter.server_model_id == server_id
+        assert adapter.definition.spec.id == model.id
+        Tts.bind_project(project)
+        assert Tts.get_instance() is adapter
+        assert project.tts_model_type == model.id
+
+
+@pytest.mark.parametrize("model_id,family", [
+    ("moss_delay_audiocpp", "moss_tts_v15"), ("moss_local_audiocpp", "moss_tts_local"),
+])
+def test_moss_tts_and_clone_server_entries_of_same_family_are_ambiguous(remote_mode, model_id, family):
+    from tts_audiobook_tool.tts_models.audio_cpp_detection import detect_audio_cpp_models
+
+    models = [{"id": f"operator-{task}", "family": family, "task": task, "mode": "offline"}
+              for task in ("tts", "clon")]
+    candidates = tuple(detect_audio_cpp_models(models))
+    RemoteTtsDiscovery._store(RemoteTtsSnapshot(
+        TtsBackendKind.AUDIO_CPP, models=tuple(models), candidates=candidates), URL)
+    model = TtsModelType.require_by_id(model_id)
+    assert Tts.get_available_tts_models() == [model]
+    project = Project(tts_model_type=model_id)
+    issue = Tts.bind_project(project)
+    assert issue is not None and "Multiple server entries" in issue.verbose
+    assert project.tts_model_type == model_id
+    assert Tts.get_active_type().id == "none" and Tts._selected_server_model_id == ""

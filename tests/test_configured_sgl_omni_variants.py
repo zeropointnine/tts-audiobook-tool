@@ -362,7 +362,7 @@ def test_moss_variants_language_music_and_no_rolling_block(server_mode, capture)
         server_mode(model_id)
         project = Project(tts_model_type=Tts.get_active_type().id)
         project.language_code = "fr"
-        project.set_model_setting("moss_local", "batch_size", 3)
+        project.set_model_setting(model_id, "batch_size", 3)
         project.set_model_setting("moss_local", "rolling_cont", 2)
         support = Tts.get_model_support(project)
         assert support.get_blocking_issues(project, None) == []
@@ -377,10 +377,54 @@ def test_moss_variants_do_not_inherit_local_rolling_blocker(server_mode, capture
     for model_id in ("moss_delay_sglomni", "moss_local_sglomni"):
         instance = server_mode(model_id)
         project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": Tts.get_active_type().id})
-        project.set_model_setting("moss_local", "file_name", ["sample.flac"])
-        project.set_model_setting("moss_local", "batch_size", 3)
+        project.set_model_setting(model_id, "file_name", ["sample.flac"])
+        project.set_model_setting(model_id, "batch_size", 3)
         project.set_model_setting("moss_local", "rolling_cont", 2)
         assert isinstance(instance.generate_using_project(project, ["hello"]), list)
+
+
+@pytest.mark.parametrize("model_id, prefix", [
+    ("moss_delay_sglomni", "delay"),
+    ("moss_local_sglomni", "local"),
+])
+def test_moss_server_payload_uses_only_its_private_settings(model_id, prefix, server_mode, capture, tmp_path):
+    instance = server_mode(model_id)
+    project = Project(dir_path=str(tmp_path), tts_model_type=model_id)
+    moss_ids = ("moss_local", "moss_delay_sglomni", "moss_local_sglomni")
+    for index, owner in enumerate(moss_ids, start=1):
+        filename = f"{owner}.flac"
+        (tmp_path / filename).write_bytes(b"audio")
+        project.set_model_setting(owner, "file_name", [filename])
+        project.set_model_setting(owner, "transcript", [f"voice {index}"])
+        # moss_local owns one seed per preset; remote members own a single seed.
+        for seed_name in (("delay_seed", "local_seed", "local_v15_seed") if owner == "moss_local" else ("seed",)):
+            project.set_model_setting(owner, seed_name, index)
+        project.set_model_setting(owner, "batch_size", index)
+        for architecture in ("delay", "local"):
+            if (owner, f"{architecture}_temperature") in REGISTRY.bindings:
+                project.set_model_setting(owner, f"{architecture}_temperature", 1.0 + index * 0.1)
+                project.set_model_setting(owner, f"{architecture}_top_p", 0.5 + index * 0.1)
+                project.set_model_setting(owner, f"{architecture}_top_k", 10 * index)
+
+    selected_index = moss_ids.index(model_id) + 1
+    for index, owner in enumerate(moss_ids, start=1):
+        assert project.get_model_setting(owner, "file_name") == [f"{owner}.flac"]
+        assert project.get_model_setting(owner, "transcript") == [f"voice {index}"]
+        for seed_name in (("delay_seed", "local_seed", "local_v15_seed") if owner == "moss_local" else ("seed",)):
+            assert project.get_model_setting(owner, seed_name) == index
+        assert project.get_model_setting(owner, "batch_size") == index
+        assert not REGISTRY.get(owner, "file_name").group
+    parameter = instance.definition.parameters[f"{prefix}_temperature"]
+    assert ConfiguredSettings.get(project, parameter, model_id) == 1.0 + selected_index * 0.1
+    assert isinstance(instance.generate_using_project(project, ["hello"]), list)
+    assert capture == [{
+        "input": "hello", "stream": False,
+        "temperature": 1.0 + selected_index * 0.1,
+        "audio_top_p": 0.5 + selected_index * 0.1, "audio_top_k": 10 * selected_index,
+        "seed": selected_index, "max_new_tokens": 1024, "language": "English",
+        "references": [{"audio_path": f"data:{tmp_path / (model_id + '.flac')}",
+                        "text": f"voice {selected_index}"}],
+    }]
 
 
 def test_menu_seed_and_shared_fish_edit_without_storage_mutation(server_mode, monkeypatch):

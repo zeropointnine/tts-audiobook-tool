@@ -56,15 +56,16 @@ def test_settings_note_can_be_omitted():
     assert "settings_note" not in parse_spec(entry).ui
 
 
-def test_catalog_random_seed_cap_defaults_and_echo_limit():
+def test_catalog_random_seed_cap_defaults_and_int32_limits():
     raw = read_catalog(CATALOG_PATH)
     specs, _, _ = load_catalog()
     assert {entry["id"]: entry["spec"]["max_random_seed"]
             for entry in raw["models"] if "max_random_seed" in entry["spec"]} == {
         "echo_tts_audiocpp": 2147483647,
+        "moss_delay_audiocpp": 2147483647,
     }
     for spec in specs:
-        expected = 2147483647 if spec.id == "echo_tts_audiocpp" else -1
+        expected = 2147483647 if spec.id in ("echo_tts_audiocpp", "moss_delay_audiocpp") else -1
         assert type(spec.max_random_seed) is int
         assert spec.max_random_seed == expected
         assert TtsModelType.require_by_id(spec.id).value.max_random_seed == expected
@@ -138,7 +139,8 @@ def test_complete_catalog_order_and_backend_suffix_ids():
         "moss_local_sglomni", "qwen3tts_sglomni", "zonos2_sglomni",
         "breeze_tts_2_audiocpp", "chatterbox_audiocpp",
         # "glm_tts_audiocpp",  # DISABLED in the catalog; see model_catalog.toml
-        "echo_tts_audiocpp", "higgs_v3_audiocpp", "omnivoice_audiocpp",
+        "echo_tts_audiocpp", "higgs_v3_audiocpp", "moss_delay_audiocpp",
+        "moss_local_audiocpp", "omnivoice_audiocpp",
     ]
     assert raw["schema_version"] == 1
     assert [entry["id"] for entry in raw["models"]] == expected_ids
@@ -160,8 +162,8 @@ def test_catalog_provides_canonical_lookup_handles_in_order():
     assert [spec.id for spec in specs] == ids
     assert list(TtsModelType._initial_specs) == ids
     assert [handle.id for handle in TtsModelType.all()] == ids
-    assert len(specs) == 28
-    assert len(servers) == 14  # nine SGL entries plus the five audio.cpp entries
+    assert len(specs) == 30
+    assert len(servers) == 16  # nine SGL entries plus the seven audio.cpp entries
     assert len(fingerprint) == 64
     for spec in specs:
         handle = TtsModelType.require_by_id(spec.id)
@@ -312,7 +314,7 @@ def test_installing_data_only_spec_uses_lookup_without_attributes_and_reset_remo
 
 def test_catalog_is_available_at_import_before_model_classes(tmp_path):
     code = """from tts_audiobook_tool.tts_models.model_catalog import load_catalog
-assert len(load_catalog()[0]) == 28
+assert len(load_catalog()[0]) == 30
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 assert FishS2BaseModel.INFO is TtsModelType.require_by_id("fish_s2_local").value
@@ -461,7 +463,8 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
     assert set(audio) == {
         "breeze_tts_2_audiocpp", "chatterbox_audiocpp",
         # "glm_tts_audiocpp",  # DISABLED in the catalog; see model_catalog.toml
-        "echo_tts_audiocpp", "higgs_v3_audiocpp", "omnivoice_audiocpp",
+        "echo_tts_audiocpp", "higgs_v3_audiocpp", "moss_delay_audiocpp",
+        "moss_local_audiocpp", "omnivoice_audiocpp",
     }
 
     chatterbox = audio["chatterbox_audiocpp"]
@@ -688,6 +691,44 @@ def test_audio_cpp_catalog_rejects_invalid_declarations(tmp_path, entry_id, muta
     mutate(entry)
     with pytest.raises(ValueError, match=match):
         load_catalog(write_catalog(tmp_path / "invalid.toml", data))
+
+
+@pytest.mark.parametrize("model_id, prefixes, local_only", [
+    ("moss_local", ("delay", "local", "local_v15"), True),
+    ("moss_delay_sglomni", ("delay",), False),
+    ("moss_local_sglomni", ("local",), False),
+])
+def test_moss_settings_are_private_and_architecture_scoped(model_id, prefixes, local_only):
+    raw = read_catalog(CATALOG_PATH)
+    assert raw["setting_groups"] == {
+        "auk": ["auk_sglomni", "auk_flash_sglomni"],
+        "fish_s2": ["fish_s2_local", "fish_s2_sglomni"],
+        "qwen3": ["qwen3tts_local", "qwen3tts_sglomni"],
+    }
+    expected = [
+        {"name": "file_name", "section": "voice_references", "type": "list[str]", "default": []},
+        {"name": "transcript", "section": "voice_references", "type": "list[str]", "default": []},
+    ]
+    if local_only:
+        expected.extend([
+            {"name": "target", "section": "parameters", "type": "str", "default": ""},
+            {"name": "rolling_cont", "section": "parameters", "type": "int", "default": 0},
+        ])
+    for prefix in prefixes:
+        expected.extend([
+            {"name": f"{prefix}_temperature", "section": "parameters", "type": "float", "default": -1.0, "sentinel": -1},
+            {"name": f"{prefix}_top_p", "section": "parameters", "type": "float", "default": -1.0, "sentinel": -1},
+            {"name": f"{prefix}_top_k", "section": "parameters", "type": "int", "default": -1, "sentinel": -1},
+        ])
+        if local_only:
+            # moss_local owns one seed per preset instead of a shared seed.
+            expected.append(
+                {"name": f"{prefix}_seed", "section": "parameters", "type": "int", "default": -1, "preserve_default": True})
+    expected.append({"name": "batch_size", "section": "orchestration", "type": "int", "default": 1})
+    if not local_only:
+        expected.append(
+            {"name": "seed", "section": "parameters", "type": "int", "default": -1, "preserve_default": True})
+    assert _entry(raw, model_id)["settings"] == expected
 
 
 @pytest.mark.parametrize("mutate, match", [

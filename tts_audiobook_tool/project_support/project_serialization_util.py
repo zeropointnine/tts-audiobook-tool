@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import math
 from typing import TYPE_CHECKING, Any
@@ -846,18 +847,22 @@ class ProjectSerializationUtil:
             if value is not None:
                 legacy_values[attr] = value
 
+        reconciliation_failed = False
         try:
             settings = REGISTRY.reconcile(d.get("model_settings"), legacy=legacy_values or None)
         except ValueError as exc:
+            reconciliation_failed = True
             # Actionable but non-destructive: keep whatever whole objects parsed
             # so the project still loads, and surface the reason.
             settings = ModelSettings()
             source = d.get("model_settings")
+            if isinstance(source, ModelSettings):
+                source = source.to_dict()
             if isinstance(source, dict):
                 if isinstance(source.get("models"), dict):
-                    settings.models.update(source["models"])
+                    settings.models.update(deepcopy(source["models"]))
                 if isinstance(source.get("shared"), dict):
-                    settings.shared.update(source["shared"])
+                    settings.shared.update(deepcopy(source["shared"]))
             if warnings is not None:
                 warnings.append(f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Problem reading model settings objects:\n{exc}\n")
 
@@ -867,7 +872,10 @@ class ProjectSerializationUtil:
             s += "\n"
             warnings.append(s)
 
-        d["model_settings"] = settings.to_dict()
+        # Preserve the intended warning/fallback path: a dict would immediately
+        # be reconciled again by Project's field validator and raise the same
+        # error. The validated/fallback ModelSettings instance bypasses that pass.
+        d["model_settings"] = settings if reconciliation_failed else settings.to_dict()
 
         removal_keys: set[str] = set(BUILTIN_LEGACY_FIELDS)
         for aliases in ProjectSerializationUtil.LEGACY_INPUT_ALIASES.values():

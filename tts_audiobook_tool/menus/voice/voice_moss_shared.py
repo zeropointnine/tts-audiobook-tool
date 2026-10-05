@@ -1,9 +1,11 @@
+from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.constants_hints import HINT_MOSS_TEMPERATURE
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
+from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
@@ -18,29 +20,52 @@ class VoiceMossShared:
         )
 
     @staticmethod
+    def get_setting_prefix(arch_type: MossConfigs) -> str:
+        return arch_type.value.setting_prefix
+
+    @staticmethod
     def get_temperature_ref(arch_type: MossConfigs) -> SettingRef:
-        return SettingRef("moss_local", "local_temperature" if arch_type == MossConfigs.LOCAL else "delay_temperature")
+        return SettingRef("moss_local", f"{VoiceMossShared.get_setting_prefix(arch_type)}_temperature")
 
     @staticmethod
     def get_top_p_ref(arch_type: MossConfigs) -> SettingRef:
-        return SettingRef("moss_local", "local_top_p" if arch_type == MossConfigs.LOCAL else "delay_top_p")
+        return SettingRef("moss_local", f"{VoiceMossShared.get_setting_prefix(arch_type)}_top_p")
 
     @staticmethod
     def get_top_k_ref(arch_type: MossConfigs) -> SettingRef:
-        return SettingRef("moss_local", "local_top_k" if arch_type == MossConfigs.LOCAL else "delay_top_k")
+        return SettingRef("moss_local", f"{VoiceMossShared.get_setting_prefix(arch_type)}_top_k")
+
+    @staticmethod
+    def get_seed_ref(arch_type: MossConfigs) -> SettingRef:
+        return SettingRef("moss_local", f"{VoiceMossShared.get_setting_prefix(arch_type)}_seed")
 
     @staticmethod
     def make_temperature_item(state: State, arch_type: MossConfigs) -> MenuItem:
         arch_values = arch_type.value
-        return VoiceMenuShared.make_temperature_item(
-            state=state,
-            target=VoiceMossShared.get_temperature_ref(arch_type),
+        target = VoiceMossShared.get_temperature_ref(arch_type)
+        label = MenuUtil.make_number_label(
+            project=state.project,
+            target=target,
             base_label=f"{arch_values.arch_name} temperature",
             default_value=arch_values.temperature_default,
-            min_value=arch_values.temperature_min,
-            max_value=arch_values.temperature_max,
-            hint=HINT_MOSS_TEMPERATURE,
+            num_decimals=2,
         )
+
+        def edit(current: State, _: MenuItem) -> None:
+            hints.show_hint_if_necessary(current.prefs, HINT_MOSS_TEMPERATURE)
+            temperature = MossBaseModel.get_generation_params(current.project, arch_type)[0]
+            ask.ask_number_and_save(
+                saveable=current.project,
+                target=target,
+                prompt=f"Enter {arch_values.arch_name} temperature",
+                min_value=arch_values.temperature_min,
+                max_value=arch_values.temperature_max,
+                default_value=arch_values.temperature_default,
+                success_prefix="Value set:",
+                prefill_value=temperature,
+            )
+
+        return MenuItem(label, edit)
 
     @staticmethod
     def make_audio_top_p_item(state: State, arch_type: MossConfigs) -> MenuItem:

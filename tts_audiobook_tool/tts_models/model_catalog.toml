@@ -20,7 +20,6 @@ schema_version = 1
 [setting_groups]
 auk = ["auk_sglomni", "auk_flash_sglomni"]
 fish_s2 = ["fish_s2_local", "fish_s2_sglomni"]
-moss = ["moss_local", "moss_delay_sglomni", "moss_local_sglomni"]
 qwen3 = ["qwen3tts_local", "qwen3tts_sglomni"]
 
 # ------------------------------------------------------------------------
@@ -380,21 +379,27 @@ project_links = [
 ]
 
 # ------------------------------------------------------------------------
+# Local implementation of MOSS (both Delay and Local variants)
 [[models]]
 id = "moss_local"
 settings = [
-    { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "moss" },
-    { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "moss" },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
     { name = "target", section = "parameters", type = "str", default = "" },
     { name = "rolling_cont", section = "parameters", type = "int", default = 0 },
-    { name = "delay_temperature", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "delay_top_p", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "delay_top_k", section = "parameters", type = "int", default = -1, group = "moss", sentinel = -1 },
-    { name = "local_temperature", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "local_top_p", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "local_top_k", section = "parameters", type = "int", default = -1, group = "moss", sentinel = -1 },
-    { name = "batch_size", section = "orchestration", type = "int", default = 1, group = "moss" },
-    { name = "seed", section = "parameters", type = "int", default = -1, group = "moss", preserve_default = true },
+    { name = "delay_temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "delay_top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "delay_top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "delay_seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+    { name = "local_temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "local_top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "local_top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "local_seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+    { name = "local_v15_temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "local_v15_top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "local_v15_top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "local_v15_seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+    { name = "batch_size", section = "orchestration", type = "int", default = 1 },
 ]
 backend_kind = "local"
 
@@ -1005,16 +1010,13 @@ label = "Top-K"
 [[models]]
 id = "moss_delay_sglomni"
 settings = [
-    { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "moss" },
-    { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "moss" },
-    { name = "delay_temperature", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "delay_top_p", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "delay_top_k", section = "parameters", type = "int", default = -1, group = "moss", sentinel = -1 },
-    { name = "local_temperature", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "local_top_p", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "local_top_k", section = "parameters", type = "int", default = -1, group = "moss", sentinel = -1 },
-    { name = "batch_size", section = "orchestration", type = "int", default = 1, group = "moss" },
-    { name = "seed", section = "parameters", type = "int", default = -1, group = "moss", preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+    { name = "delay_temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "delay_top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "delay_top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "batch_size", section = "orchestration", type = "int", default = 1 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
 ]
 backend_kind = "sgl_omni"
 
@@ -1083,15 +1085,15 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "delay_temperature"
-label = "MossTTSDelay temperature"
+label = "Temperature"
 
 [[models.sgl_omni.menu]]
 parameter = "delay_top_p"
-label = "MossTTSDelay top-p"
+label = "Top-P"
 
 [[models.sgl_omni.menu]]
 parameter = "delay_top_k"
-label = "MossTTSDelay top-k"
+label = "Top-K"
 
 [[models.sgl_omni.menu]]
 kind = "seed"
@@ -1103,16 +1105,13 @@ kind = "seed"
 [[models]]
 id = "moss_local_sglomni"
 settings = [
-    { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "moss" },
-    { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "moss" },
-    { name = "delay_temperature", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "delay_top_p", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "delay_top_k", section = "parameters", type = "int", default = -1, group = "moss", sentinel = -1 },
-    { name = "local_temperature", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "local_top_p", section = "parameters", type = "float", default = -1.0, group = "moss", sentinel = -1 },
-    { name = "local_top_k", section = "parameters", type = "int", default = -1, group = "moss", sentinel = -1 },
-    { name = "batch_size", section = "orchestration", type = "int", default = 1, group = "moss" },
-    { name = "seed", section = "parameters", type = "int", default = -1, group = "moss", preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+    { name = "local_temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "local_top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "local_top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "batch_size", section = "orchestration", type = "int", default = 1 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
 ]
 backend_kind = "sgl_omni"
 
@@ -1180,15 +1179,15 @@ kind = "voice_samples"
 
 [[models.sgl_omni.menu]]
 parameter = "local_temperature"
-label = "MossTTSLocal temperature"
+label = "Temperature"
 
 [[models.sgl_omni.menu]]
 parameter = "local_top_p"
-label = "MossTTSLocal top-p"
+label = "Top-P"
 
 [[models.sgl_omni.menu]]
 parameter = "local_top_k"
-label = "MossTTSLocal top-k"
+label = "Top-K"
 
 [[models.sgl_omni.menu]]
 kind = "seed"
@@ -1715,6 +1714,163 @@ default = 30
 min = 1
 max = 100
 input_prompt_suffix = "(low values may prevent generation from terminating correctly)"
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "moss_delay_audiocpp"
+settings = [
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "delay_temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "delay_top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "delay_top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+]
+backend_kind = "audio_cpp"
+
+[models.spec]
+file_tag = "moss"
+default_output_sample_rate = 24000
+un_all_caps = false
+requirements_file_name = "requirements-remote.txt"
+substitutions = [["—", ", "], ["─", ", "]]
+# Like Echo, community MOSS parses seed with std::stoi before casting to uint32.
+# Positive seeds must therefore fit int32, not the full uint32 RNG range.
+max_random_seed = 2147483647
+
+[models.spec.ui]
+proper_name = "MOSS-TTS Delay"
+short_name = "MOSS Delay"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/OpenMOSS/MOSS-TTS",
+    "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/community_models/moss_tts_v15.md",
+]
+
+[models.audio_cpp]
+# Neither MOSS implementation consumes reference_text; do not transcribe
+# reference samples or expose unused transcript storage for these variants.
+reference_transcript = false
+voice_required = false
+language_policy = "moss"
+language_target = "options"
+menu = [
+    { kind = "voice_samples" },
+    { parameter = "delay_temperature", label = "Temperature", group = "advanced" },
+    { parameter = "delay_top_p", label = "Top-P" },
+    { parameter = "delay_top_k", label = "Top-K" },
+    { kind = "seed" },
+]
+# Leave audio.cpp's other defaults (including repetition penalty, duration
+# bounds and text chunking) untouched. This family ignores generic max_tokens.
+
+[models.audio_cpp.match]
+family = "moss_tts_v15"
+tasks = ["tts", "clon"]
+mode = "offline"
+
+# Native audio.cpp defaults, intentionally different from local/SGL MOSS.
+[models.audio_cpp.parameters.delay_temperature]
+type = "float"
+request_key = "temperature"
+default = 1.5
+default_sentinel = -1
+min = 0.8
+max = 3.0
+
+[models.audio_cpp.parameters.delay_top_p]
+type = "float"
+request_key = "top_p"
+default = 0.6
+default_sentinel = -1
+min = 0.5
+max = 1.0
+
+[models.audio_cpp.parameters.delay_top_k]
+type = "int"
+request_key = "top_k"
+default = 50
+default_sentinel = -1
+min = 10
+max = 100
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "moss_local_audiocpp"
+settings = [
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "local_temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "local_top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "local_top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+]
+backend_kind = "audio_cpp"
+
+[models.spec]
+file_tag = "moss"
+default_output_sample_rate = 48000
+un_all_caps = false
+requirements_file_name = "requirements-remote.txt"
+substitutions = [["—", ", "], ["─", ", "]]
+
+[models.spec.ui]
+proper_name = "MOSS-TTS Local"
+short_name = "MOSS Local"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/OpenMOSS/MOSS-TTS",
+    "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Local-Transformer",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/moss_tts.md",
+]
+
+[models.audio_cpp]
+reference_transcript = false
+voice_required = false
+language_policy = "moss"
+language_target = "top_level"
+music_and_trim = true
+menu = [
+    { kind = "voice_samples" },
+    { parameter = "local_temperature", label = "Temperature", group = "advanced" },
+    { parameter = "local_top_p", label = "Top-P" },
+    { parameter = "local_top_k", label = "Top-K" },
+    { kind = "seed" },
+]
+# Match the local/SGL-Omni 1024-token budget: audio.cpp counts audio frames
+# per internal text chunk (about 81.92 seconds). This is not an app control.
+request_options = { max_tokens = 1024 }
+# Keep native text sampling, repetition penalty and internal chunking defaults.
+
+[models.audio_cpp.match]
+family = "moss_tts_local"
+tasks = ["tts", "clon"]
+mode = "offline"
+
+[models.audio_cpp.parameters.local_temperature]
+type = "float"
+request_key = "temperature"
+default = 1.7
+default_sentinel = -1
+min = 0.8
+max = 3.0
+
+[models.audio_cpp.parameters.local_top_p]
+type = "float"
+request_key = "top_p"
+default = 0.8
+default_sentinel = -1
+min = 0.5
+max = 1.0
+
+[models.audio_cpp.parameters.local_top_k]
+type = "int"
+request_key = "top_k"
+default = 25
+default_sentinel = -1
+min = 10
+max = 100
 
 # ------------------------------------------------------------------------
 [[models]]

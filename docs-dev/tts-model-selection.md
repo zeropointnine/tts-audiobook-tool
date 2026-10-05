@@ -45,20 +45,22 @@ Before building interactive menu items and when printing the status block, compa
 | Zero (local mode) | Any ID, including `"none"` or an unknown ID | Assign `"none"`; do not prompt. |
 | Zero (server mode) | Any ID, including `"none"` or an unknown ID | Preserve the saved ID. See the edge-case policy below. |
 | One | Matches the available type | Keep it; do not prompt. |
-| One (local mode) | Does not match, including `"none"`, another model, or an unknown ID | Immediately assign the sole available type's ID. Before the first main menu, queue a nonblocking startup FYI; later changes are silent. |
-| One (server mode) | Does not match, including `"none"` or an unknown ID | Immediately assign the sole available type's ID, then queue a nonblocking FYI for the end of the next complete menu. |
+| One (local mode) | Does not match, including `"none"`, another model, or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking startup FYI before the first main menu; later changes are silent. |
+| One (server mode) | Does not match, including `"none"` or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking FYI for the end of the next complete menu. |
 | More than one | Matches one of the available types | Keep it; do not prompt or choose a different type. |
 | More than one | Does not match any available type | Immediately assign `"none"`; require selection from the Project menu. |
 
-A sole-model mismatch queues this notice using the standard hint formatting: in server mode whenever reconciliation changes the selection, and in local mode only before the first main menu. A matching saved selection does not trigger a notice in either mode.
+A sole-model mismatch queues this notice using the standard hint formatting only when replacing a saved ID other than `"none"`: in server mode whenever reconciliation changes that selection, and in local mode only before the first main menu. A matching saved selection or an initially unselected project does not trigger a notice in either mode.
 
 ```text
 🔔 FYI
 This project was previously using TTS model {old_model_name}.
-It will now use the currently active model, {current_name}.
+It will now use the sole currently active model, {current_name}.
 ```
 
-The names are the models' UI `proper_name` values, each qualified by its backend kind (`Chatterbox TTS (local)`, `Breeze TTS 2 (audio.cpp)`; a model with no backend, such as `"none"`, is unqualified). The old name describes the previous saved selection, not necessarily a loaded runtime. `"none"` displays as `None (unselected)`; unknown IDs display as `Unknown model: {raw_id}`. The current name is the selected catalog model, not the exact server inference ID.
+Include `sole` only for audio.cpp. Local mode and SGL-Omni omit it because they support only one model at a time.
+
+The names are the models' UI `proper_name` values, each qualified by its backend kind (`Chatterbox TTS (local)`, `Breeze TTS 2 (audio.cpp)`). The old name describes the previous saved selection, not necessarily a loaded runtime. Unknown IDs display as `Unknown model: {raw_id}`; `"none"` is not a previous model and never queues this notice. The current name is the selected catalog model, not the exact server inference ID.
 
 If runtime binding is unavailable, the second line instead reads `It is now configured to use {current_name}, but the runtime is unavailable (see TTS mode).` The selection notification does not imply successful binding or persistence; existing status errors and save-error reporting remain in effect.
 
@@ -68,7 +70,7 @@ Pending old/new IDs live on `State`, not in global or persisted storage. Repeate
 
 Automatic changes are saved when the project has a directory, then the project is bound to the runtime. Save errors are reported. A directory-less placeholder project is updated in memory without writing a project file.
 
-Selecting **None** in the Project menu is not a permanent opt-out: if exactly one model is available, the next reconciliation selects it again. Local mode shows a deferred FYI only at startup's first main menu; later local reselection is silent. Server mode shows a deferred FYI on reselection. With multiple available types, None remains unselected until the user chooses a model.
+Selecting **None** in the Project menu is not a permanent opt-out: if exactly one model is available, the next reconciliation selects it again without an FYI in either mode. With multiple available types, None remains unselected until the user chooses a model.
 
 ## 3. New projects, loading, and explicit selection
 
@@ -105,8 +107,8 @@ The parenthesized backend qualifier is gray. Local model-specific text and devic
 
 - A valid audio.cpp binding shows **`(audio.cpp, loaded)`** when the exact bound server entry has boolean `loaded: true` in cached discovery metadata. Formatting adds no network request; the qualifier may lag residency changes until normal discovery refreshes. Missing/unknown residency and other backends omit `loaded`.
 - In server mode, connection failures and timeouts append red **`(server unreachable)`**, even if no model is selected.
-- Other discovery errors append their actual message in red. A selected model's binding error, such as duplicate matching server entries, is also shown in red when discovery itself succeeded.
-- The server qualifier uses the discovered backend when known; otherwise a saved remote model can identify its backend. If neither identifies it, the qualifier is gray **`(server)`**.
+- When discovery finds no supported catalog variants, append red **`(server mode; audio.cpp has no supported models)`** (using the discovered server backend). Other discovery errors append their actual message in red. A selected model's binding error, such as duplicate matching server entries, is also shown in red when discovery itself succeeded. A saved local-only selection instead shows **`(unavailable in server mode)`** when discovery succeeded.
+- A known selected model's gray backend qualifier always identifies that model, even when it differs from the connected server. For example, a preserved `moss_local` selection shows **`MOSS-TTS (local) (server mode; audio.cpp has no supported models)`**. None/unknown selections fall back to the discovered backend, or gray **`(server)`** when unidentified. Backend links to the server's model list are omitted when the selected backend differs from the discovered server backend. All of this remains on the single **TTS model** row.
 
 The main menu's **Project** label appends red **`(requires: TTS model selection)`** when the project's resolved type has `.id == "none"` and at least two distinct model types are available. The suffix is absent with zero or one available type, or when a model is already selected.
 

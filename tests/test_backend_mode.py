@@ -227,6 +227,8 @@ def test_catalog_helpers_classify_by_backend_kind():
                            TtsModelType.require_by_id("echo_tts_audiocpp"),
                            # TtsModelType.require_by_id("glm_tts_audiocpp"),  # DISABLED; see model_catalog.toml
                            TtsModelType.require_by_id("higgs_v3_audiocpp"),
+                           TtsModelType.require_by_id("moss_delay_audiocpp"),
+                           TtsModelType.require_by_id("moss_local_audiocpp"),
                            TtsModelType.require_by_id("omnivoice_audiocpp")]
     assert set(local_items) | set(sgl_items) | set(audio_items) == set(TtsModelType) - {TtsModelType.require_by_id("none")}
     assert all(item.value.backend_kind == TtsBackendKind.LOCAL for item in local_items)

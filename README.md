@@ -26,7 +26,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [Higgs Audio V3](https://github.com/boson-ai/higgs-audio) | | ✅ | ✅ |
 | [IndexTTS2](https://github.com/index-tts/index-tts) | ✅ | | |
 | [MiraTTS](https://github.com/ysharma3501/MiraTTS) | ✅ | | |
-| [MOSS-TTS (Delay, Local)](https://github.com/OpenMOSS/MOSS-TTS) | ✅ | ✅ | |
+| [MOSS-TTS v1.5 (Delay, Local)](https://github.com/OpenMOSS/MOSS-TTS) | ✅ | ✅ | ✅ |
 | [OmniVoice](https://github.com/k2-fsa/OmniVoice) | ✅ | | ✅ |
 | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) | ✅ | | |
 | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) | ✅ | ✅ | |
@@ -78,12 +78,11 @@ All examples use the same source text, same 15-second voice clone sample, and de
 | [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (alt voice, high temp.) | [Higgs Audio V3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-v3.abr.m4a) |
 | [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a) | [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (plus emotional guidance sample) |
 | [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a) | [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a) |
-| [MOSS-TTS-Local-Transformer-v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-local-transformer-v1.5.abr.m4a) | [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a) |
-| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (LavaSRv2 48k upsample) |
-| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined: stuart_bell) | [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a) |
-| [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a) | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett)) |
-| [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a) | [ZONOS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-zonos2.abr.m4a) |
-| New feature: [**Dialog** (two voices, auto-assigned lines)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/two-voices-dialog-qwen3.abr.m4a) | |
+| [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a) |
+| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (LavaSRv2 48k upsample) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined: stuart_bell) |
+| [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a) | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a) |
+| [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett)) | [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a) |
+| [ZONOS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-zonos2.abr.m4a) | New feature: [**Dialog** (two voices, auto-assigned lines)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/two-voices-dialog-qwen3.abr.m4a) |
 
 
 ### Enhance existing audiobooks
@@ -631,7 +630,7 @@ The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which nee
 - Disable Whisper altogether (last resort) (`Options` > `Whisper model` > `Disabled`)
 
 
-### Configurable model-specific features supported by the app
+### Configurable TTS settings by model
 
 Zero-shot voice cloning is a first-class feature, supported for all models.
 
@@ -670,10 +669,8 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Seed
 
 **IndexTTS2**
-- Emotion voice sample
-- Emotion vector
-- Emotion alpha
 - FP16 / FP8
+- Emotion voice sample, emotion vector, emotion alpha
 - Temperature, top_p, top_k, seed
 
 **MiraTTS**
@@ -681,7 +678,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature, top_p, top_k, repetition_penalty, seed
 
 **MOSS-TTS**
-- MOSS-TTS v1.5 9B and MOSS-TTS-Local-Transformer 1.7B models
+- MOSS-TTS v1.5 9B and MOSS-TTS-Local-Transformer v1.5 1.7B models
 - Batch processing
 - Experimental rolling continuation mode
 - Temperature, top_p, top_k, seed
@@ -752,7 +749,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature, guidance scale, top_p, top_k, seed
 
 **Chatterbox**
-- Multilingual V2, Multilingual V3, and English model variants (Turbo model not supported under audio.cpp)
+- Multilingual V2, Multilingual V3, and English model variants
 - Exaggeration, CFG, temperature, top_p, top_k, repetition_penalty, seed
 
 **Echo-TTS**
@@ -760,6 +757,11 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **Higgs Audio V3**
 - Temperature, top_p, top_k, seed
+
+**MOSS-TTS**
+- MOSS-TTS v1.5 8B Delay and MOSS-TTS-Local v1.5
+- Temperature, top_p, top_k, seed
+- Music detection/rejection for MOSS-TTS-Local
 
 **OmniVoice**
 - Steps
@@ -808,16 +810,19 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-10-04**
+**2026-10-04 to 05**
 
 - Added support for [audio.cpp](https://github.com/0xShug0/audio.cpp) as an alternative TTS backend, along with the following models:
     - Breeze TTS 2
     - Chatterbox
     - Echo-TTS
     - Higgs V3
+    - Moss TTS v1.5 (Delay and Local-Transformer)
     - Omnivoice
 
 - Added support for *CosyVoice3* via SGL-Omni
+- Added support for MOSS-TTS-Local-Transformer v1.5 update (local version)
+
 
 **2026-09-27**
 

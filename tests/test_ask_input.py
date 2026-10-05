@@ -289,6 +289,37 @@ def test_ask_number_and_save_accepts_minus_one_default_sentinel(monkeypatch):
     assert saves == [project]
 
 
+@pytest.mark.parametrize("is_int,target,default,minimum,maximum", [
+    (False, SettingRef("chatterbox_local", "exaggeration"), 0.5, 0.25, 2.0),
+    (True, SettingRef("moss_delay_audiocpp", "delay_top_k"), 50, 10, 100),
+])
+@pytest.mark.parametrize("response", ["", "unchanged", "-1"])
+def test_numeric_prefill_override_preserves_storage_without_enabling_reset_input(
+        monkeypatch, is_int, target, default, minimum, maximum, response):
+    project = Project()
+    project.set_model_setting(target.model_id, target.name, -1)
+    saves, errors, prefills = [], [], []
+
+    def answer(*, prefill):
+        prefills.append(prefill)
+        return prefill if response == "unchanged" else response
+
+    monkeypatch.setattr(ask, "ask_input", answer)
+    monkeypatch.setattr(ask, "printt", lambda *_: None)
+    monkeypatch.setattr(ask, "ask_error", errors.append)
+    monkeypatch.setattr(Project, "save", lambda self: saves.append(self))
+    ask.ask_number_and_save(
+        project, target, "Enter value", minimum, maximum, default, "Value set:",
+        is_int=is_int, prefill_value=default,
+    )
+    assert prefills == [str(default)]
+    assert project.get_model_setting(target.model_id, target.name) == -1
+    assert saves == []
+    # Entering the already-stored value is the shared helper's ordinary no-op,
+    # not a reset; changing a custom value to -1 remains out of range.
+    assert errors == []
+
+
 @pytest.mark.parametrize(
     ("submitted", "normalizer"),
     [("hello", None), ("HELLO", str.lower)],
