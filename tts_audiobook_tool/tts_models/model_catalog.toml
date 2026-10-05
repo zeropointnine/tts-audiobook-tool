@@ -1439,6 +1439,12 @@ reference_transcript = true
 # instruction); a configured-but-missing reference still blocks generation.
 voice_required = false
 
+# Guarantee one generation per request: the framework splitter returns the
+# text unsplit whenever it fits the codepoint budget, so a huge budget
+# disables server-side chunking outright.
+[models.audio_cpp.request_options]
+text_chunk_size = 100000
+
 [models.audio_cpp.match]
 family = "breeze_tts"
 tasks = ["tts", "clon"]
@@ -1527,6 +1533,12 @@ menu = [
     { kind = "seed" },
 ]
 
+# Native default text_chunk_size is 128 codepoints (~20 words), which silently
+# sub-splits ordinary app segments; pin a huge budget so each request is one
+# generation.
+[models.audio_cpp.request_options]
+text_chunk_size = 100000
+
 [models.audio_cpp.match]
 family = "chatterbox"
 task = "clon"
@@ -1599,6 +1611,12 @@ project_links = [
 [models.audio_cpp]
 # One request below this size stays inside a single ~300-codepoint server
 # chunk; longer text enters the family's multi-chunk path.
+#
+# Do NOT pin a large text_chunk_size here: Echo generates a fixed 640-latent
+# diffusion window (46.44 ms/frame = 29.7215 s, the trained maximum; larger
+# max_duration_sec values are clamped). Text needing more than ~29.72 s of
+# speech cannot fit one generation and would be truncated mid-sentence, so
+# the server-side chunker is load-bearing for this family, not "clever".
 max_words_range_reco = [20, 50]
 
 [models.audio_cpp.match]
@@ -1689,6 +1707,11 @@ reference_transcript = true
 # even though the upstream usage docs still label --voice-ref as required.
 voice_required = false
 
+# Guarantee one generation per request (native default 1024 codepoints is
+# already above app segment sizes; this is a hardening pin).
+[models.audio_cpp.request_options]
+text_chunk_size = 100000
+
 [models.audio_cpp.match]
 family = "higgs_audio_tts"
 task = "tts"
@@ -1762,8 +1785,12 @@ menu = [
     { parameter = "delay_top_k", label = "Top-K" },
     { kind = "seed" },
 ]
-# Leave audio.cpp's other defaults (including repetition penalty, duration
-# bounds and text chunking) untouched. This family ignores generic max_tokens.
+# Leave audio.cpp's other defaults (including repetition penalty and duration
+# bounds) untouched, but disable its internal text chunking: the native
+# default budget is only 200 codepoints (~35 words), which silently sub-splits
+# ordinary app segments into stitched sub-generations.
+[models.audio_cpp.request_options]
+text_chunk_size = 100000
 
 [models.audio_cpp.match]
 family = "moss_tts_v15"
@@ -1840,8 +1867,11 @@ menu = [
 ]
 # Match the local/SGL-Omni 1024-token budget: audio.cpp counts audio frames
 # per internal text chunk (about 81.92 seconds). This is not an app control.
-request_options = { max_tokens = 1024 }
-# Keep native text sampling, repetition penalty and internal chunking defaults.
+# text_chunk_size disables the native 2048-codepoint splitter (already above
+# app segment sizes; hardening pin), so max_tokens applies to the whole
+# segment in one generation.
+request_options = { max_tokens = 1024, text_chunk_size = 100000 }
+# Keep native text sampling and repetition penalty defaults.
 
 [models.audio_cpp.match]
 family = "moss_tts_local"
@@ -1917,10 +1947,13 @@ reference_transcript = true
 # but-missing sample file still blocks generation.
 voice_required = false
 
-# Local `OmniVoiceModel` hardcodes `AUDIO_CHUNK_THRESHOLD_SECONDS = 999` to
-# suppress the model's own long-text chunker, and the app segments text itself;
-# this pins the same value instead of exposing a control for it. The family
-# chunks text when the estimated audio length exceeds the threshold.
+# Local `OmniVoiceModel` hardcodes `AUDIO_CHUNK_THRESHOLD_SECONDS = 999`
+# to suppress the model's own long-text chunker, and the app segments text
+# itself; this pins the same value instead of exposing a control for it. The
+# family chunks text when the estimated audio length exceeds the threshold.
+#
+# Never add text_chunk_size here: an explicit value inverts the session's
+# logic and FORCES the multi-chunk path even for short text.
 [models.audio_cpp.request_options]
 audio_chunk_threshold = 999.0
 
