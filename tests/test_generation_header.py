@@ -210,7 +210,7 @@ def test_update_hotkey_renders_mode_as_ansi() -> None:
             header = pilot.app.query_one(GenerationHeader)
             header.update_hotkey("default")
             render = header.query_one("#generation-hotkey", Static).render()
-            assert "CTRL-C" in str(render)
+            assert str(render) == "Press [ESC] to interrupt"
             # The ANSI codes became styled spans rather than literal escapes.
             assert isinstance(render, Content)
             assert len(render.spans) > 0

@@ -12,11 +12,8 @@ from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
     GenerationTerminalStatus,
-    RealTimePlaybackFinished,
     RealTimePlaybackTerminalStatus,
-    RealTimePlaybackUpdate,
 )
-from tts_audiobook_tool.real_time_playback_events import RealTimePlaybackAwaitingContinue
 from tts_audiobook_tool.textual import generation_app, real_time_playback_app
 
 
@@ -330,44 +327,31 @@ def test_real_time_playback_app_releases_lock_at_terminal_summary() -> None:
     assert released == ["released"]
 
 
-def test_realtime_console_releases_before_enter_prompt(monkeypatch) -> None:
+def test_realtime_fullscreen_runner_releases_before_finish_wait(monkeypatch) -> None:
     keep = FakeKeep(mode_factory=FakeMode)
     monkeypatch.setattr(system_sleep, "_wakepy_keep", keep)
     monkeypatch.setattr(ModelWorker, "start", staticmethod(lambda: ""))
-    monkeypatch.setattr(real_time_playback_app, "can_textual", lambda: False)
-    monkeypatch.setattr(
-        real_time_playback_app, "_present_console_result", lambda *_args: None
-    )
-    monkeypatch.setattr(
-        ModelWorker, "submit_realtime_playback", staticmethod(lambda **_: "job")
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "continue_realtime_playback",
-        staticmethod(lambda _operation_id: True),
-    )
-    events: list[Any] = [
-        RealTimePlaybackUpdate("job", RealTimePlaybackAwaitingContinue(3.0, False)),
-        RealTimePlaybackFinished("job", RealTimePlaybackTerminalStatus.COMPLETED, ""),
-    ]
-    monkeypatch.setattr(
-        ModelWorker,
-        "get_event",
-        staticmethod(lambda timeout=0.1: events.pop(0) if events else None),
+    exits_at_wait: list[int] = []
+    result = real_time_playback_app.RealTimePlaybackModalResult(
+        RealTimePlaybackTerminalStatus.COMPLETED
     )
 
-    exits_at_prompt: list[int] = []
+    def run_session(app, **kwargs):
+        assert kwargs == {"inline": False}
+        assert keep.created[0].exit_count == 0
+        # The app releases the callback supplied by the runner when generation
+        # ends, before waiting for the user's finish key.
+        app._release_sleep_lock()
+        exits_at_wait.append(keep.created[0].exit_count)
+        app.terminal_result = result
+        return result
 
-    def enter() -> None:
-        exits_at_prompt.append(keep.created[0].exit_count)
+    monkeypatch.setattr(real_time_playback_app.RealTimePlaybackApp, "run", run_session)
 
-    monkeypatch.setattr(real_time_playback_app.ask, "ask_enter_to_continue", enter)
-
-    real_time_playback_app.run_real_time_playback_modal(
+    assert real_time_playback_app.run_real_time_playback_modal(
         state=SimpleNamespace(),
         phrase_groups=[],
         line_range=None,
-    )
-
-    # The lock is already released when the worker's continue prompt appears.
-    assert exits_at_prompt == [1]
+    ) is result
+    assert exits_at_wait == [1]
+    assert keep.created[0].exit_count == 1

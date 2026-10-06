@@ -240,7 +240,8 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("ctrl+c", "cancel_or_reset", show=False, priority=True),
+        # Shadow Textual's default Ctrl+C action; Escape owns interruption.
+        Binding("ctrl+c", "ignore_ctrl_c", show=False, priority=True),
         Binding("escape", "cancel_or_continue", show=False, priority=True),
         Binding("enter", "continue", show=False, priority=True),
         # Textual binds Ctrl+Q to app quit by default; the session owns its
@@ -278,8 +279,8 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         self.auto_exit = False
         # Ctrl+F opens the bottom find bar over the log; typing edits the
         # query, Enter submits it (next match), Shift+Enter goes back. While
-        # find owns focus, the session's Enter/CTRL-C bindings are disabled in
-        # ``check_action`` so they never fire from the find input.
+        # find owns focus, ``check_action`` lets Enter submit the query and
+        # Ctrl+C copy input text; Escape closes search without cancelling.
         self.find_active = False
         self.find_search_start_index: int | None = None
         self.find_query_submitted = False
@@ -485,8 +486,8 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
 
     @property
     def cancel_or_reset_blocked(self) -> bool:
-        """Whether CTRL-C must be ignored because a summary, settle, or hard
-        reset currently owns the session flow."""
+        """Whether cancellation/escalation is blocked because a summary,
+        settle, or hard reset currently owns the session flow."""
         return (
             self.terminal_result is not None
             or self.finishing
@@ -495,7 +496,7 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
 
     @property
     def hard_reset_available(self) -> bool:
-        """Whether the second-CTRL-C hard reset is offered.
+        """Whether the second-ESC hard reset is offered.
 
         The hard reset dumps the worker to clear its resident *local* model
         memory; in SGL-Omni backend mode inference is remote and the worker
@@ -510,7 +511,7 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
 
         A session is usually cancelled from the live view, but the user
         may have scrolled up to read earlier output (manual scrolling
-        detaches from the tail). CTRL-C snaps the log back to its end so
+        detaches from the tail). ESC snaps the log back to its end so
         the cancellation notice and the latest worker output are visible
         immediately.
         """
@@ -533,14 +534,10 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
                 lines = ["", f"{COL_ERROR}Cancellation requested, please wait\n"]
                 if self.hard_reset_available:
                     lines.append(
-                        f"{COL_ERROR}Or press [{COL_DEFAULT}CTRL-C{COL_ERROR}] again to hard-reset\n"
+                        f"{COL_ERROR}Or press [{COL_DEFAULT}ESC{COL_ERROR}] again to hard-reset\n"
                     )
                 lines.append(" \n")
                 self._append_application_lines(lines)
-                # self.query_one("#generation-prompt", Static).update(
-                #     "[CTRL-C] Hard-reset option"
-                # )
-                pass
                 self._update_header()
             return
         if not self.hard_reset_available:
@@ -702,14 +699,20 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
             self.exit(self.terminal_result)
 
     def action_cancel_or_continue(self) -> None:
-        # Escape dismisses the find bar while it is open, and otherwise only
-        # finishes a completed session. It no longer interrupts the generation
-        # loop: CTRL-C is the sole interrupt/hard-reset key.
+        # Escape closes search first, dismisses a summary, or requests
+        # cancellation (escalating a pending local cancellation to hard reset).
         if self.find_active:
             self.close_find()
             return
+        if self.finishing or self.reset_in_progress:
+            return
         if self.terminal_result is not None:
-            self.exit(self.terminal_result)
+            self.action_continue()
+            return
+        self.action_cancel_or_reset()
+
+    def action_ignore_ctrl_c(self) -> None:
+        """Override Textual's built-in Ctrl+C action outside the find input."""
 
     def action_ignore_ctrl_q(self) -> None:
         """Override Textual's built-in Ctrl+Q quit binding."""
@@ -729,12 +732,11 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         """Disable session bindings that would steal keys from the find bar.
 
-        While find owns focus, Enter and CTRL-C must fall through to the find
-        input (or be ignored) instead of continuing or cancelling the worker
-        session. Escape stays enabled and is handled by
-        ``action_cancel_or_continue``.
+        While find owns focus, Enter submits the query and Ctrl+C copies the
+        input selection rather than invoking session actions. Escape stays
+        enabled to close search through ``action_cancel_or_continue``.
         """
-        if self.find_active and action in ("continue", "cancel_or_reset"):
+        if self.find_active and action in ("continue", "cancel_or_reset", "ignore_ctrl_c"):
             return False
         return True
 

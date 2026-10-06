@@ -15,7 +15,6 @@ from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut, ModelUnhealthy
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
-    ConsoleOutput,
     RealTimePlaybackCommand,
     RealTimePlaybackFinished,
     RealTimePlaybackTerminalStatus,
@@ -38,7 +37,6 @@ from tts_audiobook_tool.textual import real_time_playback_app as playback_app_mo
 from tts_audiobook_tool.textual.real_time_playback_app import (
     RealTimePlaybackApp,
     RealTimePlaybackModalResult,
-    _run_realtime_playback_console,
     run_real_time_playback_modal,
 )
 from tts_audiobook_tool.textual.real_time_playback_header import (
@@ -231,7 +229,7 @@ def test_p_toggles_pause_and_header_without_stealing_find_input(
                 app._handle_update(RealTimePlaybackAwaitingContinue(3.0, False))
             prefix = (
                 "Press [ENTER] to finish" if awaiting_continue
-                else "Press [CTRL-C] to interrupt"
+                else "Press [ESC] to interrupt"
             )
             hotkey = app.query_one("#realtime-hotkey", Static)
             assert str(hotkey.render()) == prefix + "  - [P] to pause"
@@ -338,9 +336,8 @@ def test_pause_freezes_buffer_and_playhead_and_resume_excludes_paused_time(monke
     assert app.interpolated_played_samples == 192000
 
 
-def test_escape_does_not_interrupt_realtime_playback(monkeypatch) -> None:
-    """Escape no longer cancels or hard-resets running realtime playback;
-    CTRL-C is the sole interrupt key."""
+def test_escape_requests_realtime_playback_cancellation(monkeypatch) -> None:
+    """The first Escape cooperatively cancels running realtime playback."""
 
     monkeypatch.setattr(
         ModelWorker,
@@ -359,19 +356,21 @@ def test_escape_does_not_interrupt_realtime_playback(monkeypatch) -> None:
         app = RealTimePlaybackApp(make_state(), [], None)
         async with app.run_test() as pilot:
             await pilot.pause()
-            # Not in find mode, no terminal result, and not waiting to finish:
-            # Escape must be a no-op rather than forwarding to cancel_or_reset.
+            assert "Press [ESC] to interrupt" in str(
+                app.query_one("#realtime-hotkey", Static).render()
+            )
             await pilot.press("escape")
             await pilot.pause()
-            assert cancel_calls == []
+            assert cancel_calls == ["job"]
+            assert app.cancel_requested
             assert not app.find_active
 
     run(exercise())
 
 
-def test_ctrl_c_in_sgl_omni_mode_does_not_offer_hard_reset(monkeypatch) -> None:
+def test_escape_in_sgl_omni_mode_does_not_offer_hard_reset(monkeypatch) -> None:
     """In SGL-Omni backend mode the worker holds no local TTS model memory,
-    so the hard-reset offer is gated off: CTRL-C only requests a cancel and
+    so the hard-reset offer is gated off: ESC only requests a cancel and
     further presses are no-ops."""
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
 
@@ -399,7 +398,7 @@ def test_ctrl_c_in_sgl_omni_mode_does_not_offer_hard_reset(monkeypatch) -> None:
         app = RealTimePlaybackApp(make_state(), [], None)
         async with app.run_test() as pilot:
             await pilot.pause()
-            await pilot.press("ctrl+c")
+            await pilot.press("escape")
             assert cancel_calls == ["job"]
             assert app.cancel_requested
             await pilot.pause()
@@ -414,9 +413,9 @@ def test_ctrl_c_in_sgl_omni_mode_does_not_offer_hard_reset(monkeypatch) -> None:
             assert "kill process" not in hotkey
             assert "Waiting for the current generation to stop" in hotkey
 
-            # Further CTRL-C presses do nothing: no worker dump, no reset,
+            # Further ESC presses do nothing: no worker dump, no reset,
             # no terminal result.
-            await pilot.press("ctrl+c")
+            await pilot.press("escape")
             await pilot.pause(0.2)
             assert reset_calls == []
             assert not app.reset_in_progress
@@ -425,59 +424,19 @@ def test_ctrl_c_in_sgl_omni_mode_does_not_offer_hard_reset(monkeypatch) -> None:
     run(exercise())
 
 
-def test_console_fallback_waits_in_main_process_and_signals_worker(
-    monkeypatch, capsys
-) -> None:
-    events = iter(
-        [
-            ConsoleOutput("job", "stdout", "playing\n"),
-            RealTimePlaybackUpdate(
-                "job",
-                RealTimePlaybackAwaitingContinue(2.5, False),
-            ),
-            RealTimePlaybackFinished(
-                "job",
-                RealTimePlaybackTerminalStatus.COMPLETED,
-            ),
-        ]
-    )
-    continued: list[str] = []
-    prompted: list[bool] = []
-    monkeypatch.setattr(
-        ModelWorker,
-        "submit_realtime_playback",
-        staticmethod(lambda **_: "job"),
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "get_event",
-        staticmethod(lambda timeout=0.1: next(events)),
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "continue_realtime_playback",
-        staticmethod(lambda operation_id: continued.append(operation_id) or True),
-    )
-    monkeypatch.setattr(
-        "tts_audiobook_tool.textual.real_time_playback_app.ask.ask_enter_to_continue",
-        lambda: prompted.append(True),
-    )
-
-    result = _run_realtime_playback_console(make_state(), [], None)
-
-    assert result.status is RealTimePlaybackTerminalStatus.COMPLETED
-    assert prompted == [True]
-    assert continued == ["job"]
-    assert "playing" in capsys.readouterr().out
-
-
-def test_app_receives_structured_progress_buffer_and_waiting_events(monkeypatch) -> None:
+@pytest.mark.parametrize("finish_key", ["enter", "escape"])
+def test_app_receives_structured_progress_buffer_and_waiting_events(monkeypatch, finish_key) -> None:
     monkeypatch.setattr(
         ModelWorker,
         "submit_realtime_playback",
         staticmethod(lambda **_: "job"),
     )
     monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda: []))
+    cancelled: list[str] = []
+    monkeypatch.setattr(
+        ModelWorker, "request_cancel",
+        staticmethod(lambda operation_id: cancelled.append(operation_id) or True),
+    )
     continued: list[str] = []
     monkeypatch.setattr(
         ModelWorker,
@@ -508,7 +467,9 @@ def test_app_receives_structured_progress_buffer_and_waiting_events(monkeypatch)
                 app.query_one("#realtime-status", Static).render()
             )
 
-            app.action_continue()
+            await pilot.press("ctrl+c")
+            assert continued == []
+            await pilot.press(finish_key)
             app.phase = "Transient teardown status"
             app._update_header()
             assert str(app.query_one("#realtime-status", Static).render()) == rendered_status
@@ -516,6 +477,11 @@ def test_app_receives_structured_progress_buffer_and_waiting_events(monkeypatch)
             assert app.exit_after_terminal
             assert app.teardown_in_progress
             assert not app.waiting_for_continue
+            # Repeated Escape during audio teardown must not cancel the job
+            # or send a second continue handshake.
+            await pilot.press("escape")
+            assert continued == ["job"]
+            assert cancelled == []
 
             lines_before_terminal = list(appended_lines)
             app._show_terminal_summary(
@@ -965,7 +931,7 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
 def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
     monkeypatch,
 ) -> None:
-    """A cooperative cancel (one CTRL-C) arriving mid-generation stops the
+    """A cooperative cancel (one ESC) arriving mid-generation stops the
     run, but the in-flight generation had completed: its sound is submitted
     to the output buffer (where it plays while the session waits for Enter)
     instead of being discarded."""
@@ -1009,7 +975,7 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
         sr=48000,
     )
 
-    # The cancel request (as the worker signals a single CTRL-C from the
+    # The cancel request (as the worker signals a single ESC from the
     # parent) arrives while the second generation is in flight; that
     # generation still completes.
     cancel_event = threading.Event()
@@ -1157,7 +1123,7 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
 def test_gen_timeout_update_hard_resets_worker_even_with_cancel_pending(
     monkeypatch,
 ) -> None:
-    """A pending single-CTRL-C cancel must not suppress the gen timeout."""
+    """A pending single-ESC cancel must not suppress the gen timeout."""
     reset_calls: list[int] = []
     cancel_calls: list[str] = []
     latch = {"deliver": False}
@@ -1191,7 +1157,7 @@ def test_gen_timeout_update_hard_resets_worker_even_with_cancel_pending(
     async def exercise() -> None:
         app = RealTimePlaybackApp(make_state(), [], None)
         async with app.run_test() as pilot:
-            await pilot.press("ctrl+c")
+            await pilot.press("escape")
             assert cancel_calls == ["job"]
             assert app.cancel_requested
 
@@ -1272,7 +1238,7 @@ def test_unhealthy_reset_ignores_queued_awaiting_continue_and_enter(
                 # Also defend against ENTER when a waiter predated the reset;
                 # reset ownership must win regardless of event ordering.
                 app.waiting_for_continue = True
-                await pilot.press("enter")
+                await pilot.press("enter", "escape")
                 await pilot.pause()
                 assert app.waiting_for_continue
                 assert continue_calls == []
@@ -1294,97 +1260,6 @@ def test_unhealthy_reset_ignores_queued_awaiting_continue_and_enter(
     run(exercise())
 
 
-def test_console_loop_resets_worker_on_gen_timeout(monkeypatch, capsys) -> None:
-    reset_calls: list[int] = []
-
-    def fake_reset() -> str:
-        reset_calls.append(1)
-        return "replacement worker failed to start"
-
-    events = iter(
-        [
-            RealTimePlaybackUpdate(
-                "job", GenerationTimedOut(timeout_seconds=180.0)
-            ),
-        ]
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "submit_realtime_playback",
-        staticmethod(lambda **_: "job"),
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "get_event",
-        staticmethod(lambda timeout=0.1: next(events)),
-    )
-    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
-
-    result = _run_realtime_playback_console(make_state(), [], None)
-
-    assert reset_calls == [1]
-    assert result.status is RealTimePlaybackTerminalStatus.WORKER_RESET
-    assert result.hard_reset_cause is HardResetCause.GENERATION_TIMEOUT
-    assert "GEN_TIMEOUT" in result.message
-    assert "180" in result.message
-    assert "replacement worker failed to start" in result.message
-    assert "GEN_TIMEOUT" in capsys.readouterr().out
-
-
-def test_console_unhealthy_reset_reports_worker_restart_failure(
-    monkeypatch, capsys
-) -> None:
-    reset_calls: list[int] = []
-
-    def failing_reset() -> str:
-        reset_calls.append(1)
-        return "replacement worker failed to start"
-
-    event = RealTimePlaybackUpdate(
-        "job", ModelUnhealthy("TTS model is unhealthy")
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "submit_realtime_playback",
-        staticmethod(lambda **_: "job"),
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "get_event",
-        staticmethod(lambda timeout=0.1: event),
-    )
-    monkeypatch.setattr(ModelWorker, "reset", staticmethod(failing_reset))
-
-    result = _run_realtime_playback_console(make_state(), [], None)
-
-    assert reset_calls == [1]
-    assert result.status is RealTimePlaybackTerminalStatus.WORKER_RESET
-    assert result.hard_reset_cause is HardResetCause.MODEL_UNHEALTHY
-    assert "TTS model is unhealthy" in result.message
-    assert "replacement worker failed to start" in result.message
-    assert "TTS model is unhealthy" in capsys.readouterr().out
-
-
-def test_console_worker_exit_is_failure_not_reset(monkeypatch) -> None:
-    event = WorkerExited("job", "Model worker process exited unexpectedly")
-    monkeypatch.setattr(
-        ModelWorker,
-        "submit_realtime_playback",
-        staticmethod(lambda **_: "job"),
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "get_event",
-        staticmethod(lambda timeout=0.1: event),
-    )
-
-    result = _run_realtime_playback_console(make_state(), [], None)
-
-    assert result.status is RealTimePlaybackTerminalStatus.FAILED
-    assert result.hard_reset_cause is None
-    assert "exited unexpectedly" in result.message
-
-
 def test_interface_failure_cleanup_reports_worker_restart_failure(
     monkeypatch,
 ) -> None:
@@ -1402,7 +1277,6 @@ def test_interface_failure_cleanup_reports_worker_restart_failure(
             lambda: reset_calls.append(None) or "replacement worker failed to start"
         ),
     )
-    monkeypatch.setattr(playback_app_module, "can_textual", lambda: True)
     monkeypatch.setattr(RealTimePlaybackApp, "run", failing_run)
     monkeypatch.setattr(
         playback_app_module,

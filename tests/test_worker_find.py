@@ -121,7 +121,7 @@ def test_worker_app_uses_active_model_output_filters(monkeypatch) -> None:
 
 def test_find_bar_searches_and_gates_session_keys(monkeypatch) -> None:
     """Ctrl+F opens the overlay bar; Enter advances matches without continuing,
-    CTRL-C is ignored, Escape closes and clears the highlight."""
+    Ctrl+C copies input text, Escape closes and clears the highlight."""
 
     monkeypatch.setattr(worker_app_module, "EVENT_POLL_SECONDS", 3600.0)
 
@@ -161,9 +161,11 @@ def test_find_bar_searches_and_gates_session_keys(monkeypatch) -> None:
             await pilot.pause()
             assert log.highlight_line_index == 1
 
-            # CTRL-C is ignored while the find input owns focus.
+            # Ctrl+C retains the input's ordinary copy action.
+            app.query_one("#find-input", Input).select_all()
             await pilot.press("ctrl+c")
             await pilot.pause()
+            assert app.clipboard == "two"
             assert app.cancelled == 0
 
             await pilot.press("escape")
@@ -172,6 +174,11 @@ def test_find_bar_searches_and_gates_session_keys(monkeypatch) -> None:
             assert find_bar.display is False
             assert log.highlight_line_index is None
             assert app.focused is log
+            assert app.cancelled == 0
+
+            # With search closed, Escape reaches session cancellation.
+            await pilot.press("escape")
+            assert app.cancelled == 1
 
     run(exercise())
 
@@ -233,9 +240,8 @@ def test_worker_log_line_accessors_and_highlight() -> None:
     run(exercise())
 
 
-def test_escape_does_not_interrupt_generation(monkeypatch) -> None:
-    """Escape no longer cancels or hard-resets a running generation session;
-    CTRL-C is the sole interrupt key."""
+def test_ctrl_c_does_not_interrupt_worker_session(monkeypatch) -> None:
+    """Ctrl+C is shadowed outside search; Escape owns interruption."""
 
     monkeypatch.setattr(worker_app_module, "EVENT_POLL_SECONDS", 3600.0)
 
@@ -243,11 +249,10 @@ def test_escape_does_not_interrupt_generation(monkeypatch) -> None:
         app = StubWorkerApp()
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
-            # Not in find mode and no terminal result: Escape must be a no-op
-            # rather than forwarding to cancel_or_reset.
-            await pilot.press("escape")
+            await pilot.press("ctrl+c")
             await pilot.pause()
             assert app.cancelled == 0
             assert app.find_active is False
+            assert app.is_running
 
     run(exercise())

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, ClassVar
@@ -9,18 +8,14 @@ from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
 
 from tts_audiobook_tool import ask, util
-from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_support.system_sleep import SystemSleepLock
 from tts_audiobook_tool.generation_events import GenerationPhase
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
-    ConsoleFlush,
-    ConsoleOutput,
     ModelWorkerEvent,
     RealTimePlaybackFinished,
     RealTimePlaybackTerminalStatus,
     RealTimePlaybackUpdate,
-    WorkerCommandFailed,
     WorkerExited,
 )
 from tts_audiobook_tool.real_time_playback_events import (
@@ -36,18 +31,13 @@ from tts_audiobook_tool.textual.real_time_playback_header import (
     RealTimePlaybackHeader,
     RealTimePlaybackSourceText,
 )
-from tts_audiobook_tool.textual.textual_shared import can_textual
 from tts_audiobook_tool.textual.worker_app import (
     FINAL_OUTPUT_SETTLE_SECONDS,
     WorkerTextualApp,
     session_failure_result,
     worker_app_css,
 )
-from tts_audiobook_tool.worker_reset import (
-    HardResetCause,
-    hard_reset_request_from_generation_update,
-    perform_hard_reset,
-)
+from tts_audiobook_tool.worker_reset import HardResetCause
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -318,7 +308,11 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
 
     @property
     def cancel_or_reset_blocked(self) -> bool:
-        return super().cancel_or_reset_blocked or self.waiting_for_continue
+        return (
+            super().cancel_or_reset_blocked
+            or self.waiting_for_continue
+            or self.teardown_in_progress
+        )
 
     @property
     def prompt_mode(self) -> PromptMode:
@@ -469,92 +463,23 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
 
     def action_cancel_or_reset(self) -> None:
         super().action_cancel_or_reset()
-        # CTRL-C also snaps the log back to its end: a user who scrolled
+        # ESC also snaps the log back to its end: a user who scrolled
         # up to read earlier output still sees the cancellation notice and
         # the latest worker lines.
         self._snap_log_to_tail()
 
     def action_cancel_or_continue(self) -> None:
-        # Escape dismisses the find bar first, and otherwise only finishes a
-        # completed (or waiting-to-finish) session. It no longer interrupts
-        # realtime playback: CTRL-C is the sole interrupt/hard-reset key.
+        # ESC dismisses the find bar first, then finishes a completed (or
+        # waiting-to-finish) session, or interrupts an active worker job.
         if self.find_active:
             self.close_find()
             return
+        if self.finishing or self.reset_in_progress or self.teardown_in_progress:
+            return
         if self.terminal_result is not None or self.waiting_for_continue:
             self.action_continue()
-
-
-def _run_realtime_playback_console(
-    state: State,
-    phrase_groups: list[PhraseGroup],
-    line_range: tuple[int, int] | None,
-    on_job_end: Callable[[], None] | None = None,
-) -> RealTimePlaybackModalResult:
-    try:
-        operation_id = ModelWorker.submit_realtime_playback(
-            state=state,
-            phrase_groups=phrase_groups,
-            line_range=line_range,
-        )
-    except Exception as exception:
-        return RealTimePlaybackModalResult(
-            RealTimePlaybackTerminalStatus.FAILED,
-            f"{type(exception).__name__}: {exception}",
-        )
-
-    interrupts = Interrupts()
-    interrupts.set("model worker realtime playback")
-    # The console fallback supports cooperative cancellation only. Immediate
-    # second-CTRL-C escalation is a Textual interaction; GEN_TIMEOUT remains
-    # the console path's backstop for a worker stuck inside inference.
-    cancellation_sent = False
-    try:
-        while True:
-            if interrupts.did_interrupt and not cancellation_sent:
-                cancellation_sent = ModelWorker.request_cancel(operation_id)
-            event = ModelWorker.get_event(timeout=0.1)
-            if event is None or getattr(event, "operation_id", None) != operation_id:
-                continue
-            if isinstance(event, ConsoleOutput):
-                target = sys.stderr if event.stream == "stderr" else sys.stdout
-                target.write(event.text)
-                target.flush()
-            elif isinstance(event, ConsoleFlush):
-                target = sys.stderr if event.stream == "stderr" else sys.stdout
-                target.flush()
-            elif isinstance(event, RealTimePlaybackUpdate):
-                reset_request = hard_reset_request_from_generation_update(event.update)
-                if reset_request is not None:
-                    # Program resets override a pending cooperative cancel.
-                    print(reset_request.reason)
-                    reset_outcome = perform_hard_reset(reset_request)
-                    return RealTimePlaybackModalResult(
-                        RealTimePlaybackTerminalStatus.WORKER_RESET,
-                        reset_outcome.message,
-                        hard_reset_cause=reset_request.cause,
-                    )
-                if isinstance(event.update, RealTimePlaybackAwaitingContinue):
-                    # The batch loop is over; the ENTER wait below is not work.
-                    if on_job_end is not None:
-                        on_job_end()
-                    interrupts.clear()
-                    ask.ask_enter_to_continue()
-                    ModelWorker.continue_realtime_playback(operation_id)
-            elif isinstance(event, RealTimePlaybackFinished):
-                return RealTimePlaybackModalResult(event.status, event.message)
-            elif isinstance(event, WorkerCommandFailed):
-                return RealTimePlaybackModalResult(
-                    RealTimePlaybackTerminalStatus.FAILED,
-                    event.message,
-                )
-            elif isinstance(event, WorkerExited):
-                return RealTimePlaybackModalResult(
-                    RealTimePlaybackTerminalStatus.FAILED,
-                    event.message or "Model worker exited unexpectedly",
-                )
-    finally:
-        interrupts.clear()
+            return
+        self.action_cancel_or_reset()
 
 
 def _present_console_result(result: RealTimePlaybackModalResult) -> None:
@@ -600,17 +525,6 @@ def run_real_time_playback_modal(
             _present_console_result(result)
             if ask.can_hotkey:
                 ask.ask_enter_to_continue()
-            return result
-
-        if not can_textual():
-            result = _run_realtime_playback_console(
-                state,
-                phrase_groups,
-                line_range,
-                on_job_end=sleep_lock.release,
-            )
-            sleep_lock.release()
-            _present_console_result(result)
             return result
 
         app = RealTimePlaybackApp(

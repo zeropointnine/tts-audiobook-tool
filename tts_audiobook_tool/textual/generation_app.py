@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,7 +14,6 @@ from textual.binding import Binding, BindingType
 from tts_audiobook_tool import ask, text_util, util
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import make_worker_log_file_path
-from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_support.system_sleep import SystemSleepLock
 from tts_audiobook_tool.constants import (
     COL_DEFAULT,
@@ -32,17 +30,14 @@ from tts_audiobook_tool.generation_events import (
 )
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
-    ConsoleOutput,
     GenerationFinished,
     GenerationTerminalStatus,
     GenerationUpdate,
     ModelWorkerEvent,
-    WorkerCommandFailed,
     WorkerExited,
 )
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.textual.generation_header import GenerationHeader, PromptMode
-from tts_audiobook_tool.textual.textual_shared import can_textual
 from tts_audiobook_tool.textual.worker_app import (
     FINAL_OUTPUT_SETTLE_SECONDS,
     ConsoleLineAssembler,
@@ -51,11 +46,7 @@ from tts_audiobook_tool.textual.worker_app import (
     session_failure_result,
     worker_app_css,
 )
-from tts_audiobook_tool.worker_reset import (
-    HardResetCause,
-    hard_reset_request_from_generation_update,
-    perform_hard_reset,
-)
+from tts_audiobook_tool.worker_reset import HardResetCause
 if TYPE_CHECKING:
     from tts_audiobook_tool.state import State
 
@@ -174,7 +165,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
     def compose_header(self) -> ComposeResult:
         # (bottom prompt row removed; its trigger points are retained in
         # terminal_summary_extra_lines and action_cancel_or_reset)
-        # yield Static("[CTRL-C] Request cancellation", id="generation-prompt", markup=False)
+        # yield Static("[ESC] Request cancellation", id="generation-prompt", markup=False)
         yield GenerationHeader(
             title="Quick generate" if self.is_regen else "Generating audio",
             id="generation-header",
@@ -426,7 +417,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
 
     def action_cancel_or_reset(self) -> None:
         super().action_cancel_or_reset()
-        # CTRL-C also snaps the log back to its end: a user who scrolled
+        # ESC also snaps the log back to its end: a user who scrolled
         # up to read earlier output still sees the cancellation notice and
         # the latest worker lines.
         self._snap_log_to_tail()
@@ -483,97 +474,6 @@ def _persist_auto_concat_after_worker(app: GenerationApp) -> None:
         error = app.state.project.save()
         if error:
             ask.ask_error(f"Couldn't save concatenate setting: {error}")
-
-
-def _run_generation_console(
-    state: State,
-    indices: set[int],
-    batch_size: int,
-    is_regen: bool,
-    transcript: GenerationTranscript,
-) -> GenerationModalResult:
-    assembler = ConsoleLineAssembler()
-    progress = GenerationProgress(0, len(indices), len(indices))
-    try:
-        operation_id = ModelWorker.submit_generation(
-            state=state,
-            indices=indices,
-            batch_size=batch_size,
-            is_regen=is_regen,
-        )
-    except Exception as exception:
-        return GenerationModalResult(
-            GenerationTerminalStatus.FAILED,
-            state.project.generate_range_string,
-            transcript.path,
-            f"{type(exception).__name__}: {exception}",
-        )
-
-    interrupts = Interrupts()
-    interrupts.set("model worker generation")
-    # The console fallback supports cooperative cancellation only. Immediate
-    # second-CTRL-C escalation is a Textual interaction; GEN_TIMEOUT remains
-    # the console path's backstop for a worker stuck inside inference.
-    cancellation_sent = False
-    try:
-        # The loop is guaranteed to terminate: a healthy worker answers with
-        # GenerationFinished or WorkerCommandFailed, and if the process dies
-        # the drainer synthesizes WorkerExited for this operation.
-        while True:
-            if interrupts.did_interrupt and not cancellation_sent:
-                cancellation_sent = ModelWorker.request_cancel(operation_id)
-            event = ModelWorker.get_event(timeout=0.1)
-            if event is None or getattr(event, "operation_id", None) != operation_id:
-                continue
-            if isinstance(event, ConsoleOutput):
-                target = sys.stderr if event.stream == "stderr" else sys.stdout
-                target.write(event.text)
-                target.flush()
-                transcript.write_chunk(event.text)
-                assembler.feed(event.text)
-            elif isinstance(event, GenerationUpdate):
-                reset_request = hard_reset_request_from_generation_update(event.update)
-                if reset_request is not None:
-                    # Program resets override a pending cooperative cancel.
-                    print(reset_request.reason)
-                    reset_outcome = perform_hard_reset(reset_request)
-                    return GenerationModalResult(
-                        GenerationTerminalStatus.WORKER_RESET,
-                        _read_persisted_range_string(state),
-                        transcript.path,
-                        reset_outcome.message,
-                        hard_reset_cause=reset_request.cause,
-                    )
-                if isinstance(event.update, GenerationProgress):
-                    progress = event.update
-            elif isinstance(event, GenerationFinished):
-                assembler.finish()
-                return GenerationModalResult(
-                    event.status,
-                    event.remaining_range_string,
-                    transcript.path,
-                    event.message,
-                    failed_items=progress.failed,
-                    errored_items=progress.errored,
-                )
-            elif isinstance(event, WorkerCommandFailed):
-                assembler.finish()
-                return GenerationModalResult(
-                    GenerationTerminalStatus.FAILED,
-                    state.project.generate_range_string,
-                    transcript.path,
-                    event.message,
-                )
-            elif isinstance(event, WorkerExited):
-                assembler.finish()
-                return GenerationModalResult(
-                    GenerationTerminalStatus.FAILED,
-                    _read_persisted_range_string(state),
-                    transcript.path,
-                    event.message or "Model worker exited unexpectedly",
-                )
-    finally:
-        interrupts.clear()
 
 
 def _styled_terminal_label(
@@ -646,18 +546,6 @@ def run_generation_app(
                 start_error,
             )
             sleep_lock.release()
-            _present_console_result(state, result, transcript, is_regen)
-            return result
-        if not can_textual():
-            result = _run_generation_console(
-                state,
-                indices,
-                batch_size,
-                is_regen,
-                transcript,
-            )
-            sleep_lock.release()
-            _reconcile_generation_result(state, result)
             _present_console_result(state, result, transcript, is_regen)
             return result
 

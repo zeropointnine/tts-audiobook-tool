@@ -1,6 +1,6 @@
 # Model Worker Architecture
 
-Last updated: 2026-09-29
+Last updated: 2026-10-06
 
 ## Scope
 
@@ -144,9 +144,11 @@ Cancellation is **cooperative**. The worker ignores terminal `SIGINT`, so Textua
 
 The ladder in a full-screen session (`action_cancel_or_reset`):
 
-1. First Ctrl-C calls `request_cancel(operation_id)` and sets the cooperative event.
-2. In local (non-SGL-Omni) backend mode, a second Ctrl-C hard-resets: terminate the worker and its descendants, start a fresh one, discard resident model state.
+1. First Escape calls `request_cancel(operation_id)` and sets the cooperative event.
+2. In local (non-SGL-Omni) backend mode, another Escape while cancellation is pending hard-resets: terminate the worker and its descendants, start a fresh one, discard resident model state.
 3. In SGL-Omni mode the hard reset is not offered — inference is remote and the worker holds no local TTS memory to dump — so further presses are ignored and the session waits for the cooperative cancel.
+
+These bindings apply to generation, realtime playback, and TTS preview. Escape closes an open find bar without cancelling; on a terminal summary it dismisses the session, and at realtime's awaiting-continue prompt it uses the existing worker continue handshake. Escape is ignored during finishing, hard reset, or realtime audio teardown. Ctrl-C is explicitly shadowed outside search and retains the find input's ordinary copy action. Keyboard cancellation uses Textual key events, not a SIGINT handler.
 
 The hard-reset action runs on a Textual thread worker so process termination never blocks rendering.
 
@@ -173,7 +175,7 @@ When the worker dies without a reset being attempted, sessions finalize as `FAIL
 
 Each job optionally writes a complete plain-text transcript into the project's `gen_logs/` directory (`PROJECT_GEN_LOG_SUBDIR`); carriage-return progress that replaced the current line is retained as individual transcript lines.
 
-If the terminal cannot host Textual (`can_textual()` / `can_use_full_screen_terminal()`), the job still runs in the worker: the main process synchronously drains worker events to ordinary stdout/stderr, writes the same transcript, handles Ctrl-C through the shared cancellation event, and returns the same typed result. It never falls back to in-process inference.
+Interactive startup requires a full-screen-capable terminal (`can_use_full_screen_terminal()`) and exits if the terminal is unsupported. Generation and realtime playback always use Textual; there is no non-full-screen execution fallback. Startup and interface failures may still be reported to the console after the screen has closed, without falling back to a console-driven worker job.
 
 ## Process-safety rules
 

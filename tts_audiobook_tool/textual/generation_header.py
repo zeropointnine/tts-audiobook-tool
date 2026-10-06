@@ -20,7 +20,7 @@ PromptMode = Literal[
 ]
 
 _PROMPT_BY_MODE: dict[PromptMode, str] = {
-    "default": f"Press [{COL_ACCENT}CTRL-C{COL_DEFAULT}] to interrupt",
+    "default": f"Press [{COL_ACCENT}ESC{COL_DEFAULT}] to interrupt",
     "finished": f"Press [{COL_ACCENT}ENTER{COL_DEFAULT}] to continue",
     "auto_continue": "Proceeding to concatenation...",
     "auto_return": "",
@@ -30,7 +30,7 @@ _PROMPT_BY_MODE: dict[PromptMode, str] = {
 def _cancel_pending_prompt() -> str:
     """Prompt shown while a requested cancellation waits for a safe boundary.
 
-    The second-CTRL-C hard reset is gated to the local backend mode: it dumps
+    The second-ESC hard reset is gated to the local backend mode: it dumps
     the worker to clear resident *local* model memory, which does not apply
     to SGL-Omni's remote inference. The prompt is therefore resolved when
     rendered, not baked into the dict above (the backend mode is a process
@@ -38,7 +38,7 @@ def _cancel_pending_prompt() -> str:
     """
     if Tts.is_remote_mode():
         return f"{COL_DIM}Waiting for the current generation to stop...{COL_DEFAULT}"
-    return f"Press [{COL_ERROR}CTRL-C{COL_DEFAULT}] to kill process and stop immediately"
+    return f"Press [{COL_ERROR}ESC{COL_DEFAULT}] to kill process and stop immediately"
 
 
 class GenerationHeader(Vertical):

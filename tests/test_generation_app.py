@@ -21,7 +21,6 @@ from tts_audiobook_tool.generation_events import (
     GenerationRunEnded,
     GenerationStarted,
     GenerationTimedOut,
-    ModelUnhealthy,
 )
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import generation_app as generation_app_module
@@ -38,7 +37,6 @@ from tts_audiobook_tool.textual.generation_app import (
     _present_console_result,
     _read_persisted_range_string,
     _reconcile_generation_result,
-    _run_generation_console,
     run_generation_app,
 )
 from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
@@ -195,7 +193,6 @@ def test_worker_end_resaves_toggled_setting_after_range_reconciliation(
         worker_state.project.generate_range_string = worker_result.remaining_range_string
 
     monkeypatch.setattr(ModelWorker, "start", staticmethod(lambda: ""))
-    monkeypatch.setattr(generation_app_module, "can_textual", lambda: True)
     monkeypatch.setattr(GenerationApp, "run", run_worker)
     monkeypatch.setattr(generation_app_module, "_reconcile_generation_result", reconcile)
 
@@ -369,85 +366,6 @@ def test_reconcile_rederives_range_string_from_segment_catalog(tmp_path) -> None
     # The re-derived range excludes the segments that exist on disk.
     assert project.generate_range_string == "3"
     assert saved == ["3"]
-
-
-def test_non_textual_fallback_relays_worker_output(monkeypatch, tmp_path, capsys) -> None:
-    events = iter(
-        [
-            ConsoleOutput("job", "stdout", "progress 1\rprogress 2\n"),
-            GenerationFinished(
-                "job",
-                GenerationTerminalStatus.COMPLETED,
-                "none",
-            ),
-        ]
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "submit_generation",
-        staticmethod(lambda **_: "job"),
-    )
-    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
-    monkeypatch.setattr(
-        ModelWorker,
-        "get_event",
-        staticmethod(lambda timeout=0.1: next(events)),
-    )
-    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
-
-    try:
-        result = _run_generation_console(
-            make_state(),
-            {0},
-            1,
-            False,
-            transcript,
-        )
-    finally:
-        transcript.close()
-
-    assert result.status == GenerationTerminalStatus.COMPLETED
-    assert "progress 2" in capsys.readouterr().out
-    assert Path(transcript.path).read_text(encoding="utf-8") == (
-        "progress 1\nprogress 2\n"
-    )
-
-
-def test_console_fallback_finalizes_on_worker_exited(monkeypatch, tmp_path) -> None:
-    events = iter(
-        [
-            ConsoleOutput("job", "stdout", "progress 1\n"),
-            WorkerExited(
-                "job",
-                "Model worker process exited unexpectedly. Worker log: /tmp/worker.log",
-            ),
-        ]
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "submit_generation",
-        staticmethod(lambda **_: "job"),
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "get_event",
-        staticmethod(lambda timeout=0.1: next(events)),
-    )
-    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
-
-    try:
-        result = _run_generation_console(
-            make_state(),
-            {0},
-            1,
-            False,
-            transcript,
-        )
-    finally:
-        transcript.close()
-
-    assert result.status == GenerationTerminalStatus.FAILED
-    assert "Worker log: /tmp/worker.log" in result.message
 
 
 def test_generation_app_finalizes_on_worker_exited(monkeypatch, tmp_path) -> None:
@@ -1157,8 +1075,8 @@ def test_progress_bar_updates_never_resize_the_log_area(monkeypatch, tmp_path) -
         transcript.close()
 
 
-def test_ctrl_c_snaps_scrolled_log_to_bottom(monkeypatch, tmp_path) -> None:
-    """CTRL-C forces the worker log to jump to the bottom and resume tail
+def test_escape_snaps_scrolled_log_to_bottom(monkeypatch, tmp_path) -> None:
+    """ESC forces the worker log to jump to the bottom and resume tail
     following: a user who scrolled up to read earlier output immediately
     sees the cancellation notice and the latest worker lines."""
     queued_events = [
@@ -1200,9 +1118,9 @@ def test_ctrl_c_snaps_scrolled_log_to_bottom(monkeypatch, tmp_path) -> None:
             assert not log.follow_tail
             assert log.scroll_offset.y < log.max_scroll_y
 
-            # CTRL-C snaps the log back to the bottom, and the appended
+            # ESC snaps the log back to the bottom, and the appended
             # cancellation notice is visible there.
-            await pilot.press("ctrl+c")
+            await pilot.press("escape")
             await pilot.pause()
             assert log.follow_tail
             assert log.scroll_offset.y == log.max_scroll_y
@@ -1216,7 +1134,7 @@ def test_ctrl_c_snaps_scrolled_log_to_bottom(monkeypatch, tmp_path) -> None:
         transcript.close()
 
 
-def test_second_ctrl_c_hard_resets_worker_immediately(monkeypatch, tmp_path) -> None:
+def test_second_escape_hard_resets_worker_immediately(monkeypatch, tmp_path) -> None:
     cancel_calls: list[str] = []
     reset_calls: list[int] = []
 
@@ -1242,7 +1160,7 @@ def test_second_ctrl_c_hard_resets_worker_immediately(monkeypatch, tmp_path) -> 
 
     async def exercise() -> None:
         async with app.run_test(size=(100, 24)) as pilot:
-            await pilot.press("ctrl+c")
+            await pilot.press("escape")
             assert cancel_calls == ["job"]
             assert app.cancel_requested
             await pilot.pause()
@@ -1252,9 +1170,9 @@ def test_second_ctrl_c_hard_resets_worker_immediately(monkeypatch, tmp_path) -> 
                 app.query_one("#generation-hotkey", Static).render()
             )
 
-            # The second CTRL-C hard-resets the worker immediately, with no
+            # The second ESC hard-resets the worker immediately, with no
             # confirmation dialog.
-            await pilot.press("ctrl+c")
+            await pilot.press("escape")
             await pilot.pause(0.2)
 
             assert reset_calls == [1]
@@ -1275,9 +1193,9 @@ def test_second_ctrl_c_hard_resets_worker_immediately(monkeypatch, tmp_path) -> 
         transcript.close()
 
 
-def test_second_ctrl_c_in_sgl_omni_mode_is_not_offered(monkeypatch, tmp_path) -> None:
+def test_second_escape_in_sgl_omni_mode_is_not_offered(monkeypatch, tmp_path) -> None:
     """In SGL-Omni backend mode the worker holds no local TTS model memory,
-    so the hard-reset offer is gated off: CTRL-C only requests a cancel and
+    so the hard-reset offer is gated off: ESC only requests a cancel and
     further presses are no-ops."""
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
 
@@ -1307,7 +1225,7 @@ def test_second_ctrl_c_in_sgl_omni_mode_is_not_offered(monkeypatch, tmp_path) ->
 
     async def exercise() -> None:
         async with app.run_test(size=(100, 24)) as pilot:
-            await pilot.press("ctrl+c")
+            await pilot.press("escape")
             assert cancel_calls == ["job"]
             assert app.cancel_requested
             await pilot.pause()
@@ -1322,10 +1240,10 @@ def test_second_ctrl_c_in_sgl_omni_mode_is_not_offered(monkeypatch, tmp_path) ->
             assert "kill process" not in hotkey
             assert "Waiting for the current generation to stop" in hotkey
 
-            # Further CTRL-C presses do nothing: no worker dump, no reset,
+            # Further ESC presses do nothing: no worker dump, no reset,
             # no terminal result.
-            await pilot.press("ctrl+c")
-            await pilot.press("ctrl+c")
+            await pilot.press("escape")
+            await pilot.press("escape")
             await pilot.pause(0.2)
 
             assert reset_calls == []
@@ -1396,8 +1314,8 @@ def test_gen_timeout_event_hard_resets_worker(monkeypatch, tmp_path) -> None:
         transcript.close()
 
 
-def test_gen_timeout_still_resets_worker_after_single_ctrl_c(monkeypatch, tmp_path) -> None:
-    """A pending single-CTRL-C cancel must not suppress the gen timeout."""
+def test_gen_timeout_still_resets_worker_after_single_escape(monkeypatch, tmp_path) -> None:
+    """A pending single-ESC cancel must not suppress the gen timeout."""
     stubs = _install_gen_timeout_worker_stubs(monkeypatch)
 
     transcript = GenerationTranscript(str(tmp_path / "generation.log"))
@@ -1405,9 +1323,9 @@ def test_gen_timeout_still_resets_worker_after_single_ctrl_c(monkeypatch, tmp_pa
 
     async def exercise() -> None:
         async with app.run_test(size=(100, 24)) as pilot:
-            # One CTRL-C requests cancellation; the in-flight inference is
+            # One ESC requests cancellation; the in-flight inference is
             # still allowed to run (and hang) past the cap.
-            await pilot.press("ctrl+c")
+            await pilot.press("escape")
             assert stubs["cancel_calls"] == ["job"]
             assert app.cancel_requested
 
@@ -1426,71 +1344,6 @@ def test_gen_timeout_still_resets_worker_after_single_ctrl_c(monkeypatch, tmp_pa
         run(exercise())
     finally:
         transcript.close()
-
-
-def test_console_loop_resets_worker_on_gen_timeout(monkeypatch, tmp_path) -> None:
-    reset_calls: list[int] = []
-
-    def fake_reset() -> str:
-        reset_calls.append(1)
-        return "replacement worker failed to start"
-
-    event = GenerationUpdate("job", GenerationTimedOut(180.0))
-    monkeypatch.setattr(
-        ModelWorker,
-        "submit_generation",
-        staticmethod(lambda **_: "job"),
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "get_event",
-        staticmethod(lambda timeout=0.1: event),
-    )
-    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
-
-    transcript = GenerationTranscript(str(tmp_path / "generation.log"), enabled=False)
-
-    result = _run_generation_console(make_state(), {0}, 1, False, transcript)
-
-    assert reset_calls == [1]
-    assert result.status == GenerationTerminalStatus.WORKER_RESET
-    assert result.hard_reset_cause is HardResetCause.GENERATION_TIMEOUT
-    assert "GEN_TIMEOUT" in result.message
-    assert "180" in result.message
-    assert "replacement worker failed to start" in result.message
-
-
-def test_console_unhealthy_reset_reports_worker_restart_failure(
-    monkeypatch, tmp_path
-) -> None:
-    reset_calls: list[int] = []
-
-    def failing_reset() -> str:
-        reset_calls.append(1)
-        return "replacement worker failed to start"
-
-    event = GenerationUpdate("job", ModelUnhealthy("TTS model is unhealthy"))
-    monkeypatch.setattr(
-        ModelWorker,
-        "submit_generation",
-        staticmethod(lambda **_: "job"),
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "get_event",
-        staticmethod(lambda timeout=0.1: event),
-    )
-    monkeypatch.setattr(ModelWorker, "reset", staticmethod(failing_reset))
-
-    transcript = GenerationTranscript(str(tmp_path / "generation.log"), enabled=False)
-
-    result = _run_generation_console(make_state(), {0}, 1, False, transcript)
-
-    assert reset_calls == [1]
-    assert result.status is GenerationTerminalStatus.WORKER_RESET
-    assert result.hard_reset_cause is HardResetCause.MODEL_UNHEALTHY
-    assert "TTS model is unhealthy" in result.message
-    assert "replacement worker failed to start" in result.message
 
 
 def test_interface_failure_cleanup_reports_worker_restart_failure(
@@ -1520,7 +1373,6 @@ def test_interface_failure_cleanup_reports_worker_restart_failure(
             lambda: reset_calls.append(None) or "replacement worker failed to start"
         ),
     )
-    monkeypatch.setattr(generation_app_module, "can_textual", lambda: True)
     monkeypatch.setattr(GenerationApp, "run", failing_run)
     monkeypatch.setattr(
         generation_app_module,
@@ -1576,7 +1428,6 @@ def test_interface_failure_reuses_the_sessions_own_result(
         "reset",
         staticmethod(lambda: reset_calls.append(None) or ""),
     )
-    monkeypatch.setattr(generation_app_module, "can_textual", lambda: True)
     monkeypatch.setattr(GenerationApp, "run", failing_run)
     monkeypatch.setattr(
         generation_app_module,
