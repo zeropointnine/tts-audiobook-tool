@@ -44,6 +44,11 @@ _PROMPT_BY_MODE: dict[PromptMode, str] = {
 }
 
 
+def _pause_prompt(paused: bool) -> str:
+    action = "unpause" if paused else "pause"
+    return f"  - [{COL_ACCENT}P{COL_DEFAULT}] to {action}"
+
+
 def _cancel_pending_prompt() -> str:
     """Prompt shown while a requested cancellation waits for a safe boundary.
 
@@ -94,7 +99,7 @@ class RealTimePlaybackHeader(Vertical):
             yield Static("", classes="realtime-header-left", id="realtime-status")
             yield Static("", classes="realtime-header-right", id="realtime-stats")
         yield Static(
-            Text.from_ansi(_PROMPT_BY_MODE["default"]),
+            Text.from_ansi(_PROMPT_BY_MODE["default"] + _pause_prompt(False)),
             classes="realtime-header-hotkey",
             id="realtime-hotkey",
         )
@@ -128,8 +133,10 @@ class RealTimePlaybackHeader(Vertical):
         stats = f"Processed: {processed}/{total}  Buffer: {COL_OK}{buffer_value}{COL_DEFAULT}"
         self.query_one("#realtime-stats", Static).update(Text.from_ansi(stats))
 
-    def update_hotkey(self, mode: PromptMode) -> None:
+    def update_hotkey(self, mode: PromptMode, paused: bool = False) -> None:
         text = _cancel_pending_prompt() if mode == "cancel_pending" else _PROMPT_BY_MODE[mode]
+        if mode in ("default", "awaiting_continue"):
+            text += _pause_prompt(paused)
         self.query_one("#realtime-hotkey", Static).update(
             Text.from_ansi(text)
         )

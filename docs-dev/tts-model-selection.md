@@ -62,7 +62,7 @@ Use `sole active audio.cpp model` only for audio.cpp, which can have more than o
 
 The names are the models' UI `proper_name` values, each qualified by its backend kind (`Chatterbox TTS (local)`, `Breeze TTS 2 (audio.cpp)`). The old name describes the previous saved selection, not necessarily a loaded runtime. Unknown IDs display as `Unknown model: {raw_id}`; `"none"` is not a previous model and never queues this notice. The current name is the selected catalog model, not the exact server inference ID.
 
-If runtime binding is unavailable, the second line instead reads `It is now configured to use {current_name}, but the runtime is unavailable (see TTS mode).` The selection notification does not imply successful binding or persistence; existing status errors and save-error reporting remain in effect.
+If runtime binding is unavailable, the second line instead reads `It is now configured to use {current_name}, but the runtime is unavailable (see TTS model).` The selection notification does not imply successful binding or persistence; existing status errors and save-error reporting remain in effect.
 
 Reconciliation and status printing do not display or consume the FYI. In server mode it is printed once at the bottom of the next complete menu. In local mode it is printed once at the bottom of the first main menu, or the next complete menu after a runtime project load; earlier startup submenus leave it pending, and other subsequent local changes do not queue a notice. Rendering happens through the shared `MenuStatus.show_pending_project_hints()` function after the existing `on_shown` callback and before normal menu input. The menu loop captures whether this is the first main menu before `on_shown` marks startup complete. The notices use `hints.print_hint()` directly: no Enter prompt, animation, or persisted hint preference. Heading-only prompt screens leave them pending.
 
@@ -75,6 +75,15 @@ but there are 2 samples for this project that exceed that value.
 ```
 
 For one sample, use `there is 1 sample ... that exceeds`. This is warning-only: no sample trimming, rejection, or project mutation. Project assignment arms `State.pending_project_load_checks` for projects with a directory; replacement re-arms it, reset clears it, and ordinary menu redraws do not repeat the check. Worker project assignment can set the flag but does not render menus or run these checks.
+
+A third, independent project-load check follows the model-change and voice-duration notices. When the project has imported phrase groups and a selected model, it compares `book.segmentation_settings.max_words_per_segment` (the segmentation-time snapshot, not the current `project.max_words` import setting or actual segment lengths) against `Tts.get_model_support(project).get_max_words_range_reco(project)[1]`. It uses the reconciled model and only warns when that recommendation is positive and the snapshot strictly exceeds it. Missing voice-duration recommendations do not suppress this check. Empty text, an unselected/unknown model, an unset snapshot, and values at or below the recommendation stay silent. It shares the same once-per-load timing and never modifies settings or resegments text:
+
+```text
+🔔 FYI
+This project's text was segmented with a maximum of 80 words per segment,
+exceeding the current model's recommended maximum of 60.
+Output accuracy may be degraded.
+```
 
 Pending old/new IDs live on `State`, not in global or persisted storage. Repeated checks preserve the pending notice. Multiple automatic changes before display coalesce to the first old ID and latest new ID; a net return to the original selection cancels it. Project replacement/reset, explicit model selection, and reconciliation clearing selection to `"none"` clear the pending notice. Rendering also discards a notice whose new ID no longer matches the selection. Clearing an unavailable selection to `"none"` does not itself notify.
 
@@ -96,10 +105,10 @@ Changing the selected ID does not copy or discard other models' settings or the 
 `Tts.bind_project()` validates the current selection without changing `Project.tts_model_type`:
 
 - Local mode requires a selected type available in the local environment.
-- Server mode rejects local-only selections and requires exactly one matching server entry for the selected remote type.
-- None, unknown IDs, missing models, discovery errors, or multiple matching server entries block binding. The active runtime becomes the `"none"` placeholder; the saved project ID is preserved by binding itself.
+- Server mode rejects local-only selections. For audio.cpp, bind the **first matching model entry in the server's `/v1/models` response order**, even when several entries match the selected type. Do not sort entries or prefer loaded models. SGL-Omni still requires a unique matching entry and advertises exactly one served model.
+- None, unknown IDs, missing models, or discovery errors block binding. The active runtime becomes the `"none"` placeholder; the saved project ID is preserved by binding itself.
 
-**Important:** two server entries mapping to one catalog type count as **one available type** for reconciliation, but **two matching entries** for binding. The sole type can therefore be automatically selected and still fail to bind. There is currently no exact-server-entry selector to resolve this ambiguity; the app does not arbitrarily choose an entry.
+**Important:** several audio.cpp entries mapping to one catalog type count as **one available type** for reconciliation and the model picker. Binding silently chooses the first matching entry; no exact-entry selector or additional warning is shown. The chosen model ID remains runtime-only and is visible in the main-menu heading. The picker shows that entry's checkpoint filename when available. A later binding uses the current response order and can choose a different entry if the server order changes. Workers refresh and bind at command start; audiobook requests within that command keep using the bound adapter's exact model ID without per-line rediscovery or fallback.
 
 Run-start validation forces a fresh remote check. It validates binding rather than silently switching the project model immediately before generation.
 
@@ -117,7 +126,7 @@ The parenthesized backend qualifier is gray. Local model-specific text and devic
 
 - A valid audio.cpp binding shows **`(audio.cpp, loaded)`** when the exact bound server entry has boolean `loaded: true` in cached discovery metadata. Formatting adds no network request; the qualifier may lag residency changes until normal discovery refreshes. Missing/unknown residency and other backends omit `loaded`.
 - In server mode, connection failures and timeouts append red **`(server unreachable)`**, even if no model is selected.
-- When discovery finds no supported catalog variants, append red **`(server mode; audio.cpp has no supported models)`** (using the discovered server backend). Other discovery errors append their actual message in red. A selected model's binding error, such as duplicate matching server entries, is also shown in red when discovery itself succeeded. A saved local-only selection instead shows **`(unavailable in server mode)`** when discovery succeeded.
+- When discovery finds no supported catalog variants, append red **`(server mode; audio.cpp has no supported models)`** (using the discovered server backend). Other discovery errors append their actual message in red. A selected model's binding error, such as no matching server entry, is also shown in red when discovery itself succeeded. A saved local-only selection instead shows **`(unavailable in server mode)`** when discovery succeeded.
 - A known selected model's gray backend qualifier always identifies that model, even when it differs from the connected server. For example, a preserved `moss_local` selection shows **`MOSS-TTS (local) (server mode; audio.cpp has no supported models)`**. None/unknown selections fall back to the discovered backend, or gray **`(server)`** when unidentified. Backend links to the server's model list are omitted when the selected backend differs from the discovered server backend. All of this remains on the single **TTS model** row.
 
 The main menu's **Project** label appends red **`(requires: TTS model selection)`** when the project's resolved type has `.id == "none"` and at least two distinct model types are available. The suffix is absent with zero or one available type, or when a model is already selected.
@@ -133,10 +142,10 @@ These distinguish explicit selection requirements from choices made for previous
 | Zero available models in local mode | Clear the saved selection to `"none"` without prompting. | Local availability is established by probing installed libraries; no supported library means no local model can be selected. |
 | Zero available models in server mode | Preserve the raw saved selection. | Implementation choice. Offline discovery is not proof that the saved model should be discarded. This also preserves the selection for a reachable server with zero supported models. |
 | Server responds but is invalid, unsupported, or returns an HTTP error | Show the actual error, not `server unreachable`. | Interpretation of “unreachable” as a connection failure or timeout. |
-| Multiple server entries map to one type | Reject ambiguous runtime binding. | Existing behavior retained, not a new automatic-selection rule. |
+| Multiple audio.cpp model entries map to one type | Silently bind the first match in server response order. | Explicit simplification: server ordering selects the entry; no checkpoint selector or loaded-entry preference. |
 | Server backend not yet identifiable | Use gray `(server)`. | Added display fallback beyond the three explicitly requested qualifiers; do not pretend to know the protocol. |
 
-The one-model and multiple-model mismatch rules, startup/project-load local model-change FYI, gray known-backend qualifiers, red selection hint, and red unreachable hint were explicit requirements. The policies in this table are current behavior, not independently confirmed product decisions.
+The one-model and multiple-model mismatch rules, startup/project-load local model-change FYI, gray known-backend qualifiers, red selection hint, and red unreachable hint were explicit requirements. Apart from the explicitly requested audio.cpp first-match policy, the policies in this table are current behavior, not independently confirmed product decisions.
 
 ## Implementation and focused tests
 

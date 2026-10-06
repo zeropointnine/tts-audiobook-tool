@@ -103,14 +103,51 @@ def test_available_types_are_distinct_and_do_not_auto_bind(remote_mode, monkeypa
     assert project.tts_model_type == "none"
 
 
-def test_same_type_duplicate_entries_are_ambiguous_without_exact_choice(remote_mode):
+@pytest.mark.parametrize("matching_ids", [("z-first", "a-second"), ("a-second", "z-first")])
+def test_same_type_entries_bind_first_match_in_response_order(remote_mode, matching_ids):
+    from tts_audiobook_tool import readiness
+
     project = selected_project()
-    RemoteTtsDiscovery._store(snapshot("operator-one", "operator-two"), URL)
-    assert Tts.get_available_tts_models() == [MODEL]
-    issue = Tts.bind_project(project)
-    assert issue is not None and "Multiple server entries" in issue.verbose
-    assert Tts.get_active_type() is TtsModelType.require_by_id("none")
-    assert Tts._selected_server_model_id == ""
+    other = TtsModelType.require_by_id("higgs_v3_audiocpp")
+    first, second = matching_ids
+    RemoteTtsDiscovery._store(RemoteTtsSnapshot(
+        backend_kind=TtsBackendKind.AUDIO_CPP,
+        models=({"id": "unrelated", "loaded": True},
+                {"id": first, "loaded": False}, {"id": second, "loaded": True}),
+        candidates=((other, "unrelated"), (MODEL, first), (MODEL, second)),
+    ), URL)
+    assert Tts.get_available_tts_models() == [other, MODEL]
+    assert Tts.bind_project(project) is None
+    assert Tts.get_active_type() is MODEL
+    assert Tts._selected_server_model_id == first
+    assert Tts._remote_issue == ""
+    assert project.tts_model_type == MODEL.id
+    assert readiness.get_tts_blockers(project) == []
+    adapter = Tts.get_instance()
+    assert isinstance(adapter, AudioCppBackendAdapter)
+    assert adapter.server_model_id == first
+    assert Tts.bind_project(project) is None
+    assert Tts.get_instance() is adapter
+
+
+def test_reordered_entries_change_adapter_only_on_rebind(remote_mode):
+    project = selected_project()
+    RemoteTtsDiscovery._store(snapshot("first", "second"), URL)
+    assert Tts.bind_project(project) is None
+    adapter = Tts.get_instance()
+    assert isinstance(adapter, AudioCppBackendAdapter)
+    assert adapter.server_model_id == "first"
+
+    RemoteTtsDiscovery._store(snapshot("second", "first"), URL)
+    # Updating discovery alone does not switch an in-flight command's adapter.
+    assert Tts.get_instance() is adapter
+    assert adapter.server_model_id == "first"
+    assert Tts.bind_project(project) is None
+    replacement = Tts.get_instance()
+    assert isinstance(replacement, AudioCppBackendAdapter)
+    assert replacement is not adapter
+    assert replacement.server_model_id == "second"
+    assert Tts._selected_server_model_id == "second"
     assert project.tts_model_type == MODEL.id
 
 
@@ -170,18 +207,22 @@ def test_moss_audio_cpp_architectures_bind_their_exact_opaque_server_entries(rem
 @pytest.mark.parametrize("model_id,family", [
     ("moss_delay_audiocpp", "moss_tts_v15"), ("moss_local_audiocpp", "moss_tts_local"),
 ])
-def test_moss_tts_and_clone_server_entries_of_same_family_are_ambiguous(remote_mode, model_id, family):
+@pytest.mark.parametrize("tasks", [("tts", "clon"), ("clon", "tts")])
+def test_moss_tts_and_clone_entries_bind_first_match(remote_mode, model_id, family, tasks):
     from tts_audiobook_tool.tts_models.audio_cpp_detection import detect_audio_cpp_models
 
     models = [{"id": f"operator-{task}", "family": family, "task": task, "mode": "offline"}
-              for task in ("tts", "clon")]
+              for task in tasks]
     candidates = tuple(detect_audio_cpp_models(models))
     RemoteTtsDiscovery._store(RemoteTtsSnapshot(
         TtsBackendKind.AUDIO_CPP, models=tuple(models), candidates=candidates), URL)
     model = TtsModelType.require_by_id(model_id)
     assert Tts.get_available_tts_models() == [model]
     project = Project(tts_model_type=model_id)
-    issue = Tts.bind_project(project)
-    assert issue is not None and "Multiple server entries" in issue.verbose
+    assert Tts.bind_project(project) is None
     assert project.tts_model_type == model_id
-    assert Tts.get_active_type().id == "none" and Tts._selected_server_model_id == ""
+    assert Tts.get_active_type() is model
+    assert Tts._selected_server_model_id == f"operator-{tasks[0]}"
+    adapter = Tts.get_instance()
+    assert isinstance(adapter, AudioCppBackendAdapter)
+    assert adapter.server_model_id == f"operator-{tasks[0]}"

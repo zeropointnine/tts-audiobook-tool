@@ -74,20 +74,29 @@ def stop_model_worker():
 def test_spawned_model_worker_starts_and_shuts_down() -> None:
     assert ModelWorker.start() == ""
     assert ModelWorker.is_alive()
+    assert ModelWorker._pause_event is not None
+    assert not ModelWorker._pause_event.is_set()
 
     ModelWorker.shutdown()
 
     assert not ModelWorker.is_alive()
+    assert ModelWorker._pause_event is None
 
 
 def test_spawned_model_worker_can_hard_reset() -> None:
     assert ModelWorker.start() == ""
     first_process = ModelWorker._process
+    first_pause_event = ModelWorker._pause_event
+    assert first_pause_event is not None
+    first_pause_event.set()
 
     assert ModelWorker.reset() == ""
 
     assert ModelWorker.is_alive()
     assert ModelWorker._process is not first_process
+    assert ModelWorker._pause_event is not None
+    assert ModelWorker._pause_event is not first_pause_event
+    assert not ModelWorker._pause_event.is_set()
 
 
 def test_local_hard_reset_reports_catalog_change_without_menu_restart_loop(monkeypatch, capsys) -> None:
@@ -598,6 +607,8 @@ def test_discard_process_state_closes_ipc_resources_deterministically() -> None:
     ModelWorker._process = ProcessStub()
     ModelWorker._command_queue = QueueStub("command")
     ModelWorker._event_queue = QueueStub("event")
+    ModelWorker._pause_event = threading.Event()
+    ModelWorker._pause_event.set()
 
     ModelWorker._discard_process_state()
 
@@ -614,6 +625,7 @@ def test_discard_process_state_closes_ipc_resources_deterministically() -> None:
     assert ModelWorker._event_queue is None
     assert ModelWorker._cancellation_event is None
     assert ModelWorker._continue_event is None
+    assert ModelWorker._pause_event is None
 
     # Cleanup can be called again after a partially failed lifecycle path.
     ModelWorker._discard_process_state()
@@ -1156,6 +1168,159 @@ def test_inspect_tts_chat_warm_up_flags_are_carried(tmp_path, monkeypatch) -> No
     assert command.warm_stt is True
 
 
+@pytest.mark.parametrize("active_operation_id", [None, "successor"])
+@pytest.mark.parametrize("paused", [True, False])
+def test_set_realtime_playback_paused_rejects_inactive_or_stale_id(
+    monkeypatch, active_operation_id, paused,
+) -> None:
+    pause_event = threading.Event()
+    # Start opposite the requested state so an unintended mutation is visible.
+    if not paused:
+        pause_event.set()
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", active_operation_id)
+    monkeypatch.setattr(ModelWorker, "_pause_event", pause_event)
+
+    assert ModelWorker.set_realtime_playback_paused("previous", paused) is False
+    assert pause_event.is_set() is (not paused)
+
+
+@pytest.mark.parametrize("paused", [True, False])
+def test_set_realtime_playback_paused_rejects_missing_event(monkeypatch, paused) -> None:
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", "playback")
+    monkeypatch.setattr(ModelWorker, "_pause_event", None)
+
+    assert ModelWorker.set_realtime_playback_paused("playback", paused) is False
+
+
+def test_set_realtime_playback_paused_is_idempotent_for_active_id(monkeypatch) -> None:
+    pause_event = threading.Event()
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", "playback")
+    monkeypatch.setattr(ModelWorker, "_pause_event", pause_event)
+    # Pause is an out-of-band Event, never a queued worker command.
+    monkeypatch.setattr(ModelWorker, "_command_queue", None)
+
+    for paused in (True, True, False, False, True, False):
+        assert ModelWorker.set_realtime_playback_paused("playback", paused) is True
+        assert pause_event.is_set() is paused
+        assert ModelWorker._active_operation_id == "playback"
+
+
+def test_submit_realtime_playback_clears_pause_event_before_each_command(
+    tmp_path, monkeypatch,
+) -> None:
+    pause_event = threading.Event()
+    pause_event.set()
+    commands = []
+
+    class CommandQueue:
+        def put(self, command):
+            assert not pause_event.is_set()
+            commands.append(command)
+
+    state = SimpleNamespace(
+        project=SimpleNamespace(dir_path=str(tmp_path), tts_model_type="none"),
+        prefs=Prefs(project_dir=str(tmp_path), stt_variant=SttVariant.DISABLED),
+    )
+    monkeypatch.setattr(ModelWorker, "start", classmethod(lambda cls: ""))
+    monkeypatch.setattr(ModelWorker, "_command_queue", CommandQueue())
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", None)
+    monkeypatch.setattr(ModelWorker, "_cancellation_event", threading.Event())
+    monkeypatch.setattr(ModelWorker, "_continue_event", threading.Event())
+    monkeypatch.setattr(ModelWorker, "_pause_event", pause_event)
+
+    first_id = ModelWorker.submit_realtime_playback(
+        state=state, phrase_groups=[], line_range=None,
+    )
+    assert ModelWorker.set_realtime_playback_paused(first_id, True)
+    ModelWorker._observe_event(model_worker_module.RealTimePlaybackFinished(
+        first_id, model_worker_module.RealTimePlaybackTerminalStatus.COMPLETED,
+    ))
+    assert ModelWorker._active_operation_id is None
+    assert pause_event.is_set()
+
+    second_id = ModelWorker.submit_realtime_playback(
+        state=state, phrase_groups=[], line_range=None,
+    )
+
+    assert second_id != first_id
+    assert [command.operation_id for command in commands] == [first_id, second_id]
+    assert not pause_event.is_set()
+    assert ModelWorker.set_realtime_playback_paused(first_id, True) is False
+    assert not pause_event.is_set()
+    assert ModelWorker.set_realtime_playback_paused(second_id, True) is True
+    assert pause_event.is_set()
+
+
+@pytest.mark.parametrize("with_pause_event", [True, False])
+def test_worker_realtime_playback_forwards_live_pause_predicate(
+    monkeypatch, with_pause_event,
+) -> None:
+    import tts_audiobook_tool.app_support as app_support
+    import tts_audiobook_tool.model_runtime as model_runtime
+    import tts_audiobook_tool.real_time_playback as realtime_playback
+    from tts_audiobook_tool.model_manager import ModelManager
+
+    cancellation_event = threading.Event()
+    continue_event = threading.Event()
+    pause_event = threading.Event() if with_pause_event else None
+    calls = []
+    state = SimpleNamespace(project=SimpleNamespace(kill=lambda: calls.append("kill")))
+    monkeypatch.setattr(model_runtime, "mark_model_worker", lambda: None)
+    monkeypatch.setattr(model_worker_module.signal, "signal", lambda *args: None)
+    monkeypatch.setattr(model_worker_module._WorkerOutputCapture, "install", lambda self: None)
+    monkeypatch.setattr(app_support, "init_logging", lambda *args: None)
+    monkeypatch.setattr(Tts, "init_local_model_type", staticmethod(lambda: None))
+    monkeypatch.setattr(ModelManager, "clear_all_models", staticmethod(lambda: None))
+    monkeypatch.setattr(model_worker_module, "_make_worker_state", lambda command: state)
+
+    def fake_start(**kwargs):
+        calls.append("start")
+        assert kwargs["state"] is state
+        assert kwargs["phrase_groups"] == []
+        assert kwargs["line_range"] == (2, 4)
+        assert kwargs["continue_event"] is continue_event
+        predicate = kwargs["pause_requested"]
+        if pause_event is None:
+            assert predicate is None
+        else:
+            assert callable(predicate)
+            assert predicate() is False
+            pause_event.set()
+            assert predicate() is True
+            pause_event.clear()
+            assert predicate() is False
+        return realtime_playback.RealTimePlaybackRunResult(
+            realtime_playback.RealTimePlaybackRunStatus.COMPLETED,
+        )
+
+    monkeypatch.setattr(realtime_playback, "start", fake_start)
+    command = model_worker_module.RealTimePlaybackCommand(
+        "playback", "unused-project", (), (2, 4),
+        GenerationSettings("disabled", "cpu_int8_float32", False, "none", "", False),
+    )
+    commands = queue.Queue()
+    commands.put(command)
+    commands.put(model_worker_module.ShutdownCommand("shutdown"))
+    events = queue.Queue()
+    # The optional Event follows the pre-existing config-signature argument.
+    args = (commands, events, cancellation_event, continue_event, None)
+    if with_pause_event:
+        model_worker_module._model_worker_main(*args, pause_event)
+    else:
+        model_worker_module._model_worker_main(*args)
+
+    emitted = []
+    while not events.empty():
+        emitted.append(events.get_nowait())
+    terminal = [event for event in emitted if isinstance(
+        event, model_worker_module.RealTimePlaybackFinished,
+    )]
+    assert terminal == [model_worker_module.RealTimePlaybackFinished(
+        "playback", model_worker_module.RealTimePlaybackTerminalStatus.COMPLETED,
+    )]
+    assert calls == ["start", "kill"]
+
+
 @pytest.mark.parametrize("kind", ["generation", "preview", "realtime", "chat", "inspection"])
 def test_command_producers_snapshot_live_project_selection(kind, tmp_path, monkeypatch) -> None:
     """All command paths use unsaved selection, not global prefs or disk state."""
@@ -1175,6 +1340,7 @@ def test_command_producers_snapshot_live_project_selection(kind, tmp_path, monke
     monkeypatch.setattr(ModelWorker, "_active_operation_id", None)
     monkeypatch.setattr(ModelWorker, "_cancellation_event", threading.Event())
     monkeypatch.setattr(ModelWorker, "_continue_event", threading.Event())
+    monkeypatch.setattr(ModelWorker, "_pause_event", threading.Event())
     monkeypatch.setattr(
         ModelWorker, "_wait_for_blocking_result_with_handler",
         classmethod(lambda cls, operation_id, expected, handler: TtsInspected(operation_id, "bound-model")),

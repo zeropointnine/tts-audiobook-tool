@@ -102,6 +102,37 @@ def stub_language_prompt(
     )
 
 
+@pytest.mark.parametrize("did_open", [False, True])
+def test_open_existing_project_keeps_project_menu_open(monkeypatch, did_open):
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path="")))
+    captured = []
+    feedback = []
+
+    def open_project(current):
+        assert current is state
+        if did_open:
+            current.project.dir_path = "opened-project"
+        return did_open
+
+    monkeypatch.setattr(
+        project_menu_module.ProjectMenu, "ask_and_set_existing_project", open_project,
+    )
+    monkeypatch.setattr(
+        project_menu_module.MenuUtil, "menu",
+        lambda current, heading, items, **kwargs: captured.extend(items(current)),
+    )
+    monkeypatch.setattr(
+        project_menu_module, "print_feedback", lambda *args: feedback.append(args),
+    )
+
+    project_menu_module.ProjectMenu.menu(state)
+    item = next(item for item in captured if item.label == "Open existing project")
+
+    # MenuUtil exits only when a handler returns True.
+    assert item.handler(state, item) is None
+    assert feedback == ([("Project directory set:", "opened-project")] if did_open else [])
+
+
 @pytest.mark.parametrize("remote_mode", [False, True])
 @pytest.mark.parametrize("available", [(), (TtsModelType.require_by_id("vibevoice_local"),)])
 def test_project_menu_model_selector_is_remote_only(monkeypatch, tmp_path, remote_mode, available):
@@ -291,7 +322,7 @@ def test_audio_cpp_model_picker_filename(monkeypatch, path, filename):
     assert refreshes == [{"refresh": True}]
 
 
-@pytest.mark.parametrize("metadata_case", ["missing_entry", "missing_path", "ambiguous", "sgl_omni"])
+@pytest.mark.parametrize("metadata_case", ["missing_entry", "missing_path", "duplicate_metadata", "sgl_omni"])
 def test_model_picker_omits_unavailable_or_non_audio_cpp_filename(monkeypatch, metadata_case):
     from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsSnapshot
     from tts_audiobook_tool.project import Project
@@ -303,9 +334,9 @@ def test_model_picker_omits_unavailable_or_non_audio_cpp_filename(monkeypatch, m
         entries = ()
     elif metadata_case == "missing_path":
         entries = ({"id": "server-id"},)
+    elif metadata_case == "duplicate_metadata":
+        entries += ({"id": "server-id", "path": "/srv/other.gguf"},)
     candidates = ((model, "server-id"),)
-    if metadata_case == "ambiguous":
-        candidates += ((model, "another-server-id"),)
     snapshot = RemoteTtsSnapshot(
         backend_kind=TtsBackendKind.SGL_OMNI if metadata_case == "sgl_omni" else TtsBackendKind.AUDIO_CPP,
         models=entries, candidates=candidates,
@@ -318,3 +349,37 @@ def test_model_picker_omits_unavailable_or_non_audio_cpp_filename(monkeypatch, m
     project_menu_module.ProjectMenu.tts_model_menu(cast(State, SimpleNamespace(project=Project())))
 
     assert captured["labels"] == ["None (unselected)", model.value.ui["proper_name"]]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("missing_first_path", [False, True])
+def test_audio_cpp_picker_uses_first_matching_entry_filename(monkeypatch, reverse, missing_first_path):
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsSnapshot
+    from tts_audiobook_tool.project import Project
+    from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
+    from tts_audiobook_tool.util import COL_DEFAULT, COL_DIM
+
+    model = TtsModelType.require_by_id("chatterbox_audiocpp")
+    other = TtsModelType.require_by_id("higgs_v3_audiocpp")
+    matching_ids = ("z-model", "a-model") if not reverse else ("a-model", "z-model")
+    first, second = matching_ids
+    first_entry = {"id": first}
+    if not missing_first_path:
+        first_entry["path"] = f"/srv/{first}.gguf"
+    snapshot = RemoteTtsSnapshot(
+        backend_kind=TtsBackendKind.AUDIO_CPP,
+        models=({"id": "unrelated", "path": "/srv/unrelated.gguf"}, first_entry,
+                {"id": second, "path": f"/srv/{second}.gguf"}),
+        candidates=((other, "unrelated"), (model, first), (model, second)),
+    )
+    captured = {}
+    monkeypatch.setattr(project_menu_module.RemoteTtsDiscovery, "get_snapshot", lambda: snapshot)
+    monkeypatch.setattr(project_menu_module.Tts, "get_available_tts_models", lambda **kwargs: [model])
+    monkeypatch.setattr(project_menu_module.MenuUtil, "options_menu", lambda **kwargs: captured.update(kwargs))
+
+    project_menu_module.ProjectMenu.tts_model_menu(cast(State, SimpleNamespace(project=Project())))
+
+    expected = model.value.ui["proper_name"]
+    if not missing_first_path:
+        expected += f" {COL_DIM}({first}.gguf){COL_DEFAULT}"
+    assert captured["labels"] == ["None (unselected)", expected]

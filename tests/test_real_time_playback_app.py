@@ -5,13 +5,14 @@ from typing import cast
 
 import numpy as np
 import pytest
+import sounddevice as sd
 from textual.geometry import Size
-from textual.widgets import Rule, Static
+from textual.widgets import Input, Rule, Static
 
 from tts_audiobook_tool import real_time_playback
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.generation_events import GenerationTimedOut, ModelUnhealthy
+from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut, ModelUnhealthy
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
     ConsoleOutput,
@@ -199,6 +200,142 @@ def test_realtime_awaiting_continue_releases_sleep_lock(monkeypatch) -> None:
             assert app.terminal_result is None
 
     run(exercise())
+
+
+@pytest.mark.parametrize("awaiting_continue", [False, True])
+def test_p_toggles_pause_and_header_without_stealing_find_input(
+    monkeypatch, awaiting_continue: bool
+) -> None:
+    monkeypatch.setattr(
+        ModelWorker, "submit_realtime_playback", staticmethod(lambda **_: "job")
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda: []))
+    pause_calls: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        ModelWorker,
+        "set_realtime_playback_paused",
+        staticmethod(lambda operation_id, paused: pause_calls.append((operation_id, paused)) or True),
+    )
+    continue_calls: list[str] = []
+    monkeypatch.setattr(
+        ModelWorker,
+        "continue_realtime_playback",
+        staticmethod(lambda operation_id: continue_calls.append(operation_id) or True),
+    )
+
+    async def exercise() -> None:
+        app = RealTimePlaybackApp(make_state(), [], None)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            if awaiting_continue:
+                app._handle_update(RealTimePlaybackAwaitingContinue(3.0, False))
+            prefix = (
+                "Press [ENTER] to finish" if awaiting_continue
+                else "Press [CTRL-C] to interrupt"
+            )
+            hotkey = app.query_one("#realtime-hotkey", Static)
+            assert str(hotkey.render()) == prefix + "  - [P] to pause"
+            await pilot.press("p")
+            assert app.is_paused
+            assert str(hotkey.render()) == prefix + "  - [P] to unpause"
+            await pilot.press("P")
+            assert not app.is_paused
+            assert str(hotkey.render()) == prefix + "  - [P] to pause"
+            assert pause_calls == [("job", True), ("job", False)]
+
+            await pilot.press("ctrl+f", "p")
+            assert app.query_one("#find-input", Input).value == "p"
+            assert not app.is_paused
+            assert len(pause_calls) == 2
+            await pilot.press("escape", "p")
+            assert app.is_paused
+            assert pause_calls[-1] == ("job", True)
+            if awaiting_continue:
+                # Finishing a paused stream still uses the normal handshake.
+                await pilot.press("enter")
+                assert continue_calls == ["job"]
+                assert app.teardown_in_progress
+                await pilot.press("p")
+                assert len(pause_calls) == 3
+
+    run(exercise())
+
+
+@pytest.mark.parametrize(
+    "blocked_attribute",
+    ["find_active", "reset_in_progress", "finishing", "teardown_in_progress", "terminal_result", "operation_id"],
+)
+def test_pause_is_ignored_when_session_controls_are_inactive(monkeypatch, blocked_attribute) -> None:
+    app = RealTimePlaybackApp(make_state(), [], None)
+    app.operation_id = "job"
+    value = (
+        RealTimePlaybackModalResult(RealTimePlaybackTerminalStatus.COMPLETED)
+        if blocked_attribute == "terminal_result"
+        else None if blocked_attribute == "operation_id" else True
+    )
+    setattr(app, blocked_attribute, value)
+    pause_calls = []
+    monkeypatch.setattr(
+        ModelWorker,
+        "set_realtime_playback_paused",
+        staticmethod(lambda *args: pause_calls.append(args) or True),
+    )
+    app.action_toggle_pause()
+    assert not app.is_paused
+    assert pause_calls == []
+
+
+def test_rejected_pause_does_not_change_playback_estimates(monkeypatch) -> None:
+    app = RealTimePlaybackApp(make_state(), [], None)
+    app.operation_id = "job"
+    app.buffer_seconds = 8.0
+    app.buffer_updated_at = 100.0
+    app.play_anchor = (100.0, 0, 480000)
+    monkeypatch.setattr(ModelWorker, "set_realtime_playback_paused", staticmethod(lambda *_: False))
+    app.action_toggle_pause()
+    assert not app.is_paused
+    assert (app.buffer_seconds, app.buffer_updated_at) == (8.0, 100.0)
+    assert app.play_anchor == (100.0, 0, 480000)
+
+
+def test_pause_freezes_buffer_and_playhead_and_resume_excludes_paused_time(monkeypatch) -> None:
+    app = RealTimePlaybackApp(make_state(), [], None)
+    app.operation_id = "job"
+    # This test isolates estimates without mounting the Textual screen.
+    monkeypatch.setattr(app, "_update_header", lambda: None)
+    clock = [100.0]
+    monkeypatch.setattr(playback_app_module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(ModelWorker, "set_realtime_playback_paused", staticmethod(lambda *_: True))
+    app._record_buffer_duration(8.0)
+    app._record_segment(RealTimePlaybackSegmentText(0, "First", 0, 480000, 0))
+    clock[0] = 102.0
+    app.action_toggle_pause()
+    assert app.is_paused
+    clock[0] = 200.0
+    assert app.interpolated_buffer_seconds == 6.0
+    assert app.interpolated_played_samples == 96000
+    assert app._current_playing_text() == ("First", False)
+    app.action_toggle_pause()
+    assert not app.is_paused
+    assert app.interpolated_buffer_seconds == 6.0
+    assert app.interpolated_played_samples == 96000
+    clock[0] = 201.0
+    assert app.interpolated_buffer_seconds == 5.0
+    assert app.interpolated_played_samples == 144000
+
+    app.action_toggle_pause()
+    # Generation can still append data while playback is paused. New worker
+    # anchors must also stay frozen, then advance normally after unpausing.
+    clock[0] = 250.0
+    app._handle_update(RealTimePlaybackBuffer(12.0))
+    app._handle_update(RealTimePlaybackSegmentText(1, "Second", 480000, 960000, 144000))
+    clock[0] = 300.0
+    assert app.interpolated_buffer_seconds == 12.0
+    assert app.interpolated_played_samples == 144000
+    app.action_toggle_pause()
+    clock[0] = 301.0
+    assert app.interpolated_buffer_seconds == 11.0
+    assert app.interpolated_played_samples == 192000
 
 
 def test_escape_does_not_interrupt_realtime_playback(monkeypatch) -> None:
@@ -391,6 +528,88 @@ def test_app_receives_structured_progress_buffer_and_waiting_events(monkeypatch)
     run(exercise())
 
 
+@pytest.mark.parametrize("buffer_seconds", [299.0, 300.0])
+def test_buffer_throttle_returns_without_sleep_at_or_below_limit(monkeypatch, buffer_seconds) -> None:
+    monkeypatch.setattr(Interrupts(), "_external_event", None)
+    monkeypatch.setattr(Interrupts(), "_flag", False)
+    sleeps = []
+    monkeypatch.setattr(real_time_playback.time, "sleep", sleeps.append)
+    stream = cast(real_time_playback.SoundDeviceStream, SimpleNamespace(buffer_duration=buffer_seconds))
+    assert not real_time_playback.wait_for_buffer_runway(stream)
+    assert sleeps == []
+
+
+@pytest.mark.parametrize("pause_mid_wait", [False, True])
+def test_buffer_throttle_waits_through_pause_until_samples_actually_drain(
+    monkeypatch, pause_mid_wait
+) -> None:
+    stream_type = real_time_playback.SoundDeviceStream
+    pause_event = threading.Event()
+    if not pause_mid_wait:
+        pause_event.set()
+    stream = stream_type(sample_rate=10, pause_requested=pause_event.is_set)
+    stream.add_data(np.ones(40, dtype=np.float32))  # Four seconds buffered.
+    monkeypatch.setattr(real_time_playback, "REAL_TIME_BUFFER_MAX_SECONDS", 3.0)
+    monkeypatch.setattr(Interrupts(), "_external_event", None)
+    monkeypatch.setattr(Interrupts(), "_flag", False)
+    sleeps = []
+
+    def simulated_sleep(seconds):
+        sleeps.append(seconds)
+        assert len(sleeps) <= 4, "Throttle did not stop when the buffer drained"
+        if pause_mid_wait and len(sleeps) == 2:
+            pause_event.set()
+        if len(sleeps) == 4:
+            pause_event.clear()
+        before = stream.buffer_duration
+        frames = 5 if pause_mid_wait else 10
+        out = np.full((frames, 1), np.nan, dtype=np.float32)
+        stream._callback(
+            out, frames,
+            SimpleNamespace(outputBufferDacTime=float(len(sleeps))),
+            cast(sd.CallbackFlags, SimpleNamespace(output_underflow=False)),
+        )
+        if pause_event.is_set():
+            assert stream.buffer_duration == before
+            assert np.all(out == 0)
+        else:
+            assert stream.buffer_duration == before - frames / stream.sample_rate
+
+    monkeypatch.setattr(real_time_playback.time, "sleep", simulated_sleep)
+    assert not real_time_playback.wait_for_buffer_runway(stream)
+    assert sleeps == [0.1] * 4
+    assert stream.buffer_duration == 3.0
+    assert stream.played_samples == 10
+
+
+@pytest.mark.parametrize("cancel_before_wait", [False, True])
+def test_buffer_throttle_can_cancel_while_audio_remains_paused(monkeypatch, cancel_before_wait) -> None:
+    cancel_event = threading.Event()
+    pause_event = threading.Event()
+    pause_event.set()
+    stream = real_time_playback.SoundDeviceStream(sample_rate=10, pause_requested=pause_event.is_set)
+    stream.add_data(np.ones(40, dtype=np.float32))
+    monkeypatch.setattr(real_time_playback, "REAL_TIME_BUFFER_MAX_SECONDS", 3.0)
+    monkeypatch.setattr(Interrupts(), "_external_event", cancel_event)
+    monkeypatch.setattr(Interrupts(), "_flag", False)
+    sleeps = []
+    if cancel_before_wait:
+        cancel_event.set()
+
+    def simulated_sleep(seconds):
+        sleeps.append(seconds)
+        assert stream.buffer_duration == 4.0
+        assert len(sleeps) <= 2, "Throttle ignored cancellation"
+        if len(sleeps) == 2:
+            cancel_event.set()
+
+    monkeypatch.setattr(real_time_playback.time, "sleep", simulated_sleep)
+    assert real_time_playback.wait_for_buffer_runway(stream)
+    assert sleeps == ([] if cancel_before_wait else [0.1, 0.1])
+    assert stream.played_samples == 0
+    assert stream.buffer_duration == 4.0
+
+
 def test_buffer_duration_interpolates_between_worker_events(monkeypatch) -> None:
     app = RealTimePlaybackApp(make_state(), [], None)
     app.buffer_seconds = 8.0
@@ -410,11 +629,14 @@ def test_submit_realtime_playback_serializes_text_and_control_events(monkeypatch
     commands = []
     cancellation_event = threading.Event()
     continue_event = threading.Event()
+    pause_event = threading.Event()
+    pause_event.set()
     monkeypatch.setattr(ModelWorker, "start", classmethod(lambda cls: ""))
     monkeypatch.setattr(ModelWorker, "_active_operation_id", None)
     monkeypatch.setattr(ModelWorker, "_command_queue", SimpleNamespace(put=commands.append))
     monkeypatch.setattr(ModelWorker, "_cancellation_event", cancellation_event)
     monkeypatch.setattr(ModelWorker, "_continue_event", continue_event)
+    monkeypatch.setattr(ModelWorker, "_pause_event", pause_event)
     phrase_group = PhraseGroup([Phrase("Hello.", Reason.SENTENCE)], voice_index=2)
     state = SimpleNamespace(
         project=SimpleNamespace(dir_path="/project", tts_model_type="vibevoice_local"),
@@ -427,6 +649,13 @@ def test_submit_realtime_playback_serializes_text_and_control_events(monkeypatch
         line_range=(2, 4),
     )
 
+    assert not pause_event.is_set()
+    assert ModelWorker.set_realtime_playback_paused(operation_id, True)
+    assert pause_event.is_set()
+    assert not ModelWorker.set_realtime_playback_paused("stale", False)
+    assert pause_event.is_set()
+    assert ModelWorker.set_realtime_playback_paused(operation_id, False)
+    assert not pause_event.is_set()
     assert len(commands) == 1
     command = commands[0]
     assert isinstance(command, RealTimePlaybackCommand)
@@ -453,7 +682,7 @@ def test_realtime_stream_owner_closes_stream_when_impl_raises(monkeypatch) -> No
         lambda: continuation_cleared.append(True),
     )
 
-    def fail_impl(state, phrase_groups, line_range, continue_event, stream_holder):
+    def fail_impl(state, phrase_groups, line_range, continue_event, stream_holder, pause_requested):
         stream_holder.append(fake_stream)
         raise RuntimeError("boom")
 
@@ -545,11 +774,19 @@ def test_playing_text_resets_when_stream_is_reused_mid_run(monkeypatch) -> None:
     assert app._current_playing_text() == ("Fresh start", False)
 
 
-def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
+@pytest.mark.parametrize("max_retries", [0, 1, 2, 3, 5])
+@pytest.mark.parametrize(
+    ("buffer_seconds", "expected_runway"),
+    [(1.0, False), (59.9, False), (60.0, True), (169.0, True), (301.0, True)],
+)
+def test_start_impl_emits_segment_text_and_checks_validation_runway(
+    monkeypatch, max_retries: int, buffer_seconds: float, expected_runway: bool
+) -> None:
     class FakeStream:
         def __init__(self) -> None:
             self.total = 0
             self.shut_downs = 0
+            self.remaining_buffer = buffer_seconds
 
         def start(self) -> bool:
             return True
@@ -557,11 +794,12 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
         def add_data(self, data: np.ndarray) -> tuple[int, int]:
             start = self.total
             self.total += len(data)
+            self.remaining_buffer = buffer_seconds
             return start, self.total
 
         @property
         def buffer_duration(self) -> float:
-            return 1.0
+            return self.remaining_buffer
 
         @property
         def played_samples(self) -> int:
@@ -572,7 +810,15 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
 
     streams: list[FakeStream] = []
 
-    def fake_stream_factory() -> FakeStream:
+    pause_event = threading.Event()
+    pause_event.set()
+
+    def fake_stream_factory(*, blocksize, latency, pause_requested) -> FakeStream:
+        assert blocksize == 4096
+        assert latency == "low"
+        assert pause_requested is not None and pause_requested()
+        pause_event.clear()
+        assert not pause_requested()
         stream = FakeStream()
         streams.append(stream)
         return stream
@@ -582,15 +828,31 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
         duration=1.0,
         sr=48000,
     )
+    runway_checks: list[bool] = []
+    throttle_calls: list[FakeStream] = []
+
+    def fake_wait_for_runway(stream):
+        # Generation cannot advance to the second segment until this wait
+        # returns. Its final segment must not wait, even if still over limit.
+        assert runway_checks == [False]
+        assert stream.buffer_duration > real_time_playback.REAL_TIME_BUFFER_MAX_SECONDS
+        throttle_calls.append(stream)
+        stream.remaining_buffer = real_time_playback.REAL_TIME_BUFFER_MAX_SECONDS
+        return False
+
+    monkeypatch.setattr(real_time_playback, "wait_for_buffer_runway", fake_wait_for_runway)
+
+    def fake_generate_full_flow(
+        state, phrase_groups, index, has_runway,
+        consecutive_model_errors=0, max_consecutive_model_errors=5,
+        gen_timeout_tracker=None,
+    ):
+        runway_checks.append(has_runway)
+        return sound, False, 0
+
     monkeypatch.setattr(real_time_playback, "SoundDeviceStream", fake_stream_factory)
     monkeypatch.setattr(
-        real_time_playback,
-        "generate_full_flow",
-        lambda state, phrase_groups, index, has_runway,
-        consecutive_model_errors=0, max_consecutive_model_errors=5,
-        gen_timeout_tracker=None: (
-            sound, False, 0,
-        ),
+        real_time_playback, "generate_full_flow", fake_generate_full_flow
     )
     monkeypatch.setattr(
         real_time_playback.SoundPipeline,
@@ -640,7 +902,7 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
         SimpleNamespace(
             prefs=SimpleNamespace(stt_variant=SttVariant.DISABLED),
             project=SimpleNamespace(
-                max_retries=0,
+                max_retries=max_retries,
                 limit_silence_gaps=False,
                 limit_silence_gaps_duration=0.5,
                 use_break_sound_effect=False,
@@ -665,10 +927,23 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
             [phrase_group, second_phrase_group],
             (1, 2),
             continue_event=continue_event,
+            pause_requested=pause_event.is_set,
         )
 
     assert result.status is real_time_playback.RealTimePlaybackRunStatus.COMPLETED
     assert heading_calls == [[0], [1]]
+    # No stream exists for the first segment. Later validation starts at 60s,
+    # independent of the configured retry count (including zero retries).
+    assert runway_checks == [False, expected_runway]
+    assert len(throttle_calls) == (1 if buffer_seconds > 300.0 else 0)
+    assert streams[0].buffer_duration == buffer_seconds
+    wait_phases = [
+        event for event in received
+        if isinstance(event, GenerationPhase)
+        and event.label == "Waiting for audio buffer to drain"
+    ]
+    assert len(wait_phases) == len(throttle_calls)
+    assert isinstance(received[-1], RealTimePlaybackAwaitingContinue)
     buffer_idx = next(
         i for i, e in enumerate(received) if isinstance(e, RealTimePlaybackBuffer)
     )
@@ -721,7 +996,9 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
 
     streams: list[FakeStream] = []
 
-    def fake_stream_factory() -> FakeStream:
+    def fake_stream_factory(*, blocksize, latency, pause_requested) -> FakeStream:
+        assert blocksize == 4096
+        assert latency == "low"
         stream = FakeStream()
         streams.append(stream)
         return stream

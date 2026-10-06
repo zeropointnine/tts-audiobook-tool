@@ -31,13 +31,10 @@ class ProjectMenu:
         def on_new_project(_: State, __: MenuItem) -> None:
             ProjectNewMenu.menu(state)
 
-        def on_existing_project(_: State, __: MenuItem) -> bool:
+        def on_existing_project(_: State, __: MenuItem) -> None:
             did = ProjectMenu.ask_and_set_existing_project(state)
             if did:
                 print_feedback("Project directory set:", state.project.dir_path)
-                return True
-            else:
-                return False
 
         def on_view(_: State, __: MenuItem) -> None:
             err = open_directory(state.project.dir_path)
@@ -137,8 +134,9 @@ class ProjectMenu:
                     or model.value.backend_kind is not TtsBackendKind.AUDIO_CPP):
                 return label
             server_ids = [server_id for candidate, server_id in snapshot.candidates if candidate == model]
-            if len(server_ids) != 1:
+            if not server_ids:
                 return label
+            # Match binding's first-entry policy, even with several candidates.
             entries = [entry for entry in snapshot.models if entry.get("id") == server_ids[0]]
             if len(entries) != 1:
                 return label

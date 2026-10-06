@@ -57,22 +57,34 @@ class MenuStatus:
             return
         state.pending_project_load_checks = False
 
+        from tts_audiobook_tool.tts import Tts
+
         model = state.project.get_tts_model_type()
         max_duration = model.value.ui.get("voice_sample_max_duration_s")
-        if max_duration is None:
+        if max_duration is not None:
+            count = 0
+            for voice in ProjectVoiceUtil.get_voice_values(state.project, model):
+                path = ProjectVoiceUtil.resolve_voice_file_path(state.project, voice)
+                duration = AudioMetaUtil.get_audio_duration(path)
+                if duration is not None and duration > max_duration:
+                    count += 1
+            if count:
+                samples = "is 1 sample" if count == 1 else f"are {count} samples"
+                verb = "exceeds" if count == 1 else "exceed"
+                hints.print_hint(Hint("", "FYI", (
+                    f"The current model's recommended duration for voice clone samples is {max_duration:g}s,\n"
+                    f"but there {samples} for this project that {verb} that value."
+                )))
+
+        if model.id == "none" or not state.project.phrase_groups:
             return
-        count = 0
-        for voice in ProjectVoiceUtil.get_voice_values(state.project, model):
-            path = ProjectVoiceUtil.resolve_voice_file_path(state.project, voice)
-            duration = AudioMetaUtil.get_audio_duration(path)
-            if duration is not None and duration > max_duration:
-                count += 1
-        if count:
-            samples = "is 1 sample" if count == 1 else f"are {count} samples"
-            verb = "exceeds" if count == 1 else "exceed"
+        limit = Tts.get_model_support(state.project).get_max_words_range_reco(state.project)[1]
+        max_words = state.project.book.segmentation_settings.max_words_per_segment
+        if limit > 0 and max_words > limit:
             hints.print_hint(Hint("", "FYI", (
-                f"The current model's recommended duration for voice clone samples is {max_duration:g}s,\n"
-                f"but there {samples} for this project that {verb} that value."
+                f"This project's text was segmented with a maximum of {max_words} words per segment,\n"
+                f"exceeding the current model's recommended maximum of {limit}.\n"
+                "Output accuracy may be degraded."
             )))
 
     @staticmethod
@@ -106,7 +118,7 @@ class MenuStatus:
             text += f"It will now use the {qualifier} model, {current_name}"
         else:
             text += (f"It is now configured to use {current_name}, "
-                     "but the runtime is unavailable (see TTS mode).")
+                     "but the runtime is unavailable (see TTS model).")
         hints.print_hint(Hint("", "FYI", text))
 
     @staticmethod

@@ -11,7 +11,7 @@ Is blocking.
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol
+from typing import Callable, Protocol
 
 import numpy as np
 from tts_audiobook_tool import text_util
@@ -77,6 +77,8 @@ def start(
     phrase_groups: list[PhraseGroup],
     line_range: tuple[int, int] | None,
     continue_event: ContinueEvent | None = None,
+    *,
+    pause_requested: Callable[[], bool] | None = None,
 ) -> RealTimePlaybackRunResult:
     """Run realtime generation/playback and always release the audio device."""
     stream_holder: list[SoundDeviceStream] = []
@@ -87,6 +89,7 @@ def start(
             line_range,
             continue_event,
             stream_holder,
+            pause_requested,
         )
     finally:
         try:
@@ -104,6 +107,7 @@ def _start_impl(
         line_range: tuple[int, int] | None,
         continue_event: ContinueEvent | None,
         stream_holder: list[SoundDeviceStream],
+        pause_requested: Callable[[], bool] | None,
     ) -> RealTimePlaybackRunResult:
     """
     line_range is one-indexed
@@ -203,7 +207,12 @@ def _start_impl(
         printt(f"{COL_DIM_ITALICS}{phrase_group.presentable_text}")
         printt()
 
-        has_runway = (stream is not None and stream.buffer_duration >= (REQUIRED_SECONDS_PER_RETRY * state.project.max_retries))
+        # Validation starts at a fixed buffer threshold; max_retries only
+        # controls the number of attempts, not whether transcription runs.
+        has_runway = (
+            stream is not None
+            and stream.buffer_duration >= REQUIRED_BUFFER_SECONDS_FOR_VALIDATION
+        )
 
         sound_opt, did_interrupt, consecutive_model_errors = generate_full_flow(
             state,
@@ -280,7 +289,11 @@ def _start_impl(
 
         # Start stream lazy
         if not stream:
-            stream = SoundDeviceStream()
+            # Keep other audio users' larger/high-latency stream defaults;
+            # realtime's pause hotkey needs a more responsive callback cadence.
+            stream = SoundDeviceStream(
+                blocksize=4096, latency="low", pause_requested=pause_requested
+            )
             stream_holder.append(stream)
             if not stream.start():
                 # Abort. Stream is in a not-started state, so no shut_down() is needed;
@@ -300,10 +313,6 @@ def _start_impl(
         if appended_sound is not None:
             # Add page-turn sound
             _, segment_end = stream.add_data(appended_sound)
-
-        full_duration = sound.duration
-        if appended_sound is not None:
-            full_duration += len(appended_sound) / sound.sr
 
         RealTimePlaybackEvents.emit(RealTimePlaybackBuffer(stream.buffer_duration))
         if segment_end > segment_start:
@@ -325,10 +334,14 @@ def _start_impl(
             Tts.clear_continuation()
             break
 
-        # Sleep if necessary to prevent growing buffer beyond threshold
-        if stream.buffer_duration > REAL_TIME_BUFFER_MAX_SECONDS and full_duration > 0.0:
-            printt(f"{COL_DIM_ITALICS}Sleeping for {full_duration:.1f}s ...")
-            did_interrupt = did_interrupt or sleep_interruptibly(full_duration)
+        # Backpressure follows the actual buffer, not wall-clock time: while
+        # audio is paused no samples drain, so generation must stay throttled.
+        # After the last segment there is no more generation to throttle; let
+        # the user reach the finish prompt even if the stream is still paused.
+        if index < end_index and stream.buffer_duration > REAL_TIME_BUFFER_MAX_SECONDS:
+            RealTimePlaybackEvents.emit(GenerationPhase("Waiting for audio buffer to drain"))
+            printt(f"{COL_DIM_ITALICS}Waiting for audio buffer to drain to {REAL_TIME_BUFFER_MAX_SECONDS:.0f}s ...")
+            did_interrupt = wait_for_buffer_runway(stream)
             if did_interrupt:
                 break
 
@@ -366,23 +379,19 @@ def _start_impl(
     return RealTimePlaybackRunResult(status)
 
 
-def sleep_interruptibly(duration_s: float) -> bool:
-    """
-    Sleeps in short increments so Ctrl-C can stop realtime playback even
-    while we're throttling to let the audio buffer drain.
+def wait_for_buffer_runway(stream: SoundDeviceStream) -> bool:
+    """Wait for real buffer space, remaining cancellable even while paused.
 
-    Returns True if interrupted.
+    Returns True if interrupted. P controls the audio callback independently
+    of this wait, so unpausing allows the buffer to drain and generation to
+    resume. A single generated segment may overshoot the soft buffer limit.
     """
-    deadline = time.time() + max(0.0, duration_s)
     while True:
         if Interrupts().did_interrupt:
             return True
-
-        remaining = deadline - time.time()
-        if remaining <= 0.0:
+        if stream.buffer_duration <= REAL_TIME_BUFFER_MAX_SECONDS:
             return False
-
-        time.sleep(min(INTERRUPTIBLE_SLEEP_POLL_SECONDS, remaining))
+        time.sleep(INTERRUPTIBLE_SLEEP_POLL_SECONDS)
 
 
 def generate_full_flow(
@@ -514,4 +523,4 @@ def generate_full_flow(
 # ---
 
 INTERRUPTIBLE_SLEEP_POLL_SECONDS = 0.1
-REQUIRED_SECONDS_PER_RETRY = 60.0
+REQUIRED_BUFFER_SECONDS_FOR_VALIDATION = 60.0

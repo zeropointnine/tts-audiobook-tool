@@ -692,6 +692,7 @@ def _run_realtime_playback_command(
     event_queue: Any,
     cancellation_event: Any,
     continue_event: Any,
+    pause_event: Any,
 ) -> None:
     from tts_audiobook_tool.app_support.interrupts import Interrupts
     from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -735,6 +736,7 @@ def _run_realtime_playback_command(
                 phrase_groups=phrase_groups,
                 line_range=command.line_range,
                 continue_event=continue_event,
+                pause_requested=pause_event.is_set if pause_event is not None else None,
             )
         status_by_result = {
             RealTimePlaybackRunStatus.COMPLETED: RealTimePlaybackTerminalStatus.COMPLETED,
@@ -809,6 +811,7 @@ def _model_worker_main(
     cancellation_event: Any,
     continue_event: Any,
     expected_config_signature: str | None = None,
+    pause_event: Any | None = None,
 ) -> None:
     from tts_audiobook_tool.model_runtime import mark_model_worker
 
@@ -869,6 +872,7 @@ def _model_worker_main(
                 event_queue,
                 cancellation_event,
                 continue_event,
+                pause_event,
             )
             tracker.set("")
             continue
@@ -1298,6 +1302,7 @@ class ModelWorker:
     _event_queue: Any | None = None
     _cancellation_event: Any | None = None
     _continue_event: Any | None = None
+    _pause_event: Any | None = None
     _pending_events: deque[ModelWorkerEvent] = deque()
     _active_operation_id: str | None = None
     _status: WorkerStatus = WorkerStatus.ABSENT
@@ -1314,13 +1319,14 @@ class ModelWorker:
             event_queue = context.Queue()
             cancellation_event = context.Event()
             continue_event = context.Event()
+            pause_event = context.Event()
             from tts_audiobook_tool.tts import Tts
             if not Tts._catalog_initialized:
                 Tts.init_local_model_type()
             expected_config_signature = Tts._config_fingerprint
             process = context.Process(
                 target=_model_worker_main,
-                args=(command_queue, event_queue, cancellation_event, continue_event, expected_config_signature),
+                args=(command_queue, event_queue, cancellation_event, continue_event, expected_config_signature, pause_event),
                 name="model-worker",
                 daemon=False,
             )
@@ -1329,6 +1335,7 @@ class ModelWorker:
             cls._event_queue = event_queue
             cls._cancellation_event = cancellation_event
             cls._continue_event = continue_event
+            cls._pause_event = pause_event
             cls._process = process
             process.start()
             cls._status = WorkerStatus.STARTING
@@ -1499,14 +1506,17 @@ class ModelWorker:
             )
             cancellation_event = cls._cancellation_event
             continue_event = cls._continue_event
+            pause_event = cls._pause_event
             command_queue = cls._command_queue
             assert (
                 cancellation_event is not None
                 and continue_event is not None
+                and pause_event is not None
                 and command_queue is not None
             )
             cancellation_event.clear()
             continue_event.clear()
+            pause_event.clear()
             cls._active_operation_id = operation_id
             command_queue.put(command)
             return operation_id
@@ -1520,6 +1530,21 @@ class ModelWorker:
             if cancellation_event is None:
                 return False
             cancellation_event.set()
+            return True
+
+    @classmethod
+    def set_realtime_playback_paused(cls, operation_id: str, paused: bool) -> bool:
+        """Control the audio callback even while the worker is inside inference."""
+        with cls._lock:
+            if cls._active_operation_id != operation_id:
+                return False
+            pause_event = cls._pause_event
+            if pause_event is None:
+                return False
+            if paused:
+                pause_event.set()
+            else:
+                pause_event.clear()
             return True
 
     @classmethod
@@ -2300,6 +2325,7 @@ class ModelWorker:
         cls._event_queue = None
         cls._cancellation_event = None
         cls._continue_event = None
+        cls._pause_event = None
         cls._pending_events.clear()
         cls._active_operation_id = None
         cls._status = WorkerStatus.ABSENT

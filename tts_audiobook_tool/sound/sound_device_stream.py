@@ -37,15 +37,29 @@ class SoundDeviceStream:
         finally:
             pthread_sigmask(signal.SIG_SETMASK, old_mask)
 
-    def __init__(self, sample_rate: int=APP_SAMPLE_RATE):
+    def __init__(
+        self,
+        sample_rate: int = APP_SAMPLE_RATE,
+        *,
+        blocksize: int = 8192,
+        latency: str = "high",
+        pause_requested: Callable[[], bool] | None = None,
+    ):
         """
         Initializes the AudioStreamer.
 
         Args:
             sample_rate (int): The sample rate for the output audio stream (e.g., 44100).
+            blocksize (int): The number of frames per output callback.
+            latency (str): The requested output device latency.
+            pause_requested: Optional predicate checked each callback; while true,
+                output silence without consuming buffered audio.
         """
-        # This is the sample_rate for the output audio stream.
+        # Output device settings and optional externally controlled pause state.
         self.sample_rate = sample_rate
+        self.blocksize = blocksize
+        self.latency = latency
+        self.pause_requested = pause_requested
 
         # This is the data buffer from which the audio stream callback function draws from to
         # stream the audio in realtime.
@@ -100,7 +114,7 @@ class SoundDeviceStream:
 
         first_audio_output_callback: Callable[[], None] | None = None
         with self.lock:
-            if self.is_paused:
+            if self.is_paused or (self.pause_requested is not None and self.pause_requested()):
                 # If paused, stream silence.
                 outdata.fill(0)
                 return
@@ -199,7 +213,7 @@ class SoundDeviceStream:
             return True
 
         # Create and start the output stream. We assume a mono output (channels=1).
-        # Note big block size and latency=high
+        # Default settings favor a large block size and high latency.
         try:
             # On POSIX, block SIGINT before creating the stream so PortAudio's
             # audio thread inherits the mask — prevents SIGINT from being
@@ -210,8 +224,8 @@ class SoundDeviceStream:
                     channels=1,
                     callback=self._callback,
                     dtype=np.float32,  # We work with float32 internally
-                    blocksize=8192,
-                    latency="high"
+                    blocksize=self.blocksize,
+                    latency=self.latency
                 )
                 self.stream.start()
         except Exception as e:

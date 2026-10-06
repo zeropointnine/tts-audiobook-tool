@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, ClassVar
 
 from textual.app import ComposeResult
+from textual.binding import Binding, BindingType
 
 from tts_audiobook_tool import ask, util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
@@ -78,6 +79,9 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
     source-text band, live worker log."""
 
     CSS = worker_app_css("realtime-divider")
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("p,P", "toggle_pause", show=False, priority=True),
+    ]
 
     DIVIDER_ID: ClassVar[str] = "realtime-divider"
     OUTPUT_SHELL_ID: ClassVar[str] = "realtime-output-shell"
@@ -101,6 +105,7 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         self.processed = 0
         self.total = 0
         self.buffer_seconds = 0.0
+        self.is_paused = False
         self.buffer_updated_at = self.started_at
         # (text, start_sample, end_sample) for each segment whose audio was
         # added to the stream; used to show which source text is being played.
@@ -332,7 +337,10 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
     @property
     def interpolated_buffer_seconds(self) -> float:
         """Estimate worker-owned buffer drain between authoritative events."""
-        elapsed_since_update = max(0.0, time.monotonic() - self.buffer_updated_at)
+        elapsed_since_update = (
+            0.0 if self.is_paused
+            else max(0.0, time.monotonic() - self.buffer_updated_at)
+        )
         return max(0.0, self.buffer_seconds - elapsed_since_update)
 
     def _record_segment(self, update: RealTimePlaybackSegmentText) -> None:
@@ -362,7 +370,7 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         if anchor is None:
             return None
         anchor_at, anchor_played, anchor_added = anchor
-        elapsed = max(0.0, time.monotonic() - anchor_at)
+        elapsed = 0.0 if self.is_paused else max(0.0, time.monotonic() - anchor_at)
         return min(anchor_added, anchor_played + int(elapsed * APP_SAMPLE_RATE))
 
     def _current_playing_text(self) -> tuple[str, bool]:
@@ -407,7 +415,38 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         # (playhead past the last segment) no longer affects rendering.
         playing_text, _ = self._current_playing_text()
         self.query_one(RealTimePlaybackSourceText).update_playing_text(playing_text)
-        header.update_hotkey(self.prompt_mode)
+        header.update_hotkey(self.prompt_mode, paused=self.is_paused)
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "toggle_pause":
+            return (
+                not self.find_active
+                and self.operation_id is not None
+                and not self.reset_in_progress
+                and not self.finishing
+                and not self.teardown_in_progress
+                and self.terminal_result is None
+            )
+        return super().check_action(action, parameters)
+
+    def action_toggle_pause(self) -> None:
+        operation_id = self.operation_id
+        if operation_id is None or not self.check_action("toggle_pause", ()):
+            return
+        paused = not self.is_paused
+        if not ModelWorker.set_realtime_playback_paused(operation_id, paused):
+            return
+        # Freeze current estimates before changing state, and rebase on resume
+        # so paused wall-clock time never drains the buffer or moves the text.
+        buffer_seconds = self.interpolated_buffer_seconds
+        played_samples = self.interpolated_played_samples
+        now = time.monotonic()
+        self.buffer_seconds = buffer_seconds
+        self.buffer_updated_at = now
+        if self.play_anchor is not None and played_samples is not None:
+            self.play_anchor = (now, played_samples, self.play_anchor[2])
+        self.is_paused = paused
+        self._update_header()
 
     def action_continue(self) -> None:
         # ENTER must not advance or dismiss the session while a hard reset is

@@ -63,9 +63,9 @@ Server IDs are arbitrary operator-configured strings. No quantization/session-op
 
 ### Selection and binding
 
-The project stores a catalog ID; refer to [TTS model selection rules](<tts-model-selection.md>) for the canonical reconciliation and binding rules. For a remote selection, `Tts.bind_project()` requires exactly one server entry matching the selected type: zero matches, an unreachable server, or several matches block binding and leave the saved ID untouched.
+The project stores a catalog ID; refer to [TTS model selection rules](<tts-model-selection.md>) for the canonical reconciliation and binding rules. For audio.cpp, `Tts.bind_project()` silently selects the first matching model entry in `/v1/models` response order, without sorting or preferring loaded entries. SGL-Omni still requires a unique match. Zero matches or an unreachable server block binding and leave the saved ID untouched.
 
-Generation settings, output metadata, and architecture-dependent behavior come from the selected catalog definition; the runtime never reclassifies the served model from its ID during generation. The status UI still shows the exact server model ID as diagnostics, so a selection that disagrees with what the server serves is visible as a configuration error rather than silently overridden. Configure only one audio.cpp server entry per variant: separate `tts` and `clon` entries for the same family create an ambiguous binding, not separate app model types.
+Generation settings, output metadata, and architecture-dependent behavior come from the selected catalog definition; the runtime never reclassifies the served model from its ID during generation. The status UI still shows the exact server model ID as diagnostics, so a selection that disagrees with what the server serves is visible as a configuration error rather than silently overridden. Separate audio.cpp `tts` and `clon` entries for the same family remain one app model type; the first matching entry wins. Its exact model ID is runtime-only, so a later rebind can choose differently if the server response order changes.
 
 ### Pre-release IDs
 

@@ -5,6 +5,7 @@ import pytest
 
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot, RemoteTtsIssue
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.menus.main_menu import make_voice_label
 from tts_audiobook_tool.menus.menu_status import _make_stt_text
 from tts_audiobook_tool.menus.menu_status import MenuStatus
@@ -421,7 +422,7 @@ def test_model_change_hint_reports_binding_failure(monkeypatch, capsys, sole_rem
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
     assert "last used with TTS model Chatterbox TTS" in output
     assert f"It is now configured to use {sole_remote_model.value.ui['proper_name']}" in output
-    assert "runtime is unavailable (see TTS mode)" in output
+    assert "runtime is unavailable (see TTS model)" in output
     assert "currently active model" not in output
     assert state.pending_tts_model_change is None
 
@@ -555,6 +556,7 @@ def test_interactive_state_initializes_without_pending_notice(monkeypatch):
 
 
 @pytest.mark.parametrize("runtime", [False, True])
+@pytest.mark.parametrize("with_long_text", [False, True])
 @pytest.mark.parametrize("saved", ["qwen3tts_local", "omnivoice_local"])
 @pytest.mark.parametrize("durations, expected", [
     ([15.01, 15.0, 14.6, None], "is 1 sample for this project that exceeds"),
@@ -563,7 +565,7 @@ def test_interactive_state_initializes_without_pending_notice(monkeypatch):
     ([], None),
 ])
 def test_shared_project_load_hints_at_startup_and_runtime(
-    monkeypatch, capsys, runtime, saved, durations, expected,
+    monkeypatch, capsys, runtime, with_long_text, saved, durations, expected,
 ):
     from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
     from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
@@ -573,6 +575,14 @@ def test_shared_project_load_hints_at_startup_and_runtime(
         for index in range(len(durations))
     ])
     project.dir_path = "/example/book"
+    if with_long_text:
+        project.phrase_groups = [PhraseGroup([Phrase("Short text.", Reason.PARAGRAPH)])]
+        project.book.segmentation_settings = project.book.segmentation_settings._replace(
+            max_words_per_segment=100,
+        )
+        project.max_words = 20  # The next import's setting must not affect the FYI.
+    original_book = project.book
+    original_settings = project.book.segmentation_settings
     monkeypatch.setattr(Prefs, "load", lambda: Prefs(project_dir=project.dir_path))
     monkeypatch.setattr(Prefs, "save", lambda _: "")
     monkeypatch.setattr(Project, "save", lambda _: "")
@@ -618,7 +628,22 @@ def test_shared_project_load_hints_at_startup_and_runtime(
         assert f"but there {expected} that value." in output
     else:
         assert "recommended duration" not in output
-    assert output.count("FYI") == int(saved != model.id) + int(expected is not None)
+    if with_long_text:
+        assert (
+            "This project's text was segmented with a maximum of 100 words per segment,\n"
+            "exceeding the current model's recommended maximum of 80.\n"
+            "Output accuracy may be degraded."
+        ) in output
+        if saved != model.id:
+            assert output.index("last used with") < output.index("text was segmented")
+        if expected:
+            assert output.index("recommended duration") < output.index("text was segmented")
+        assert project.max_words == 20
+    else:
+        assert "text was segmented" not in output
+    assert output.count("FYI") == int(saved != model.id) + int(expected is not None) + int(with_long_text)
+    assert project.book is original_book
+    assert project.book.segmentation_settings == original_settings
     assert len(probes) == len(durations)
     assert not state.pending_project_load_checks
     MenuStatus.prepare_tts(state)
@@ -641,7 +666,92 @@ def test_project_load_skips_samples_without_duration_recommendation(monkeypatch,
     assert not state.pending_project_load_checks
 
 
-def test_project_replacement_rearms_duration_check_and_reset_clears_it(monkeypatch, capsys):
+@pytest.mark.parametrize("model_id", ["glm_local", "echo_tts_audiocpp", "higgs_v3_sglomni"])
+@pytest.mark.parametrize("offset", [None, -1, 0, 1])
+def test_project_load_max_words_uses_model_recommended_upper_bound(
+    capsys, model_id, offset,
+):
+    state = make_state(TtsModelType.require_by_id(model_id))
+    state.pending_project_load_checks = True
+    state.project.phrase_groups = [PhraseGroup([Phrase("Short text.", Reason.PARAGRAPH)])]
+    limit = Tts.get_model_support(state.project).get_max_words_range_reco(state.project)[1]
+    max_words = 0 if offset is None else limit + offset
+    state.project.book.segmentation_settings = state.project.book.segmentation_settings._replace(
+        max_words_per_segment=max_words,
+    )
+    state.project.max_words = limit + 100  # Current import setting is irrelevant.
+
+    MenuStatus.show_pending_project_hints(state, is_first_main_menu=True)
+
+    output = text_util.strip_ansi_codes(capsys.readouterr().out)
+    assert output.count("FYI") == int(offset == 1)
+    if offset == 1:
+        assert f"maximum of {max_words} words per segment" in output
+        assert f"recommended maximum of {limit}." in output
+    assert not state.pending_project_load_checks
+
+
+@pytest.mark.parametrize("model_id, has_text", [
+    ("none", True), ("unknown-model", True), ("glm_local", False),
+])
+def test_project_load_max_words_skips_missing_model_or_text(capsys, model_id, has_text):
+    state = make_state()
+    state.project.tts_model_type = model_id
+    state.pending_project_load_checks = True
+    if has_text:
+        state.project.phrase_groups = [PhraseGroup([Phrase("Short text.", Reason.PARAGRAPH)])]
+    state.project.book.segmentation_settings = state.project.book.segmentation_settings._replace(
+        max_words_per_segment=100,
+    )
+
+    MenuStatus.show_pending_project_hints(state, is_first_main_menu=True)
+
+    assert capsys.readouterr().out == ""
+    assert not state.pending_project_load_checks
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_project_load_max_words_skips_nonpositive_recommendation(monkeypatch, capsys, limit):
+    state = make_state(TtsModelType.require_by_id("glm_local"))
+    state.pending_project_load_checks = True
+    state.project.phrase_groups = [PhraseGroup([Phrase("Short text.", Reason.PARAGRAPH)])]
+    state.project.book.segmentation_settings = state.project.book.segmentation_settings._replace(
+        max_words_per_segment=100,
+    )
+    monkeypatch.setattr(Tts, "get_model_support", lambda _: SimpleNamespace(
+        get_max_words_range_reco=lambda _: (0, limit, ""),
+    ))
+
+    MenuStatus.show_pending_project_hints(state, is_first_main_menu=True)
+
+    assert capsys.readouterr().out == ""
+    assert not state.pending_project_load_checks
+
+
+def test_project_load_max_words_uses_reconciled_model(monkeypatch, capsys):
+    state = make_state(TtsModelType.require_by_id("glm_local"))
+    state.pending_project_load_checks = True
+    state.project.phrase_groups = [PhraseGroup([Phrase("Short text.", Reason.PARAGRAPH)])]
+    state.project.book.segmentation_settings = state.project.book.segmentation_settings._replace(
+        max_words_per_segment=60,  # Within GLM's recommendation, but above Echo's.
+    )
+    model = TtsModelType.require_by_id("echo_tts_audiocpp")
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [model])
+    monkeypatch.setattr(Tts, "get_active_type", lambda: model)
+
+    MenuStatus.prepare_tts(state)
+    MenuStatus.show_pending_project_hints(state, is_first_main_menu=True)
+
+    output = text_util.strip_ansi_codes(capsys.readouterr().out)
+    assert state.project.tts_model_type == model.id
+    assert output.count("FYI") == 2
+    assert "maximum of 60 words per segment" in output
+    assert "recommended maximum of 50." in output
+    assert output.index("last used with") < output.index("text was segmented")
+
+
+def test_project_replacement_rearms_load_checks_and_reset_clears_them(monkeypatch, capsys):
     from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 
     monkeypatch.setattr(Project, "kill", lambda _: None)
@@ -654,10 +764,14 @@ def test_project_replacement_rearms_duration_check_and_reset_clears_it(monkeypat
             {"file_name": "voice.flac", "transcript": ""},
         ])
         project.dir_path = path
+        project.phrase_groups = [PhraseGroup([Phrase("Short text.", Reason.PARAGRAPH)])]
+        project.book.segmentation_settings = project.book.segmentation_settings._replace(
+            max_words_per_segment=100,
+        )
         state.project = project
         assert state.pending_project_load_checks
         MenuStatus.show_pending_project_hints(state)
-        assert capsys.readouterr().out.count("FYI") == 1
+        assert capsys.readouterr().out.count("FYI") == 2
         assert not state.pending_project_load_checks
     project = Project(tts_model_type="omnivoice_local")
     project.dir_path = "/example/third"

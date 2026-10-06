@@ -845,8 +845,9 @@ class Tts:
         """Bind a validated project selection without changing its saved ID.
 
         Metadata reads use the Project directly. Only this runtime boundary
-        resolves an exact remote entry, which remains ephemeral and must be
-        unique. Repeated bindings reuse discovery and unchanged model instances.
+        resolves an exact remote entry, which remains ephemeral. audio.cpp uses
+        the first matching entry in discovery order; other remote backends require
+        a unique match. Repeated bindings reuse discovery and unchanged instances.
         """
         selected = project.get_tts_model_type()
         issue: ReadinessIssue | None = None
@@ -868,7 +869,11 @@ class Tts:
                 issue = ReadinessIssue("Remote TTS server", snapshot.issue.message)
             else:
                 candidates = [pair for pair in snapshot.candidates if pair[0] == selected]
-                if len(candidates) == 1:
+                if candidates and (
+                    selected.value.backend_kind is TtsBackendKind.AUDIO_CPP
+                    or len(candidates) == 1
+                ):
+                    # Discovery preserves /v1/models order; never sort or prefer loaded entries.
                     new_id = candidates[0][1]
                 elif not candidates:
                     issue = ReadinessIssue("TTS model", _missing_remote_model_issue(snapshot, selected))
