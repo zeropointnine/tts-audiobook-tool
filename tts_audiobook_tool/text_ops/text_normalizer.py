@@ -2,6 +2,7 @@ import difflib
 import re
 import string
 import unicodedata
+from collections.abc import Sequence
 from whisper_normalizer.english import EnglishNumberNormalizer
 
 from tts_audiobook_tool.text_ops.spanish_number_normalizer import SpanishNumberNormalizer
@@ -140,37 +141,69 @@ def strip_spanish_diacritics_keep_enye(text: str) -> str:
 def normalize_transcript_en_specific(normalized_source: str, normalized_transcript: str) -> str:
     return normalize_spacing_en(normalized_source, normalized_transcript)
 
+def _spacing_repair_regions(
+    source: str,
+    transcript: str,
+    opcodes: Sequence[tuple[str, int, int, int, int]],
+) -> list[tuple[int, int, bool]]:
+    """Return region ends and whether their complete non-whitespace text matches."""
+    boundaries = [(0, 0)]
+    for tag, i1, i2, j1, _ in opcodes:
+        if tag == 'equal':
+            # Only aligned whitespace separates complete token/compound regions.
+            for offset, char in enumerate(source[i1:i2]):
+                if char.isspace():
+                    boundaries.append((i1 + offset + 1, j1 + offset + 1))
+    boundaries.append((len(source), len(transcript)))
+
+    return [
+        (i2, j2, "".join(source[i1:i2].split()) == "".join(transcript[j1:j2].split()))
+        for (i1, j1), (i2, j2) in zip(boundaries, boundaries[1:])
+    ]
+
+
 def normalize_spacing_en(source: str, transcript: str) -> str:
     """
     Normalizes the spacing of the `transcript` to match the `source` text
-    wherever the characters align, fixing split/merged compound words.
+    only where complete token/compound regions have identical non-whitespace
+    characters, fixing split/merged compound words without altering typos.
     """
     # Create a SequenceMatcher to align the two strings
     # autojunk=False is important to prevent spaces from being treated as 'noise'
     matcher = difflib.SequenceMatcher(None, source, transcript, autojunk=False)
-    
+    opcodes = matcher.get_opcodes()
+    regions = _spacing_repair_regions(source, transcript, opcodes)
+    region_index = 0
+
     normalized_parts = []
-    
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+
+    for tag, i1, i2, j1, j2 in opcodes:
+        while (
+            region_index < len(regions) - 1
+            and regions[region_index][0] <= i1
+            and regions[region_index][1] <= j1
+        ):
+            region_index += 1
+        can_repair_spacing = regions[region_index][2]
         
         # 1. MATCH: The text is the same. Keep the transcript text.
         if tag == 'equal':
             normalized_parts.append(transcript[j1:j2])
             
         # 2. DELETE: Text exists in Source but is missing in Transcript.
-        # If the missing part was ONLY whitespace, we restore it.
+        # Restore missing whitespace only when the complete region's letters match.
         # (Example: Source "high school" -> Trans "highschool". We restore the space.)
         elif tag == 'delete':
             missing_source_part = source[i1:i2]
-            if missing_source_part.isspace():
+            if missing_source_part.isspace() and can_repair_spacing:
                 normalized_parts.append(missing_source_part)
                 
         # 3. INSERT: Text exists in Transcript but is missing in Source.
-        # If the extra part is ONLY whitespace, we remove it.
+        # Remove extra whitespace only when the complete region's letters match.
         # (Example: Source "firefly" -> Trans "fire fly". We skip the inserted space.)
         elif tag == 'insert':
             inserted_trans_part = transcript[j1:j2]
-            if not inserted_trans_part.isspace():
+            if not (inserted_trans_part.isspace() and can_repair_spacing):
                 normalized_parts.append(inserted_trans_part)
                 
         # 4. REPLACE: The text differs significantly. 

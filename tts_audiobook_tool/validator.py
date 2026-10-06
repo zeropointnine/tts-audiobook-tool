@@ -3,6 +3,7 @@ import math
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
+from tts_audiobook_tool import constants
 from tts_audiobook_tool.app_types import Sound, Strictness, Word
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
@@ -354,12 +355,13 @@ class Validator:
         n = len(source_words)
         m = len(transcript_words)
 
-        # Bounds the phrase-equivalence window search (eg "all right" <-> "alright").
-        # 0 means the language has no equivalence data.
-        max_equivalence_len = WordEquivalence.max_phrase_length(language_code)
-        equivalence_lookup: Mapping[str, frozenset[str]] = WordEquivalence.get_lookup(language_code)
-        if max_equivalence_len == 0:
-            equivalence_lookup = {}
+        # Gate once per alignment: disabled means no lookup construction or
+        # phrase-table preparation. Other matching allowances are independent.
+        equivalence_lookup: Mapping[str, frozenset[str]] = {}
+        max_equivalence_len = 0
+        if constants.ENABLE_WORD_EQUIVALENCE:
+            equivalence_lookup = WordEquivalence.get_lookup(language_code)
+            max_equivalence_len = WordEquivalence.max_phrase_length(language_code)
 
         def build_phrase_tables(words: list[str]) -> dict[tuple[int, int], str]:
             """
@@ -420,12 +422,12 @@ class Validator:
                 # reason for a zero-cost phrase match.
                 if equivalence_lookup and source_phrase_tables and transcript_phrase_tables:
                     for s_len in range(1, min(max_equivalence_len, i) + 1):
-                        s_group = equivalence_lookup.get(source_phrase_tables[(i-s_len, s_len)])
-                        if s_group is None:
+                        neighbors = equivalence_lookup.get(source_phrase_tables[(i-s_len, s_len)])
+                        if neighbors is None:
                             # Rare in practice: most windows have no equivalence data
                             continue
                         for t_len in range(1, min(max_equivalence_len, j) + 1):
-                            if equivalence_lookup.get(transcript_phrase_tables[(j-t_len, t_len)]) is s_group:
+                            if transcript_phrase_tables[(j-t_len, t_len)] in neighbors:
                                 cost = dp[i-s_len][j-t_len] + 0
                                 if cost < dp[i][j]:
                                     dp[i][j] = cost

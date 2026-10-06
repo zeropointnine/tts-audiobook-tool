@@ -318,9 +318,14 @@ elif language_code == "es":
 Behavior by opcode:
 
 - `equal`: keep transcript text
-- `delete`: if source-only content is whitespace, restore it
-- `insert`: if transcript-only content is whitespace, drop it
+- `delete`: if source-only content is whitespace and its surrounding region differs only in whitespace, restore it
+- `insert`: if transcript-only content is whitespace and its surrounding region differs only in whitespace, drop it
 - `replace`: keep transcript text as-is
+
+Regions are bounded by shared whitespace boundaries (or text edges). Their
+non-whitespace characters must match exactly before spacing is changed. This
+preserves contractions such as `didnt` versus `did not` for phrase-equivalence
+matching instead of producing partial tokens such as `did nt`.
 
 **Spanish** (`normalize_transcript_es_specific`): currently returns the transcript as-is without spacing repair. The spacing repair logic (`normalize_spacing_en`) is English-only for now.
 
@@ -391,7 +396,7 @@ Supported outcomes (alignment actions):
 
 - `match_direct` — exact match
 - `match_homophone` — homophone match (English only)
-- `match_equivalent` — word/phrase equivalence match (see below and `docs/word-equivalence.md`)
+- `match_equivalent` — word/phrase equivalence match (see below and `docs-dev/word-equivalence.md`)
 - `uncommon_pass_1` — 1 source word ↔ 1 transcript word free pass for uncommon source words
 - `uncommon_pass_2` — 1 source word ↔ 2 transcript words free pass for uncommon source words
 - `skip_source` — deletion (`d:word`)
@@ -413,13 +418,19 @@ This allows some pronunciation-equivalent English mismatches to count as matches
 #### 2. Word/phrase equivalence matching
 
 `WordEquivalence` (`tts_audiobook_tool/text_ops/word_equivalence.py`) declares
-per-language equivalence groups of variants (single words or multi-word
-phrases) that the DP alignment treats as zero-cost matches, eg `all right` ↔
-`alright` or `toward` ↔ `towards`. This covers cases that neither spacing
-repair nor Double Metaphone can align.
+a single per-language table of explicit bidirectional pairs (single words
+or multi-word phrases) that the DP alignment treats as zero-cost
+matches, eg `all right` ↔ `alright`, `would have` ↔ `wouldve`, or `did not` ↔
+`didnt`. Relationships are direct, not transitively inferred; overlapping
+entries accumulate neighbors. This covers cases that neither spacing repair
+nor Double Metaphone can align.
+
+`ENABLE_WORD_EQUIVALENCE` in `tts_audiobook_tool/constants.py` defaults to
+`True`. When disabled, alignment skips the equivalence lookup and phrase
+preparation without changing homophone or uncommon-word allowances.
 
 For the data model, curation policy, language-code handling, and validator
-integration details, see `docs/word-equivalence.md`.
+integration details, see `docs-dev/word-equivalence.md`.
 
 #### 3. Language-specific whitelist behavior
 
@@ -449,7 +460,7 @@ Language variants are normalized to a base code first:
 The normalization also accepts ISO 639-2 codes and full names (`eng`,
 `English` -> `en`) via a shared alias table in
 `tts_audiobook_tool/text_ops/language_util.py`, so both subsystems resolve
-language codes identically. For details see `docs/word-equivalence.md`.
+language codes identically. For details see `docs-dev/word-equivalence.md`.
 
 That normalization happens in `language_util.normalize_language_code()`, which
 `Whitelist.normalize_language_code()` and

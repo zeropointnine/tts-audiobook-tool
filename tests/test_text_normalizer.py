@@ -183,3 +183,72 @@ def test_sounds_the_same(a: str, b: str, expected: bool) -> None:
 )
 def test_normalize_spacing(source: str, transcript: str, expected: str) -> None:
     assert normalize_spacing_en(source=source, transcript=transcript) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "transcript"),
+    [
+        ("did not", "didnt"),
+        ("didnt", "did not"),
+        ("do not", "dont"),
+        ("dont", "do not"),
+        ("do not", "don't"),
+        ("don't", "do not"),
+        # A matching prefix/suffix is insufficient when the compound has a typo.
+        ("firefly", "fire flay"),
+        ("fire flay", "firefly"),
+        ("fireflay", "fire fly"),
+        ("fire fly", "fireflay"),
+        # Shared whitespace bounds the whole mismatching compound, not its prefix.
+        ("a firefly glows", "a fire flay glows"),
+        ("a fire flay glows", "a firefly glows"),
+        ("high school today", "highschol today"),
+        ("highschol today", "high school today"),
+    ],
+)
+def test_normalize_spacing_preserves_letter_mismatch_regions(
+    source: str, transcript: str
+) -> None:
+    assert normalize_spacing_en(source, transcript) == transcript
+
+
+@pytest.mark.parametrize(
+    ("source", "transcript", "expected"),
+    [
+        ("firefly", "fire fly", "firefly"),
+        ("fire fly", "firefly", "fire fly"),
+        ("high school", "highschool", "high school"),
+        ("highschool", "high school", "highschool"),
+        # A letter mismatch in a neighboring region must not block exact repairs.
+        ("red firefly glows", "blue fire fly shines", "blue firefly shines"),
+        ("red high school opens", "blue highschool closes", "blue high school closes"),
+        ("firefly red high school", "fire fly blue highschool", "firefly blue high school"),
+        ("fire fly red highschool", "firefly blue high school", "fire fly blue highschool"),
+        ("firefly high school", "fire fly highschool", "firefly high school"),
+        ("fire fly highschool", "firefly high school", "fire fly highschool"),
+        # Several spacing edits inside one compound region still match exactly.
+        ("ice cream cone", "icecreamcone", "ice cream cone"),
+        ("icecreamcone", "ice cream cone", "icecreamcone"),
+    ],
+)
+def test_normalize_spacing_repairs_complete_compounds(
+    source: str, transcript: str, expected: str
+) -> None:
+    assert normalize_spacing_en(source, transcript) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "transcript", "expected_source", "expected_transcript"),
+    [
+        ("did not", "didn't", "did not", "didnt"),
+        ("didn't", "did not", "didnt", "did not"),
+        ("do not", "don't", "do not", "dont"),
+        ("don't", "do not", "dont", "do not"),
+    ],
+)
+def test_normalize_transcript_preserves_contraction_spacing(
+    source: str, transcript: str, expected_source: str, expected_transcript: str
+) -> None:
+    assert TextNormalizer.normalize_source_and_transcript(
+        source, transcript, language_code="en"
+    ) == (expected_source, expected_transcript)

@@ -31,6 +31,10 @@ FFMPEG_COMMAND = "ffmpeg"
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
 VALIDATION_UNSUPPORTED_LANGUAGES = ["zh", "ja", "ko"]
 
+# Allow declared word/phrase equivalents during word-error alignment.
+# Other allowances (homophones and uncommon words) remain independent.
+ENABLE_WORD_EQUIVALENCE = True
+
 # Excessive-duration validation threshold: base + per-word, plus a flat allowance
 # for internal silence gaps. Saved sound segments are no longer gap-limited at
 # generation time (that happens when concatenating), so a segment's duration can

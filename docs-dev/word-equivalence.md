@@ -41,20 +41,31 @@ The equivalence table exists precisely for these leftovers.
 
 ## Data model
 
-Equivalence groups are declared in `WordEquivalence._EQUIVALENCE_GROUPS`,
-a per-language list of tuples. Each tuple is one group of variants; any two
-members of the same group are mutual matches:
+All declarations live in `WordEquivalence._EQUIVALENCE_PAIRS`, a single
+per-language table of explicit bidirectional relationships. Each tuple has
+exactly two variants; the lookup automatically adds both directions.
 
 ```python
-_EQUIVALENCE_GROUPS: dict[str, list[tuple[str, ...]]] = {
+_EQUIVALENCE_PAIRS: dict[str, list[tuple[str, str]]] = {
     "en": [
         ("all right", "alright"),
         ("do not", "dont"),          # from "don't", apostrophe stripped
-        ("toward", "towards"),
+        ("can not", "cannot"),
+        ("can not", "cant"),
+        ("cannot", "cant"),
+        ("would have", "wouldve"),
+        ("did not", "didnt"),
         ...
     ],
 }
 ```
+
+Pairs may share an endpoint without making their other endpoints match.
+For example, declaring `hed` ↔ `he had` and `hed` ↔ `he would` would **not**
+declare `he had` ↔ `he would`. These examples illustrate the data model;
+ambiguous contractions are not added to the production vocabulary yet.
+No transitive relationships are inferred. When all variants should match,
+declare every pair explicitly, as with `can not`, `cannot`, and `cant` above.
 
 Entry format rules:
 
@@ -65,10 +76,18 @@ Entry format rules:
   This is because `TextNormalizer.normalize_common()` strips apostrophes
   from both source and transcript before comparison.
 
-The class builds a read-only two-way lookup (variant → its frozen group),
-cached per language. `get_lookup()` returns a `MappingProxyType` so callers
-cannot corrupt the process-global cache; `is_equivalent()` is the
-convenience API on top of it.
+At lookup construction, malformed declarations raise `ValueError`: phrases
+must be nonempty, casefolded, single-spaced, and contain only alphanumeric
+words. Each pair needs exactly two distinct variants and cannot be a
+self-pair. No partially built lookup is cached on failure.
+
+The class builds a read-only two-way adjacency lookup (variant → frozen set
+of directly related variants), cached per language. Overlapping declarations
+accumulate neighbors instead of overwriting earlier relationships.
+`get_lookup()` returns a `MappingProxyType` so callers cannot corrupt the
+process-global cache; `is_equivalent()` is the convenience API on top of it.
+For compatibility, `is_equivalent()` also accepts identical indexed variants;
+identical text is handled by direct matching during alignment.
 
 ### Curation policy: what belongs in the table
 
@@ -78,10 +97,11 @@ Before adding a pair, check:
 1. If joining the split side reproduces the merged side letter-for-letter
    (`a lot`/`alot`, `for ever`/`forever`, `good bye`/`goodbye`,
    `can not`/`cannot`), spacing repair already handles it — do **not** add
-   it.
+   new entries solely for that difference. The existing `can not`/`cannot`
+   pair is retained to preserve the established lookup behavior.
 2. If the two words share a Double Metaphone primary code, homophone
    matching already handles it — do **not** add it (eg `toward`/`towards`
-   have differing codes `TRT`/`TRTS`, so it *is* added).
+   have differing codes `TRT`/`TRTS`, so they are candidates for the table).
 
 Kept entries therefore fall into categories like: split/merged forms whose
 letters differ, irregular contractions whose expansion is a separate word
@@ -116,12 +136,18 @@ empty mapping and `max_phrase_length()` returns `0`.
 
 ## Validator integration
 
+`ENABLE_WORD_EQUIVALENCE = True` in `tts_audiobook_tool/constants.py` gates
+all declared equivalences (not just contractions). The validator checks it
+once per alignment call. When disabled, it skips lookup construction and
+phrase-table preparation; exact matches, phonetic homophones, and uncommon-word
+allowances remain active. The standalone data/query API is not gated.
+
 `Validator.get_word_error_alignment()` uses the equivalence data as an
 additional zero-cost alignment option in its dynamic-programming table:
 
 - For each DP cell, source windows of up to `max_phrase_length()` words are
   tested against transcript windows of up to the same length. When the
-  joined phrases belong to the same equivalence group, the cell gets a
+  joined phrases have a declared direct relationship, the cell gets a
   zero-cost transition labeled `match_equivalent`.
 - Phrase strings per `(start, length)` window are precomputed once per
   side, so the per-cell scan avoids repeated string joins.
@@ -143,4 +169,9 @@ Equivalence matching is one of several comparison allowances applied inside
 the word-error DP alignment. For the surrounding normalization pipeline,
 the DP alignment algorithm, the other leniency mechanisms (spacing repair,
 Double Metaphone, whitelist wildcards), and threshold computation, see
-`docs/tts-validation-architecture.md`.
+`docs-dev/tts-validation-architecture.md`.
+
+Spacing repair must preserve mismatching letter sequences such as `did not`
+versus `didnt`; it only changes whitespace inside surrounding regions whose
+non-whitespace characters match exactly. This prevents upstream repair from
+turning a declared contraction into an unrecognized fragment like `did nt`.
