@@ -183,7 +183,8 @@ def test_transcript_menu_edits_selected_pair_for_model_without_requirement(monke
     expected = references()
     expected[1]["transcript"] = "Edited Reference."
     assert project.voice_references == expected
-    assert inputs[1] == {"prefill": "Second reference.", "lower": False}
+    # The transcript prompt prefilled with the current transcript.
+    assert inputs[-1]["prefill"] == "Second reference."
 
 
 @pytest.mark.parametrize("secondary", [False, True])
@@ -298,7 +299,7 @@ def test_static_voice_menus_keep_entire_sample_group(monkeypatch, module_name, c
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
         voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
         voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_PLAY_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
         voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
         voice_menu_shared.LABEL_VOICE_SELECTION_MODE,
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,

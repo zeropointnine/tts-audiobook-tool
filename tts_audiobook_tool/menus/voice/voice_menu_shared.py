@@ -34,7 +34,7 @@ from tts_audiobook_tool.transcriber import Transcriber
 LABEL_ADD_VOICE_SAMPLE = "Add voice sample"
 LABEL_REMOVE_VOICE_SAMPLE = "Remove voice sample"
 LABEL_MOVE_VOICE_SAMPLE = "Move voice sample position"
-LABEL_PLAY_VOICE_SAMPLE = "Play voice sample"
+LABEL_CROP_VOICE_SAMPLE = "Trim or play voice sample"
 LABEL_EDIT_VOICE_TRANSCRIPTION = "Edit voice sample transcription"
 LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
@@ -287,8 +287,7 @@ class VoiceMenuShared:
             return "", words
         transcript = Transcriber.get_flat_text_filtered_by_probability(words, VOICE_CLONE_TRANSCRIBE_MIN_PROBABILITY)
         print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
-        printt(f"{COL_DIM_ITALICS}{transcript}")
-        printt()
+        print_feedback(transcript, long_pause=True)
         return transcript, ""
 
     @staticmethod
@@ -331,6 +330,29 @@ class VoiceMenuShared:
         errors: list[str] = []
         for index, entry in enumerate(project.voice_references):
             file_name = entry["file_name"]
+            if ProjectVoiceUtil.get_crop_range(entry) is not None:
+                # A crop is active: validate (and transcribe) the cropped
+                # span, which is what generation will actually use.
+                file_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry)
+                if not os.path.exists(file_path):
+                    errors.append(
+                        f"Trimmed voice file for {file_name} not found "
+                        f"(reset the trim or restore {os.path.basename(file_path)})"
+                    )
+                    continue
+                sound_result = SoundFileUtil.load(file_path)
+                if isinstance(sound_result, str):
+                    errors.append(f"Trimmed voice file for {file_name} is invalid")
+                    continue
+                if requires_transcript and not entry.get("crop_transcript", "").strip():
+                    transcript, err = VoiceMenuShared.transcribe_voice_sample_to_text(state, sound_result)
+                    if err or not transcript:
+                        errors.append(f"Trimmed voice file for {file_name} could not be transcribed")
+                        continue
+                    save_err = ProjectVoiceUtil.set_voice_crop_transcript_at_index_and_save(project, index, transcript)
+                    if save_err:
+                        errors.append(f"Could not save trim transcript for voice file {file_name}: {save_err}")
+                continue
             file_path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
             if not os.path.exists(file_path):
                 errors.append(f"Voice file {file_name} not found")
@@ -392,9 +414,10 @@ class VoiceMenuShared:
         if len(voices) < 9:
             items.append(MenuItem(make_add_label, add_voice))
         items.append(MenuItem(LABEL_REMOVE_VOICE_SAMPLE, remove_voice))
+        if len(voices) > 1:
+            items.append(MenuItem(LABEL_MOVE_VOICE_SAMPLE, lambda s, _: VoiceMenuShared.move_voice_sample_from_menu(s)))
         items.extend([
-            MenuItem(LABEL_MOVE_VOICE_SAMPLE, lambda s, _: VoiceMenuShared.move_voice_sample_from_menu(s)),
-            MenuItem(LABEL_PLAY_VOICE_SAMPLE, lambda s, _: VoiceMenuShared.play_voice_sample_from_menu(s, tts_type)),
+            MenuItem(LABEL_CROP_VOICE_SAMPLE, lambda s, _: VoiceMenuShared.crop_voice_sample_from_menu(s)),
             MenuItem(LABEL_EDIT_VOICE_TRANSCRIPTION, lambda s, _: VoiceMenuShared.edit_voice_sample_transcript(s)),
         ])
         selection_items = []
@@ -482,13 +505,23 @@ class VoiceMenuShared:
         has_long_sample = False
         for i, voice in enumerate(voices, start=1):
             label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, tts_type.value)
-            path = ProjectVoiceUtil.resolve_voice_file_path(project, voice)
+            ref = project.voice_references[i - 1] if i - 1 < len(project.voice_references) else None
+            crop_range = ProjectVoiceUtil.get_crop_range(ref) if ref is not None else None
+            # The shown duration and the max-duration warning follow the sample
+            # generation actually uses: the saved crop when one is in effect.
+            path = ProjectVoiceUtil.effective_voice_file_path(project, ref or {"file_name": voice})
             duration = AudioMetaUtil.get_audio_duration(str(path))
             if duration is not None:
-                label += f"{COL_DIM} ({duration_string(duration, include_tenth=True)}){COL_DEFAULT}"
+                duration_text = duration_string(duration, include_tenth=True)
+                if crop_range is not None:
+                    label += f"{COL_DIM} (trimmed, {duration_text}){COL_DEFAULT}"
+                else:
+                    label += f"{COL_DIM} ({duration_text}){COL_DEFAULT}"
                 if max_duration is not None and duration > max_duration:
                     label += f"{COL_ERROR}*{COL_DEFAULT}"
                     has_long_sample = True
+            elif crop_range is not None:
+                label += f"{COL_DIM} (trimmed){COL_DEFAULT}"
             lines.append(f"{COL_DIM}- Voice sample {i}: {COL_DEFAULT}{label}")
         if has_long_sample:
             lines.append(
@@ -507,10 +540,10 @@ class VoiceMenuShared:
         try:
             index = int(value) - 1
         except ValueError:
-            ask.ask_error(f"Enter a number between 1 and {count}")
+            print_feedback("Bad value", is_error=True)
             return None
         if not 0 <= index < count:
-            ask.ask_error(f"Enter a number between 1 and {count}")
+            print_feedback("Out of range", is_error=True)
             return None
         return index
 
@@ -520,10 +553,10 @@ class VoiceMenuShared:
         if not count:
             print_feedback("No voice samples")
             return
-        index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to move", count)
+        index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to move:", count)
         if index is None:
             return
-        new_index = VoiceMenuShared.ask_voice_sample_position("Enter new position", count)
+        new_index = VoiceMenuShared.ask_voice_sample_position("Enter new position:", count)
         if new_index is None:
             return
         if index == new_index:
@@ -536,25 +569,79 @@ class VoiceMenuShared:
             print_feedback(f"Moved voice sample {index + 1} to position {new_index + 1}")
 
     @staticmethod
-    def play_voice_sample_from_menu(state: State, tts_type: TtsModelType) -> None:
-        voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
-        if not voices:
+    def crop_voice_sample_from_menu(state: State) -> None:
+        """Set or revert the active-range crop of one voice sample.
+
+        Runs the full-screen interactive crop editor (Textual). On save, the
+        cropped span is auto-transcribed; on failure the empty crop
+        transcript remains and pre-flight validation (validate_voices)
+        retries at the next generation launch.
+        """
+        from tts_audiobook_tool.textual.voice_crop_app import run_voice_crop_app
+
+        entries = state.project.voice_references
+        if not entries:
             print_feedback("No voice samples")
             return
         index = 0
-        if len(voices) > 1:
-            index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to play", len(voices))
+        if len(entries) > 1:
+            index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to trim:", len(entries))
             if index is None:
                 return
-        path = ProjectVoiceUtil.resolve_voice_file_path(state.project, voices[index])
+
+        entry = entries[index]
+        crop_range = ProjectVoiceUtil.get_crop_range(entry)
+        file_name = entry["file_name"]
+        path = ProjectVoiceUtil.resolve_voice_file_path(state.project, file_name)
         sound = SoundFileUtil.load(path)
         if isinstance(sound, str):
-            ask.ask_error(sound)
+            ask.ask_error(f"Couldn't load voice sample {file_name}: {sound}")
             return
-        duration_s = len(sound.data) / sound.sr
-        printt(f"{COL_DIM}Playing selected sound sample ({duration_s:.1f}s)...")
-        printt()
-        PlaySoundUtil.play_sound_async(sound)
+        # Short samples can still be played; the editor clamps them to the
+        # full range, so their cut points cannot be adjusted.
+
+        title = Path(file_name).stem
+        result = run_voice_crop_app(sound, title, crop_range)
+        if isinstance(result, str):
+            ask.ask_error(result)
+            return
+
+        if result.cleared:
+            if crop_range is None:
+                print_feedback("No trim to reset")
+                return
+            err = ProjectVoiceUtil.discard_voice_crop_and_save(state.project, index)
+            if err:
+                ask.ask_error(err)
+            else:
+                print_feedback(f"Trim reset; using original sample {file_name}")
+            return
+        if not result.saved:
+            return
+
+        err = ProjectVoiceUtil.apply_voice_crop_and_save(
+            state.project, index, result.start_s, result.end_s, ""
+        )
+        if err:
+            ask.ask_error(err)
+            return
+        print_feedback(f"Trim saved: {result.start_s:g}s - {result.end_s:g}s (used for generation)")
+
+        # Auto-generate the cropped span's transcript now. On failure the
+        # empty crop transcript remains; pre-flight validation retries at the
+        # next generation launch.
+        cropped_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(state.project, state.project.voice_references[index])
+        cropped_sound = SoundFileUtil.load(cropped_path)
+        if isinstance(cropped_sound, str):
+            print_feedback("Couldn't load trimmed sample to transcribe; will retry at next generation")
+            return
+        transcript, transcribe_err = VoiceMenuShared.transcribe_voice_sample_to_text(state, cropped_sound)
+        if transcribe_err or not transcript:
+            print_feedback("Couldn't transcribe trimmed span; will retry at next generation")
+            return
+        save_err = ProjectVoiceUtil.set_voice_crop_transcript_at_index_and_save(state.project, index, transcript)
+        if save_err:
+            ask.ask_error(save_err)
 
     @staticmethod
     def edit_voice_sample_transcript(state: State) -> None:
@@ -564,26 +651,35 @@ class VoiceMenuShared:
             return
         index = 0
         if len(entries) > 1:
-            printt("Enter voice sample number to edit")
-            value = ask.ask_input()
-            if not value:
+            index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to edit transcription:", len(entries))
+            if index is None:
                 return
-            try:
-                index = int(value) - 1
-            except ValueError:
-                ask.ask_error("Bad value")
-                return
-            if index < 0 or index >= len(entries):
-                ask.ask_error("Bad value")
-                return
-        current = entries[index].get("transcript", "")
-        printt('Enter voice sample transcript (or "/clear" to clear)')
-        transcript = ask.ask_input(prefill=current, lower=False)
+        # Edit the transcript generation actually consumes: the cropped
+        # span's transcript when a crop is active (and its file present),
+        # otherwise the original sample's transcript. Decided through the
+        # same funnel generation uses, so file and transcript stay in
+        # lockstep.
+        model_type = state.project.get_tts_model_type()
+        voices = ProjectVoiceUtil.get_voice_values(state.project, model_type)
+        if not voices:
+            print_feedback("No voice samples")
+            return
+        effective_name, current = ProjectVoiceUtil.effective_voice_reference(state.project, model_type, index)
+        is_cropped = index < len(voices) and effective_name != voices[index]
+        scope_note = " (trimmed span)" if is_cropped else ""
+        message = f'Enter voice sample transcript{scope_note} (or "/clear" to clear): '
+        # ask_input (not raw AskAdvanced.ask): the app-standard helper adds
+        # the input color/reset, clears stale buffered input, strips escape
+        # sequences, and catches terminals prompt_toolkit cannot drive.
+        transcript = ask.ask_input(message=message, prefill=current, lower=False)
         if not transcript or transcript == current:
             return
         if transcript == "/clear":
             transcript = ""
-        err = ProjectVoiceUtil.set_voice_transcript_at_index_and_save(state.project, index, transcript)
+        if is_cropped:
+            err = ProjectVoiceUtil.set_voice_crop_transcript_at_index_and_save(state.project, index, transcript)
+        else:
+            err = ProjectVoiceUtil.set_voice_transcript_at_index_and_save(state.project, index, transcript)
         if err:
             ask.ask_error(err)
         else:
@@ -611,10 +707,10 @@ class VoiceMenuShared:
                 try:
                     index = int(inp) - 1
                 except ValueError:
-                    ask.ask_error("Bad value")
+                    print_feedback("Bad value", is_error=True)
                     return False
                 if index < 0 or index >= len(voices):
-                    ask.ask_error("Bad value")
+                    print_feedback("Out of range", is_error=True)
                     return False
 
         if not clear_all:

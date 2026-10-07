@@ -632,7 +632,7 @@ def test_shared_project_load_hints_at_startup_and_runtime(
         assert (
             "This project's text was segmented with a maximum of 100 words per segment,\n"
             "exceeding the current model's recommended maximum of 80.\n"
-            "Output accuracy may be degraded."
+            "Output accuracy on longer prompts may be degraded."
         ) in output
         if saved != model.id:
             assert output.index("last used with") < output.index("text was segmented")
@@ -778,6 +778,37 @@ def test_project_replacement_rearms_load_checks_and_reset_clears_them(monkeypatc
     state.project = project
     state.reset()
     assert not state.pending_project_load_checks
+    MenuStatus.show_pending_project_hints(state)
+    assert capsys.readouterr().out == ""
+
+
+def test_model_switch_rearms_checks_and_prints_only_compatibility_fyis(monkeypatch, capsys):
+    from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
+
+    monkeypatch.setattr(AudioMetaUtil, "get_audio_duration", lambda _: 16.0)
+    model = TtsModelType.require_by_id("omnivoice_local")
+    state = make_state(model)
+    state.has_shown_main_menu = True
+    state.project.dir_path = "/example/book"
+    state.project.voice_references = [{"file_name": "voice.flac", "transcript": ""}]
+    state.project.phrase_groups = [PhraseGroup([Phrase("Short text.", Reason.PARAGRAPH)])]
+    state.project.book.segmentation_settings = state.project.book.segmentation_settings._replace(
+        max_words_per_segment=100,
+    )
+
+    # What ProjectMenu.tts_model_menu.on_select leaves behind after a switch.
+    state.pending_tts_model_change = None
+    state.pending_project_load_checks = True
+
+    MenuStatus.show_pending_project_hints(state)
+    output = text_util.strip_ansi_codes(capsys.readouterr().out)
+    assert output.count("FYI") == 2
+    assert "last used with" not in output
+    assert "recommended duration for voice clone samples is 15s" in output
+    assert "maximum of 100 words per segment" in output
+    assert not state.pending_project_load_checks
+
+    # Ordinary redraws after the switch do not repeat the notices.
     MenuStatus.show_pending_project_hints(state)
     assert capsys.readouterr().out == ""
 

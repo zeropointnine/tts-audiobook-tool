@@ -1,9 +1,11 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.server.server import get_blocking_issues_error
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.none_base_model import NoneBaseModel
@@ -61,18 +63,35 @@ def test_server_readiness_includes_unavailable_project_binding():
 
 
 @pytest.mark.parametrize(
-    "model_id, transcripts, should_exit",
+    "model_id, transcripts, should_exit, crop",
     [
-        ("higgs_v3_sglomni", [""], True),
-        ("higgs_v3_sglomni", ["   "], True),
-        ("higgs_v3_sglomni", ["", "second transcript"], True),
-        ("higgs_v3_sglomni", ["first transcript", ""], False),
-        ("higgs_v3_sglomni", [], False),
-        ("zonos2_sglomni", [""], False),
+        ("higgs_v3_sglomni", [""], True, None),
+        ("higgs_v3_sglomni", ["   "], True, None),
+        ("higgs_v3_sglomni", ["", "second transcript"], True, None),
+        ("higgs_v3_sglomni", ["first transcript", ""], False, None),
+        ("higgs_v3_sglomni", [], False, None),
+        ("zonos2_sglomni", [""], False, None),
+        # An active crop swaps in the cropped span's transcript: the startup
+        # check must validate that transcript, not the original's.
+        pytest.param(
+            "higgs_v3_sglomni", ["original transcript"], True,
+            {"crop_transcript": "", "crop_file": True},
+            id="crop-empty-transcript-exits",
+        ),
+        pytest.param(
+            "higgs_v3_sglomni", [""], False,
+            {"crop_transcript": "cropped transcript", "crop_file": True},
+            id="crop-transcript-satisfies-check",
+        ),
+        pytest.param(
+            "higgs_v3_sglomni", [""], True,
+            {"crop_transcript": "cropped transcript", "crop_file": False},
+            id="missing-crop-file-falls-back-to-original",
+        ),
     ],
 )
 def test_server_startup_requires_first_voice_transcript(
-    monkeypatch, tmp_path, capsys, model_id, transcripts, should_exit,
+    monkeypatch, tmp_path, capsys, model_id, transcripts, should_exit, crop,
 ):
     from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
     from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
@@ -89,6 +108,17 @@ def test_server_startup_requires_first_voice_transcript(
             for index, transcript in enumerate(transcripts)
         ],
     })
+    if crop is not None and project.voice_references:
+        entry = project.voice_references[0]
+        entry.update({
+            "crop_file_name": "a.flac",
+            "crop_start": "0.0", "crop_end": "4.0",
+            "crop_transcript": crop["crop_transcript"],
+        })
+        if crop["crop_file"]:
+            crop_path = Path(ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry))
+            crop_path.parent.mkdir(parents=True, exist_ok=True)
+            crop_path.write_bytes(b"x")
     monkeypatch.setattr(Prefs, "load", lambda: SimpleNamespace(
         project_dir=str(tmp_path), remote_tts_url="",
     ))

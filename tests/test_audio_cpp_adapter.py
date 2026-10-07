@@ -278,7 +278,7 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
         voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
         voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_PLAY_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
         voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
         f"{voice_menu_shared.LABEL_VOICE_SELECTION_MODE} (currently: user-defined)",
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,

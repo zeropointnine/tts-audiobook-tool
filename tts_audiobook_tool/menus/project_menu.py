@@ -157,6 +157,9 @@ class ProjectMenu:
             if error:
                 ask.ask_error(error)
             Tts.bind_project(state.project)
+            # Re-arm the model-dependent project FYIs (voice sample durations,
+            # segmentation max words) so they re-check against the new model.
+            state.pending_project_load_checks = True
             print_feedback("Project TTS model:", ProjectMenu.make_tts_model_label(state))
 
         MenuUtil.options_menu(

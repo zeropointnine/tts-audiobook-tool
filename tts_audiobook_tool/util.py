@@ -35,7 +35,8 @@ def print_feedback(
         no_preformat=False,
         extra_line=True,
         skip_pause=False,
-        long_pause=False
+        long_pause=False,
+        is_error=False
 ) -> None:
     """
     Should be used for printing feedback after an action is taken (eg, after a setting has been changed),
@@ -44,11 +45,17 @@ def print_feedback(
     :param no_preformat: If True, doesn't apply the standard dim italic formatting
     :param skip_pause: If True, doesn't do the typical slight pause
     :param long_pause: If True, pauses 2x longer
+    :param is_error: If True, prepends error color, forces long_pause to True, forces skip_pause to False, forces no_preformat to False
     """
+    if is_error:
+        message = COL_ERROR + message
+        long_pause = True
+        skip_pause = False
+        no_preformat = False
     if not no_preformat:
-        message = Ansi.ITALICS + COL_DIM + message
+        message = COL_DIM_ITALICS + message
     if end_value is not None:
-        message = message.strip() + " " + COL_ACCENT + str(end_value)
+        message = message.strip() + " " + Ansi.RESET + COL_DEFAULT + str(end_value)
     printt(message)
 
     if skip_pause:

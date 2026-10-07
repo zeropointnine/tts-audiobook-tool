@@ -94,10 +94,20 @@ class Server:
         self._project = result
 
         from tts_audiobook_tool.project_support.model_settings import REGISTRY
+        from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+        # Validate the transcript generation will actually use: when a crop
+        # is active on the first sample, that is the cropped span's
+        # transcript (with the same missing-crop-file fallback generation
+        # applies), not the original sample's transcript.
+        effective_transcript = ""
+        if self._project.voice_references:
+            _, effective_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+                self._project, self._project.get_tts_model_type(), 0
+            )
         if (
             REGISTRY.transcript_binding(self._project.tts_model_type) is not None
             and self._project.voice_references
-            and not self._project.voice_references[0].get("transcript", "").strip()
+            and not effective_transcript.strip()
         ):
             printt(f"{COL_ERROR}Voice clone is missing required accompanying transcript.")
             printt("Run the interactive app (tts-audiobook-tool), open this project, and add")

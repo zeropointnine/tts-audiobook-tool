@@ -31,7 +31,10 @@ _HISTORY_KEYS = (
 class AskAdvanced:
     @staticmethod
     def ask(message: str = "", prefill: str = "") -> str:
-        """Behave like input(), with editable, initially selected prefill text."""
+        """
+        Normal app callers should *not* call this directly but instead use an "ask*" function from the "ask" module.
+        Behaves like input(), but with editable, initially selected prefill text.
+        """
         if not isinstance(message, str):
             raise TypeError("prompt must be a string")
 

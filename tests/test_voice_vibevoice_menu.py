@@ -36,6 +36,8 @@ def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
                         lambda *_: pytest.fail("Opening voice controls must not load the model"))
     menu.VoiceVibeVoiceMenu.menu(state)
     items = captured["items"](state)
+    # The crop item replaced the old play item (one-for-one), so the item
+    # count and indices are unchanged from before the crop feature.
     select = items[7]
     assert get_string_from(state, items[6].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     label = strip_ansi_codes(get_string_from(state, select.label))

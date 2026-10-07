@@ -23,3 +23,14 @@ class ModelSupport(Protocol):
     def get_max_words_range_reco(self, project: Project, instance: object = None) -> tuple[int, int, str]: ...
     def should_trim_trailing_token_noise(self, project: Project, instance: object = None) -> bool: ...
     def can_hallucinate_music(self, project: Project, instance: object = None) -> bool: ...
+
+
+def max_words_exceeds_recommended(max_words: int, limit: int) -> bool:
+    """
+    Whether a segmentation `max_words_per_segment` value exceeds a model's
+    recommended maximum `limit` (the upper bound of get_max_words_range_reco).
+
+    A non-positive `limit` means the model makes no recommendation, so it is
+    never exceeded. Shared by every max-words-per-segment warning site.
+    """
+    return limit > 0 and max_words > limit

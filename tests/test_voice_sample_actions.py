@@ -21,10 +21,17 @@ def make_state(count=3):
 def capture(monkeypatch, inputs):
     errors, prompts, feedback = [], [], []
     answers = iter(inputs)
-    monkeypatch.setattr(menu.ask, "ask_input", lambda **_: next(answers))
+
+    def next_answer(**_kwargs):
+        return next(answers)
+
+    monkeypatch.setattr(menu.ask, "ask_input", lambda **_: next_answer())
     monkeypatch.setattr(menu.ask, "ask_error", errors.append)
     monkeypatch.setattr(menu, "printt", lambda text="": prompts.append(text))
-    monkeypatch.setattr(menu, "print_feedback", feedback.append)
+    monkeypatch.setattr(
+        menu, "print_feedback",
+        lambda message, **kwargs: feedback.append((message, kwargs) if kwargs else message),
+    )
     return errors, prompts, feedback
 
 
@@ -41,23 +48,52 @@ def test_move_reorders_pairs_and_saves(monkeypatch, inputs, order):
     menu.VoiceMenuShared.move_voice_sample_from_menu(state)
     assert state.project.voice_references == [original[i] for i in order]
     assert [group.voice_index for group in state.project.book.phrase_groups] == [-1, 0, 1, 2]
-    assert prompts == ["Enter voice sample number to move", "Enter new position"]
+    assert prompts == ["Enter voice sample number to move:", "Enter new position:"]
     assert not errors
     saved.assert_called_once()
 
 
-@pytest.mark.parametrize("inputs, error", [([""], False), (["x"], True), (["0"], True), (["4"], True), (["1", ""], False), (["1", "x"], True), (["1", "0"], True), (["1", "4"], True), (["2", "2"], False)])
+@pytest.mark.parametrize("inputs, error", [
+    ([""], None), (["x"], "Bad value"), (["0"], "Out of range"),
+    (["4"], "Out of range"), (["1", ""], None), (["1", "x"], "Bad value"),
+    (["1", "0"], "Out of range"), (["1", "4"], "Out of range"), (["2", "2"], None),
+])
 def test_move_invalid_cancel_and_no_change(monkeypatch, inputs, error):
     state = make_state()
     original = list(state.project.voice_references)
     saved = Mock(return_value="")
     monkeypatch.setattr(Project, "save", saved)
-    errors, _, _ = capture(monkeypatch, inputs)
+    errors, _, feedback = capture(monkeypatch, inputs)
     menu.VoiceMenuShared.move_voice_sample_from_menu(state)
     assert state.project.voice_references == original
-    assert bool(errors) == error
+    assert not errors
     if error:
-        assert errors == ["Enter a number between 1 and 3"]
+        assert feedback == [(error, {"is_error": True})]
+    saved.assert_not_called()
+
+
+@pytest.mark.parametrize("action", ["trim", "edit", "remove"])
+@pytest.mark.parametrize("value, error", [
+    ("x", "Bad value"), ("1.5", "Bad value"), ("0", "Out of range"),
+    ("-1", "Out of range"), ("4", "Out of range"),
+])
+def test_invalid_sample_index_uses_nonblocking_error_feedback(monkeypatch, action, value, error):
+    state = make_state()
+    original = list(state.project.voice_references)
+    saved = Mock()
+    monkeypatch.setattr(Project, "save", saved)
+    errors, _, feedback = capture(monkeypatch, [value])
+    if action == "trim":
+        menu.VoiceMenuShared.crop_voice_sample_from_menu(state)
+    elif action == "edit":
+        menu.VoiceMenuShared.edit_voice_sample_transcript(state)
+    else:
+        assert menu.VoiceMenuShared.remove_voice_sample_from_menu(
+            state, state.project.get_tts_model_type(),
+        ) is False
+    assert not errors
+    assert feedback == [(error, {"is_error": True})]
+    assert state.project.voice_references == original
     saved.assert_not_called()
 
 
@@ -72,49 +108,11 @@ def test_move_save_failure_restores_order(monkeypatch):
     assert not feedback
 
 
-@pytest.mark.parametrize("count, inputs, selected", [(1, [], 0), (3, ["2"], 1)])
-def test_play_uses_saved_sample_and_async_player(monkeypatch, count, inputs, selected):
-    state = make_state(count)
-    capture(monkeypatch, inputs)
-    monkeypatch.setattr(menu.ProjectVoiceUtil, "resolve_voice_file_path", lambda _, name: f"/voices/{name}")
-    sound = SimpleNamespace(data=[0] * 10, sr=10)
-    load = Mock(return_value=sound)
-    play = Mock()
-    monkeypatch.setattr(menu.SoundFileUtil, "load", load)
-    monkeypatch.setattr(menu.PlaySoundUtil, "play_sound_async", play)
-    menu.VoiceMenuShared.play_voice_sample_from_menu(state, state.project.get_tts_model_type())
-    load.assert_called_once_with(f"/voices/{selected}.flac")
-    play.assert_called_once_with(sound)
-
-
-@pytest.mark.parametrize("inputs", [[""], ["x"], ["0"], ["4"]])
-def test_play_invalid_or_canceled_does_not_load(monkeypatch, inputs):
-    state = make_state()
-    capture(monkeypatch, inputs)
-    load = Mock()
-    monkeypatch.setattr(menu.SoundFileUtil, "load", load)
-    menu.VoiceMenuShared.play_voice_sample_from_menu(state, state.project.get_tts_model_type())
-    load.assert_not_called()
-
-
-def test_play_load_error(monkeypatch):
-    state = make_state(1)
-    errors, _, _ = capture(monkeypatch, [])
-    monkeypatch.setattr(menu.SoundFileUtil, "load", lambda _: "missing audio")
-    play = Mock()
-    monkeypatch.setattr(menu.PlaySoundUtil, "play_sound_async", play)
-    menu.VoiceMenuShared.play_voice_sample_from_menu(state, state.project.get_tts_model_type())
-    assert errors == ["missing audio"]
-    play.assert_not_called()
-
-
-@pytest.mark.parametrize("action", ["move", "play", "edit"])
+@pytest.mark.parametrize("action", ["move", "edit"])
 def test_empty_sample_actions_do_not_prompt(monkeypatch, action):
     state = make_state(0)
     errors, prompts, feedback = capture(monkeypatch, [])
-    if action == "play":
-        menu.VoiceMenuShared.play_voice_sample_from_menu(state, state.project.get_tts_model_type())
-    elif action == "move":
+    if action == "move":
         menu.VoiceMenuShared.move_voice_sample_from_menu(state)
     else:
         menu.VoiceMenuShared.edit_voice_sample_transcript(state)

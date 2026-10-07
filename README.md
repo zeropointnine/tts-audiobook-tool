@@ -33,14 +33,14 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [VibeVoice](https://github.com/microsoft/VibeVoice) | ✅ | | |
 | [ZONOS2](https://github.com/Zyphra/ZONOS2) | | ✅ | |
 
-The app employs various techniques to make the nondeterministic output of generative text-to-speech models reliable enough for bulk long-form speech synthesis. For example:
+These models are unreliable at book scale. The app wraps them in the tooling needed for long-form generation:
 
 - Error detection using speech-to-text verification, with retry logic that keeps the most accurate take
-- Rational segmentation of long-form text at paragraph/sentence/phrase boundaries
-- Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
+- Rational text segmentation at paragraph/sentence/phrase boundaries
+- Silence trimming and reduction of excessive pauses, plus semantically-aware pause modulation at segment boundaries to improve prosody
 - EBU R128 loudness normalization plus optional 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) generative upsampler
 
-The app can also utilize multiple voice-clone samples, which can be assigned on a line-by-line basis. Each project has one ordered list of voice samples and transcripts shared by all its TTS models, not an app-global list. Optional dialog detection can automatically assign quoted dialog to a separate voice, simplifying setup.
+The app can also utilize multiple voice-clone samples, which can be assigned on a line-by-line basis. Optional dialog detection can automatically assign quoted dialog to a separate voice, simplifying setup.
 
 It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
 
@@ -813,14 +813,15 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-10-06**
+**2026-10-06 to 07**
 
-- A project now uses a single voice clone list instead of maintaining separate lists for each TTS model used within the same project. This makes it more convenient to switch between models mid-project.
 - The `Voice clone and model settings` menu has been split into `Voice clone` and `Model settings` menus.
+- Projects now use a **unified voice clone list** instead of a separate list for each TTS model. This makes it more convenient to switch between models mid-project.
+- Added **trim voice sample audio** full-screen interface. This can be useful when your clip is, say, 15s, but the TTS model you're using has a lower recommended duration (eg, Echo TTS recommends 10s).
 
-**2026-10-04**
+**2026-10-04 to 05**
 
-- Added support for [audio.cpp](https://github.com/0xShug0/audio.cpp) as an alternative TTS backend, along with the following models:
+- Added support for [**audio.cpp**](https://github.com/0xShug0/audio.cpp) as an alternative TTS backend, along with the following models:
     - Breeze TTS 2
     - Chatterbox
     - Echo-TTS
@@ -828,17 +829,17 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
     - Moss TTS v1.5 (Delay and Local-Transformer)
     - Omnivoice
 
-- Added support for *CosyVoice3* via SGL-Omni
-- Added support for MOSS-TTS-Local-Transformer v1.5 update (local version)
+- Added support for **CosyVoice3** via SGL-Omni
+- Added support for **MOSS-TTS-Local-Transformer v1.5** update (local version)
 
 
 **2026-09-27**
 
-- Expanded menu for the "enhance-an-audiobook" feature.
+- Expanded menu for the "**enhance-an-audiobook**" feature.
 
 **2026-09-16**
 
-- Added support for *AuK* TTS models (base and Flash) via SGL-Omni.
+- Added support for **AuK** TTS models (base and Flash) via SGL-Omni.
 
 **2026-09-15**
 

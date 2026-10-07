@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
+
 from tts_audiobook_tool.constants import (
     PROJECT_TEXT_EPUB_FILE_NAME,
     PROJECT_TEXT_FILE_NAME,
@@ -9,7 +11,10 @@ from tts_audiobook_tool.constants import (
     PROJECT_VOICE_SUBDIR,
 )
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 def test_make_supporting_project_file_names_collects_project_local_voice_files(tmp_path: Path) -> None:
@@ -203,6 +208,197 @@ def test_copy_supporting_project_files_does_not_escape_the_project_dir(tmp_path:
         str(source_dir / PROJECT_TEXT_EPUB_FILE_NAME),
     ]
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'escaped.flac').read_bytes() == b'escaped'
+
+
+def _cropped_reference() -> dict[str, str]:
+    return {
+        'file_name': 'narrator.flac',
+        'transcript': 'Original transcript.',
+        'crop_file_name': 'a.flac',
+        'crop_start': '1.25',
+        'crop_end': '4.5',
+        'crop_transcript': 'Trimmed transcript.',
+    }
+
+
+def test_transfer_collector_includes_missing_active_explicit_crops(tmp_path: Path) -> None:
+    project = Project(dir_path=str(tmp_path), voice_references=[_cropped_reference()])
+    project.voice_references.extend([
+        # Old implicit crop metadata must not infer narrator_crop.flac.
+        {'file_name': 'old.flac', 'crop_start': '0', 'crop_end': '3', 'crop_transcript': 'Old crop.'},
+        {'file_name': 'invalid.flac', 'crop_file_name': 'invalid.flac',
+         'crop_start': '4', 'crop_end': '1'},
+    ])
+
+    _, names = ProjectTransferUtil.collect_supporting_project_file_names(project)
+
+    assert names == ['narrator.flac', 'old.flac', 'invalid.flac', 'crops/a.flac']
+    assert not (tmp_path / PROJECT_VOICE_SUBDIR / 'crops/a.flac').exists()
+
+
+@pytest.mark.parametrize('original_subdir', ['', PROJECT_VOICE_SUBDIR], ids=['legacy-root', 'voice'])
+def test_transfer_preserves_explicit_crop_bytes_metadata_and_effective_pair(
+    tmp_path: Path, original_subdir: str,
+) -> None:
+    source_dir = tmp_path / 'source'
+    dest_dir = tmp_path / 'destination'
+    dest_dir.mkdir()
+    (source_dir / PROJECT_VOICE_SUBDIR / 'crops').mkdir(parents=True)
+    original_path = source_dir / original_subdir / 'narrator.flac'
+    original_path.write_bytes(b'complete original audio')
+    crop_path = source_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac'
+    crop_path.write_bytes(b'explicit trimmed audio')
+    source = Project(dir_path=str(source_dir), voice_references=[_cropped_reference()])
+    dest = Project(dir_path=str(dest_dir))
+    ProjectTransferUtil.apply_project_settings(dest, source)
+    _, voice_names = ProjectTransferUtil.collect_supporting_project_file_names(source)
+
+    assert ProjectTransferUtil.copy_supporting_project_files(dest, str(source_dir), [], voice_names) == []
+    assert dest.save() == ''
+    reloaded = ProjectLoadUtil.load_using_dir_path(str(dest_dir))
+    assert isinstance(reloaded, Project)
+    assert reloaded.voice_references == source.voice_references == [_cropped_reference()]
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == original_path.read_bytes()
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac').read_bytes() == crop_path.read_bytes()
+    assert not (dest_dir / PROJECT_VOICE_SUBDIR / 'a.flac').exists()
+    model = TtsModelType.require_by_id('fish_s2_local')
+    assert ProjectVoiceUtil.effective_voice_reference(source, model, 0) == ('crops/a.flac', 'Trimmed transcript.')
+    assert ProjectVoiceUtil.effective_voice_reference(reloaded, model, 0) == ('crops/a.flac', 'Trimmed transcript.')
+    assert ProjectVoiceUtil.effective_voice_file_path(reloaded, reloaded.voice_references[0]) == str(
+        dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac'
+    )
+
+
+def test_transfer_keeps_original_matching_crop_basename_unambiguous(tmp_path: Path) -> None:
+    source_dir = tmp_path / 'source'
+    dest_dir = tmp_path / 'destination'
+    dest_dir.mkdir()
+    (source_dir / PROJECT_VOICE_SUBDIR / 'crops').mkdir(parents=True)
+    original = source_dir / PROJECT_VOICE_SUBDIR / 'a.flac'
+    crop = source_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac'
+    original.write_bytes(b'complete original audio')
+    crop.write_bytes(b'explicit trimmed audio')
+    entry = {**_cropped_reference(), 'file_name': 'a.flac'}
+    source = Project(dir_path=str(source_dir), voice_references=[entry])
+    dest = Project(dir_path=str(dest_dir))
+    ProjectTransferUtil.apply_project_settings(dest, source)
+    _, voice_names = ProjectTransferUtil.collect_supporting_project_file_names(source)
+
+    assert voice_names == ['a.flac', 'crops/a.flac']
+    assert ProjectTransferUtil.copy_supporting_project_files(dest, str(source_dir), [], voice_names) == []
+    assert dest.voice_references == [entry]
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'a.flac').read_bytes() == original.read_bytes()
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac').read_bytes() == crop.read_bytes()
+    assert ProjectVoiceUtil.resolve_voice_file_path(dest, 'a.flac') == str(
+        dest_dir / PROJECT_VOICE_SUBDIR / 'a.flac'
+    )
+    assert ProjectVoiceUtil.get_cropped_voice_relative_path(dest.voice_references[0]) == 'crops/a.flac'
+    assert ProjectVoiceUtil.resolve_cropped_voice_file_path(dest, dest.voice_references[0]) == str(
+        dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac'
+    )
+    model = TtsModelType.require_by_id('fish_s2_local')
+    assert ProjectVoiceUtil.current_voice_reference_pair(dest, model, 0) == ('crops/a.flac', 'Trimmed transcript.')
+    assert ProjectVoiceUtil.discard_voice_crop_and_save(dest, 0) == ''
+    assert not (dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac').exists()
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'a.flac').read_bytes() == original.read_bytes()
+    assert ProjectVoiceUtil.current_voice_reference_pair(dest, model, 0) == ('a.flac', 'Original transcript.')
+
+
+def test_voice_transfer_prefers_generation_original_over_same_named_root_file(tmp_path: Path) -> None:
+    source_dir = tmp_path / 'source'
+    dest_dir = tmp_path / 'destination'
+    dest_dir.mkdir()
+    (source_dir / PROJECT_VOICE_SUBDIR / 'crops').mkdir(parents=True)
+    root_original = source_dir / 'narrator.flac'
+    voice_original = source_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac'
+    root_original.write_bytes(b'old root original')
+    voice_original.write_bytes(b'generation original')
+    (source_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac').write_bytes(b'active crop audio')
+    source = Project(dir_path=str(source_dir), voice_references=[_cropped_reference()])
+    dest = Project(dir_path=str(dest_dir))
+    ProjectTransferUtil.apply_project_settings(dest, source)
+    _, voice_names = ProjectTransferUtil.collect_supporting_project_file_names(source)
+
+    assert ProjectVoiceUtil.resolve_voice_file_path(source, 'narrator.flac') == str(voice_original)
+    # Generic/text callers still retain their original root-first behavior.
+    assert ProjectTransferUtil.find_supporting_project_file_source_path(
+        str(source_dir), 'narrator.flac',
+    ).path == str(root_original)
+    assert ProjectTransferUtil.copy_supporting_project_files(dest, str(source_dir), [], voice_names) == []
+    assert dest.save() == ''
+    reloaded = ProjectLoadUtil.load_using_dir_path(str(dest_dir))
+    assert isinstance(reloaded, Project)
+    assert reloaded.voice_references == source.voice_references == [_cropped_reference()]
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == voice_original.read_bytes()
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac').read_bytes() == b'active crop audio'
+    model = TtsModelType.require_by_id('fish_s2_local')
+    assert ProjectVoiceUtil.effective_voice_reference(reloaded, model, 0) == ('crops/a.flac', 'Trimmed transcript.')
+    assert ProjectVoiceUtil.effective_voice_file_path(reloaded, reloaded.voice_references[0]) == str(
+        dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac'
+    )
+
+
+@pytest.mark.parametrize('original_subdir', ['', PROJECT_VOICE_SUBDIR], ids=['legacy-root', 'voice'])
+def test_missing_crop_never_copies_unrelated_root_basename_or_implicit_sibling(
+    tmp_path: Path, original_subdir: str,
+) -> None:
+    source_dir = tmp_path / 'source'
+    dest_dir = tmp_path / 'destination'
+    dest_dir.mkdir()
+    (source_dir / PROJECT_VOICE_SUBDIR).mkdir(parents=True)
+    (source_dir / original_subdir / 'narrator.flac').write_bytes(b'original audio')
+    for relative_path in ['crops/a.flac', 'a.flac', 'voice/a.flac',
+                          'narrator_crop.flac', 'voice/narrator_crop.flac']:
+        decoy = source_dir / relative_path
+        decoy.parent.mkdir(parents=True, exist_ok=True)
+        decoy.write_bytes(b'unrelated audio')
+    source = Project(dir_path=str(source_dir), voice_references=[_cropped_reference()])
+    dest = Project(dir_path=str(dest_dir))
+    ProjectTransferUtil.apply_project_settings(dest, source)
+    _, voice_names = ProjectTransferUtil.collect_supporting_project_file_names(source)
+
+    missing = ProjectTransferUtil.copy_supporting_project_files(dest, str(source_dir), [], voice_names)
+
+    assert missing == [str(source_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac')]
+    assert (dest_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == b'original audio'
+    assert not (dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac').exists()
+    assert not (dest_dir / PROJECT_VOICE_SUBDIR / 'a.flac').exists()
+    assert dest.voice_references == source.voice_references
+    model = TtsModelType.require_by_id('fish_s2_local')
+    assert ProjectVoiceUtil.effective_voice_reference(dest, model, 0) == ('narrator.flac', 'Original transcript.')
+    assert ProjectVoiceUtil.effective_voice_file_path(dest, dest.voice_references[0]) == str(
+        dest_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac'
+    )
+
+
+@pytest.mark.parametrize('nested_subdir', ['', PROJECT_VOICE_SUBDIR], ids=['legacy-root', 'voice'])
+def test_transfer_preserves_nested_original_paths_without_basename_overwrites(
+    tmp_path: Path, nested_subdir: str,
+) -> None:
+    source_dir = tmp_path / 'source'
+    dest_dir = tmp_path / 'destination'
+    dest_dir.mkdir()
+    (source_dir / PROJECT_VOICE_SUBDIR).mkdir(parents=True)
+    expected = {'first/narrator.flac': b'first voice', 'second/narrator.flac': b'second voice'}
+    for name, content in expected.items():
+        path = source_dir / nested_subdir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    # A root basename must not take precedence over an exact nested voice path.
+    (source_dir / 'narrator.flac').write_bytes(b'legacy bare voice')
+    expected['narrator.flac'] = b'legacy bare voice'
+    source = Project(dir_path=str(source_dir), voice_references=[
+        {'file_name': name, 'transcript': name} for name in expected
+    ])
+    dest = Project(dir_path=str(dest_dir))
+    ProjectTransferUtil.apply_project_settings(dest, source)
+    _, voice_names = ProjectTransferUtil.collect_supporting_project_file_names(source)
+
+    assert ProjectTransferUtil.copy_supporting_project_files(dest, str(source_dir), [], voice_names) == []
+
+    for name, content in expected.items():
+        assert (dest_dir / PROJECT_VOICE_SUBDIR / name).read_bytes() == content
+        assert Path(ProjectVoiceUtil.resolve_voice_file_path(dest, name)).read_bytes() == content
 
 
 def test_get_snapshot_source_dir_falls_back_to_the_abr_files_own_directory(tmp_path: Path) -> None:

@@ -13,6 +13,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
@@ -20,6 +22,8 @@ from tts_audiobook_tool.constants import PROJECT_SOUND_SEGMENTS_SUBDIR, PROJECT_
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.menus import project_new_menu as project_new_menu_module
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -383,6 +387,61 @@ def test_abr_import_cancelled_voice_choice_keeps_destination_and_selection_untou
     assert "cancelled" in errors[0]
     assert not (tmp_path / "dest").exists()
     assert state.project is previous and state.prefs.project_dir == ""
+
+
+@pytest.mark.parametrize('original_subdir', ['', PROJECT_VOICE_SUBDIR], ids=['legacy-root', 'voice'])
+@pytest.mark.parametrize('crop_exists', [True, False], ids=['active-crop', 'missing-crop'])
+def test_abr_import_preserves_explicit_crop_and_warns_when_missing(
+    monkeypatch, tmp_path, capsys, original_subdir, crop_exists,
+):
+    state = _make_state()
+    source = tmp_path / 'source'
+    (source / PROJECT_VOICE_SUBDIR / 'crops').mkdir(parents=True)
+    (source / original_subdir / 'narrator.flac').write_bytes(b'original audio')
+    if crop_exists:
+        (source / PROJECT_VOICE_SUBDIR / 'crops/a.flac').write_bytes(b'trimmed audio')
+    else:
+        # None of these may stand in for voice/crops/a.flac.
+        for name in ['a.flac', 'voice/a.flac', 'crops/a.flac', 'voice/narrator_crop.flac']:
+            path = source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'unrelated audio')
+    entry = {
+        'file_name': 'narrator.flac', 'transcript': 'Original transcript.',
+        'crop_file_name': 'a.flac', 'crop_start': '1.25', 'crop_end': '4.5',
+        'crop_transcript': 'Trimmed transcript.',
+    }
+    _stub_abr_snapshot(monkeypatch, tmp_path, {
+        'version': 4, 'source_dir_display': str(source), 'voice_references': [entry],
+    })
+    errors, _ = _collect_exits(monkeypatch)
+
+    with _quiet_project_setter():
+        assert ProjectNewMenu.make_new_project_using_abr(state) is True
+
+    assert not errors
+    dest = tmp_path / 'dest'
+    assert state.project.voice_references == [entry]
+    saved = json.loads((dest / 'project.json').read_text())
+    assert saved['voice_references'] == [entry]
+    assert (dest / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == b'original audio'
+    crop_path = dest / PROJECT_VOICE_SUBDIR / 'crops/a.flac'
+    output = capsys.readouterr().out
+    if crop_exists:
+        assert crop_path.read_bytes() == b'trimmed audio'
+        assert str(source / PROJECT_VOICE_SUBDIR / 'crops/a.flac') not in output
+        expected_pair = ('crops/a.flac', 'Trimmed transcript.')
+        expected_path = crop_path
+    else:
+        assert not crop_path.exists()
+        assert str(source / PROJECT_VOICE_SUBDIR / 'crops/a.flac') in output
+        assert 'were not copied over' in output
+        expected_pair = ('narrator.flac', 'Original transcript.')
+        expected_path = dest / PROJECT_VOICE_SUBDIR / 'narrator.flac'
+    assert not (dest / PROJECT_VOICE_SUBDIR / 'a.flac').exists()
+    model = TtsModelType.require_by_id('fish_s2_local')
+    assert ProjectVoiceUtil.effective_voice_reference(state.project, model, 0) == expected_pair
+    assert ProjectVoiceUtil.effective_voice_file_path(state.project, state.project.voice_references[0]) == str(expected_path)
 
 
 # --- Console-fallback path normalization ---

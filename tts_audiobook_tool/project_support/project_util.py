@@ -76,11 +76,6 @@ class ProjectUtil:
         return ProjectTransferUtil.make_supporting_project_file_names(project)
 
     @staticmethod
-    def copy_supporting_project_files(project: Project, source_dir: str, file_names: list[str]) -> list[str]:
-        from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
-        return ProjectTransferUtil.copy_supporting_project_files(project, source_dir, file_names)
-
-    @staticmethod
     def find_supporting_project_file_source_path(source_dir: str, file_name: str) -> SourceFileMatch:
         from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
         return ProjectTransferUtil.find_supporting_project_file_source_path(source_dir, file_name)

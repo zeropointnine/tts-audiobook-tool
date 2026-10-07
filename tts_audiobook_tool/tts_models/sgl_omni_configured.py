@@ -13,6 +13,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
 from tts_audiobook_tool.tts_models.sgl_omni_definition import NumericParameter, SglOmniModelDefinition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -87,13 +88,13 @@ class ConfiguredModelSupport:
     def get_max_words_exceed_warning(self, project: Project) -> str:
         # Higgs uses the shared recommended range; no warning when within it.
         limit = self.get_max_words_range_reco(project)[1]
-        if project.book.segmentation_settings.max_words_per_segment <= limit:
+        count = project.book.segmentation_settings.max_words_per_segment
+        if not max_words_exceeds_recommended(count, limit):
             return ""
         from tts_audiobook_tool.constants import Ansi
-        count = project.book.segmentation_settings.max_words_per_segment
         name = self.INFO.ui.get("proper_name") or self.INFO.id
         return (f"{Ansi.ITALICS}Source text's max word length ({count}) exceeds {name} recommended model limit ({limit})\n"
-                f"{Ansi.ITALICS}Output accuracy may be degraded")
+                f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded")
 
     def get_menu_text(self, project: Project, instance: object = None) -> str:
         return self.INFO.ui.get("proper_name") or ""

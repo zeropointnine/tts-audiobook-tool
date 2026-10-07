@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+import math
 from typing import Any
 
 from tts_audiobook_tool.app_support import path_norm
@@ -39,6 +40,101 @@ class VoiceReferenceMigrationCancelled(ValueError):
     pass
 
 
+# Optional per-entry crop fields (see docs-dev/voice-sample-crop.md). Times
+# are stored as canonical decimal strings so the entry dicts remain
+# dict[str, str] throughout the serialization/compat stack.
+VOICE_CROP_SUBDIR = 'crops'
+CROP_FILE_NAME_FIELD = 'crop_file_name'
+CROP_START_FIELD = 'crop_start'
+CROP_END_FIELD = 'crop_end'
+CROP_TRANSCRIPT_FIELD = 'crop_transcript'
+CROP_FIELDS = (CROP_FILE_NAME_FIELD, CROP_START_FIELD, CROP_END_FIELD, CROP_TRANSCRIPT_FIELD)
+
+
+def normalize_crop_file_name(value: Any) -> str | None:
+    """Accept only a FLAC basename; the managed directory is not persisted."""
+    if not isinstance(value, str):
+        return None
+    if (not value.endswith('.flac') or value == '.flac'
+            or any(char in value for char in ('/', '\\', ':', '\x00'))):
+        return None
+    return value
+
+
+def format_crop_seconds(value: float) -> str:
+    """Canonical persisted form of a crop boundary in seconds."""
+    return str(float(value))
+
+
+def parse_crop_range(ref: dict) -> tuple[float, float] | None:
+    """Parse a validated entry's crop range, or None when no crop is set.
+
+    Only meaningful for entries that already passed through
+    `normalize_voice_references`; malformed values yield None.
+    """
+    if normalize_crop_file_name(ref.get(CROP_FILE_NAME_FIELD)) is None:
+        return None
+    try:
+        start = float(ref[CROP_START_FIELD])
+        end = float(ref[CROP_END_FIELD])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+    if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end):
+        return None
+    return start, end
+
+
+def copy_crop_fields(ref: dict) -> dict:
+    """Copy the crop subset of an already-normalized entry."""
+    return {name: ref[name] for name in CROP_FIELDS if name in ref}
+
+
+def _normalize_crop_fields(ref: dict, where: str, index: int) -> dict:
+    """Drop malformed crop metadata with a warning; never infer a crop path.
+
+    The pre-deployment sibling naming scheme is intentionally unsupported.
+    Original sample files and transcripts are retained untouched.
+    """
+    from tts_audiobook_tool.l import L
+
+    if not any(name in ref for name in CROP_FIELDS):
+        return {}
+
+    crop_file_name = normalize_crop_file_name(ref.get(CROP_FILE_NAME_FIELD))
+    if crop_file_name is None:
+        L.w(f'{where}[{index}]: trim requires an explicit <name>.flac basename; dropping trim')
+        return {}
+
+    transcript = ref.get(CROP_TRANSCRIPT_FIELD, '')
+    if not isinstance(transcript, str):
+        L.w(f'{where}[{index}]: trim transcript must be a string; dropping trim')
+        return {}
+
+    parsed: tuple[float, float] | None = None
+    try:
+        start_raw = ref.get(CROP_START_FIELD)
+        end_raw = ref.get(CROP_END_FIELD)
+        if start_raw is None or end_raw is None:
+            raise ValueError('trim start and end must both be present')
+        start = float(start_raw)  # accepts numbers or numeric strings
+        end = float(end_raw)
+        if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end):
+            raise ValueError('expected finite seconds with 0 <= start < end')
+        parsed = start, end
+    except (TypeError, ValueError, OverflowError) as e:
+        L.w(f'{where}[{index}]: invalid trim range ({e}); dropping trim')
+        return {}
+
+    assert parsed is not None
+    start, end = parsed
+    return {
+        CROP_FILE_NAME_FIELD: crop_file_name,
+        CROP_START_FIELD: format_crop_seconds(start),
+        CROP_END_FIELD: format_crop_seconds(end),
+        CROP_TRANSCRIPT_FIELD: transcript,
+    }
+
+
 def normalize_voice_references(value: Any, where: str = 'voice_references') -> list[dict[str, str]]:
     if not isinstance(value, list):
         raise ValueError(f'{where} must be an array')
@@ -55,7 +151,11 @@ def normalize_voice_references(value: Any, where: str = 'voice_references') -> l
             from tts_audiobook_tool.l import L
             L.w(f'{where}[{index}].file_name is not a usable project-local path; dropping entry')
             continue
-        result.append({'file_name': file_name, 'transcript': ref.get('transcript', '')})
+        entry = {'file_name': file_name, 'transcript': ref.get('transcript', '')}
+        crop_fields = _normalize_crop_fields(ref, where, index)
+        if crop_fields:
+            entry.update(crop_fields)
+        result.append(entry)
     return result
 
 

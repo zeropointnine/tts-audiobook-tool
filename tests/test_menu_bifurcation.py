@@ -110,11 +110,11 @@ def test_all_local_voice_menus_keep_sample_selection_group(
             assert add_label == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
     expected = [
         voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_PLAY_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
         voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
     ]
     if voice_count >= 2:
+        expected.insert(1, voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE)
         expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     assert len(labels) == len(expected)
@@ -137,7 +137,7 @@ def test_all_local_models_route_settings_without_sample_controls(monkeypatch, mo
     assert not any(label.startswith((voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
                                      voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
                                      voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
-                                     voice_menu_shared.LABEL_PLAY_VOICE_SAMPLE,
+                                     voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
                                      voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
                                      "Add/remove voice samples", "Select voice clone sample",
                                      voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
@@ -331,7 +331,7 @@ def test_remote_voice_factory_tracks_backend_changes(monkeypatch, next_id):
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
         voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
         voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_PLAY_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
         voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
     ]
     assert labels[5].startswith(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)

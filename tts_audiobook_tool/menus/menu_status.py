@@ -5,6 +5,7 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
+from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import ModelStateSnapshot
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -63,8 +64,12 @@ class MenuStatus:
         max_duration = model.value.ui.get("voice_sample_max_duration_s")
         if max_duration is not None:
             count = 0
-            for voice in ProjectVoiceUtil.get_voice_values(state.project, model):
-                path = ProjectVoiceUtil.resolve_voice_file_path(state.project, voice)
+            entries = state.project.voice_references
+            for index, voice in enumerate(ProjectVoiceUtil.get_voice_values(state.project, model)):
+                # An active crop is what generation uses, so its (shorter)
+                # duration is what this hint should measure.
+                entry = entries[index] if index < len(entries) else {"file_name": voice}
+                path = ProjectVoiceUtil.effective_voice_file_path(state.project, entry)
                 duration = AudioMetaUtil.get_audio_duration(path)
                 if duration is not None and duration > max_duration:
                     count += 1
@@ -80,11 +85,11 @@ class MenuStatus:
             return
         limit = Tts.get_model_support(state.project).get_max_words_range_reco(state.project)[1]
         max_words = state.project.book.segmentation_settings.max_words_per_segment
-        if limit > 0 and max_words > limit:
+        if max_words_exceeds_recommended(max_words, limit):
             hints.print_hint(Hint("", "FYI", (
                 f"This project's text was segmented with a maximum of {max_words} words per segment,\n"
                 f"exceeding the current model's recommended maximum of {limit}.\n"
-                "Output accuracy may be degraded."
+                "Output accuracy on longer prompts may be degraded."
             )))
 
     @staticmethod

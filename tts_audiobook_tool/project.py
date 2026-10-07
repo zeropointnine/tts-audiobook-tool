@@ -137,12 +137,17 @@ class Project(BaseModel):
             if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
                 raise ValueError(f"{model_id}.{name}: expected a list of strings")
             if name == "transcript":
+                from tts_audiobook_tool.project_support.voice_reference_migration import copy_crop_fields
                 self.voice_references = [
-                    {"file_name": ref["file_name"], "transcript": value[i] if i < len(value) else ""}
+                    {**copy_crop_fields(ref), "file_name": ref["file_name"],
+                     "transcript": value[i] if i < len(value) else ""}
                     for i, ref in enumerate(self.voice_references)
                 ]
             else:
                 from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
+                # Replacing the file-name list points entries at different
+                # samples, so any crop fields are intentionally not carried
+                # over: a crop range belongs to the file it was cut from.
                 self.voice_references = normalize_voice_references([
                     {"file_name": item, "transcript": self.voice_references[i].get("transcript", "") if i < len(self.voice_references) else ""}
                     for i, item in enumerate(value)

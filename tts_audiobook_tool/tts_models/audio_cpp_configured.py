@@ -14,6 +14,7 @@ from tts_audiobook_tool.tts_models.audio_cpp_definition import (
     AudioCppParameter,
     AudioCppTextParameter,
 )
+from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 if TYPE_CHECKING:
@@ -78,11 +79,11 @@ class AudioCppModelSupport:
         reco = self.get_max_words_range_reco(project)
         limit = reco[1]
         count = project.book.segmentation_settings.max_words_per_segment
-        if count <= limit:
+        if not max_words_exceeds_recommended(count, limit):
             return ""
         name = reco[2] or self.INFO.ui.get("proper_name") or self.INFO.id
         return (f"{Ansi.ITALICS}Source text's max word length ({count}) exceeds {name} recommended model limit ({limit})\n"
-                f"{Ansi.ITALICS}Output accuracy may be degraded")
+                f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded")
 
     def get_menu_text(self, project: Project, instance: object = None) -> str:
         return self.INFO.ui.get("proper_name") or ""

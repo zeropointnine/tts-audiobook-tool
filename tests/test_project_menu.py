@@ -232,6 +232,7 @@ def test_project_model_picker_saves_only_project_selection(monkeypatch, selected
     state = cast(State, SimpleNamespace(
         project=project, prefs=object(),
         pending_tts_model_change=PendingTtsModelChange("chatterbox_local", "mira_local"),
+        pending_project_load_checks=False,
     ))
     captured = {}
     saves = []
@@ -252,9 +253,11 @@ def test_project_model_picker_saves_only_project_selection(monkeypatch, selected
     assert project.tts_model_type == "mira_local"
     captured["on_select"](selected)
     assert state.pending_tts_model_change is None
+    assert state.pending_project_load_checks is True
     assert saves == bindings == [selected.id]
     captured["on_select"](TtsModelType.require_by_id("none"))
     assert project.tts_model_type == "none"
+    assert state.pending_project_load_checks is True
 
 
 def test_project_model_picker_preserves_unknown_selection_until_explicit_choice(monkeypatch):

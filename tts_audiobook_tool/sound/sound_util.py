@@ -25,6 +25,11 @@ class SoundUtil:
         return Sound(new_data, target_sr)
 
     @staticmethod
+    def seconds_to_sample_index(seconds: float, sample_rate: int) -> int:
+        """Round a boundary to the nearest sample, tolerating float drift."""
+        return round(seconds * sample_rate)
+
+    @staticmethod
     def trim(sound: Sound, start_time: float | None, end_time: float | None) -> Sound:
 
         if start_time is None:
@@ -35,8 +40,8 @@ class SoundUtil:
             # TODO: something is reporting an end_time that is longer than the sound duration :/
             end_time = sound.duration
 
-        start_samples = int(start_time * sound.sr)
-        end_samples = int(end_time * sound.sr)
+        start_samples = SoundUtil.seconds_to_sample_index(start_time, sound.sr)
+        end_samples = SoundUtil.seconds_to_sample_index(end_time, sound.sr)
         if end_samples > len(sound.data):
             end_samples = len(sound.data)
 

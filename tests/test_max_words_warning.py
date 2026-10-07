@@ -28,7 +28,7 @@ def test_warning_uses_proper_name_when_no_disambiguator():
     result = Tts.get_model_support(project).get_max_words_exceed_warning(project)
     assert result.startswith(f"{Ansi.ITALICS}Source text's max word length (80)")
     assert "exceeds GLM-TTS recommended model limit (60)" in result
-    assert result.endswith(f"{Ansi.ITALICS}Output accuracy may be degraded")
+    assert result.endswith(f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded")
     assert result.count("\n") == 1
 
 

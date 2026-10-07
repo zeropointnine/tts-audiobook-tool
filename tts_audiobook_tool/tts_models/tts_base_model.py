@@ -5,6 +5,7 @@ from typing import Any, Callable, TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback, VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -320,17 +321,15 @@ class TtsBaseModel(ABC):
         """
         reco = cls.get_max_words_range_reco(project)
         limit = reco[1]
-        if limit <= 0:
-            return ""
         max_words = project.book.segmentation_settings.max_words_per_segment
-        if max_words <= limit:
+        if not max_words_exceeds_recommended(max_words, limit):
             return ""
 
         name = reco[2] or cls.INFO.ui.get("proper_name") or cls.INFO.id
         return (
             f"{Ansi.ITALICS}Source text's max word length ({max_words})"
             f" exceeds {name} recommended model limit ({limit})\n"
-            f"{Ansi.ITALICS}Output accuracy may be degraded"
+            f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded"
         )
 
     @classmethod

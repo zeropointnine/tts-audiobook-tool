@@ -272,7 +272,16 @@ class ProjectTransferUtil:
         ]
         # The clone list is project-wide. Collect it once, then independently
         # collect catalog-declared secondary files such as IndexTTS emo_voice.
+        from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+
         raw_voice_file_names: list[object] = [entry.get("file_name") for entry in project.voice_references]
+        # A crop is additional persisted audio, not a replacement for the
+        # original. Keep missing active crops in the list so transfer reports
+        # them rather than silently changing the effective voice/transcript.
+        raw_voice_file_names.extend(
+            ProjectVoiceUtil.get_cropped_voice_relative_path(entry) for entry in project.voice_references
+            if ProjectVoiceUtil.get_crop_range(entry) is not None
+        )
         seen_owners: set[tuple[str, str]] = set()
         for model_type in TtsModelType.all():
             for binding in REGISTRY.for_model(model_type.id):
@@ -321,9 +330,9 @@ class ProjectTransferUtil:
         strict_copy_errors: bool = False,
     ) -> list[str]:
         """
-        Copies text files to the destination project root and voice sample
-        files into its voice subdir — wherever in the source project the files
-        happened to be found, including the legacy project-root layout.
+        Copies text files to the destination project root and voice samples
+        into its voice subdir, preserving nested paths and upgrading legacy
+        root layouts. Managed crops are copied only from source voice/crops.
         """
         if not isinstance(source_dir, str):
             source_dir = ''
@@ -332,22 +341,35 @@ class ProjectTransferUtil:
 
         for file_names, is_voice_file in ((text_file_names, False), (voice_file_names, True)):
             for file_name in file_names:
-                match = ProjectTransferUtil.find_supporting_project_file_source_path(source_dir, file_name)
-                if not match.path:
-                    missing_paths.append(
-                        path_norm.join_project_relative(source_dir, file_name) if source_dir else file_name
+                name_parts = path_norm.split_relative(file_name)
+                is_crop = is_voice_file and bool(name_parts) and name_parts[0] == "crops"
+                if is_crop:
+                    # Explicit crops live only in voice/crops, independently of
+                    # the original's (possibly legacy) location. Never let the
+                    # general root/basename search substitute unrelated audio.
+                    relative_path = f"{PROJECT_VOICE_SUBDIR}/{file_name}"
+                    source_path = path_norm.join_project_relative(source_dir, relative_path) if source_dir else ""
+                    match = (
+                        SourceFileMatch(source_path, relative_path)
+                        if source_path and os.path.isfile(source_path)
+                        else SourceFileMatch("", "")
                     )
+                    missing_path = source_path or relative_path
+                else:
+                    match = ProjectTransferUtil.find_supporting_project_file_source_path(
+                        source_dir, file_name, prefer_voice=is_voice_file,
+                    )
+                    missing_path = path_norm.join_project_relative(source_dir, file_name) if source_dir else file_name
+                if not match.path:
+                    missing_paths.append(missing_path)
                     continue
 
-                if is_voice_file:
-                    # Saved voice references are bare names, which resolve
-                    # against the voice subdir first, so the copy's place in
-                    # the destination is the voice subdir regardless of where
-                    # the source project kept it.
-                    base_name = path_norm.split_relative(match.relative_path)[-1]
-                    relative_path = f"{PROJECT_VOICE_SUBDIR}/{base_name}"
-                else:
-                    relative_path = match.relative_path
+                relative_path = match.relative_path
+                if is_voice_file and path_norm.split_relative(relative_path)[0] != PROJECT_VOICE_SUBDIR:
+                    # Upgrade legacy root layouts, retaining the actual nested
+                    # path. Flattening would lose crops and overwrite samples
+                    # in different directories that share a basename.
+                    relative_path = f"{PROJECT_VOICE_SUBDIR}/{relative_path}"
 
                 dest_path = path_norm.join_project_relative(project.dir_path, relative_path)
                 try:
@@ -363,7 +385,9 @@ class ProjectTransferUtil:
         return missing_paths
 
     @staticmethod
-    def find_supporting_project_file_source_path(source_dir: str, file_name: str) -> SourceFileMatch:
+    def find_supporting_project_file_source_path(
+        source_dir: str, file_name: str, *, prefer_voice: bool = False,
+    ) -> SourceFileMatch:
         """
         Look for a project-local file under `source_dir`.
 
@@ -373,7 +397,9 @@ class ProjectTransferUtil:
         the file was found; `copy_supporting_project_files` upgrades legacy
         root-level voice files into the destination's voice subdir —
         previously derived with `os.path.commonpath`, which raises when the
-        two paths belong to different path grammars.
+        two paths belong to different path grammars. Voice copies set
+        `prefer_voice` to match generation's voice-first lookup; text and
+        default callers retain root-first precedence.
         """
         name_parts = path_norm.split_relative(file_name)
         if not name_parts:
@@ -391,11 +417,15 @@ class ProjectTransferUtil:
         if source_dir:
             candidate_dirs.append((source_dir, ""))
             candidate_dirs.append((os.path.join(source_dir, PROJECT_VOICE_SUBDIR), PROJECT_VOICE_SUBDIR))
+            if prefer_voice:
+                candidate_dirs.reverse()
         else:
             candidate_dirs.append(("", ""))
 
-        for candidate_dir, dir_prefix in candidate_dirs:
-            for candidate_name in candidate_names:
+        # Exhaust exact nested matches before legacy basename recovery. An
+        # unrelated root-level basename must not hide distinct nested samples.
+        for candidate_name in candidate_names:
+            for candidate_dir, dir_prefix in candidate_dirs:
                 if not candidate_dir:
                     candidate_path = candidate_name
                 else:
@@ -405,7 +435,7 @@ class ProjectTransferUtil:
                     continue
 
                 if dir_prefix:
-                    relative_path = f"{dir_prefix}/{base_name}"
+                    relative_path = f"{dir_prefix}/{candidate_name}"
                 else:
                     relative_path = candidate_name
                 return SourceFileMatch(candidate_path, relative_path)

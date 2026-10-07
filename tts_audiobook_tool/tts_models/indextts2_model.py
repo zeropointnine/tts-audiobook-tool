@@ -12,6 +12,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
+from tts_audiobook_tool.tts_models.tts_base_model import VoiceCloneCacheKey
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
@@ -44,10 +45,14 @@ class IndexTts2Model(IndexTts2BaseModel):
             use_cuda_kernel=False,
             use_deepspeed=False
         )
+        self._speaker_reference_key: VoiceCloneCacheKey | None = None
+        self._emotion_reference_key: VoiceCloneCacheKey | None = None
 
 
     def kill(self) -> None:
         self.model = None
+        self._speaker_reference_key = None
+        self._emotion_reference_key = None
 
     def generate_using_project(
             self,
@@ -142,13 +147,24 @@ class IndexTts2Model(IndexTts2BaseModel):
         app_support.set_seed(seed)
 
         try:
-            # FYI, infer() internally caches the derived voice intermediates (speaker
-            # embedding, style, prompt condition, reference mel) keyed by path string,
-            # so a tool-side voice clone cache is redundant for single-voice runs.
-            # Not opting in to RETAINS_MULTIPLE_VOICE_CLONES either: the library cache
-            # is a single slot that fully evicts on every voice switch, and infer()
-            # only accepts a path string, so multi-voice support would require forking
-            # the indextts package.
+            # infer() caches conditioning by path only. Crops and imported
+            # samples can change in place, so invalidate its path markers when
+            # the standard file-revision key changes. Keep the cached tensors
+            # intact here: infer() frees/replaces them through its normal miss
+            # branch. Unchanged references retain the library's single-slot cache.
+            speaker_key = self._make_voice_clone_cache_key(voice_path, "")
+            # IndexTTS2 ignores an external emotion clip when a vector is set;
+            # otherwise a missing emotion clip defaults to the speaker reference.
+            emotion_path = voice_path if emo_vector else (emo_voice_path or voice_path)
+            emotion_key = self._make_voice_clone_cache_key(emotion_path, "")
+            if speaker_key != self._speaker_reference_key:
+                self.model.cache_spk_audio_prompt = None
+                self._speaker_reference_key = speaker_key
+            if emotion_key != self._emotion_reference_key:
+                self.model.cache_emo_audio_prompt = None
+                self._emotion_reference_key = emotion_key
+            # Track invalidated revisions before inference, including on failure:
+            # the library may have refreshed only part of its conditioning cache.
             result = self.model.infer(
                 spk_audio_prompt=voice_path,
                 text=text,
