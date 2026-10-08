@@ -50,6 +50,10 @@ def sound():
     return Sound(np.full(100, 0.1, dtype=np.float32), APP_SAMPLE_RATE)
 
 
+def long_sound(seconds):
+    return Sound(np.full(int(APP_SAMPLE_RATE * seconds), 0.1, dtype=np.float32), APP_SAMPLE_RATE)
+
+
 @pytest.mark.parametrize("model_id", ["mira_local", "dots_local", "indextts2_local", "pocket_local", "qwen3tts_sglomni"])
 def test_models_read_identical_pairs_even_without_transcript_capability(model_id):
     project = Project(voice_references=references())
@@ -196,7 +200,7 @@ def test_import_nonrequiring_model_retains_sidecar_but_secondary_ignores_it(tmp_
     prefs = SimpleNamespace(last_voice_dir="", save=lambda: None, stt_variant=SttVariant.DISABLED)
     state = cast(State, SimpleNamespace(project=project, prefs=prefs))
     monkeypatch.setattr(VoiceMenuShared, "ask_voice_file", lambda *_: str(path))
-    monkeypatch.setattr(SoundFileUtil, "load", lambda *_: sound())
+    monkeypatch.setattr(SoundFileUtil, "load", lambda *_: long_sound(2.5))
     monkeypatch.setattr(SoundFileUtil, "save_flac", lambda *_: "")
     monkeypatch.setattr(voice_menu_shared.SoundPipeline, "apply_voice_clone_post_processing", lambda value: value)
     monkeypatch.setattr(voice_menu_shared.PlaySoundUtil, "play_sound_async", lambda *_: None)
@@ -205,6 +209,37 @@ def test_import_nonrequiring_model_retains_sidecar_but_secondary_ignores_it(tmp_
     monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *_: None)
     VoiceMenuShared.ask_and_set_voice_file(state, model("indextts2_local" if secondary else "mira_local"), is_secondary=secondary)
     assert project.voice_references == ([] if secondary else [{"file_name": "clip.flac", "transcript": "Sidecar text"}])
+
+
+def _setup_short_import(tmp_path, monkeypatch, raw_seconds, trimmed_seconds):
+    path = tmp_path / "clip.wav"
+    path.write_bytes(b"sound")
+    project = Project(dir_path=str(tmp_path))
+    prefs = SimpleNamespace(last_voice_dir="", save=lambda: None, stt_variant=SttVariant.DISABLED)
+    state = cast(State, SimpleNamespace(project=project, prefs=prefs))
+    errors: list[str] = []
+    monkeypatch.setattr(VoiceMenuShared, "ask_voice_file", lambda *_: str(path))
+    monkeypatch.setattr(SoundFileUtil, "load", lambda *_: long_sound(raw_seconds))
+    monkeypatch.setattr(voice_menu_shared.SoundPipeline, "apply_voice_clone_post_processing", lambda value: long_sound(trimmed_seconds))
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_error", errors.append)
+    monkeypatch.setattr(voice_menu_shared.PlaySoundUtil, "play_sound_async", lambda *_: pytest.fail("unexpected playback"))
+    monkeypatch.setattr(voice_menu_shared.hints, "show_hint_if_necessary", lambda *_, **__: None)
+    monkeypatch.setattr(voice_menu_shared.Transcriber, "transcribe_to_words", lambda *_: pytest.fail("unexpected STT"))
+    return state, project, errors
+
+
+def test_import_rejects_raw_sound_under_two_seconds(tmp_path, monkeypatch):
+    state, project, errors = _setup_short_import(tmp_path, monkeypatch, 1.0, 1.0)
+    VoiceMenuShared.ask_and_set_voice_file(state, model())
+    assert errors == ["Sound file must be at least 2 seconds"]
+    assert project.voice_references == []
+
+
+def test_import_rejects_sound_under_two_seconds_after_trim(tmp_path, monkeypatch):
+    state, project, errors = _setup_short_import(tmp_path, monkeypatch, 3.0, 1.0)
+    VoiceMenuShared.ask_and_set_voice_file(state, model())
+    assert errors == ["Sound file post silence trim must be at least 2 seconds"]
+    assert project.voice_references == []
 
 
 def test_abr_validation_migrates_single_source_without_mutating_snapshot():

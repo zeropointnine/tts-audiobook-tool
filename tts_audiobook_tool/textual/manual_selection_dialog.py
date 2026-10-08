@@ -64,6 +64,10 @@ class ManualSelectionDialog(ModalScreen[set[int] | None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id != "manual-selection-input":
             return
+        if not event.value.strip():
+            # No input: do nothing (same as cancel)
+            self.dismiss(None)
+            return
         line_indices, errors = RangeStringUtil.parse_ranges_string(
             event.value, self.line_count, strict=False
         )

@@ -39,6 +39,9 @@ LABEL_EDIT_VOICE_TRANSCRIPTION = "Edit voice sample transcription"
 LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 
+# Minimum duration of an imported voice sample, checked before and after silence trim
+VOICE_SAMPLE_MIN_DURATION_S = 2.0
+
 
 class VoiceMenuShared:
 
@@ -205,10 +208,18 @@ class VoiceMenuShared:
             return
         sound = sound_result
 
+        if len(sound.data) / sound.sr < VOICE_SAMPLE_MIN_DURATION_S:
+            ask.ask_error("Sound file must be at least 2 seconds")
+            return
+
         sound = SoundPipeline.apply_voice_clone_post_processing(sound)
 
         if sound.data.size == 0:
             ask.ask_error("Selected sound sample is entirely silence")
+            return
+
+        if len(sound.data) / sound.sr < VOICE_SAMPLE_MIN_DURATION_S:
+            ask.ask_error("Sound file post silence trim must be at least 2 seconds")
             return
 
         duration_s = len(sound.data) / sound.sr

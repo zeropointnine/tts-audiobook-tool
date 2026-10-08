@@ -96,10 +96,12 @@ class ProjectNewMenu:
         """
         Creates a new project using settings embedded in an existing ABR audio file.
         Returns True on success.
-        Always ends with ask_util.ask_enter_to_continue(), except when the user
-        cancels a path prompt, which ends with print_feedback("Cancelled") instead.
+        Ends with ask_enter_to_continue() on success and ask_error() on failure
+        (which itself waits for enter), except when the user cancels a path
+        prompt, which ends with print_feedback("Cancelled") instead.
         """
         did_cancel = False
+        did_succeed = False
         dest_prepared = False
         dest_path = ""
         try:
@@ -135,8 +137,7 @@ class ProjectNewMenu:
             if app_meta is None:
                 raw_meta = ProjectTransferUtil.load_raw_abr_metadata_string(abr_path)
                 if not raw_meta:
-                    printt(f"{COL_ERROR}This audio file has no ABR metadata")
-                    printt()
+                    ask.ask_error("This audio file has no ABR metadata")
                     return False
 
                 parse_result = AppMetadata.get_from_json_string(raw_meta)
@@ -146,8 +147,7 @@ class ProjectNewMenu:
 
             project_snapshot = app_meta.project_snapshot
             if not project_snapshot:
-                printt(f"{COL_ERROR}{ABR_OLD_VERSION_MESSAGE}")
-                printt()
+                ask.ask_error(ABR_OLD_VERSION_MESSAGE)
                 return False
 
             try:
@@ -210,6 +210,7 @@ class ProjectNewMenu:
                 ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
 
             hints.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
+            did_succeed = True
             return True
         except Exception as e:
             detail = make_error_string(e)
@@ -220,7 +221,7 @@ class ProjectNewMenu:
         finally:
             if did_cancel:
                 print_feedback("\nCancelled")
-            else:
+            elif did_succeed:
                 ask.ask_enter_to_continue()
 
     @staticmethod

@@ -158,7 +158,7 @@ def test_abr_flow_reports_cancelled_when_the_directory_prompt_is_cancelled(monke
     assert continues == []
 
 
-def test_abr_flow_still_waits_for_enter_on_a_validation_error(monkeypatch, tmp_path):
+def test_abr_flow_does_not_add_a_second_enter_prompt_after_a_validation_error(monkeypatch, tmp_path):
     state = _make_state()
     dest_dir = tmp_path / "dest"
     dest_dir.mkdir()
@@ -169,7 +169,7 @@ def test_abr_flow_still_waits_for_enter_on_a_validation_error(monkeypatch, tmp_p
 
     assert ProjectNewMenu.make_new_project_using_abr(state) is False
     assert errors == ["Please select a .flac, .m4a, or .m4b file"]
-    assert continues == [1]
+    assert continues == []  # ask_error already waits for enter
     assert feedback == []
 
 
@@ -276,9 +276,9 @@ def test_abr_import_rejects_junk_snapshot_without_creating_project(monkeypatch, 
 def test_abr_import_without_snapshot_refuses_before_creating_project(monkeypatch, tmp_path, capsys):
     state = _make_state()
     _stub_abr_snapshot(monkeypatch, tmp_path, {})
-    _collect_exits(monkeypatch)
+    errors, _ = _collect_exits(monkeypatch)
     assert ProjectNewMenu.make_new_project_using_abr(state) is False
-    assert "does not contain project snapshot data" in capsys.readouterr().out
+    assert "does not contain project snapshot data" in errors[0]
     assert not (tmp_path / "dest").exists()
 
 

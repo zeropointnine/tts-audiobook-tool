@@ -206,4 +206,4 @@ def print_warm_up_result_stop(result: ModelWarmUpResult) -> None:
     if result.did_interrupt:
         print_feedback("\nCancelled")
     elif result.error:
-        print_feedback(f"\n{COL_ERROR}Model initialization failed:\n\n{result.error}")
+        print_feedback(f"\nModel initialization failed:\n\n{result.error}", is_error=True)

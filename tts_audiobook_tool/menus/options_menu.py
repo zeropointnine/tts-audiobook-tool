@@ -339,8 +339,7 @@ class OptionsMenu:
         snapshot = RemoteTtsDiscovery.refresh(force=True)
         Tts.bind_project(state.project)
         if snapshot.issue is not None:
-            printt(f"Remote TTS server:\n{COL_ERROR}{snapshot.issue.message}\n")
-            ask.ask_enter_to_continue()
+            ask.ask_error(f"Remote TTS server:\n{snapshot.issue.message}")
         else:
             count = len(snapshot.candidates)
             noun = make_noun("model", "models", count)

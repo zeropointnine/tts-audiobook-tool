@@ -145,7 +145,8 @@ PLAYER_URL = "https://zeropointnine.github.io/tts-audiobook-tool/browser_player/
 SPACE_BREAK_SOUND_EFFECT_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, "card_flip_a.flac")
 SECTION_BREAK_SOUND_EFFECT_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, "page_turn_a.flac")
 
-FILE_REQUESTOR_SOUND_TYPES = [('Sound files', '*.wav *.flac *.mp3,*.aac,*.m4a,*.ogg'), ('All files', '*.*')]
+# Tk filetypes globs are space-separated, not comma-separated
+FILE_REQUESTOR_SOUND_TYPES = [('Sound files', '*.wav *.flac *.mp3 *.aac *.m4a *.ogg'), ('All files', '*.*')]
 
 # App uses this format for file names of audio fragments.
 # Example file name: "[00001] [0123456789ABCDEF] [my_voice] [any_other_bracketed_tags] Hello_world.flac"
