@@ -16,7 +16,7 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_types.validation_findings import ValidationFindings, ValidationInvalidReason
 from tts_audiobook_tool.validator import Validator
-from tts_audiobook_tool.app_types.validation_result import POSSIBLE_TRUNCATION_UI_MESSAGE, TranscriptResult, TrimmedResult, ValidationResult
+from tts_audiobook_tool.app_types.validation_result import POSSIBLE_TRUNCATION_UI_MESSAGE, TranscriptResult, ValidationResult
 from tts_audiobook_tool.transcriber import Transcriber
 from tts_audiobook_tool.util import *
 
@@ -93,28 +93,10 @@ class SegmentTranscriptUtil:
             words=validation_result.transcript_words,
             sound_duration=validation_result.sound.duration
         )
-        if isinstance(validation_result, TrimmedResult):
-            timed_phrases = SegmentTranscriptUtil.adjust_timed_phrases_trimmed(timed_phrases, validation_result)
+        # Note: for a TrimmedResult, the transcript words' timings were already
+        # re-based to the trimmed sound by the Validator, and the sound duration
+        # above is that of the trimmed sound, so no further offset is needed.
         return timed_phrases
-
-    @staticmethod
-    def adjust_timed_phrases_trimmed(
-            timed_phrases: list[TimedPhrase],
-            trimmed_result: TrimmedResult
-    ) -> list[TimedPhrase]:
-
-        start_offset = trimmed_result.start_time or 0
-        end_time = trimmed_result.end_time or trimmed_result.sound.duration
-        full_duration = end_time - start_offset
-
-        results = []
-        for item in timed_phrases:
-            time_start = max(item.time_start - start_offset, 0)
-            time_end = min(item.time_end, full_duration)
-            new_item = TimedPhrase(text=item.text, time_start=time_start, time_end=time_end)
-            results.append(new_item)
-
-        return results
 
     @staticmethod
     def to_dict(info: SegmentTranscriptData) -> dict[str, Any]:

@@ -7,15 +7,12 @@
 
 # audio.cpp
 
-The audio.cpp local repository lives in `/d/p/audio.cpp-repo`. Treat this local checkout as the primary reference for audio.cpp behavior and capabilities. In particular, consult:
+The audio.cpp local repository lives in `/d/p/audio.cpp-repo`. Treat this local checkout as the primary reference for audio.cpp behavior and capabilities.
 
-- `/d/p/audio.cpp-repo/model_specs/` for model capability/spec definitions
-- `/d/p/audio.cpp-repo/app/server/` for server/API behavior
-- `/d/p/audio.cpp-repo/docs/` for model and usage documentation
-- `/d/p/audio.cpp-repo/community_models/` for community model implementations
-- the relevant model implementation/source files when behavior is unclear
+# tests
 
+When writing unit tests, add short comment explaining what the test illustrates illustrating unless the test is relatively trivial.
 
-# Other
+# git commit messages
 
-When formulating git commit messages, the "headline" should start lowercase. The body text should use a bulleted list format which is relatively terse.
+When formulating git commit messages, the "headline" should start lowercase. The body text should use a bulleted list format which is relatively terse. Don't bother mentioning tests or documentation updates.

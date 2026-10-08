@@ -70,6 +70,7 @@ class Prefs(Saveable):
             chat_save_mic: bool = PROJECT_DEFAULT_CHAT_SAVE_MIC,
             save_debug_files: bool = False,
             save_gen_log: bool = False,
+            startup_version_code: int | None = None,
     ) -> None:
         self._project_dir = project_dir
         # Copied: the signature default is a shared mutable object, so
@@ -109,6 +110,11 @@ class Prefs(Saveable):
         self._chat_save_mic = chat_save_mic
         self._save_debug_files = save_debug_files
         self._save_gen_log = save_gen_log
+
+        # The startup-messaging version code the app last ran with.
+        # None means "no history" (brand-new user, or a prefs file from before
+        # this property existed); in that case no startup messages are shown.
+        self._startup_version_code = startup_version_code
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -396,6 +402,14 @@ class Prefs(Saveable):
             save_gen_log = False
             dirty = True
 
+        # Startup version code (None is a valid value: no history)
+        startup_version_code = prefs_dict.get("startup_version_code", None)
+        if startup_version_code is not None and (
+            isinstance(startup_version_code, bool) or not isinstance(startup_version_code, int)
+        ):
+            startup_version_code = None
+            dirty = True
+
         # Make prefs instance
         prefs = Prefs(
             project_dir=project_dir,
@@ -421,6 +435,7 @@ class Prefs(Saveable):
             chat_save_mic=chat_save_mic,
             save_debug_files=save_debug_files,
             save_gen_log=save_gen_log,
+            startup_version_code=startup_version_code,
             hints=hint_prefs,
         )
         prefs.legacy_llm_api_key_removed = had_legacy_llm_api_key
@@ -459,6 +474,14 @@ class Prefs(Saveable):
     @save_gen_log.setter
     def save_gen_log(self, value: bool):
         self._save_gen_log = value
+
+    @property
+    def startup_version_code(self) -> int | None:
+        return self._startup_version_code
+
+    @startup_version_code.setter
+    def startup_version_code(self, value: int | None) -> None:
+        self._startup_version_code = value
 
     def get_hint(self, key: str) -> bool:
         return bool(self._hints.get(key, False))
@@ -696,6 +719,7 @@ class Prefs(Saveable):
                 "chat_save_mic": self._chat_save_mic,
                 "save_debug_files": self._save_debug_files,
                 "save_gen_log": self._save_gen_log,
+                "startup_version_code": self._startup_version_code,
             }
 
         err = JsonSaveUtil.save(

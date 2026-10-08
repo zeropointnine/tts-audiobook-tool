@@ -50,6 +50,56 @@ def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
 
     return can_continue
 
+def get_startup_version_messages(
+        stored_code: int | None,
+        current_code: int,
+        messages: list[tuple[int, str]],
+) -> list[str]:
+    """
+    Returns the messages with a version code greater than stored_code and
+    not greater than current_code, in ascending version-code order.
+    Returns an empty list if there is no stored code (no history).
+    """
+    if stored_code is None:
+        return []
+    qualifying = [
+        (code, message) for code, message in messages
+        if stored_code < code <= current_code
+    ]
+    qualifying.sort(key=lambda item: item[0])
+    return [message for _, message in qualifying]
+
+def show_startup_version_messages(prefs: Prefs) -> None:
+    """
+    Shows what has changed since the last time the app ran, then records the
+    current startup version code in prefs.
+
+    - No stored code (new user, or first run with this feature): stores the
+      current code silently.
+    - Stored code newer than current (downgrade): leaves the stored code alone,
+      so that re-upgrading doesn't repeat messages.
+    The code is stored only after any messages have been shown.
+    """
+    from tts_audiobook_tool.constants_startup_messaging import (
+        STARTUP_VERSION_CODE, STARTUP_VERSION_MESSAGES
+    )
+
+    stored = prefs.startup_version_code
+    if stored is not None and stored >= STARTUP_VERSION_CODE:
+        return
+
+    messages = get_startup_version_messages(stored, STARTUP_VERSION_CODE, STARTUP_VERSION_MESSAGES)
+    if messages:
+        hint = Hint(
+            "",
+            f"New features since the last time you ran {APP_NAME}:",
+            "\n".join(f"- {message}" for message in messages),
+        )
+        hints.show_hint(hint)
+
+    prefs.startup_version_code = STARTUP_VERSION_CODE
+    prefs.save()
+
 def show_shared_startup_hints(prefs: Prefs, is_server: bool) -> None:
     """
     Shows one-time informational startup messages which are not blockers
@@ -61,11 +111,11 @@ def show_shared_startup_hints(prefs: Prefs, is_server: bool) -> None:
 
     # Tkinter (must do concrete import to test for tkinter functionality)
     if not is_server and not does_import_test_pass("tkinter"):
-        hints.show_hint_if_necessary(prefs, HINT_TKINTER, and_prompt=True)
+        hints.show_hint_if_necessary(prefs, HINT_TKINTER, and_prompt=is_server)
 
     # Long paths on Windows
     if not is_server and not is_long_path_enabled():
-        hints.show_hint_if_necessary(prefs, HINT_LONG_PATHS, and_prompt=True)
+        hints.show_hint_if_necessary(prefs, HINT_LONG_PATHS, and_prompt=is_server)
 
     # SGL-Omni is a venv-level capability: in a local-mode venv without a
     # TTS model, saved SGL-Omni settings cannot be used here
@@ -74,7 +124,7 @@ def show_shared_startup_hints(prefs: Prefs, is_server: bool) -> None:
         and not Tts.get_available_tts_models()
         and prefs.remote_tts_url != ""
     ):
-        hints.show_hint_if_necessary(prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
+        hints.show_hint_if_necessary(prefs, HINT_SGL_OMNI_DORMANT, and_prompt=is_server)
 
 def make_player_hint() -> Hint:
     from tts_audiobook_tool.util import get_package_dir

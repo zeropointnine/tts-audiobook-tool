@@ -12,5 +12,7 @@ package-lock.json
 plans/
 .agents/
 
+AGENTS.local.md
+
 # Disposable diagnostic scripts
 *_probe.py

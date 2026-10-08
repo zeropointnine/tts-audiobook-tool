@@ -1,4 +1,5 @@
 from __future__ import annotations
+import copy
 import math
 from dataclasses import dataclass
 from typing import Mapping, Optional
@@ -162,41 +163,56 @@ class Validator:
             last = transcript_words[i + source_word_count - 1]
             last_plus_one = transcript_words[i + source_word_count] if len(transcript_words) > i + source_word_count else None
 
+            duration = word_error_result.sound.duration
+
             if first_minus_one is None:
-                start = 0
+                start = 0.0
             else:
                 start = (first_minus_one.end + first.start) / 2
                 start = SoundExtraUtil.get_local_minima(word_error_result.sound, start)
 
             if i + source_word_count == len(transcript_words):
-                end = word_error_result.sound.duration
+                end = duration
             else:
                 if last_plus_one is not None:
                     end = (last_plus_one.start + last.end) / 2
                 else:
                     end = last.end
-                end = min(end, word_error_result.sound.duration)
+                end = min(end, duration)
                 end = SoundExtraUtil.get_local_minima(word_error_result.sound, end)
+            end = min(end, duration)
 
-            if start == end: # TODO: revisit
+            # Skip a start/end trim that is negligible (or non-existent)
+            min_trim = constants.MIN_SEMANTIC_TRIM_SECONDS
+            if start < min_trim:
+                start = 0.0
+            if duration - end < min_trim:
+                end = duration
+            if start == 0.0 and end == duration:
+                return None
+            if start >= end:
                 return None
 
-
             new_sound = SoundUtil.trim(word_error_result.sound, start, end)
-            new_sound, trim_start, _ = SilenceUtil.trim_silence_ends(new_sound) 
+            new_sound, trim_start, _ = SilenceUtil.trim_silence_ends(new_sound)
 
-            # Adjust Word timing data # TODO: Untested
+            # Copy the words, adjusting their timing to be relative to the new
+            # sound; originals must stay untouched (the trim may be discarded
+            # by the caller, which then keeps using the original words).
             start_offset = start + trim_start
+            adjusted_words: list[Word] = []
             for word in sub_transcript_words:
-                word.start -= start_offset
-                word.end -= start_offset            
+                word = copy.copy(word)
+                word.start = max(word.start - start_offset, 0.0)
+                word.end = max(word.end - start_offset, 0.0)
+                adjusted_words.append(word)
 
             return TrimmedResult(
                 new_sound,
-                sub_transcript_words,
-                start,
-                end,
-                original_duration=word_error_result.sound.duration,
+                adjusted_words,
+                start if start > 0.0 else None,
+                end if end < duration else None,
+                original_duration=duration,
                 findings=ValidationFindings(
                     possible_truncation=word_error_result.possible_truncation,
                 ),

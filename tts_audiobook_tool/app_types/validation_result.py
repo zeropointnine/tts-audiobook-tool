@@ -131,11 +131,11 @@ class TrimmedResult(TranscriptResult):
 
     def get_ui_message(self) -> str:
         s = f"{COL_DEFAULT}Trimmed excess audio: "
-        if self.start_time and self.end_time:
+        if self.start_time is not None and self.end_time is not None:
             s += f"{COL_DIM}0s to {self.start_time:.2f}s, {self.end_time:.2f}s to end {self.original_duration:.2f}s"
-        elif self.start_time:
+        elif self.start_time is not None:
             s += f"{COL_DIM}0s to {self.start_time:.2f}s"
-        else:
+        elif self.end_time is not None:
             s += f"{COL_DIM}{self.end_time:.2f}s to end {self.original_duration:.2f}s"
         return s
 

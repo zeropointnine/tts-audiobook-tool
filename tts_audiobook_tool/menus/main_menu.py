@@ -99,6 +99,9 @@ class MainMenu:
             is_first_show = not state.has_shown_main_menu
             state.mark_main_menu_shown()
             if is_first_show:
+                # What's changed since the last run (shown before any other hints)
+                app_hint_util.show_startup_version_messages(state.prefs)
+
                 # One-time informational startup hints (tkinter, long paths, etc)
                 app_hint_util.show_shared_startup_hints(state.prefs, is_server=False)
 

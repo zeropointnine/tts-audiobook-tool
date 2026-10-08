@@ -43,6 +43,10 @@ EXCESSIVE_DURATION_BASE_SECONDS = 1.5
 EXCESSIVE_DURATION_PER_WORD_SECONDS = 0.75
 EXCESSIVE_DURATION_GAP_ALLOWANCE_SECONDS = 2.0
 
+# Semantic ("excess audio") trimming skips a start or end trim whose duration is
+# shorter than this; such a trim is not worth making or reporting.
+MIN_SEMANTIC_TRIM_SECONDS = 0.1
+
 # App's samplerate for final outputs (post-processed sound segments, sound output stream, etc).
 APP_SAMPLE_RATE = 48000
 
