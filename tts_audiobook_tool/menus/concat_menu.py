@@ -106,29 +106,18 @@ class ConcatMenu:
             items.append(
                 MenuItem(
                     lambda _: make_menu_label(
-                        "Pauses between segments",
-                        state.project.reason_pauses.menu_label,
+                        label="Loudness normalization",
+                        value=state.project.normalization_type.value.label,
                     ),
-                    lambda _, __: ConcatMenu.reason_pauses_menu(state),
+                    lambda _, __: ConcatMenu.normalization_menu(state),
                     superlabel="Post-processing options"
                 )
             )
 
             items.append(
                 MenuItem(
-                    make_limit_silence_gaps_label,
-                    lambda _, __: ConcatMenu.limit_silence_gaps_menu(state)
-                )
-            )
-
-            items.append(
-                MenuItem(
-                    lambda _: make_menu_label(
-                        label="Loudness normalization",
-                        value=state.project.normalization_type.value.label,
-                    ),
-                    lambda _, __: ConcatMenu.normalization_menu(state),
-                    superlabel=" ", superlabel_no_blank_line=True # yes rly
+                    make_prosody_modulation_label,
+                    lambda _, __: ConcatMenu.prosody_modulation_menu(state)
                 )
             )
 
@@ -182,6 +171,30 @@ class ConcatMenu:
             current_value=state.project.export_type,
             default_value=list(ExportType)[0],
             on_select=on_select
+        )
+
+    @staticmethod
+    def prosody_modulation_menu(state: State) -> None:
+
+        def make_items(_: State) -> list[MenuItem]:
+            return [
+                MenuItem(
+                    lambda _: make_menu_label(
+                        "Pauses between segments",
+                        state.project.reason_pauses.menu_label,
+                    ),
+                    lambda _, __: ConcatMenu.reason_pauses_menu(state),
+                ),
+                MenuItem(
+                    make_limit_silence_gaps_label,
+                    lambda _, __: ConcatMenu.limit_silence_gaps_menu(state)
+                ),
+            ]
+
+        MenuUtil.menu(
+            state=state,
+            heading="Prosody modulation",
+            items=make_items,
         )
 
     @staticmethod
@@ -565,6 +578,15 @@ def make_limit_silence_gaps_label(state: State) -> str:
         value=value,
         default=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     )
+
+def make_prosody_modulation_label(state: State) -> str:
+    parts = []
+    if state.project.reason_pauses.id != ReasonPauseTypes.default().value.id:
+        parts.append(f"segment pauses: {state.project.reason_pauses.menu_label}")
+    if state.project.limit_silence_gaps:
+        parts.append(f"limit silence gaps: {state.project.limit_silence_gaps_duration:.2f}s")
+    value = ", ".join(parts) if parts else "default"
+    return f"Prosody modulation {make_currently_string(value)}"
 
 LOUDNORM_SUBHEADING = \
 """Applies a final pass after concatenation to standardize overall loudness and
