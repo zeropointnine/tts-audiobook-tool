@@ -247,6 +247,21 @@ class BeautifulSoupEpubChapterTextExtractor:
         return not text
 
     @staticmethod
+    def is_comment_node(node: Any) -> bool:
+        """
+        Whether node is an HTML comment (`<!-- ... -->`).
+
+        BeautifulSoup parses comments as NavigableString subclasses with `name` None, so without an explicit
+        check they would be emitted as readable text. Comments are never rendered by readers; in practice they
+        hold things like publisher-tooling leftovers, e.g. a commented-out duplicate `<img>` for Kindle.
+        """
+        try:
+            Comment = getattr(importlib.import_module("bs4"), "Comment")
+        except Exception as e:
+            raise ImportError("Missing dependency beautifulsoup4. Reinstall requirements for EPUB import support.") from e
+        return isinstance(node, Comment)
+
+    @staticmethod
     def import_beautiful_soup() -> Any:
         try:
             module = importlib.import_module("bs4")
@@ -297,6 +312,8 @@ class BeautifulSoupEpubChapterTextExtractor:
             self.append_text_node(str(node), pieces)
         else:
             for child in node.children:
+                if self.is_comment_node(child):
+                    continue
                 child_name = getattr(child, "name", None)
                 if child_name is None:
                     self.append_text_node(str(child), pieces, name, child, stats)
@@ -426,6 +443,9 @@ class BeautifulSoupEpubChapterTextExtractor:
         while sibling is not None:
             name = getattr(sibling, "name", None)
             if name in cls.SKIP_TAGS:
+                sibling = getattr(sibling, "next_sibling", None)
+                continue
+            if cls.is_comment_node(sibling):
                 sibling = getattr(sibling, "next_sibling", None)
                 continue
             if name is None:

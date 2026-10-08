@@ -145,6 +145,7 @@ The default implementation is `BeautifulSoupEpubChapterTextExtractor`.
 It is intentionally more deliberate than raw `BeautifulSoup.get_text()`:
 
 - removes non-reading tags such as `script`, `style`, `nav`, `img`, `svg`, and form/media elements,
+- ignores HTML comments (BeautifulSoup yields them as nameless string nodes; e.g. publishers often leave a commented-out duplicate `<img>` that would otherwise appear as literal text),
 - treats paragraphs, headings, lists, blockquotes, tables, and other block elements as paragraph-like text blocks,
 - preserves `<br>` line breaks where appropriate,
 - renders `<hr>` as a scene-break-like `* * *`,

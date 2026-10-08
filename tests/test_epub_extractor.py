@@ -907,6 +907,39 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(result.warnings, ["No readable body text found in Text/insert001.xhtml"])
         self.assertEqual(result.significant_warnings, [])
 
+    def test_extract_text_ignores_html_comments(self):
+        # Illustrates a real-world pattern (publisher cover page): a real <img> followed by a commented-out
+        # duplicate <img> for another renderer. BeautifulSoup yields the comment as a nameless string node,
+        # which previously leaked into the output as literal "<img ...>" text.
+        chapter = EpubSourceChapter(
+            title="Cover",
+            href="cover.xhtml",
+            media_type="application/xhtml+xml",
+            html=(
+                '<html><body><div>'
+                '<img alt="cover image" src="images/cover.jpg"/>\n'
+                '<!--<img src="images/cover.jpg" alt="cover image" class="squeeze-amzn" />-->\n'
+                '</div><p>Hello<!-- hidden --> world.</p></body></html>'
+            ),
+        )
+
+        result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
+
+        self.assertEqual(result.text, "Hello world.")
+
+    def test_extract_text_comment_after_inline_whitespace_does_not_count_as_readable_sibling(self):
+        # A trailing comment must not make whitespace-only inline text look like it precedes readable content
+        # (which would trigger the inline-whitespace "repair").
+        from bs4 import BeautifulSoup
+        from tts_audiobook_tool.text_ops.epub_extractor import EpubTextExtractionStats
+
+        soup = BeautifulSoup("<p><span>Hello.</span><span>\n</span><!-- c --></p>", "html.parser")
+        stats = EpubTextExtractionStats()
+
+        BeautifulSoupEpubChapterTextExtractor().node_to_text(soup, stats)
+
+        self.assertEqual(stats.inline_whitespace_repairs, 0)
+
     def test_extract_text_preserves_chapter_number_and_title_headings_without_heading_count_warning(self):
         chapter = EpubSourceChapter(
             title="1",
