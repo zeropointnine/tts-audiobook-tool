@@ -12,22 +12,17 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import duration_string
 
-# The bottom header line shows a prompt driven by the app. The quick
-# generation and quick preview sessions use auto_return to leave the line
-# blank while returning to their editor.
-PromptMode = Literal[
-    "default", "cancel_pending", "finished", "auto_continue", "auto_return"
-]
+# The bottom header line shows a prompt driven by the app.
+PromptMode = Literal["default", "cancel_pending", "finished", "auto_continue"]
 
 _PROMPT_BY_MODE: dict[PromptMode, str] = {
     "default": f"Press [{COL_ACCENT}ESC{COL_DEFAULT}] to interrupt",
     "finished": f"Press [{COL_ACCENT}ENTER{COL_DEFAULT}] to continue",
     "auto_continue": "Proceeding to concatenation...",
-    "auto_return": "",
 }
 
 
-def _cancel_pending_prompt() -> str:
+def make_cancel_pending_prompt() -> str:
     """Prompt shown while a requested cancellation waits for a safe boundary.
 
     The second-ESC hard reset is gated to the local backend mode: it dumps
@@ -54,8 +49,7 @@ class GenerationHeader(Vertical):
     receive the underlying values (processed/total/elapsed and prompt mode)
     and format their own strings.
 
-    The title on row 1 is fixed for the session and supplied at construction:
-    the editor's quick-generate flow passes its own.
+    The title on row 1 is fixed for the session and supplied at construction.
     """
 
     # Widgets (unlike Screen) must use `DEFAULT_CSS` in this Textual build;
@@ -171,7 +165,7 @@ class GenerationHeader(Vertical):
 
     def update_hotkey(self, mode: PromptMode) -> None:
         """Render the left-hand prompt on the third row (ANSI colors allowed)."""
-        text = _cancel_pending_prompt() if mode == "cancel_pending" else _PROMPT_BY_MODE[mode]
+        text = make_cancel_pending_prompt() if mode == "cancel_pending" else _PROMPT_BY_MODE[mode]
         self.query_one(
             "#generation-hotkey", Static
         ).update(Text.from_ansi(text))

@@ -145,14 +145,12 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         state: State,
         indices: set[int],
         batch_size: int,
-        is_regen: bool,
         transcript: GenerationTranscript,
         on_job_end: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(state)
         self.indices = set(indices)
         self.batch_size = batch_size
-        self.is_regen = is_regen
         self.transcript = transcript
         self.progress = GenerationProgress(0, len(indices), len(indices))
         self.stats: GenerationStats | None = None
@@ -167,7 +165,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         # terminal_summary_extra_lines and action_cancel_or_reset)
         # yield Static("[ESC] Request cancellation", id="generation-prompt", markup=False)
         yield GenerationHeader(
-            title="Quick generate" if self.is_regen else "Generating audio",
+            title="Generating audio",
             id="generation-header",
         )
 
@@ -176,7 +174,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             state=self.state,
             indices=self.indices,
             batch_size=self.batch_size,
-            is_regen=self.is_regen,
+            is_regen=False,
         )
 
     def _on_submit_failure(self, message: str) -> None:
@@ -288,24 +286,10 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         self.transcript.write_lines(lines)
 
     def terminal_label(self, result: GenerationModalResult) -> str:
-        if self._suppresses_completion_banner(result):
-            return ""
         return _TERMINAL_LABELS[result.status]
 
     def terminal_display_label(self, result: GenerationModalResult) -> str:
-        if self._suppresses_completion_banner(result):
-            return ""
         return _styled_terminal_label(result.status, _TERMINAL_LABELS)
-
-    def _suppresses_completion_banner(self, result: GenerationModalResult) -> bool:
-        """Whether the terminal summary must omit its status banner.
-
-        A quick generation that completed returns straight to the editor,
-        so the banner (and the phase it would set) would only flash for the
-        brief auto-return delay. Interrupted or failed quick generations
-        still show their labels.
-        """
-        return self.is_regen and result.completed_cleanly
 
     def terminal_summary_extra_lines(self, result: GenerationModalResult) -> list[str]:
         lines = []
@@ -314,31 +298,14 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
                 f"Transcript: {text_util.make_terminal_hyperlink(result.transcript_path, is_file=True)}"
             )
         if self.auto_exit:
-            # A regular generation proceeds to concatenation. Quick generation
-            # instead returns directly to the editor without displaying a
-            # misleading concatenation handoff.
-            if not self.is_regen:
-                lines.extend(["", "Proceeding to concatenation..."])
+            lines.extend(["", "Proceeding to concatenation..."])
         else:
             lines.extend(["", f"Press {util.make_hotkey_string('ENTER')} to continue"])
         return lines
 
     def should_auto_exit(self, result: GenerationModalResult) -> bool:
-        """Quick generation that completed cleanly returns to the editor.
-
-        The one item it generated needs no review. A generated segment tagged
-        as failed (excess word errors), or an item that exhausted generation
-        retries, keeps the result open for review just like an interrupted
-        job. A completed regular generation instead proceeds to concatenation
-        when that is enabled.
-        """
-        quick_return = self.is_regen and result.completed_cleanly
-        regular_auto_concat = (
-            not self.is_regen
-            and result.completed
-            and self.state.project.gen_auto_concat
-        )
-        return quick_return or regular_auto_concat
+        """A completed generation proceeds to concatenation when that is enabled."""
+        return result.completed and self.state.project.gen_auto_concat
 
     def _pre_terminal_summary(self, result: GenerationModalResult) -> None:
         # The worker job is over. Release the system-sleep lock now, so the
@@ -358,14 +325,13 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             and result.hard_reset_cause is not None
             and result.hard_reset_cause.should_alert
         )
-        if not self.is_regen:
-            if result.status in fatal_statuses or reset_should_alert:
-                app_support.play_fatal_gen_sound()
-            elif result.status is GenerationTerminalStatus.COMPLETED:
-                app_support.play_done_sound()
+        if result.status in fatal_statuses or reset_should_alert:
+            app_support.play_fatal_gen_sound()
+        elif result.status is GenerationTerminalStatus.COMPLETED:
+            app_support.play_done_sound()
 
         # Return immediately, with no ceremony and no ENTER wait, so the
-        # caller's flow (editor reopen or concatenation) continues.
+        # caller's flow (concatenation) continues.
         super()._post_terminal_summary(result)
 
     @property
@@ -374,9 +340,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         interrupt hint, the kill-process hint while the worker waits for a
         safe boundary, and the continue hint once the job has stopped."""
         if self.terminal_result is not None:
-            if self.auto_exit:
-                return "auto_return" if self.is_regen else "auto_continue"
-            return "finished"
+            return "auto_continue" if self.auto_exit else "finished"
         if self.cancel_pending:
             return "cancel_pending"
         return "default"
@@ -452,16 +416,25 @@ def _read_persisted_range_string(state: State) -> str:
         return state.project.generate_range_string
 
 
-def _reconcile_generation_result(state: State, result: GenerationModalResult) -> None:
-    if result.remaining_range_string:
-        state.project.generate_range_string = result.remaining_range_string
+def reconcile_generation_state(state: State, remaining_range_string: str) -> str:
+    """Re-sync project state with what the worker actually wrote.
+
+    Returns an error message when the corrected range could not be saved
+    (empty on success); the caller decides how to present it.
+    """
+    if remaining_range_string:
+        state.project.generate_range_string = remaining_range_string
     state.project.sound_segments.force_invalidate()
     # The file-based segment catalog is the source of truth for what was
     # actually written: the worker's in-memory range update only reaches disk
     # if the worker ran to its save point, so after a hard reset or worker
     # crash it is stale. Re-derive the range string from the (just
     # invalidated) catalog so persisted state matches the audio on disk.
-    save_error = ProjectUtil.persist_range_without_generated_items(state.project)
+    return ProjectUtil.persist_range_without_generated_items(state.project)
+
+
+def _reconcile_generation_result(state: State, result: GenerationModalResult) -> None:
+    save_error = reconcile_generation_state(state, result.remaining_range_string)
     if save_error:
         ask.ask_error(save_error)
 
@@ -490,13 +463,7 @@ def _present_console_result(
     state: State,
     result: GenerationModalResult,
     transcript: GenerationTranscript,
-    is_regen: bool,
 ) -> None:
-    # Match the Textual quick-generation path: a clean completion returns to
-    # the editor without adding a terminal summary or waiting for ENTER.
-    if is_regen and result.completed_cleanly:
-        return
-
     labels = {
         GenerationTerminalStatus.COMPLETED: "Generation completed.",
         GenerationTerminalStatus.CANCELLED: "Generation cancelled.",
@@ -511,13 +478,11 @@ def _present_console_result(
         lines.append(f"Transcript: {text_util.make_terminal_hyperlink(result.transcript_path, is_file=True)}")
     transcript.write_lines(lines)
     print("\n".join(lines))
-    if result.completed and state.project.gen_auto_concat and not is_regen:
+    if result.completed and state.project.gen_auto_concat:
         # Auto-concat is enabled: no ENTER wait; program flow resumes at the
         # concatenation step.
         print("Proceeding to concatenation...")
-    elif (not result.completed or is_regen) and ask.can_hotkey:
-        # Reaching this branch for quick generation means either the job
-        # stopped or its item was tagged as failed/errored.
+    elif not result.completed and ask.can_hotkey:
         ask.ask_enter_to_continue()
 
 
@@ -525,7 +490,6 @@ def run_generation_app(
     state: State,
     indices: set[int],
     batch_size: int,
-    is_regen: bool,
 ) -> GenerationModalResult:
     transcript = GenerationTranscript(
         make_generation_transcript_path(state.project.dir_path),
@@ -546,14 +510,13 @@ def run_generation_app(
                 start_error,
             )
             sleep_lock.release()
-            _present_console_result(state, result, transcript, is_regen)
+            _present_console_result(state, result, transcript)
             return result
 
         app = GenerationApp(
             state,
             indices,
             batch_size,
-            is_regen,
             transcript,
             on_job_end=sleep_lock.release,
         )
@@ -580,7 +543,7 @@ def run_generation_app(
             sleep_lock.release()
             _reconcile_generation_result(state, result)
             _persist_auto_concat_after_worker(app)
-            _present_console_result(state, result, transcript, is_regen)
+            _present_console_result(state, result, transcript)
             return result
         if result is None:
             result = session_failure_result(
@@ -592,7 +555,7 @@ def run_generation_app(
         _persist_auto_concat_after_worker(app)
         if result.status == GenerationTerminalStatus.FAILED and app.terminal_result is None:
             sleep_lock.release()
-            _present_console_result(state, result, transcript, is_regen)
+            _present_console_result(state, result, transcript)
         return result
     finally:
         sleep_lock.release()

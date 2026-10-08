@@ -29,7 +29,7 @@ Before the worker (everything up to and including `e46ad10`, 2026-08-22) one pro
 
 One long-lived child process buys:
 
-1. **A responsive UI.** The main process keeps its event loop; worker output arrives as events. The full-screen Textual sessions (Generate, realtime playback, TTS preview) exist because nothing outside the UI writes to the terminal during a job.
+1. **A responsive UI.** The main process keeps its event loop; worker output arrives as events. The full-screen Textual sessions (Generate, realtime playback) and the in-editor quick-generation modal exist because nothing outside the UI writes to the terminal during a job.
 2. **A deterministic unload/reset boundary.** Unloading models and recovering from a bad model state are process lifecycle operations, not reference juggling.
 3. **Hang recovery without losing the app.** A watchdog inside the worker plus parent-side timeouts can terminate and restart the worker while the app, project, and preferences survive.
 4. **Crash isolation.** A dead worker surfaces as one `WorkerExited` event: the session fails, the app continues, the next command runs in a fresh process.
@@ -99,7 +99,7 @@ Commands (main to worker):
 | Command | What runs in the worker | Driven by |
 | --- | --- | --- |
 | `GenerateCommand` | the full warm-up / generate / validate / retry / save loop | Generate, quick Generate |
-| `TtsPreviewCommand` | one diagnostic inference for a prompt | text-menu preview |
+| `TtsPreviewCommand` | one diagnostic inference for a prompt | word-substitutions pronunciation preview |
 | `RealTimePlaybackCommand` | realtime generation plus PortAudio playback | realtime playback session |
 | `SynthesizeChatCommand`, `ResetChatSessionCommand` | one chat utterance; chat session reset | voice chat |
 | `TranscribeAudioCommand` | Whisper transcription of a sample buffer | enhance chunking, realtime microphone |
@@ -131,9 +131,10 @@ Each command that needs project context builds its own process-local state:
 
 ## Driving a worker job
 
-Two client shapes exist, and both are legitimate:
+Three client shapes exist, and all are legitimate:
 
-- **Full-screen sessions** (`WorkerTextualApp` in `textual/worker_app.py`) own the terminal for the duration of a job. `on_mount` submits the job, then a `set_interval(EVENT_POLL_SECONDS)` timer calls `_drain_worker_events()` — the queue is polled, never drained on a worker thread, so the Textual event loop is never blocked. The base class owns the key bindings, console plumbing, the cancel/hard-reset ladder, and the terminal summary; concrete apps (`GenerationApp`, `RealTimePlaybackApp`, `TtsPreviewApp`) supply job submission, session-event dispatch, and result formatting.
+- **Full-screen sessions** (`WorkerTextualApp` in `textual/worker_app.py`) own the terminal for the duration of a job. `on_mount` submits the job, then a `set_interval(EVENT_POLL_SECONDS)` timer calls `_drain_worker_events()` — the queue is polled, never drained on a worker thread, so the Textual event loop is never blocked. The job lifecycle (submission, the `operation_id`-filtered drain, console plumbing, the cancel/hard-reset ladder, the terminal summary) lives in `WorkerSessionMixin` (`textual/worker_session.py`); the app base adds the key bindings, chrome and find bar. Concrete apps (`GenerationApp`, `RealTimePlaybackApp`) supply job submission, session-event dispatch, and result formatting.
+- **In-app modal sessions** (`QuickGenModal` in `textual/quick_gen_modal.py`) host the same `WorkerSessionMixin` on a `ModalScreen` over a live editor, so a one-off job (single-line regeneration, pronunciation preview) runs without tearing the editor down. See `in-place-quick-gen.md`. The mixin only needs scheduling/query methods that both `App` and `Screen` provide; the hard reset reports back through the owning `App`.
 - **Blocking helpers** (`*_blocking`) serve menu and flow code that is itself synchronous: `transcribe_audio_blocking`, `upsample_file_blocking`, `probe_lava_sr_blocking`, `inspect_tts_blocking`, `get_model_state_blocking`, `clear_models_if_running_blocking`, `synthesize_chat_blocking`. They loop over `get_event`, relay console output to an optional handler, honor a `cancel_check`, and can enforce `timeout_seconds` — on timeout the parent stops the worker rather than waiting forever. Enhancement's chunked transcription and realtime microphone transcription both use this shape, including a per-chunk retry with a fresh worker after a timeout.
 
 Both shapes must treat the worker as shared: a session that ends without draining leaves a live worker holding a command nobody awaits.
@@ -148,7 +149,7 @@ The ladder in a full-screen session (`action_cancel_or_reset`):
 2. In local (non-SGL-Omni) backend mode, another Escape while cancellation is pending hard-resets: terminate the worker and its descendants, start a fresh one, discard resident model state.
 3. In SGL-Omni mode the hard reset is not offered — inference is remote and the worker holds no local TTS memory to dump — so further presses are ignored and the session waits for the cooperative cancel.
 
-These bindings apply to generation, realtime playback, and TTS preview. Escape closes an open find bar without cancelling; on a terminal summary it dismisses the session, and at realtime's awaiting-continue prompt it uses the existing worker continue handshake. Escape is ignored during finishing, hard reset, or realtime audio teardown. Ctrl-C is explicitly shadowed outside search and retains the find input's ordinary copy action. Keyboard cancellation uses Textual key events, not a SIGINT handler.
+These bindings apply to generation, realtime playback, and the quick-generation modal. Escape closes an open find bar without cancelling; on a terminal summary it dismisses the session, and at realtime's awaiting-continue prompt it uses the existing worker continue handshake. Escape is ignored during finishing, hard reset, or realtime audio teardown. Ctrl-C is explicitly shadowed outside search and retains the find input's ordinary copy action. Keyboard cancellation uses Textual key events, not a SIGINT handler.
 
 The hard-reset action runs on a Textual thread worker so process termination never blocks rendering.
 

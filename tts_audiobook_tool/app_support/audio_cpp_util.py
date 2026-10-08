@@ -101,7 +101,7 @@ class AudioCppUtil:
             return
         # This path belongs to the server; preserve it rather than resolving it
         # against the client's filesystem.
-        print_init(f"audio.cpp is loading {model_description}\n{COL_DIM_ITALICS}server path: {path}")
+        print_init(f"audio.cpp will load {model_description}\n{COL_DIM_ITALICS}server path: {path}")
 
     @staticmethod
     def make_voice_ref(path: str) -> str:

@@ -160,17 +160,6 @@ def test_update_memory_text_noop_when_empty(monkeypatch) -> None:
     run(exercise())
 
 
-def test_update_hotkey_auto_return_is_blank() -> None:
-    async def exercise() -> None:
-        async with HeaderTestApp().run_test() as pilot:
-            await pilot.pause()
-            header = pilot.app.query_one(GenerationHeader)
-            header.update_hotkey("auto_return")
-            assert str(header.query_one("#generation-hotkey", Static).render()) == ""
-
-    run(exercise())
-
-
 def test_update_hotkey_auto_continue_announces_concatenation() -> None:
     async def exercise() -> None:
         async with HeaderTestApp().run_test() as pilot:

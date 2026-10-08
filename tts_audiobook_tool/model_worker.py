@@ -570,6 +570,7 @@ def _run_tts_preview_command(
     import numpy as np
 
     from tts_audiobook_tool.app_support.interrupts import Interrupts
+    from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM_ITALICS
     from tts_audiobook_tool.generation_events import GenerationEvent, GenerationEvents
     from tts_audiobook_tool.gen_timeout_util import (
         backend_gen_timeout_scope,
@@ -610,6 +611,17 @@ def _run_tts_preview_command(
                     command.operation_id, GenerationTerminalStatus.CANCELLED,
                 ))
                 return
+        # Resolve the model instance (loading it if needed) before announcing
+        # the generation, so any load or init output precedes the heading, like
+        # a regular generation run. Kept outside the watchdog scope: a slow
+        # first load must not count against the inference deadline.
+        Tts.get_instance()
+        if interrupts.did_interrupt:
+            event_queue.put(TtsPreviewFinished(
+                command.operation_id, GenerationTerminalStatus.CANCELLED,
+            ))
+            return
+        print(f"{COL_DIM_ITALICS}Generating audio...{COL_DEFAULT}\n", flush=True)
         timeout_scope = (
             backend_gen_timeout_scope() if watch_inference else nullcontext()
         )

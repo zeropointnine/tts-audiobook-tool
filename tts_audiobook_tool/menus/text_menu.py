@@ -20,12 +20,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
     run_content_textual_app,
 )
 from tts_audiobook_tool.textual.text_editor import TextEditor
-from tts_audiobook_tool.textual.tts_preview_app import run_tts_preview_app
-from tts_audiobook_tool.textual.word_substitutions_app import (
-    WordSubstitutionPreviewRequested,
-    WordSubstitutionsApp,
-    make_word_substitution_preview_prompt,
-)
+from tts_audiobook_tool.textual.word_substitutions_app import WordSubstitutionsApp
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -191,53 +186,19 @@ class TextMenu:
 
     @staticmethod
     def edit_word_substitutions(state: State) -> bool:
-        """Run the editor and its non-persistent pronunciation preview loop."""
-        staged: dict[str, str] | None = None
-        restore_original: str | None = None
-        preview_sound = None
+        """Run the word-substitutions editor (its pronunciation preview runs in place)."""
+        run_result = run_content_textual_app(WordSubstitutionsApp(state))
+        if not isinstance(run_result, ContentAppCompleted):
+            ask.ask_error(run_result.message)
+            return False
 
-        while True:
-            run_result = run_content_textual_app(
-                WordSubstitutionsApp(
-                    state,
-                    staged=staged,
-                    restore_original=restore_original,
-                    preview_sound=preview_sound,
-                )
-            )
-            if not isinstance(run_result, ContentAppCompleted):
-                ask.ask_error(run_result.message)
-                return False
-
-            editor_result = run_result.result
-            if isinstance(editor_result, EditorSaveFailed):
-                ask.ask_error(editor_result.error)
-                return False
-            if isinstance(editor_result, WordSubstitutionPreviewRequested):
-                staged = dict(editor_result.staged_items)
-                restore_original = editor_result.original
-                # Pre-flight: verify shared voice samples (and transcripts)
-                # before the full-screen preview app takes over the console.
-                from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-                if not VoiceMenuShared.validate_voices(state):
-                    # Keep the editor session (and staged substitutions) alive
-                    # instead of dropping the user back to the Text menu.
-                    preview_sound = None
-                    continue
-                preview_result = run_tts_preview_app(
-                    state,
-                    make_word_substitution_preview_prompt(
-                        editor_result.original,
-                        editor_result.substitution,
-                    ),
-                )
-                preview_sound = (
-                    preview_result.sound if preview_result.completed else None
-                )
-                continue
-            # Preserve the existing menu behavior: any normal editor close
-            # (saved or unchanged) returns to the parent Text menu.
-            return True
+        editor_result = run_result.result
+        if isinstance(editor_result, EditorSaveFailed):
+            ask.ask_error(editor_result.error)
+            return False
+        # Preserve the existing menu behavior: any normal editor close
+        # (saved or unchanged) returns to the parent Text menu.
+        return True
 
     @staticmethod
     def word_substitutions_menu(state: State) -> None:

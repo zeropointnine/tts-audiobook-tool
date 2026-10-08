@@ -471,6 +471,28 @@ def _validate_state(tmp_path, model_id, entries, *, preset=False):
     return cast(State, SimpleNamespace(project=project, prefs=prefs))
 
 
+def _validate_entry(file_name, transcript, *, cropped):
+    entry = {"file_name": file_name, "transcript": transcript}
+    if cropped:
+        entry.update(
+            transcript="original text",
+            crop_file_name=f"trim-{file_name}",
+            crop_start="0.0",
+            crop_end="3.0",
+            crop_transcript=transcript,
+        )
+    return entry
+
+
+def _write_active_sample(tmp_path, entry):
+    sample_path = tmp_path / entry["file_name"]
+    if "crop_file_name" in entry:
+        sample_path = tmp_path / "voice" / "crops" / entry["crop_file_name"]
+    sample_path.parent.mkdir(parents=True, exist_ok=True)
+    sample_path.write_bytes(b"valid")
+    return sample_path
+
+
 @pytest.mark.parametrize("model_id, entries, preset", [
     ("none", [{"file_name": "a.flac", "transcript": ""}], False),  # no voice binding
     ("dots_local", [], False),  # empty shared list, voice not required
@@ -485,20 +507,28 @@ def test_validate_voices_no_op_cases(tmp_path, monkeypatch, model_id, entries, p
 
 
 @pytest.mark.parametrize("model_type", ["custom_voice", "voice_design"])
-def test_validate_voices_qwen3_non_base_checkpoint_needs_no_samples(tmp_path, monkeypatch, model_type):
+@pytest.mark.parametrize("voice_count", [0, 1])
+def test_validate_voices_qwen3_non_base_checkpoint_needs_no_samples(tmp_path, monkeypatch, model_type, voice_count):
+    # Non-cloning checkpoints ignore even stale shared references in both modes.
     capture = _ValidateCapture(monkeypatch)
     monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: pytest.fail("must not load"))
-    state = _validate_state(tmp_path, "qwen3tts_local", [])
+    state = _validate_state(tmp_path, "qwen3tts_local", [
+        {"file_name": "gone.flac", "transcript": ""} for _ in range(voice_count)
+    ])
     state.project.set_model_setting("qwen3tts_local", "model_type", model_type)
+    assert VoiceMenuShared.get_voice_problems(state) == []
     assert VoiceMenuShared.validate_voices(state) is True
     assert not capture.lines and not capture.errors
 
 
-def test_validate_voices_qwen3_base_checkpoint_requires_samples(tmp_path, monkeypatch):
+@pytest.mark.parametrize("model_type", ["", "base"])
+def test_validate_voices_qwen3_base_checkpoint_requires_samples(tmp_path, monkeypatch, model_type):
+    # An unset checkpoint retains Base's required-clone rule.
     capture = _ValidateCapture(monkeypatch)
     monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: pytest.fail("must not load"))
     state = _validate_state(tmp_path, "qwen3tts_local", [])
-    assert state.project.get_model_setting("qwen3tts_local", "model_type") in ("", "base")
+    state.project.set_model_setting("qwen3tts_local", "model_type", model_type)
+    assert VoiceMenuShared.get_voice_problems(state) == ["A voice clone sample is required"]
     assert VoiceMenuShared.validate_voices(state) is False
     assert capture.errors == ["A voice clone sample is required"]
 
@@ -519,60 +549,226 @@ def test_validate_voices_blocks_required_voice_with_empty_list(tmp_path, monkeyp
     assert capture.errors == ["A voice clone sample is required"]
 
 
-def test_validate_voices_reports_missing_and_invalid_files(tmp_path, monkeypatch):
+@pytest.mark.parametrize("cropped", [False, True])
+def test_validate_voices_reports_missing_and_invalid_files(tmp_path, monkeypatch, cropped):
+    # Both modes reject active-file problems before attempting transcript repair.
     capture = _ValidateCapture(monkeypatch)
-    (tmp_path / "bad.flac").write_bytes(b"junk")
-    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda path: "decode failed" if path.endswith("bad.flac") else object())
-    state = _validate_state(tmp_path, "glm_local", [
-        {"file_name": "gone.flac", "transcript": "kept"},
-        {"file_name": "bad.flac", "transcript": "kept"},
-    ])
+    entries = [_validate_entry(name, "", cropped=cropped) for name in ("gone.flac", "bad.flac")]
+    sample_dir = tmp_path / "voice"
+    if cropped:
+        sample_dir.mkdir()
+        for entry in entries:
+            (sample_dir / entry["file_name"]).write_bytes(b"original")
+        sample_dir /= "crops"
+    sample_dir.mkdir(parents=True, exist_ok=True)
+    bad_name = "trim-bad.flac" if cropped else "bad.flac"
+    bad_path = sample_dir / bad_name
+    bad_path.write_bytes(b"junk")
+    loaded = []
+    monkeypatch.setattr(
+        voice_menu_shared.SoundFileUtil, "load",
+        lambda path: loaded.append(path) or "decode failed",
+    )
+    monkeypatch.setattr(
+        VoiceMenuShared, "transcribe_voice_sample_to_text",
+        lambda *_: pytest.fail("must not transcribe"),
+    )
+    state = _validate_state(tmp_path, "glm_local", entries)
+    expected = [
+        "Trimmed voice file for gone.flac not found (reset the trim or restore trim-gone.flac)",
+        "Trimmed voice file for bad.flac is invalid",
+    ] if cropped else ["Voice file gone.flac not found", "Voice file bad.flac is invalid"]
+    assert VoiceMenuShared.get_voice_problems(state) == expected
+    assert not capture.lines and not capture.errors
     assert VoiceMenuShared.validate_voices(state) is False
-    assert any("Voice file gone.flac not found" in line for line in capture.lines)
-    assert any("Voice file bad.flac is invalid" in line for line in capture.lines)
+    assert capture.lines == [
+        *(f"{voice_menu_shared.COL_ERROR}{problem}{voice_menu_shared.COL_DEFAULT}" for problem in expected),
+        "",
+    ]
     assert capture.errors == ["Replace problem voice clone file"]
-    assert state.project.voice_references[0]["transcript"] == "kept"
+    assert loaded == [str(bad_path), str(bad_path)]
+    assert state.project.voice_references == entries
+    assert not (tmp_path / "project.json").exists()
 
 
-def test_validate_voices_transcribes_empty_transcript_and_saves(tmp_path, monkeypatch):
+@pytest.mark.parametrize("cropped", [False, True])
+@pytest.mark.parametrize("transcript", ["", " \n "])
+def test_validate_voices_transcribes_empty_transcript_and_saves(tmp_path, monkeypatch, cropped, transcript):
+    # Only interactive validation repairs the active transcript, not the original crop source.
     capture = _ValidateCapture(monkeypatch)
-    (tmp_path / "a.flac").write_bytes(b"valid")
-    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: object())
-    monkeypatch.setattr(voice_menu_shared.Transcriber, "transcribe_to_words", lambda *args, **kwargs: ["words"])
+    entry = _validate_entry("a.flac", transcript, cropped=cropped)
+    sample_path = _write_active_sample(tmp_path, entry)
+    sound = object()
+    loaded = []
+    transcribed = []
+    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda path: loaded.append(path) or sound)
+    monkeypatch.setattr(
+        voice_menu_shared.Transcriber, "transcribe_to_words",
+        lambda sample, *_: transcribed.append(sample) or ["words"],
+    )
     monkeypatch.setattr(
         voice_menu_shared.Transcriber,
         "get_flat_text_filtered_by_probability",
         lambda words, min_probability: "transcribed text",
     )
-    state = _validate_state(tmp_path, "glm_local", [{"file_name": "a.flac", "transcript": ""}])
+    state = _validate_state(tmp_path, "glm_local", [entry])
+    label = "Trimmed voice file for a.flac" if cropped else "Voice file a.flac"
+    assert VoiceMenuShared.get_voice_problems(state) == [f"{label} has no transcript"]
+    assert not transcribed and not capture.lines and not capture.errors
+    assert state.project.voice_references == [entry]
+    assert not (tmp_path / "project.json").exists()
+
     assert VoiceMenuShared.validate_voices(state) is True
-    assert state.project.voice_references == [{"file_name": "a.flac", "transcript": "transcribed text"}]
+    expected = {**entry, "crop_transcript" if cropped else "transcript": "transcribed text"}
+    assert state.project.voice_references == [expected]
     saved = json.loads((tmp_path / "project.json").read_text())
-    assert saved["voice_references"] == [{"file_name": "a.flac", "transcript": "transcribed text"}]
+    assert saved["voice_references"] == [expected]
+    assert loaded == [str(sample_path), str(sample_path)]
+    assert transcribed == [sound]
     assert not capture.errors
 
 
-def test_validate_voices_transcription_failure_blocks_launch_and_does_not_save(tmp_path, monkeypatch):
+@pytest.mark.parametrize("cropped", [False, True])
+@pytest.mark.parametrize("result", [("", "stt broke"), ("", "")])
+def test_validate_voices_transcription_failure_blocks_launch_and_does_not_save(tmp_path, monkeypatch, cropped, result):
+    # STT errors and empty successful results both leave the active transcript unchanged.
     capture = _ValidateCapture(monkeypatch)
-    (tmp_path / "a.flac").write_bytes(b"valid")
+    entry = _validate_entry("a.flac", "", cropped=cropped)
+    _write_active_sample(tmp_path, entry)
     monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: object())
-    monkeypatch.setattr(voice_menu_shared.Transcriber, "transcribe_to_words", lambda *args, **kwargs: "stt broke")
-    state = _validate_state(tmp_path, "glm_local", [{"file_name": "a.flac", "transcript": ""}])
+    monkeypatch.setattr(VoiceMenuShared, "transcribe_voice_sample_to_text", lambda *_: result)
+    state = _validate_state(tmp_path, "glm_local", [entry])
     assert VoiceMenuShared.validate_voices(state) is False
-    assert any("Voice file a.flac could not be transcribed" in line for line in capture.lines)
+    label = "Trimmed voice file for a.flac" if cropped else "Voice file a.flac"
+    assert capture.lines == [f"{voice_menu_shared.COL_ERROR}{label} could not be transcribed{voice_menu_shared.COL_DEFAULT}", ""]
     assert capture.errors == ["Replace problem voice clone file"]
-    assert state.project.voice_references == [{"file_name": "a.flac", "transcript": ""}]
+    assert state.project.voice_references == [entry]
     assert not (tmp_path / "project.json").exists()
 
 
-def test_validate_voices_skips_stt_for_model_without_transcripts(tmp_path, monkeypatch):
+@pytest.mark.parametrize("cropped", [False, True])
+def test_validate_voices_reports_transcript_save_failure(tmp_path, monkeypatch, cropped):
+    # Crop/noncrop save failures keep their existing messages and use the matching updater.
     capture = _ValidateCapture(monkeypatch)
+    entry = _validate_entry("a.flac", "", cropped=cropped)
+    _write_active_sample(tmp_path, entry)
+    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: object())
+    monkeypatch.setattr(VoiceMenuShared, "transcribe_voice_sample_to_text", lambda *_: ("fixed", ""))
+    updater = "set_voice_crop_transcript_at_index_and_save" if cropped else "set_voice_transcript_at_index_and_save"
+    other_updater = "set_voice_transcript_at_index_and_save" if cropped else "set_voice_crop_transcript_at_index_and_save"
+    saved = []
+    monkeypatch.setattr(ProjectVoiceUtil, updater, lambda *args: saved.append(args) or "disk full")
+    monkeypatch.setattr(ProjectVoiceUtil, other_updater, lambda *_: pytest.fail("wrong transcript updater"))
+    state = _validate_state(tmp_path, "glm_local", [entry])
+    assert VoiceMenuShared.validate_voices(state) is False
+    transcript_label = "trim transcript" if cropped else "transcript"
+    assert capture.lines == [
+        f"{voice_menu_shared.COL_ERROR}Could not save {transcript_label} for voice file a.flac: disk full{voice_menu_shared.COL_DEFAULT}",
+        "",
+    ]
+    assert capture.errors == ["Replace problem voice clone file"]
+    assert saved == [(state.project, 0, "fixed")]
+
+
+@pytest.mark.parametrize("cropped", [False, True])
+def test_validate_voices_skips_stt_for_model_without_transcripts(tmp_path, monkeypatch, cropped):
+    # Transcript-free models still validate the active audio in both modes.
+    capture = _ValidateCapture(monkeypatch)
+    entry = _validate_entry("a.flac", "", cropped=cropped)
+    sample_path = _write_active_sample(tmp_path, entry)
+    loaded = []
+    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda path: loaded.append(path) or object())
+    monkeypatch.setattr(VoiceMenuShared, "transcribe_voice_sample_to_text", lambda *_: pytest.fail("must not transcribe"))
+    state = _validate_state(tmp_path, "pocket_local", [entry])
+    assert VoiceMenuShared.get_voice_problems(state) == []
+    assert VoiceMenuShared.validate_voices(state) is True
+    assert loaded == [str(sample_path), str(sample_path)]
+    assert not capture.lines and not capture.errors
+    assert state.project.voice_references == [entry]
+    assert not (tmp_path / "project.json").exists()
+
+
+@pytest.mark.parametrize("cropped", [False, True])
+def test_voice_validation_preserves_existing_active_transcript(tmp_path, monkeypatch, cropped):
+    # An existing crop transcript is sufficient even when the original transcript is empty.
+    capture = _ValidateCapture(monkeypatch)
+    entry = _validate_entry("a.flac", " kept ", cropped=cropped)
+    if cropped:
+        entry["transcript"] = ""
+    _write_active_sample(tmp_path, entry)
+    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: object())
+    monkeypatch.setattr(VoiceMenuShared, "transcribe_voice_sample_to_text", lambda *_: pytest.fail("must not transcribe"))
+    state = _validate_state(tmp_path, "glm_local", [entry])
+    assert VoiceMenuShared.get_voice_problems(state) == []
+    assert VoiceMenuShared.validate_voices(state) is True
+    assert state.project.voice_references == [entry]
+    assert not capture.lines and not capture.errors
+    assert not (tmp_path / "project.json").exists()
+
+
+# --- get_voice_problems (console-free pre-flight used by the quick-gen modal) ---
+
+@pytest.mark.parametrize("model_id, entries, preset", [
+    ("none", [{"file_name": "a.flac", "transcript": ""}], False),
+    ("dots_local", [], False),
+    ("pocket_local", [{"file_name": "a.flac", "transcript": ""}], True),
+])
+def test_get_voice_problems_is_empty_where_validate_is_a_no_op(tmp_path, monkeypatch, model_id, entries, preset):
+    # Same "nothing to check" scope as validate_voices.
+    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: pytest.fail("must not load"))
+    state = _validate_state(tmp_path, model_id, entries, preset=preset)
+    assert VoiceMenuShared.get_voice_problems(state) == []
+
+
+def test_get_voice_problems_reports_required_voice_missing(tmp_path):
+    state = _validate_state(tmp_path, "qwen3tts_local", [])
+    assert VoiceMenuShared.get_voice_problems(state) == ["A voice clone sample is required"]
+
+
+@pytest.mark.parametrize("cropped", [False, True])
+def test_get_voice_problems_lists_every_problem_without_side_effects(tmp_path, monkeypatch, cropped, capsys):
+    # List all active-file blockers without console output, transcription, or saving.
+    capture = _ValidateCapture(monkeypatch)
+    entries = [
+        _validate_entry("gone.flac", "kept", cropped=cropped),
+        _validate_entry("bad.flac", "kept", cropped=cropped),
+        _validate_entry("ok.flac", "", cropped=cropped),
+    ]
+    sample_dir = tmp_path / "voice" / "crops" if cropped else tmp_path
+    sample_dir.mkdir(parents=True, exist_ok=True)
+    for entry in entries[1:]:
+        name = entry["crop_file_name"] if cropped else entry["file_name"]
+        (sample_dir / name).write_bytes(b"sample")
+    monkeypatch.setattr(
+        voice_menu_shared.SoundFileUtil, "load",
+        lambda path: "decode failed" if path.endswith("bad.flac") else object(),
+    )
+    monkeypatch.setattr(
+        VoiceMenuShared, "transcribe_voice_sample_to_text",
+        lambda *_: pytest.fail("must not transcribe"),
+    )
+    state = _validate_state(tmp_path, "glm_local", entries)
+    expected = [
+        "Trimmed voice file for gone.flac not found (reset the trim or restore trim-gone.flac)",
+        "Trimmed voice file for bad.flac is invalid",
+        "Trimmed voice file for ok.flac has no transcript",
+    ] if cropped else [
+        "Voice file gone.flac not found",
+        "Voice file bad.flac is invalid",
+        "Voice file ok.flac has no transcript",
+    ]
+    assert VoiceMenuShared.get_voice_problems(state) == expected
+    assert not capture.lines and not capture.errors
+    assert capsys.readouterr().out == ""
+    assert state.project.voice_references == entries
+    assert not (tmp_path / "project.json").exists()
+
+
+def test_get_voice_problems_ignores_empty_transcript_for_model_without_transcripts(tmp_path, monkeypatch):
     (tmp_path / "a.flac").write_bytes(b"valid")
     monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: object())
-    monkeypatch.setattr(voice_menu_shared.Transcriber, "transcribe_to_words", lambda *_args, **_kwargs: pytest.fail("must not transcribe"))
     state = _validate_state(tmp_path, "pocket_local", [{"file_name": "a.flac", "transcript": ""}])
-    assert VoiceMenuShared.validate_voices(state) is True
-    assert not capture.lines and not capture.errors
+    assert VoiceMenuShared.get_voice_problems(state) == []
 
 
 class TestCropVoiceSampleMenu:

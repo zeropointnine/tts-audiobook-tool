@@ -17,7 +17,6 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorClosed,
     EditorSaveFailed,
 )
-from tts_audiobook_tool.textual.generate_editor import QuickGenerationRequested
 from tts_audiobook_tool.textual.generation_app import GenerationModalResult
 from tts_audiobook_tool.model_worker_protocol import GenerationTerminalStatus
 from tts_audiobook_tool.tts import Tts
@@ -175,7 +174,6 @@ def test_generate_menu_shows_blocker_but_delegates_launch_validation(monkeypatch
 
 def test_generation_workflow_closed_result_performs_no_generation(monkeypatch) -> None:
     state = cast(State, SimpleNamespace(project=object()))
-    generation_calls: list[State] = []
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
         "persist_range_without_generated_items",
@@ -187,95 +185,18 @@ def test_generation_workflow_closed_result_performs_no_generation(monkeypatch) -
         "run_content_textual_app",
         lambda _: ContentAppCompleted(EditorClosed()),
     )
-    monkeypatch.setattr(
-        generate_menu_module.GenerateUtil,
-        "do_generate_using_project_and_state",
-        lambda passed_state: generation_calls.append(passed_state),
-    )
+    errors: list[str] = []
+    monkeypatch.setattr(generate_menu_module.ask, "ask_error", errors.append)
 
     GenerateMenu.run_editor(state)
 
-    assert generation_calls == []
-
-
-def test_generation_workflow_quick_generates_and_reopens(monkeypatch) -> None:
-    state = cast(State, SimpleNamespace(project=object()))
-    restored_indices: list[int | None] = []
-    quick_generation_calls: list[tuple[State, int]] = []
-    run_results = iter(
-        [
-            ContentAppCompleted(QuickGenerationRequested(2)),
-            ContentAppCompleted(EditorClosed()),
-        ]
-    )
-
-    def make_editor(_state: State, quick_gen_index=None):
-        restored_indices.append(quick_gen_index)
-        return object()
-
-    monkeypatch.setattr(
-        generate_menu_module.ProjectUtil,
-        "persist_range_without_generated_items",
-        lambda _: "",
-    )
-    monkeypatch.setattr(generate_menu_module, "GenerateEditor", make_editor)
-    monkeypatch.setattr(
-        generate_menu_module,
-        "run_content_textual_app",
-        lambda _: next(run_results),
-    )
-    monkeypatch.setattr(
-        generate_menu_module.GenerateUtil,
-        "do_quick_generate",
-        lambda passed_state, index: quick_generation_calls.append(
-            (passed_state, index)
-        ),
-    )
-
-    GenerateMenu.run_editor(state)
-
-    assert restored_indices == [None, 2]
-    assert quick_generation_calls == [(state, 2)]
-
-
-def test_generation_workflow_reports_quick_save_error_and_continues(monkeypatch) -> None:
-    state = cast(State, SimpleNamespace(project=object()))
-    feedback_calls: list[str] = []
-    run_results = iter(
-        [
-            ContentAppCompleted(
-                QuickGenerationRequested(1, "Save failed: disk full")
-            ),
-            ContentAppCompleted(EditorClosed()),
-        ]
-    )
-    monkeypatch.setattr(
-        generate_menu_module.ProjectUtil,
-        "persist_range_without_generated_items",
-        lambda _: "",
-    )
-    monkeypatch.setattr(generate_menu_module, "GenerateEditor", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(
-        generate_menu_module,
-        "run_content_textual_app",
-        lambda _: next(run_results),
-    )
-    monkeypatch.setattr(
-        generate_menu_module.GenerateUtil,
-        "do_quick_generate",
-        lambda *_: None,
-    )
-    monkeypatch.setattr(generate_menu_module.ask, "ask_error", feedback_calls.append)
-
-    GenerateMenu.run_editor(state)
-
-    assert feedback_calls == ["Save failed: disk full"]
+    # A normal close just returns; nothing is reported.
+    assert errors == []
 
 
 def test_generation_workflow_reports_save_failure_without_generation(monkeypatch) -> None:
     state = cast(State, SimpleNamespace(project=object()))
     feedback_calls: list[str] = []
-    generation_calls: list[State] = []
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
         "persist_range_without_generated_items",
@@ -287,17 +208,11 @@ def test_generation_workflow_reports_save_failure_without_generation(monkeypatch
         "run_content_textual_app",
         lambda _: ContentAppCompleted(EditorSaveFailed("Save failed: disk full")),
     )
-    monkeypatch.setattr(
-        generate_menu_module.GenerateUtil,
-        "do_generate_using_project_and_state",
-        lambda passed_state: generation_calls.append(passed_state),
-    )
     monkeypatch.setattr(generate_menu_module.ask, "ask_error", feedback_calls.append)
 
     GenerateMenu.run_editor(state)
 
     assert feedback_calls == ["Save failed: disk full"]
-    assert generation_calls == []
 
 
 def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch) -> None:
@@ -600,7 +515,6 @@ def test_do_generate_prompts_to_queue_remaining_lines_when_none_queued(
             "state": state,
             "indices": {1, 2, 4},
             "batch_size": 1,
-            "is_regen": False,
         }
     ]
 

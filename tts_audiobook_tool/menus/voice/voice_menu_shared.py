@@ -302,20 +302,21 @@ class VoiceMenuShared:
         return transcript, ""
 
     @staticmethod
-    def validate_voices(state: State) -> bool:
-        """Pre-flight check before full-screen TTS features (main process only).
+    def _voice_check_scope(state: State) -> tuple[str, bool] | None:
+        """Decide what the voice pre-flight must check for the active model.
 
-        Verifies every shared voice sample file and, when the active model
-        uses transcripts, auto-transcribes entries whose transcript is empty
-        (migrated projects may have none). Prints the collected problems,
-        then returns False when the feature must not launch.
+        Returns None when the model (or checkpoint) uses no voice samples and
+        nothing is to be checked. Otherwise ``(blocking_message, requires_transcript)``:
+        a non-empty message means generation cannot proceed at all (a required
+        voice is missing); else the project's voice references are to be
+        checked, which is trivially fine when there are none.
         """
         project = state.project
         model_type = project.get_tts_model_type()
         if REGISTRY.voice_binding(model_type.id) is None:
-            return True
+            return None
         if model_type.id == "pocket_local" and project.get_model_setting(model_type.id, "predefined_voice"):
-            return True
+            return None
         # Qwen3 needs a clone sample only for its "base" checkpoint type;
         # custom_voice uses a speaker id and voice_design uses instructions,
         # so those model types launch without any voice samples. An unset
@@ -323,7 +324,7 @@ class VoiceMenuShared:
         if model_type.id == "qwen3tts_local" and project.get_model_setting(model_type.id, "model_type") in (
             "custom_voice", "voice_design",
         ):
-            return True
+            return None
         if not project.voice_references:
             # Readiness no longer blocks a required voice; this pre-flight is
             # the single interactive place that does.
@@ -333,53 +334,109 @@ class VoiceMenuShared:
                     if model_type.id == "pocket_local"
                     else "A voice clone sample is required"
                 )
-                ask.ask_error(message)
-                return False
+                return message, False
+            return "", False
+        return "", REGISTRY.transcript_binding(model_type.id) is not None
+
+    @staticmethod
+    def _check_voice_sample(
+            state: State,
+            index: int,
+            requires_transcript: bool,
+            *,
+            auto_transcribe: bool,
+    ) -> str:
+        """Return an active-sample problem, optionally repairing its missing transcript."""
+        project = state.project
+        entry = project.voice_references[index]
+        file_name = entry["file_name"]
+        cropped = ProjectVoiceUtil.get_crop_range(entry) is not None
+        if cropped:
+            # Validate the active crop, never fall back to the original sample.
+            file_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry)
+            label = f"Trimmed voice file for {file_name}"
+        else:
+            file_path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
+            label = f"Voice file {file_name}"
+        if not os.path.exists(file_path):
+            problem = f"{label} not found"
+            if cropped:
+                problem += f" (reset the trim or restore {os.path.basename(file_path)})"
+            return problem
+        sound_result = SoundFileUtil.load(file_path)
+        if isinstance(sound_result, str):
+            return f"{label} is invalid"
+        transcript_key = "crop_transcript" if cropped else "transcript"
+        if not requires_transcript or entry.get(transcript_key, "").strip():
+            return ""
+        if not auto_transcribe:
+            return f"{label} has no transcript"
+
+        transcript, err = VoiceMenuShared.transcribe_voice_sample_to_text(state, sound_result)
+        if err or not transcript:
+            return f"{label} could not be transcribed"
+        if cropped:
+            save_err = ProjectVoiceUtil.set_voice_crop_transcript_at_index_and_save(project, index, transcript)
+        else:
+            save_err = ProjectVoiceUtil.set_voice_transcript_at_index_and_save(project, index, transcript)
+        if save_err:
+            transcript_label = "trim transcript" if cropped else "transcript"
+            return f"Could not save {transcript_label} for voice file {file_name}: {save_err}"
+        return ""
+
+    @staticmethod
+    def get_voice_problems(state: State) -> list[str]:
+        """Pure (no console output, no transcription) voice pre-flight.
+
+        Returns every problem that would stop a TTS run: a missing required
+        voice, missing or invalid sample files, and, for models that use
+        transcripts, a sample whose transcript is still empty. For use by
+        full-screen UI that cannot run the interactive ``validate_voices``.
+        """
+        project = state.project
+        scope = VoiceMenuShared._voice_check_scope(state)
+        if scope is None:
+            return []
+        blocking_message, requires_transcript = scope
+        if blocking_message:
+            return [blocking_message]
+
+        problems: list[str] = []
+        for index in range(len(project.voice_references)):
+            problem = VoiceMenuShared._check_voice_sample(
+                state, index, requires_transcript, auto_transcribe=False,
+            )
+            if problem:
+                problems.append(problem)
+        return problems
+
+    @staticmethod
+    def validate_voices(state: State) -> bool:
+        """Pre-flight check before full-screen TTS features (main process only).
+
+        Verifies every shared voice sample file and, when the active model
+        uses transcripts, auto-transcribes entries whose transcript is empty
+        (migrated projects may have none). Prints the collected problems,
+        then returns False when the feature must not launch.
+        """
+        project = state.project
+        scope = VoiceMenuShared._voice_check_scope(state)
+        if scope is None:
             return True
-        requires_transcript = REGISTRY.transcript_binding(model_type.id) is not None
+        blocking_message, requires_transcript = scope
+        if blocking_message:
+            ask.ask_error(blocking_message)
+            return False
+        if not project.voice_references:
+            return True
 
         errors: list[str] = []
-        for index, entry in enumerate(project.voice_references):
-            file_name = entry["file_name"]
-            if ProjectVoiceUtil.get_crop_range(entry) is not None:
-                # A crop is active: validate (and transcribe) the cropped
-                # span, which is what generation will actually use.
-                file_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry)
-                if not os.path.exists(file_path):
-                    errors.append(
-                        f"Trimmed voice file for {file_name} not found "
-                        f"(reset the trim or restore {os.path.basename(file_path)})"
-                    )
-                    continue
-                sound_result = SoundFileUtil.load(file_path)
-                if isinstance(sound_result, str):
-                    errors.append(f"Trimmed voice file for {file_name} is invalid")
-                    continue
-                if requires_transcript and not entry.get("crop_transcript", "").strip():
-                    transcript, err = VoiceMenuShared.transcribe_voice_sample_to_text(state, sound_result)
-                    if err or not transcript:
-                        errors.append(f"Trimmed voice file for {file_name} could not be transcribed")
-                        continue
-                    save_err = ProjectVoiceUtil.set_voice_crop_transcript_at_index_and_save(project, index, transcript)
-                    if save_err:
-                        errors.append(f"Could not save trim transcript for voice file {file_name}: {save_err}")
-                continue
-            file_path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
-            if not os.path.exists(file_path):
-                errors.append(f"Voice file {file_name} not found")
-                continue
-            sound_result = SoundFileUtil.load(file_path)
-            if isinstance(sound_result, str):
-                errors.append(f"Voice file {file_name} is invalid")
-                continue
-            if requires_transcript and not entry.get("transcript", "").strip():
-                transcript, err = VoiceMenuShared.transcribe_voice_sample_to_text(state, sound_result)
-                if err or not transcript:
-                    errors.append(f"Voice file {file_name} could not be transcribed")
-                    continue
-                save_err = ProjectVoiceUtil.set_voice_transcript_at_index_and_save(project, index, transcript)
-                if save_err:
-                    errors.append(f"Could not save transcript for voice file {file_name}: {save_err}")
+        for index in range(len(project.voice_references)):
+            problem = VoiceMenuShared._check_voice_sample(
+                state, index, requires_transcript, auto_transcribe=True,
+            )
+            if problem:
+                errors.append(problem)
 
         if errors:
             for error in errors:

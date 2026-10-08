@@ -1,4 +1,4 @@
-"""Keyboard contract shared by generation, realtime playback, and TTS preview."""
+"""Keyboard contract shared by the generation and realtime playback sessions."""
 
 import asyncio
 from types import SimpleNamespace
@@ -12,18 +12,17 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import worker_app as worker_app_module
 from tts_audiobook_tool.textual.generation_app import GenerationApp, GenerationTranscript
 from tts_audiobook_tool.textual.real_time_playback_app import RealTimePlaybackApp
-from tts_audiobook_tool.textual.tts_preview_app import TtsPreviewApp
 from tts_audiobook_tool.textual.worker_content import WorkerLogContentArea
 from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.worker_reset import HardResetCause
 
 
-@pytest.fixture(params=["generation", "realtime", "preview"])
+@pytest.fixture(params=["generation", "realtime"])
 def session(request, monkeypatch):
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.LOCAL)
     monkeypatch.setattr(worker_app_module, "EVENT_POLL_SECONDS", 3600.0)
-    for method in ("submit_generation", "submit_realtime_playback", "submit_tts_preview"):
+    for method in ("submit_generation", "submit_realtime_playback"):
         monkeypatch.setattr(ModelWorker, method, staticmethod(lambda **_: "job"))
     monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda: []))
     cancellations: list[str] = []
@@ -38,11 +37,9 @@ def session(request, monkeypatch):
         generate_range_string="all", gen_auto_concat=False,
     )))
     if request.param == "generation":
-        app = GenerationApp(state, {0}, 1, False, GenerationTranscript("", enabled=False))
-    elif request.param == "realtime":
-        app = RealTimePlaybackApp(state, [], None)
+        app = GenerationApp(state, {0}, 1, GenerationTranscript("", enabled=False))
     else:
-        app = TtsPreviewApp(state, "preview prompt")
+        app = RealTimePlaybackApp(state, [], None)
     return app, cancellations, resets
 
 

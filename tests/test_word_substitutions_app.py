@@ -1,10 +1,11 @@
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 from rich.text import Text
+from textual.timer import Timer
 from textual.widgets import Input, OptionList, Rule, Static
 
 from tts_audiobook_tool.app_types import HighShelfEq, Sound
@@ -13,7 +14,15 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.textual.alert_dialog import AlertDialog
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.model_worker_protocol import (
+    GenerationTerminalStatus,
+    TtsPreviewFinished,
+)
+from tts_audiobook_tool.textual import worker_app as worker_app_module
+from tts_audiobook_tool.textual import word_substitutions_app as word_subs_module
+from tts_audiobook_tool.textual.quick_gen_modal import QuickGenJob, QuickGenModal
 from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
     EditorSaved,
@@ -26,7 +35,6 @@ from tts_audiobook_tool.textual.word_substitutions_app import (
     ADD_ITEM_LABEL,
     NO_ITEMS_LABEL,
     WordSubstitutionItem,
-    WordSubstitutionPreviewRequested,
     WordSubstitutionSentinel,
     WordSubstitutionsApp,
     fit_cell,
@@ -53,6 +61,12 @@ class StubWordSubstitutionsProject:
     def save(self) -> str:
         self.save_calls += 1
         return self.save_error
+
+    # Read by the quick-generation modal's worker-log chrome.
+    dir_path: str = ""
+
+    def get_tts_model_type(self) -> TtsModelType:
+        return TtsModelType.require_by_id("none")
 
     def get_high_shelf(self) -> HighShelfEq:
         return self.high_shelf
@@ -339,27 +353,69 @@ def test_preview_prompt_uses_both_literal_row_values() -> None:
     )
 
 
-def test_pressing_q_requests_preview_and_carries_unsaved_staged_state() -> None:
+def patch_preview_job(
+    sound: Sound | None,
+    *,
+    problems: tuple[str, ...] = (),
+    status: GenerationTerminalStatus = GenerationTerminalStatus.COMPLETED,
+):
+    """Patch the preview job factory with a fake worker job.
+
+    Returns the prompts submitted and the patchers to apply; the fake worker
+    answers each poll with one canned finish event.
+    """
+    prompts: list[str] = []
+
+    def make_job(_state, title: str, prompt: str) -> QuickGenJob:
+        def submit() -> str:
+            prompts.append(prompt)
+            return "job"
+
+        return QuickGenJob(title=title, submit=submit, noun="Preview generation", problems=problems)
+
+    events = [[TtsPreviewFinished("job", status, sound=sound)]]
+    patchers = [
+        patch.object(word_subs_module, "make_preview_job", make_job),
+        patch.object(
+            ModelWorker,
+            "drain_events",
+            staticmethod(lambda max_events=1000: events.pop(0) if events else []),
+        ),
+        patch.object(worker_app_module, "EVENT_POLL_SECONDS", 0.02),
+    ]
+    return prompts, patchers
+
+
+def run_patched(patchers, coroutine) -> None:
+    from contextlib import ExitStack
+
+    with ExitStack() as stack:
+        for patcher in patchers:
+            stack.enter_context(patcher)
+        run(coroutine)
+
+
+def test_pressing_q_previews_in_place_with_unsaved_staged_state() -> None:
+    # The preview modal opens over the live editor, using the highlighted
+    # row's literal values (including unsaved staged edits); nothing is saved
+    # and the editor keeps running with its staged state intact.
     app, project = make_app({"apple": "a", "zebra": "z"})
     app.handle_dialog_result(WordSubstitutionEdit("apple", "ay"))
+    prompts, patchers = patch_preview_job(
+        None, status=GenerationTerminalStatus.FAILED
+    )
 
     async def exercise() -> None:
-        with patch(
-            "tts_audiobook_tool.textual.word_substitutions_app."
-            "readiness.get_tts_preview_blocker_text",
-            return_value="",
-        ):
-            async with app.run_test() as pilot:
-                await pilot.press("q")
-                await pilot.pause()
+        async with app.run_test() as pilot:
+            await pilot.press("q")
+            await pilot.pause(0.3)
+            assert isinstance(app.screen, QuickGenModal)
+            assert app.is_running is True
+            assert app.staged == {"apple": "ay", "zebra": "z"}
 
-    run(exercise())
+    run_patched(patchers, exercise())
     assert project.save_calls == 0
-    assert app.return_value == WordSubstitutionPreviewRequested(
-        original="apple",
-        substitution="ay",
-        staged_items=(("apple", "ay"), ("zebra", "z")),
-    )
+    assert prompts == ["Original word: apple. Substitute word: ay"]
 
 
 def test_pressing_q_on_sentinel_rows_does_nothing() -> None:
@@ -367,57 +423,53 @@ def test_pressing_q_on_sentinel_rows_does_nothing() -> None:
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            # No preview sound restored: the playback-status poll stays off.
             assert app.preview_status_timer is None
             await pilot.press("q")
             await pilot.pause()
             assert app.is_running is True
-            assert app.return_value is None
+            assert len(app.screen_stack) == 1
 
             await pilot.press("down", "q")
             await pilot.pause()
             assert app.is_running is True
-            assert app.return_value is None
+            assert len(app.screen_stack) == 1
 
     run(exercise())
 
 
-def test_preview_blocker_keeps_editor_open() -> None:
+def test_preview_preflight_problems_show_in_modal_and_do_not_submit() -> None:
+    # Pre-flight failures appear inside the modal and nothing is submitted;
+    # "q" cannot stack a second session while it is open.
     app, _ = make_app({"apple": "ay"})
+    prompts, patchers = patch_preview_job(None, problems=("Choose a voice",))
 
     async def exercise() -> None:
-        with patch(
-            "tts_audiobook_tool.textual.word_substitutions_app."
-            "readiness.get_tts_preview_blocker_text",
-            return_value="Choose a voice",
-        ):
-            async with app.run_test() as pilot:
-                await pilot.press("q")
-                await pilot.pause()
-                assert app.is_running is True
-                assert isinstance(app.screen, AlertDialog)
-                assert app.screen.copy == "Choose a voice"
+        async with app.run_test() as pilot:
+            await pilot.press("q")
+            await pilot.pause(0.2)
+            assert isinstance(app.screen, QuickGenModal)
 
-                # "q" must not fire while the modal alert is open: it would
-                # otherwise stack another alert or bypass the dialog.
-                await pilot.press("q")
-                await pilot.pause()
-                assert app.is_running is True
-                assert app.return_value is None
-                assert len(app.screen_stack) == 2
+            await pilot.press("q")
+            await pilot.pause()
+            assert len(app.screen_stack) == 2
 
-    run(exercise())
+            await pilot.press("escape")
+            await pilot.pause()
+            assert len(app.screen_stack) == 1
+            assert app.modal_session_active is False
+
+    run_patched(patchers, exercise())
+    assert prompts == []
 
 
-def test_restored_preview_selects_row_and_autoplays_in_memory_sound() -> None:
+def test_completed_preview_autoplays_in_memory_sound() -> None:
+    # On success the modal disappears and the returned sound plays, shaped for
+    # playback (resampled to the app rate) rather than the raw model output.
     project = StubWordSubstitutionsProject({"apple": "a", "Banana": "b"})
     state = cast(State, SimpleNamespace(project=cast(Project, project)))
     sound = Sound(np.zeros(2_400, dtype=np.float32), 24_000)
-    app = WordSubstitutionsApp(
-        state,
-        restore_original="Banana",
-        preview_sound=sound,
-    )
+    app = WordSubstitutionsApp(state)
+    _, patchers = patch_preview_job(sound)
 
     async def exercise() -> None:
         with (
@@ -430,23 +482,59 @@ def test_restored_preview_selects_row_and_autoplays_in_memory_sound() -> None:
             patch.object(PlaySoundUtil, "stop_sound_async", return_value=True),
         ):
             async with app.run_test() as pilot:
-                await pilot.pause()
+                await pilot.press("down", "q")
+                await pilot.pause(0.6)
+                assert not isinstance(app.screen, QuickGenModal)
                 assert app.selected_index == 1
-                # Playback receives the app-shaped sound, not the raw model
-                # output: playback shaping resamples to the app sample rate.
                 played = play.call_args.args[0]
                 assert played is not sound
                 assert played.sr == APP_SAMPLE_RATE
                 assert len(played.data) == 2 * len(sound.data)
-                assert app.preview_sound is None
                 assert app.preview_sound_id == "preview-id"
-                # The playback-status poll is installed lazily with playback.
                 assert app.preview_status_timer is not None
 
-    run(exercise())
+    run_patched(patchers, exercise())
 
 
-def test_restored_preview_shapes_playback_with_project_settings() -> None:
+def test_overlapping_previews_stop_the_previous_status_timer() -> None:
+    # Replacing active playback must retire its timer, so completion only
+    # cleans up the current timer rather than leaving an orphan interval.
+    app, _ = make_app({"apple": "a", "Banana": "b"})
+    sound = Sound(np.zeros(240, dtype=np.float32), APP_SAMPLE_RATE)
+    first_timer = Mock(spec=Timer)
+    second_timer = Mock(spec=Timer)
+    with (
+        patch.object(app, "set_interval", side_effect=[first_timer, second_timer]),
+        patch.object(
+            SoundPipeline, "prepare_generated_sound_for_playback", return_value=sound
+        ),
+        patch.object(PlaySoundUtil, "play_sound_async", side_effect=["first", "second"]),
+        patch.object(PlaySoundUtil, "current_sound_id", return_value="second") as current,
+        patch.object(PlaySoundUtil, "stop_sound_async") as stop_sound,
+    ):
+        app.play_preview_sound(sound, "apple")
+        app.play_preview_sound(sound, "Banana")
+        first_timer.stop.assert_called_once_with()
+        second_timer.stop.assert_not_called()
+        assert app.preview_status_timer is second_timer
+        assert app.preview_sound_id == "second"
+        assert app.selected_status.right == "Playing pronunciation preview: Banana"
+
+        app.update_preview_playback_status()
+        assert app.preview_status_timer is second_timer
+        current.return_value = ""
+        app.update_preview_playback_status()
+        second_timer.stop.assert_called_once_with()
+        assert app.preview_status_timer is None
+        assert app.preview_sound_id == ""
+        assert app.selected_status.right == ""
+        app.on_unmount()
+        first_timer.stop.assert_called_once_with()
+        second_timer.stop.assert_called_once_with()
+        stop_sound.assert_not_called()
+
+
+def test_preview_shapes_playback_with_project_settings() -> None:
     """The preview applies interactive playback shaping like the other paths."""
     project = StubWordSubstitutionsProject(
         {"apple": "a"},
@@ -456,8 +544,9 @@ def test_restored_preview_shapes_playback_with_project_settings() -> None:
     )
     state = cast(State, SimpleNamespace(project=cast(Project, project)))
     sound = Sound(np.zeros(240, dtype=np.float32), 24_000)
-    app = WordSubstitutionsApp(state, preview_sound=sound)
+    app = WordSubstitutionsApp(state)
     shaped = Sound(np.zeros(480, dtype=np.float32), APP_SAMPLE_RATE)
+    _, patchers = patch_preview_job(sound)
 
     async def exercise() -> None:
         with (
@@ -475,7 +564,8 @@ def test_restored_preview_shapes_playback_with_project_settings() -> None:
             patch.object(PlaySoundUtil, "stop_sound_async", return_value=True),
         ):
             async with app.run_test() as pilot:
-                await pilot.pause()
+                await pilot.press("q")
+                await pilot.pause(0.6)
                 prepare.assert_called_once_with(
                     sound,
                     high_shelf=HighShelfEq.MODERATE,
@@ -484,7 +574,7 @@ def test_restored_preview_shapes_playback_with_project_settings() -> None:
                 )
                 play.assert_called_once_with(shaped)
 
-    run(exercise())
+    run_patched(patchers, exercise())
 
 
 def test_pressing_x_on_only_item_restores_empty_state() -> None:

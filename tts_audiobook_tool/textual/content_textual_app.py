@@ -220,6 +220,23 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         """Prepare deferred backing state and return the final visible indices."""
         raise NotImplementedError
 
+    # Set while an in-app modal session (e.g. the quick-generation modal) owns
+    # the screen. The app-level priority bindings (find, select all, ...) are
+    # resolved before the modal sees a key, so they are disabled meanwhile.
+    modal_session_active: bool = False
+
+    _PRIORITY_EDITOR_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {"open_find", "select_all", "find_previous"}
+    )
+
+    def check_action(
+        self, action: str, parameters: tuple[object, ...]
+    ) -> bool | None:
+        """Disable the editor's priority bindings while a modal session runs."""
+        if self.modal_session_active and action in self._PRIORITY_EDITOR_ACTIONS:
+            return False
+        return True
+
     def initial_selected_phrase_index(self) -> int | None:
         """Return the phrase to select when deferred content is first installed."""
         return None

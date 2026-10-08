@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -7,7 +8,8 @@ from typing import ClassVar
 
 from rich.text import Text
 from textual.binding import Binding, BindingType
-from tts_audiobook_tool import readiness, text_util
+from textual.widgets import OptionList
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types import SoundSegment
 from tts_audiobook_tool.constants import (
@@ -25,13 +27,18 @@ from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
-from tts_audiobook_tool.textual.alert_dialog import AlertDialog
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentTextualApp,
     EditorClosed,
     EditorSaveFailed,
 )
 from tts_audiobook_tool.textual.filter_dialog import FilterDialog
+from tts_audiobook_tool.textual.generation_app import reconcile_generation_state
+from tts_audiobook_tool.textual.quick_gen_modal import (
+    QuickGenModal,
+    QuickGenResult,
+    make_generation_job,
+)
 from tts_audiobook_tool.textual.save_changes_dialog import (
     ExitDecision,
     SaveChangesDialog,
@@ -42,6 +49,7 @@ from tts_audiobook_tool.textual.segment_info_dialog import (
 )
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
+    NonWrappingOptionList,
     OptionReconcileItem,
     STYLE_DIM,
 )
@@ -124,15 +132,7 @@ class GenerateSectionItem:
 GenerateListItem = GenerateSectionItem | GeneratePhraseGroupItem
 
 
-@dataclass(frozen=True)
-class QuickGenerationRequested:
-    """One phrase should be regenerated before reopening the editor."""
-
-    phrase_index: int
-    save_error: str = ""
-
-
-GenerateEditorResult = QuickGenerationRequested | EditorSaveFailed
+GenerateEditorResult = EditorSaveFailed
 
 
 class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
@@ -146,14 +146,9 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         Binding("x", "delete_generated", show=False),
     ]
 
-    def __init__(
-        self,
-        state: State,
-        quick_gen_index: int | None = None,
-    ) -> None:
+    def __init__(self, state: State) -> None:
 
         self.state = state
-        self.quick_gen_restore_phrase_index = quick_gen_index
         self.all_phrase_indices: list[int] = []
         self.list_items: list[GenerateListItem] = []
         self.original_queued_indices: set[int] = set()
@@ -200,12 +195,8 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         self.content_initialized_at = perf_counter()
         return self.get_filtered_phrase_indices()
 
-    def initial_selected_phrase_index(self) -> int | None:
-        """Restore the phrase selected before a completed quick generation."""
-        return self.item_index_for_phrase(self.quick_gen_restore_phrase_index)
-
     def on_content_loaded(self) -> None:
-        """Play a restored quick-generation item after its row is mounted."""
+        """Drop the construction-time status snapshot once rows are installed."""
         # The snapshot accelerates construction of every initial Option. Later
         # row refreshes query the live catalog, while the derived index sets are
         # retained for queue operations.
@@ -214,8 +205,6 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             # The rows are installed synchronously, but they are only painted
             # on the next refresh; log once that refresh has completed.
             self.call_after_refresh(self.log_display_elapsed)
-        if self.quick_gen_restore_phrase_index is not None and self.is_running:
-            self.call_after_refresh(self.play_quick_generated_item)
 
     def log_display_elapsed(self) -> None:
         """Log how long the real content took to display after initialization."""
@@ -225,18 +214,6 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             return
         elapsed = perf_counter() - started_at
         L.d(f"Displayed text after initialization in {elapsed:.3f}s")
-
-    def play_quick_generated_item(self) -> None:
-        """Play the quick-generated item after its restored row is mounted."""
-        phrase_index = self.quick_gen_restore_phrase_index
-        self.quick_gen_restore_phrase_index = None
-        if (
-            phrase_index is None
-            or self.selected_index is None
-            or self.highlighted_content_line_index() != phrase_index
-        ):
-            return
-        self.action_play_sound()
 
     def update_pinned_status(self) -> None:
         """Show the active filter and number of queued ungenerated lines."""
@@ -496,6 +473,90 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             self.make_reconcile_items(old_items_by_id, changed_phrase_indices),
         )
 
+    def refresh_filtered_rows_preserving_selection(
+        self, changed_phrase_indices: set[int]
+    ) -> None:
+        """Refresh live rows, remapping selection and anchor by stable identities."""
+        selected_option_ids = {self.option_id(index) for index in self.selected_indices}
+        highlighted_option_id = (
+            self.option_id(self.selected_index) if self.selected_index is not None else None
+        )
+        anchor_option_id = (
+            self.option_id(self.selection_anchor_index)
+            if self.selection_anchor_index is not None
+            else None
+        )
+        old_selected_index = self.selected_index
+        old_items_by_id = self.visible_items_by_id()
+        option_list = (
+            self.query_one("#line-list", NonWrappingOptionList)
+            if self.is_running
+            else None
+        )
+        scroll_offset = option_list.scroll_offset if option_list is not None else None
+
+        phrase_indices = self.get_filtered_phrase_indices()
+        visible_indices_by_id = {
+            self.stable_option_id(self.list_items[item_index]): index
+            for index, item_index in enumerate(phrase_indices)
+        }
+        selected_index = (
+            visible_indices_by_id.get(highlighted_option_id)
+            if highlighted_option_id is not None
+            else None
+        )
+        if selected_index is None:
+            phrase_rows = [
+                index
+                for index, item_index in enumerate(phrase_indices)
+                if isinstance(self.list_items[item_index], GeneratePhraseGroupItem)
+            ]
+            selected_index = min(
+                phrase_rows,
+                key=lambda index: abs(index - (old_selected_index or 0)),
+                default=None,
+            )
+        selected_item_index = (
+            phrase_indices[selected_index] if selected_index is not None else None
+        )
+
+        # Reconciliation can move the highlight; its synthetic event must not
+        # collapse the selection we restore below.
+        with (
+            option_list.prevent(OptionList.OptionHighlighted)
+            if option_list is not None
+            else nullcontext()
+        ):
+            self.replace_filtered_phrase_indices(
+                phrase_indices,
+                selected_item_index,
+                old_items_by_id,
+                changed_phrase_indices,
+            )
+            self.selected_indices = {
+                index
+                for option_id, index in visible_indices_by_id.items()
+                if option_id in selected_option_ids
+            }
+            if self.selected_index is not None:
+                self.selected_indices.add(self.selected_index)
+            self.selection_anchor_index = (
+                visible_indices_by_id.get(anchor_option_id, self.selected_index)
+                if anchor_option_id is not None
+                else self.selected_index
+            )
+            if option_list is None:
+                return
+            self.update_inactive_selection_style()
+            self.update_selection_status()
+            if scroll_offset is not None:
+                option_list.scroll_to(
+                    x=scroll_offset.x,
+                    y=scroll_offset.y,
+                    animate=False,
+                    immediate=True,
+                )
+
     def find_text_strings(self, item_index: int) -> Sequence[str]:
         """Search visible phrase text and complete section heading text."""
         item = self.list_items[item_index]
@@ -697,7 +758,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         self.show_playback_status()
 
     def action_quick_generate(self) -> None:
-        """Regenerate the highlighted item outside the full-screen editor."""
+        """Regenerate the highlighted item in a modal over the editor."""
         phrase_index = self.get_highlighted_phrase_index()
         if phrase_index is None:
             return
@@ -705,24 +766,65 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         self.quick_generate_phrase(phrase_index)
 
     def quick_generate_phrase(self, phrase_index: int) -> None:
-        """Regenerate a specific phrase outside the full-screen editor."""
+        """Regenerate a specific phrase in a modal over the editor.
 
-        blocker_text = readiness.get_run_blocker_text(self.state, verbose=True)
-        if blocker_text:
-            self.push_screen(
-                AlertDialog(
-                    title="Cannot generate audio",
-                    copy=blocker_text,
-                )
-            )
+        The modal runs its own pre-flight (readiness, voices, busy worker) and
+        lists any problems in red; only when there are none does the editor
+        persist the staged queue and delete the line's existing sound.
+        """
+        if self.modal_session_active:
             return
 
-        save_error = self.persist_staged_queue()
-        if self.playing_phrase_index == phrase_index:
-            self.stop_tracked_playback()
-        self.project.sound_segments.delete_by_indices({phrase_index})
-        self.project.sound_segments.force_invalidate()
-        self.exit(QuickGenerationRequested(phrase_index, save_error))
+        job = make_generation_job(self.state, phrase_index)
+        if not job.problems:
+            save_error = self.persist_staged_queue()
+            if save_error:
+                self.notify(save_error, severity="error")
+            if self.playing_phrase_index == phrase_index:
+                self.stop_tracked_playback()
+            self.project.sound_segments.delete_by_indices({phrase_index})
+            self.project.sound_segments.force_invalidate()
+
+        self.modal_session_active = True
+        self.push_screen(
+            QuickGenModal(self.state, job),
+            lambda result: self.handle_quick_gen_result(result, phrase_index),
+        )
+
+    def handle_quick_gen_result(
+        self, result: QuickGenResult | None, phrase_index: int
+    ) -> None:
+        """Re-sync the live editor with what the quick generation produced."""
+        self.modal_session_active = False
+        if result is None or not result.submitted:
+            return
+
+        save_error = reconcile_generation_state(
+            self.state, result.remaining_range_string
+        )
+        if save_error:
+            self.notify(save_error, severity="error")
+
+        # The worker updated the persisted generation range; adopt it as the
+        # new baseline for the queue.
+        old_staged_indices = self.staged_queued_indices
+        queued_indices = ProjectUtil.get_indices_to_generate(self.project)
+        self.original_queued_indices = queued_indices & set(self.all_phrase_indices)
+        self.staged_queued_indices = set(self.original_queued_indices)
+
+        self.refresh_phrase_classifications()
+        changed_indices = (old_staged_indices ^ self.staged_queued_indices) | {
+            phrase_index
+        }
+        self.refresh_filtered_rows_preserving_selection(changed_indices)
+        self.update_pinned_status()
+        has_new_segment = (
+            self.get_phrase_segment_status(phrase_index).best_segment is not None
+        )
+        self.phrase_segment_statuses.clear()
+
+        if has_new_segment and result.completed:
+            self.play_sound_for_phrase(phrase_index)
 
     def action_show_info(self) -> None:
         """Show dialog with info for the highlighted segment."""

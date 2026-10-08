@@ -16,7 +16,6 @@ import pytest
     ("textual.word_substitutions_app", "WordSubstitutionsApp"),
     ("textual.generation_app", "GenerationApp"),
     ("textual.real_time_playback_app", "RealTimePlaybackApp"),
-    ("textual.tts_preview_app", "TtsPreviewApp"),
     ("enhance.unmatched_lines_app", "UnmatchedLinesApp"),
 ])
 def test_all_textual_apps_shadow_ctrl_q_with_a_noop(module_name, class_name):

@@ -86,7 +86,7 @@ def test_cold_exact_model_prints_verbatim_path(notice_io, trailing_slashes, non_
     response.raise_for_status.assert_called_once_with()
     response.json.assert_called_once_with()
     notice_io.print_init.assert_called_once_with(
-        f"audio.cpp is loading {DESCRIPTION}\n{COL_DIM_ITALICS}server path: {path}"
+        f"audio.cpp will load {DESCRIPTION}\n{COL_DIM_ITALICS}server path: {path}"
     )
 
 
@@ -233,6 +233,6 @@ def test_each_invocation_requests_current_state_to_notice_reloads(notice_io):
         response.raise_for_status.assert_called_once_with()
         response.json.assert_called_once_with()
     assert notice_io.print_init.call_args_list == [
-        call(f"audio.cpp is loading {DESCRIPTION}\n{COL_DIM_ITALICS}server path: {MODEL_PATH}"),
-        call(f"audio.cpp is loading {DESCRIPTION}\n{COL_DIM_ITALICS}server path: /models/reloaded.gguf"),
+        call(f"audio.cpp will load {DESCRIPTION}\n{COL_DIM_ITALICS}server path: {MODEL_PATH}"),
+        call(f"audio.cpp will load {DESCRIPTION}\n{COL_DIM_ITALICS}server path: /models/reloaded.gguf"),
     ]

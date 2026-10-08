@@ -995,22 +995,6 @@ class GenerateUtil:
         _ = SoundFileUtil.save_flac(sound, path)
 
     @staticmethod
-    def do_quick_generate(state: State, phrase_index: int) -> None:
-        """Regenerate exactly one project item."""
-        # Main-process UI flow only; the worker never runs this method, and
-        # the lazy import keeps this module importable without the UI chain.
-        from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-        if not VoiceMenuShared.validate_voices(state):
-            return
-        from tts_audiobook_tool.textual.generation_app import run_generation_app
-        run_generation_app(
-            state=state,
-            indices={phrase_index},
-            batch_size=ProjectVoiceUtil.get_batch_size(state.project),
-            is_regen=True,
-        )
-
-    @staticmethod
     def do_generate_using_project_and_state(state: State) -> None:
         """ Generate queued project items and run configured completion actions. """
 
@@ -1033,7 +1017,6 @@ class GenerateUtil:
             state=state,
             indices=indices,
             batch_size=ProjectVoiceUtil.get_batch_size(state.project),
-            is_regen=False,
         )
         if not generation_result.completed:
             return

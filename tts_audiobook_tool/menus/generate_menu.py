@@ -9,7 +9,6 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project_support.model_settings import REGISTRY, SettingRef
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
@@ -20,14 +19,10 @@ from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
-    EditorClosed,
     EditorSaveFailed,
     run_content_textual_app,
 )
-from tts_audiobook_tool.textual.generate_editor import (
-    GenerateEditor,
-    QuickGenerationRequested,
-)
+from tts_audiobook_tool.textual.generate_editor import GenerateEditor
 from tts_audiobook_tool.textual.generation_app import run_generation_app
 from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 from tts_audiobook_tool.util import *
@@ -148,33 +143,14 @@ class GenerateMenu:
         if range_save_error:
             ask.ask_error(range_save_error)
 
-        # Loop is required to re-run editor after "quick-gen"
-        quick_gen_index: int | None = None
-        while True:
-            run_result = run_content_textual_app(
-                GenerateEditor(
-                    state,
-                    quick_gen_index=quick_gen_index,
-                )
-            )
-            if not isinstance(run_result, ContentAppCompleted):
-                ask.ask_error(run_result.message)
-                return
+        run_result = run_content_textual_app(GenerateEditor(state))
+        if not isinstance(run_result, ContentAppCompleted):
+            ask.ask_error(run_result.message)
+            return
 
-            editor_result = run_result.result
-            if isinstance(editor_result, EditorSaveFailed):
-                ask.ask_error(editor_result.error)
-                return
-            if isinstance(editor_result, QuickGenerationRequested):
-                if editor_result.save_error:
-                    ask.ask_error(editor_result.save_error)
-                quick_gen_index = editor_result.phrase_index
-                GenerateUtil.do_quick_generate(
-                    state, quick_gen_index
-                )
-                continue
-            if isinstance(editor_result, EditorClosed):
-                return
+        editor_result = run_result.result
+        if isinstance(editor_result, EditorSaveFailed):
+            ask.ask_error(editor_result.error)
 
     @staticmethod
     def gen_auto_concat_menu(state: State) -> None:
@@ -423,7 +399,6 @@ def do_generate(state: State) -> None:
         state=state,
         indices=indices,
         batch_size=ProjectVoiceUtil.get_batch_size(state.project),
-        is_regen=False,
     )
 
     if generation_result.completed and state.project.gen_auto_concat:

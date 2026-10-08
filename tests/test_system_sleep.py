@@ -206,7 +206,7 @@ def test_run_generation_app_holds_sleep_inhibitor(monkeypatch, tmp_path) -> None
         project=SimpleNamespace(dir_path=str(tmp_path), generate_range_string="all"),
         prefs=SimpleNamespace(save_gen_log=False),
     )
-    result = generation_app.run_generation_app(state, {0}, 1, False)
+    result = generation_app.run_generation_app(state, {0}, 1)
 
     assert result.status is GenerationTerminalStatus.FAILED
     assert [mode.enter_count for mode in keep.created] == [1]
@@ -284,7 +284,7 @@ def test_run_generation_app_releases_before_console_prompt(monkeypatch, tmp_path
         project=SimpleNamespace(dir_path=str(tmp_path), generate_range_string="all"),
         prefs=SimpleNamespace(save_gen_log=False),
     )
-    generation_app.run_generation_app(state, {0}, 1, False)
+    generation_app.run_generation_app(state, {0}, 1)
 
     # The lock is already released by the time the prompt is presented.
     assert exits_at_prompt == [1]
@@ -297,7 +297,6 @@ def test_generation_app_releases_lock_at_terminal_summary() -> None:
         SimpleNamespace(project=SimpleNamespace(gen_auto_concat=False)),
         {0},
         1,
-        False,
         transcript,
         on_job_end=lambda: released.append("released"),
     )

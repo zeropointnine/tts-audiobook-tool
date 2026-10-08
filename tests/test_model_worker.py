@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 import tts_audiobook_tool.model_worker as model_worker_module
-from tts_audiobook_tool import gen_timeout_util
+from tts_audiobook_tool import gen_timeout_util, text_util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types import Book, BookSection, Sound, SttVariant
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
@@ -794,6 +794,7 @@ def test_run_tts_preview_returns_processed_sound_without_word_substitutions(
     monkeypatch.setattr(
         Tts, "reset_voice_selection_index", staticmethod(lambda: None)
     )
+    monkeypatch.setattr(Tts, "get_instance", staticmethod(lambda: object()))
     # This test covers the unwatched path (a call that may still load the
     # model); the watchdog itself is covered separately.
     monkeypatch.setattr(
@@ -873,6 +874,7 @@ def test_run_tts_preview_rejects_nan_output(monkeypatch) -> None:
     monkeypatch.setattr(
         Tts, "reset_voice_selection_index", staticmethod(lambda: None)
     )
+    monkeypatch.setattr(Tts, "get_instance", staticmethod(lambda: object()))
     monkeypatch.setattr(
         model_worker_module, "_should_watch_preview_inference", lambda: False
     )
@@ -931,6 +933,8 @@ def _install_preview_state(monkeypatch) -> None:
     monkeypatch.setattr(
         Tts, "reset_voice_selection_index", staticmethod(lambda: None)
     )
+    # The preview resolves the model instance before announcing the run.
+    monkeypatch.setattr(Tts, "get_instance", staticmethod(lambda: object()))
 
 
 @pytest.mark.parametrize("cancel_during_notice", [False, True])
@@ -974,6 +978,34 @@ def test_audio_cpp_preview_reports_init_before_inference(monkeypatch, cancel_dur
     assert isinstance(event, TtsPreviewFinished)
     assert event.status is (GenerationTerminalStatus.CANCELLED if cancel_during_notice else GenerationTerminalStatus.COMPLETED)
     assert event.sound is (None if cancel_during_notice else sound)
+
+
+def test_preview_prints_heading_after_model_load_and_before_inference(monkeypatch, capsys) -> None:
+    # The "Generating audio" heading marks where inference actually begins, so
+    # any output from loading the model must come before it (like a regular
+    # run's "Processing line" heading).
+    _install_preview_state(monkeypatch)
+    monkeypatch.setattr(model_worker_module, "_should_watch_preview_inference", lambda: False)
+    sound = Sound(np.zeros(8, dtype=np.float32), 24_000)
+
+    def load_model():
+        print("model load output")
+        return object()
+
+    def generate(*_args, **_kwargs):
+        print("inference output")
+        return [sound]
+
+    monkeypatch.setattr(Tts, "get_instance", staticmethod(load_model))
+    monkeypatch.setattr(SoundPipeline, "generate_processed_using_project", generate)
+
+    model_worker_module._run_tts_preview_command(
+        _make_preview_command(), _PreviewEventQueue(), _PreviewCancellationEvent()
+    )
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    plain = [text_util.strip_ansi_codes(line) for line in lines]
+    assert plain == ["model load output", "Generating audio...", "inference output"]
 
 
 def test_should_watch_preview_inference_exempts_model_setup_calls(monkeypatch) -> None:
