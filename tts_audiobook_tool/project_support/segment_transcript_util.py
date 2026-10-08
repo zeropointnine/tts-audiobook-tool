@@ -50,7 +50,7 @@ class SegmentTranscriptUtil:
             validation_result: TranscriptResult
     ) -> SegmentTranscriptData:
 
-        source = phrase_group.as_flattened_phrase().text
+        source = phrase_group.spoken_text(project.language_code)
         prompt = SegmentTranscriptUtil.make_inference_prompt(project, source)
         transcript = Transcriber.get_flat_text_from_words(validation_result.transcript_words)
         normalized_source, normalized_transcript = TextNormalizer.normalize_source_and_transcript(

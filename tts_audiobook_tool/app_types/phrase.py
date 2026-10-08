@@ -3,6 +3,7 @@ from enum import Enum
 from functools import total_ordering
 
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.text_ops import roman_heading
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
@@ -146,6 +147,25 @@ class PhraseGroup:
         for phrase in self.phrases:
             s += phrase.text
         return s
+
+    def spoken_text(self, language_code: str) -> str:
+        """
+        The text that is actually spoken by the TTS model, and so the text the
+        spoken audio is validated against. This is `text` except where a
+        content rule rewrites it for speech. The stored project text is never
+        modified.
+
+        Current rule: a group that is a single phrase of a bare Roman numeral
+        (eg, a chapter heading line "XI") with a reason of PARAGRAPH or higher
+        is spelled out ("Eleven"). Such a phrase is a standalone line, so it
+        cannot be a numeral embedded in a sentence (eg, "Henry VIII").
+        See docs-dev/roman-numeral-headings.md
+        """
+        text = self.text
+        if len(self.phrases) != 1 or self.last_reason < Reason.PARAGRAPH:
+            return text
+        expanded = roman_heading.expand_bare_roman_numeral(text, language_code)
+        return text if expanded is None else expanded
 
     @property
     def presentable_text(self) -> str:

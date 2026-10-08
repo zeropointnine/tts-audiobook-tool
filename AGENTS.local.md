@@ -14,3 +14,8 @@ The audio.cpp local repository lives in `/d/p/audio.cpp-repo`. Treat this local 
 - `/d/p/audio.cpp-repo/docs/` for model and usage documentation
 - `/d/p/audio.cpp-repo/community_models/` for community model implementations
 - the relevant model implementation/source files when behavior is unclear
+
+
+# Other
+
+When formulating git commit messages, the "headline" should start lowercase. The body text should use a bulleted list format which is relatively terse.

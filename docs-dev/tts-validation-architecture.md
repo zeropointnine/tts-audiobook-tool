@@ -54,6 +54,7 @@ The key design idea is that the app does **not** compare raw source text directl
 - A `PhraseGroup` wraps one or more `Phrase` objects.
 - `PhraseGroup.text` concatenates the original phrase text without altering whitespace.
 - `PhraseGroup.as_flattened_phrase().text` produces the exact prompt text used for generation.
+- `PhraseGroup.spoken_text(language_code)` is what generation and validation actually use. It equals `.text` except that a standalone bare Roman numeral heading (eg, `XI`) is spelled out (`Eleven`). See `docs-dev/roman-numeral-headings.md`.
 
 This matters because the validator compares the generated audio against the **flattened group text**, not against each inner phrase separately.
 
@@ -257,7 +258,7 @@ Main transformations:
 2. `casefold()` lowercases aggressively for international text.
 3. Apostrophes adjacent to word boundaries are stripped.
 4. Language-specific transformations are applied via dispatch functions:
-   - **English** (`normalize_common_en_specific()`): dashes replaced with spaces, then text-number normalization via `whisper_normalizer.english.EnglishNumberNormalizer` so forms like `ninety-nine` normalize reliably.
+   - **English** (`normalize_common_en_specific()`): dashes replaced with spaces, then text-number normalization via `whisper_normalizer.english.EnglishNumberNormalizer` so forms like `ninety-nine` normalize reliably. The number normalizer is run per clause (split after a letter plus clause punctuation) because attached punctuation otherwise defeats it (`Eleven.` vs `Eleven`); see `docs-dev/roman-numeral-headings.md`.
    - **Spanish** (`normalize_common_es_specific()`): first converts spelled-out integer cardinals (0-9999) to digits via `SpanishNumberNormalizer.normalize()` (`tts_audiobook_tool/text_ops/spanish_number_normalizer.py`) — this happens **before** diacritic stripping because the number normalizer expects accented forms (e.g. `veintidós`) — then calls `strip_spanish_diacritics_keep_enye()` which removes accented characters (e->e, etc.) while preserving ñ/Ñ via sentinel-based protect-decompose-restore.
 5. Punctuation (ASCII punctuation plus em-dash, en-dash, and ellipsis) is replaced with spaces.
 6. Remaining non-word/non-space characters are stripped.

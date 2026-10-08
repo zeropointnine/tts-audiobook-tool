@@ -706,7 +706,7 @@ class GenerateUtil:
             transcribed_words = gen_result
 
             # Validate
-            text = phrase_groups[ indices[i] ].as_flattened_phrase().text
+            text = phrase_groups[ indices[i] ].spoken_text(project.language_code)
             validation_result = Validator.validate(
                 sound, text, transcribed_words, project.language_code, strictness=project.strictness
             )
@@ -899,7 +899,7 @@ class GenerateUtil:
     @staticmethod
     def phrase_group_to_prompt(phrase_group: PhraseGroup, project: Project) -> str:
 
-        prompt = phrase_group.as_flattened_phrase().text
+        prompt = phrase_group.spoken_text(project.language_code)
         return prompt
 
     @staticmethod
