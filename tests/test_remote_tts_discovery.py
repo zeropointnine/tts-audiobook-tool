@@ -366,6 +366,19 @@ def test_audio_detector_matches_omnivoice_offline_route_only():
     assert audio_cpp_detection.detect_audio_cpp_models([{**omnivoice, "mode": "streaming"}]) == []
 
 
+def test_audio_detector_matches_dots_under_either_task_but_not_streaming():
+    # dots.tts runs one reference-optional path for both `tts` and `clon`, so the
+    # operator's spelling must not matter. The server cannot say whether the
+    # weights are SOAR or MeanFlow (or Edit), so identical metadata matches alike.
+    dots = {"id": "my-dots", "family": "dots_tts", "task": "tts", "mode": "offline",
+            "session_options": {}, "path": "/models/DotTTS-MF-GGUF/dots-tts-mf-q8_0.gguf"}
+    expected = [(TtsModelType.require_by_id("dots_audiocpp"), "my-dots")]
+    assert audio_cpp_detection.detect_audio_cpp_models([dots]) == expected
+    assert audio_cpp_detection.detect_audio_cpp_models([{**dots, "task": "clon"}]) == expected
+    assert audio_cpp_detection.detect_audio_cpp_models([{**dots, "task": "vdes"}]) == []
+    assert audio_cpp_detection.detect_audio_cpp_models([{**dots, "mode": "streaming"}]) == []
+
+
 def test_audio_detector_matches_fish_s2_tts_route_only():
     # The Fish session rejects any task but `tts`, despite its spec listing
     # `clone`, so a `clon` entry is not a usable candidate.

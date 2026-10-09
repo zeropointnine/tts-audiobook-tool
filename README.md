@@ -16,7 +16,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [AuK (Base, Flash)](https://github.com/Tencent-Hunyuan/AuK) | | ✅ | |
 | [Breeze TTS 2](https://github.com/breezeblue-ai/breeze-tts) | | | ✅ |
 | [Chatterbox (Multilingual V3, Turbo)](https://github.com/resemble-ai/chatterbox) | ✅ | ✅ | ✅ |
-| [dots.tts](https://github.com/studio-dots-ai/dots.tts) | ✅ | | |
+| [dots.tts](https://github.com/studio-dots-ai/dots.tts) | ✅ | | ✅ |
 | [Echo-TTS](https://github.com/jordandare/echo-tts) | | | ✅ |
 | [Fish Speech S2-Pro](https://github.com/fishaudio/fish-speech) | ✅ | ✅ | ✅ |
 | [Fish Speech S1-mini](https://github.com/fishaudio/fish-speech) | ✅ | | |
@@ -638,7 +638,7 @@ The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which nee
 
 Zero-shot voice cloning is a first-class feature, supported for all models.
 
-**<u>Locally generated using dedicated venv:</u>**
+<ins>**Locally generated using dedicated venv:**</ins>
 
 **Chatterbox**
 - Multilingual V2, Multilingual V3, and Turbo model variants
@@ -715,7 +715,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - CFG, steps, seed
 
 
-**<u>SGL-Omni:</u>**
+<ins>**SGL-Omni:**</ins>
 
 **AuK / AuK-Flash**
 - Base and Flash models
@@ -746,7 +746,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature, top_k, repetition_penalty
 
 
-**<u>audio.cpp:</u>**
+<ins>**audio.cpp:**</ins>
 
 **Breeze TTS 2**
 - Supports voice clone and/or voice design
@@ -755,6 +755,10 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 **Chatterbox**
 - Multilingual V2, Multilingual V3, and English model variants
 - Exaggeration, CFG, temperature, top_p, top_k, repetition_penalty, seed
+
+**dots.tts**
+- SOAR or MeanFlow (whichever the server entry is configured with)
+- Steps, guidance scale, speaker scale, seed
 
 **Echo-TTS**
 - Steps, text guidance scale, speaker guidance scale, seed
@@ -817,8 +821,9 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-10-06**
+**2026-10-09**
 
+- Added support for **dots.tts for audio.cpp** (SOAR or MeanFlow)
 - Added support for **Fish S2-Pro for audio.cpp**
 
 **2026-10-06**

@@ -668,13 +668,13 @@ class GenerateUtil:
 
             if isinstance(gen_result, TtsModelError):
                 err = gen_result.message
-                printt(f"Text segment {index+1} - error: {err}")
+                printt(f"{COL_ERROR}Error: {err}")
                 results.append(gen_result)
                 continue
 
             if isinstance(gen_result, str):
                 err = gen_result
-                printt(f"Text segment {index+1} - error: {err}")
+                printt(f"{COL_ERROR}Error: {err}")
                 results.append(err)
                 continue
 

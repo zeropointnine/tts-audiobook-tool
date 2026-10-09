@@ -404,7 +404,7 @@ class WorkerSessionMixin(Generic[ResultT], _SessionHostBase):
                 self.phase = "Cancellation requested"
                 # These are logical lines, not print() arguments. Leave trailing
                 # spacing to the worker so its next blank line is not duplicated.
-                lines = ["", f"{COL_ERROR}Cancellation requested, please wait"]
+                lines = ["", f"{COL_ERROR}Cancellation requested, please wait..."]
                 if self.hard_reset_available:
                     lines.append(
                         f"{COL_ERROR}Or press [{COL_DEFAULT}ESC{COL_ERROR}] again to hard-reset"

@@ -110,7 +110,7 @@ settings = [
     { name = "target", section = "parameters", type = "str", default = "" },
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
-    { name = "seed", section = "parameters", type = "int", default = 42, preserve_default = true },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
     { name = "speaker_scale", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "num_steps_soar", section = "parameters", type = "int", default = -1, sentinel = -1 },
     { name = "num_steps_mf", section = "parameters", type = "int", default = -1, sentinel = -1 },
@@ -1611,6 +1611,87 @@ min = 0.25
 max = 2.0
 # audio.cpp forwards its fixed top-level request fields only, so a
 # family-specific control travels inside the `options` object.
+target = "options"
+
+# ------------------------------------------------------------------------
+# dots.tts via audio.cpp. One entry serves whichever dots.tts model the server is
+# configured with (SOAR or MeanFlow): audio.cpp advertises them identically, so
+# the operator chooses by pointing the server entry at a GGUF. Defaults are SOAR's.
+# Do not configure the Edit package; it advertises the same family and task.
+[[models]]
+id = "dots_audiocpp"
+settings = [
+    { name = "num_inference_steps", section = "parameters", type = "int", default = 10 },
+    { name = "guidance_scale", section = "parameters", type = "float", default = 1.2 },
+    { name = "speaker_scale", section = "parameters", type = "float", default = 1.5 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+]
+backend_kind = "audio_cpp"
+
+[models.spec]
+file_tag = "dots"
+default_output_sample_rate = 48000
+un_all_caps = false
+requirements_file_name = "requirements-remote.txt"
+substitutions = []
+
+[models.spec.ui]
+proper_name = "dots.tts"
+short_name = "dots.tts audio.cpp"
+settings_note = """
+This model uses whichever dots.tts model the audio.cpp server entry is configured
+with (SOAR or MeanFlow). MeanFlow ignores the guidance scale. """
+voice_sample_max_duration_s = 10
+voice_path_console = "Enter voice clone audio clip file path (up to 10s recommended): "
+voice_path_requestor = "Select voice clone audio clip (up to 10s recommended)"
+project_links = [
+    "https://github.com/studio-dots-ai/dots.tts",
+    "https://huggingface.co/dots-studio/dots.tts-base"
+]
+
+[models.audio_cpp]
+reference_transcript = true
+voice_required = false
+language_policy = "normalized"
+menu = [
+    { kind = "voice_samples" },
+    { parameter = "num_inference_steps", label = "Steps", target_menu = "model" },
+    { parameter = "guidance_scale", label = "Guidance scale", target_menu = "model" },
+    { parameter = "speaker_scale", label = "Speaker scale", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
+]
+
+[models.audio_cpp.request_options]
+max_tokens = 500
+text_chunk_size = 100000
+
+# audio.cpp lists dots.tts as both `tts` and `clone`; the session accepts either
+[models.audio_cpp.match]
+family = "dots_tts"
+tasks = ["tts", "clon"]
+mode = "offline"
+
+[models.audio_cpp.parameters.num_inference_steps]
+type = "int"
+default = 10
+min = 1
+max = 32
+input_prompt_suffix = "(default for SOAR is 10, default for MeanFlow is 4)"
+
+[models.audio_cpp.parameters.guidance_scale]
+type = "float"
+default = 1.2
+min = 1.0
+max = 3.0
+
+[models.audio_cpp.parameters.speaker_scale]
+type = "float"
+default = 1.5
+min = 0.0
+max = 3.0
+# Not one of audio.cpp's forwarded top-level request fields.
 target = "options"
 
 # ------------------------------------------------------------------------

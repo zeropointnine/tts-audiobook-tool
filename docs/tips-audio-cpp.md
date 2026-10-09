@@ -123,6 +123,28 @@ audio.cpp serves Fish S2-Pro as family `fish_audio`. Configure it with `"task": 
 - Rolling continuation and audio.cpp's `multi_reference_cond` (which needs server-side file paths) are not supported.
 - VRAM-constrained GPUs can use the server-side session options `fish_audio.mem_saver`, `fish_audio.weight_type` and `fish_audio.codec_weight_type`; see audio.cpp's [Fish Audio docs](https://github.com/0xShug0/audio.cpp/blob/main/docs/models/fish_audio.md).
 
+## dots.tts (SOAR and MeanFlow)
+
+audio.cpp serves dots.tts as family `dots_tts`, and the app treats `"task": "tts"` and `"task": "clon"` as equivalent for it: both run the same reference-optional path, so either spelling is found.
+
+```json
+{
+  "id": "my-dots",
+  "family": "dots_tts",
+  "path": "/path/to/models/DotTTS-SOAR-GGUF/dots-tts-soar-q8_0.gguf",
+  "task": "tts",
+  "mode": "offline"
+}
+```
+
+- **You choose the variant.** audio.cpp reports SOAR, MeanFlow and Edit identically, so the app cannot tell them apart. Point `path` at the SOAR GGUF (`dots-tts-soar-*.gguf`) or the MeanFlow GGUF (`dots-tts-mf-*.gguf`). Defaults are SOAR's: **10 steps** (MeanFlow wants **4**, so set Steps accordingly) and a guidance scale of 1.2, which MeanFlow ignores.
+- **Configure only one dots.tts entry at a time.** If several match, the app uses the first one the server lists. To switch variants, change the entry's `path` and restart the server.
+- **Do not configure the Edit package** (`dots-tts-edit-*.gguf`). It advertises the same metadata, so it would be accepted and then misused as plain text-to-speech.
+- A voice sample is optional. With one, its transcript is sent as `reference_text` for prompt prefill (better clone quality); the app transcribes samples on import. The recommended sample length is up to 10s.
+- Controls are steps, guidance scale, speaker scale and seed. The seed defaults to random (`-1`). The app pins a 500-patch audio budget per request (the same as local) and sends the project language as a base code (for example `en`).
+- The app disables audio.cpp's internal 320-character text splitter so each segment is one generation. Very long segments need more VRAM (the attention cache grows with the audio generated, up to a hard ceiling), so on a GPU with little free memory a long segment can fail with `failed to allocate DotTTS SOAR DiT cache memory`; lower the max words per segment if that happens.
+- The 1-step/2-step MeanFlow variants, Edit mode, other samplers and streaming are not supported.
+
 ## Keep one TTS model loaded at a time
 
 **For most single-GPU setups, start with `"max_loaded_models": 1`.** You can set this directly at the top level of the JSON config, as shown above (or, alternatively, as a command-line option).

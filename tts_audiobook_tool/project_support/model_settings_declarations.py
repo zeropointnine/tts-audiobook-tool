@@ -26,7 +26,7 @@ BUILTIN_LEGACY_FIELDS: dict[str, tuple[str, object]] = {
     'dots_target': ('str', ''),
     'dots_voice_file_name': ('list[str]', []),
     'dots_voice_transcript': ('list[str]', []),
-    'dots_seed': ('int', 42),
+    'dots_seed': ('int', -1),
     'dots_speaker_scale': ('float', -1.0),
     'dots_num_steps_soar': ('int', -1),
     'dots_num_steps_mf': ('int', -1),

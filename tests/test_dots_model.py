@@ -162,7 +162,9 @@ def test_dots_generation_passes_voice_language_defaults_and_float32(tmp_path, mo
     assert len(result) == 1
     assert result[0].sr == 48_000
     assert result[0].data.dtype == np.float32
-    assert seeded == [DotsBaseModel.SEED_DEFAULT]
+    # Default seed is -1 (random per request): a concrete in-range seed is drawn.
+    assert DotsBaseModel.SEED_DEFAULT == -1
+    assert len(seeded) == 1 and 0 <= seeded[0] <= DotsBaseModel.SEED_MAX
     assert runtime.stream_calls == []
     assert runtime.calls == [
         {

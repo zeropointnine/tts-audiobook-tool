@@ -425,7 +425,7 @@ def test_existing_families_keep_default_language_policy_and_postprocessing():
     for model_id, item in load_audio_cpp_definitions().models.items():
         if model_id in IDS:
             continue
-        expected_policy = "omit" if model_id == "fish_s2_audiocpp" else "project_code"
+        expected_policy = {"fish_s2_audiocpp": "omit", "dots_audiocpp": "normalized"}.get(model_id, "project_code")
         assert item.language_policy == expected_policy and item.language_target == "top_level"
         assert not item.music_and_trim
         support = AudioCppModelSupport(item)

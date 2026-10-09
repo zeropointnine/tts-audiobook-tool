@@ -82,7 +82,7 @@ def test_shipped_voice_sample_duration_recommendations():
         "higgs_v2_local": 15, "mira_local": 8, "omnivoice_local": 15, "pocket_local": 15,
         "auk_sglomni": 5, "auk_flash_sglomni": 5, "cosyvoice3_sglomni": 30,
         "fish_s2_sglomni": 30, "zonos2_sglomni": 20,
-        "echo_tts_audiocpp": 15, "fish_s2_audiocpp": 30, "omnivoice_audiocpp": 15,
+        "dots_audiocpp": 10, "echo_tts_audiocpp": 15, "fish_s2_audiocpp": 30, "omnivoice_audiocpp": 15,
     }
 
 
@@ -169,8 +169,8 @@ def test_complete_catalog_order_and_backend_suffix_ids():
         "moss_local_sglomni", "qwen3tts_sglomni", "zonos2_sglomni",
         "breeze_tts_2_audiocpp", "chatterbox_audiocpp",
         # "glm_tts_audiocpp",  # DISABLED in the catalog; see model_catalog.toml
-        "echo_tts_audiocpp", "fish_s2_audiocpp", "higgs_v3_audiocpp", "moss_delay_audiocpp",
-        "moss_local_audiocpp", "omnivoice_audiocpp",
+        "dots_audiocpp", "echo_tts_audiocpp", "fish_s2_audiocpp", "higgs_v3_audiocpp",
+        "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp",
     ]
     assert raw["schema_version"] == 1
     assert [entry["id"] for entry in raw["models"]] == expected_ids
@@ -192,8 +192,8 @@ def test_catalog_provides_canonical_lookup_handles_in_order():
     assert [spec.id for spec in specs] == ids
     assert list(TtsModelType._initial_specs) == ids
     assert [handle.id for handle in TtsModelType.all()] == ids
-    assert len(specs) == 31
-    assert len(servers) == 17  # nine SGL entries plus the eight audio.cpp entries
+    assert len(specs) == 32
+    assert len(servers) == 18  # nine SGL entries plus the nine audio.cpp entries
     assert len(fingerprint) == 64
     for spec in specs:
         handle = TtsModelType.require_by_id(spec.id)
@@ -344,7 +344,7 @@ def test_installing_data_only_spec_uses_lookup_without_attributes_and_reset_remo
 
 def test_catalog_is_available_at_import_before_model_classes(tmp_path):
     code = """from tts_audiobook_tool.tts_models.model_catalog import load_catalog
-assert len(load_catalog()[0]) == 31
+assert len(load_catalog()[0]) == 32
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 assert FishS2BaseModel.INFO is TtsModelType.require_by_id("fish_s2_local").value
@@ -492,8 +492,8 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
     assert set(audio) == {
         "breeze_tts_2_audiocpp", "chatterbox_audiocpp",
         # "glm_tts_audiocpp",  # DISABLED in the catalog; see model_catalog.toml
-        "echo_tts_audiocpp", "fish_s2_audiocpp", "higgs_v3_audiocpp", "moss_delay_audiocpp",
-        "moss_local_audiocpp", "omnivoice_audiocpp",
+        "dots_audiocpp", "echo_tts_audiocpp", "fish_s2_audiocpp", "higgs_v3_audiocpp",
+        "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp",
     }
 
     chatterbox = audio["chatterbox_audiocpp"]

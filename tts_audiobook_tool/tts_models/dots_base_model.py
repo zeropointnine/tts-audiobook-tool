@@ -77,7 +77,7 @@ class DotsBaseModel(TtsBaseModel):
     # to fit the app's 80-word segment limit without clipping.
     MAX_GENERATE_LENGTH = 500
 
-    SEED_DEFAULT = 42
+    SEED_DEFAULT = -1
     SEED_MIN = -1
     SEED_MAX = APP_SEED_MAX
 

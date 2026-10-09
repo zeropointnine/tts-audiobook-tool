@@ -269,6 +269,10 @@ class AudioCppBackendAdapter:
         if self.definition.language_policy == "moss":
             from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
             language = MossBaseModel.get_language_name(language)
+        if self.definition.language_policy == "normalized":
+            # Base lowercase code ("en-US"/"English" -> "en"); empty is omitted below.
+            from tts_audiobook_tool.text_ops.language_util import normalize_language_code
+            language = normalize_language_code(language)
         # Keep other families' existing empty/ISO language fields, but omit an
         # unknown MOSS hint instead of inserting a tag the model wasn't trained on.
         # An "omit" family auto-detects and never receives a language field.

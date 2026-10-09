@@ -28,6 +28,7 @@ BREEZE_ID = "breeze_tts_2_audiocpp"
 ECHO_ID = "echo_tts_audiocpp"
 OMNIVOICE_ID = "omnivoice_audiocpp"
 FISH_S2_ID = "fish_s2_audiocpp"
+DOTS_ID = "dots_audiocpp"
 # GLM_ID = "glm_tts_audiocpp"  # DISABLED; see model_catalog.toml
 
 
@@ -887,7 +888,68 @@ def test_fish_s2_payload_omits_language_and_pins_token_and_chunk_options(monkeyp
     }
 
 
-@pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, FISH_S2_ID])
+def test_dots_definition_defaults_to_soar_and_accepts_both_clone_task_spellings():
+    # audio.cpp cannot say whether a dots entry serves SOAR or MeanFlow, so the
+    # defaults are SOAR's and the operator is on the hook; both task tokens match.
+    item = definition(DOTS_ID)
+    assert item.family == "dots_tts" and item.tasks == ("tts", "clon") and item.mode == "offline"
+    assert item.session_options == {}
+    assert item.reference_transcript and not item.voice_required and not item.spec.requires_voice
+    assert item.language_policy == "normalized" and item.request_options == {"max_tokens": 500, "text_chunk_size": 100000}
+    assert {name: (parameter.type, parameter.default, parameter.min, parameter.max, parameter.target)
+            for name, parameter in item.parameters.items()} == {
+        "num_inference_steps": ("int", 10, 1, 32, "top_level"),
+        "guidance_scale": ("float", 1.2, 1.0, 3.0, "top_level"),
+        "speaker_scale": ("float", 1.5, 0.0, 3.0, "options"),
+    }
+    assert "MeanFlow is 4" in item.parameters["num_inference_steps"].input_prompt_suffix
+    assert [(control.kind, control.parameter) for control in item.menu] == [
+        ("voice_samples", ""), ("parameter", "num_inference_steps"), ("parameter", "guidance_scale"),
+        ("parameter", "speaker_scale"), ("seed", ""),
+    ]
+    assert item.spec.default_output_sample_rate == 48000 and item.spec.file_tag == "dots"
+    # Untouched project: random seed per request, like every other audio.cpp entry.
+    assert [s["default"] for s in item.settings if s["name"] == "seed"] == [-1]
+
+
+@pytest.mark.parametrize("project_language, expected", [
+    ("en", "en"), ("en-US", "en"), ("English", "en"), ("zh", "zh"), ("", None),
+])
+def test_dots_payload_places_controls_and_normalizes_language(monkeypatch, tmp_path: Path, project_language, expected):
+    # speaker_scale is not a server-forwarded top-level field, so it rides in
+    # `options` with the pinned token budget; the language becomes a base code
+    # (or is omitted) so the server does not build a bad "[EN-US]" tag.
+    path = tmp_path / "sample.flac"
+    sf.write(path, np.full(100, .2), 24000, format="FLAC")
+    item = definition(DOTS_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "my-dots")
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair",
+                        lambda *args: ("sample.flac", "the exact words spoken"))
+    monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: str(path))
+    captured = []
+
+    def fake_generate(url, payload, print_request=False):
+        captured.append(payload)
+        return SimpleNamespace(data=np.asarray([0], dtype=np.float32), sr=48000)
+
+    monkeypatch.setattr(AudioCppUtil, "generate", fake_generate)
+    project = FakeProject(model_id=DOTS_ID, values={"seed": 7, "num_inference_steps": 4})
+    project.language_code = project_language
+    assert not isinstance(adapter.generate_using_project(project, ["hello"]), str)
+    payload = captured[0]
+    assert payload.pop("voice_ref")["data"].startswith("data:audio/wav;base64,")
+    expected_payload = {
+        "model": "my-dots", "input": "hello", "response_format": "wav", "seed": 7,
+        "num_inference_steps": 4, "guidance_scale": 1.2,
+        "reference_text": "the exact words spoken",
+        "options": {"max_tokens": 500, "text_chunk_size": 100000, "speaker_scale": 1.5},
+    }
+    if expected:
+        expected_payload["language"] = expected
+    assert payload == expected_payload
+
+
+@pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, FISH_S2_ID, DOTS_ID])
 def test_optional_voice_requires_a_reference_transcript_when_a_voice_is_set(monkeypatch, model_id):
     """audio.cpp rejects a reference WAV without reference_text; report it first."""
     item = definition(model_id)
@@ -901,7 +963,7 @@ def test_optional_voice_requires_a_reference_transcript_when_a_voice_is_set(monk
     )
 
 
-@pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, HIGGS_ID, FISH_S2_ID])
+@pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, HIGGS_ID, FISH_S2_ID, DOTS_ID])
 def test_voice_readiness_is_lazy_for_every_audio_cpp_family(monkeypatch, model_id):
     item = definition(model_id)
     support = AudioCppModelSupport(item)
