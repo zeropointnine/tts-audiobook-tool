@@ -443,9 +443,8 @@ class WorkerSessionMixin(Generic[ResultT], _SessionHostBase):
         self.reset_request = request
         self.reset_outcome = None
         self.phase = "Hard-resetting model worker"
-        lines = ["", f"{COL_ERROR}Terminating and hard-resetting models\n", "\n "]
-        if request.reason:
-            lines.insert(1, f"{COL_ERROR}{request.reason}\n")
+        # The reason is shown once, in the terminal summary beside the outcome.
+        lines = ["", f"{COL_ERROR}Terminating and hard-resetting models...", ""]
         self._append_application_lines(lines)
         self._update_header()
         # Captured here on the UI thread: the reset runs on a worker thread and
@@ -480,7 +479,10 @@ class WorkerSessionMixin(Generic[ResultT], _SessionHostBase):
             return
         self.reset_in_progress = False
         self.reset_outcome = outcome
-        message = outcome.message
+        # Colored per line: the log stores one color-scoped line per row.
+        message = "\n".join(
+            f"{COL_ERROR}{line}{COL_DEFAULT}" for line in outcome.message.splitlines()
+        )
         log_path = make_worker_log_file_path()
         if log_path:
             message = (

@@ -70,8 +70,6 @@ def test_generate_files_emits_model_unhealthy_after_consecutive_model_errors(
     assert len(unhealthy) == 1
     assert isinstance(unhealthy[0], ModelUnhealthy)
     assert "consecutive TTS model errors" in unhealthy[0].reason
-    assert "reset" in unhealthy[0].reason
-    assert "was reset" not in unhealthy[0].reason
     output = capsys.readouterr().out
     assert "Too many consecutive TTS model errors" in output
 
@@ -94,8 +92,6 @@ def test_generate_files_emits_model_unhealthy_on_oom(capsys) -> None:
     assert len(unhealthy) == 1
     assert isinstance(unhealthy[0], ModelUnhealthy)
     assert "out of memory" in unhealthy[0].reason
-    assert "reset" in unhealthy[0].reason
-    assert "was reset" not in unhealthy[0].reason
 
 
 def test_generate_files_no_model_unhealthy_on_user_interrupt_or_success() -> None:

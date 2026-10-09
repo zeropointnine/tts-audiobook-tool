@@ -69,7 +69,6 @@ def test_slow_call_times_out_reports_and_emits(capsys) -> None:
     output = capsys.readouterr().out
     assert "GEN_TIMEOUT" in output
     assert "0.2s" in output
-    assert "reset" in output
 
 
 def test_gen_timeout_scope_reads_gen_timeout_at_call_time(monkeypatch) -> None:
@@ -85,8 +84,6 @@ def test_make_gen_timeout_message_cites_the_cap_value() -> None:
     message = make_gen_timeout_message(180)
     assert "GEN_TIMEOUT" in message
     assert "180s" in message
-    assert "reset" in message
-    assert "was reset" not in message
 
 
 def test_sgl_timeout_uses_remote_wording_and_backend_deadline(

@@ -65,10 +65,7 @@ def make_gen_timeout_message(
     """Return backend-appropriate generation-timeout feedback."""
     if is_remote:
         return "Remote generation timed out; recycling client worker"
-    return (
-        f"TTS inference exceeded GEN_TIMEOUT ({timeout_seconds:g}s); "
-        "generation loop aborted; model-worker hard reset required"
-    )
+    return f"TTS inference exceeded GEN_TIMEOUT ({timeout_seconds:g}s)"
 
 
 @contextmanager

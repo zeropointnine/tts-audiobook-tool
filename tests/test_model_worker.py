@@ -1093,7 +1093,6 @@ def test_run_tts_preview_reports_a_watchdog_timeout(monkeypatch, capsys) -> None
     assert finished.status is GenerationTerminalStatus.FAILED
     assert finished.sound is None
     assert "GEN_TIMEOUT" in finished.message
-    assert "reset" in finished.message
     assert "GEN_TIMEOUT" in capsys.readouterr().out
 
 

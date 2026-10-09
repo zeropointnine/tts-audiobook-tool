@@ -277,6 +277,9 @@ class WorkerLog(ReflowLog):
         is dropped. App-generated lines are never filtered. A fresh empty
         current line ends up last.
         """
+        # Each stored line is one logical row; an embedded newline would be
+        # rendered as a garbled single line, so split into separate lines.
+        lines = [part for line in lines for part in line.split("\n")]
         current = self._lines[-1] if self._lines else None
         current_text = current.text.plain if current is not None else ""
         keep_current = bool(current_text) and not self._is_filtered_console_line(

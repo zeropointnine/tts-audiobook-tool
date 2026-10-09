@@ -467,7 +467,6 @@ def generate_full_flow(
 
         # Check for OOM in results and break early to avoid wasting time
         if isinstance(gen_result, str) and is_oom_error_message(gen_result):
-            print_gen_oom_message(gen_result)
             GenerationEvents.emit(ModelUnhealthy(reason=make_oom_reset_message()))
             Tts.clear_continuation()
             did_interrupt = True

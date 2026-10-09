@@ -78,17 +78,13 @@ ETA_MIN_BATCH_DURATIONS = 10
 def make_consecutive_model_errors_reset_message(max_consecutive_model_errors: int) -> str:
     """Single source of the reason text for a consecutive-model-errors abort."""
     return (
-        f"Too many consecutive TTS model errors ({max_consecutive_model_errors}); "
-        "generation loop aborted; model-worker hard reset required"
+        f"Too many consecutive TTS model errors ({max_consecutive_model_errors})"
     )
 
 
 def make_oom_reset_message() -> str:
     """Single source of the reason text for an OOM abort."""
-    return (
-        "TTS model ran out of memory; generation loop aborted; "
-        "model-worker hard reset required"
-    )
+    return "TTS model ran out of memory"
 
 
 class GenerateUtil:
@@ -309,9 +305,8 @@ class GenerateUtil:
 
             # Check for OOM in results and break early if detected
             if any(GenerateUtil.is_error_result_oom(r) for r in results):
-                printt()
-                first_oom = next(GenerateUtil.get_error_result_message(r) for r in results if GenerateUtil.is_error_result_oom(r))
-                print_gen_oom_message(first_oom)
+                # The per-segment error line already printed the raw error, and the
+                # reset reason below is shown by the hard-reset UI; print nothing more.
                 GenerationEvents.emit(ModelUnhealthy(reason=make_oom_reset_message()))
                 Tts.clear_continuation()
                 did_interrupt = True

@@ -455,16 +455,6 @@ def get_torch_allocated_vram() -> int:
         return -1
     return torch.cuda.memory_allocated()
 
-def print_gen_oom_message(err: str) -> None:
-    """
-    Print the standard OOM warning followed by the raw error string.
-    Used by generate_util.py and real_time_playback_util.py.
-    """
-    printt(f"{COL_ERROR}{GEN_OOM_ERROR_MESSAGE}")
-    printt()
-    printt(f"{COL_ERROR}{err}")
-    printt()
-
 def is_oom_error_message(error_string: str) -> bool:
     """
     Checks if an error string likely indicates an out-of-memory error.

@@ -111,6 +111,24 @@ def test_app_lines_commit_the_current_line_to_history() -> None:
     run(exercise())
 
 
+def test_app_lines_with_embedded_newlines_become_separate_lines() -> None:
+    """A multi-line app message (e.g. reset reason + worker log path) is
+    stored as one document line per row rather than one line with newlines."""
+
+    async def exercise() -> None:
+        app = _HostApp()
+        async with app.run_test(size=(100, 24)) as pilot:
+            area = app.query_one(WorkerLogContentArea)
+            log = area.worker_log
+            await pilot.pause()
+
+            area.append_lines(["first\nsecond", "third"])
+            await pilot.pause()
+            assert doc_lines(log) == ["first", "second", "third", ""]
+
+    run(exercise())
+
+
 def test_finalize_commits_the_current_line() -> None:
     """At session end the current line is committed like a newline;
     finalizing an empty current line is a no-op."""
