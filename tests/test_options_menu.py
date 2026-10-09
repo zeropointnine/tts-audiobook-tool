@@ -37,7 +37,7 @@ def test_refresh_label_counts_compatible_audio_cpp_models(monkeypatch, count):
     monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: snapshot)
     monkeypatch.setattr(RemoteTtsDiscovery, "refresh", lambda *a, **kw: pytest.fail("Label must not probe"))
     noun = "model" if count == 1 else "models"
-    value = f"{count} compatible {noun} available"
+    value = f"{count} supported {noun} available"
 
     label = OptionsMenu.make_refresh_remote_tts_label()
 
@@ -61,7 +61,7 @@ def test_refresh_feedback_pluralizes_compatible_models(monkeypatch, count, noun)
     OptionsMenu.refresh_remote_tts(state)
 
     assert feedback == [(
-        ("Remote TTS server refreshed:", f"audio_cpp, {count} compatible {noun}"),
+        ("Remote TTS server refreshed:", f"audio_cpp, {count} supported {noun}"),
         {"long_pause": True},
     )]
 

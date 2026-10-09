@@ -45,7 +45,7 @@ def test_main_menu_has_separate_voice_and_model_hotkeys(monkeypatch):
     voice = next(item for item in items if item.hotkey == "v")
     model = next(item for item in items if item.hotkey == "m")
     assert get_string_from(make_state(), voice.label) == "Voice clone"
-    assert get_string_from(make_state(), model.label) == "Model settings"
+    assert get_string_from(make_state(), model.label).startswith("Model settings")
     assert voice.handler is main_menu.on_voice
     assert model.handler is main_menu.on_model
     assert len({item.hotkey for item in items}) == len(items)
@@ -63,6 +63,7 @@ def test_entrypoint_prerequisites_do_not_require_clone(
         monkeypatch, entrypoint, menu_class, model_id, dir_path, expected):
     state = make_state(model_id, dir_path=dir_path)
     errors, opened, bound = [], [], []
+    monkeypatch.setattr(Tts, "is_remote_mode", lambda: False)
     monkeypatch.setattr(Tts, "bind_project", bound.append)
     monkeypatch.setattr(main_menu.ask, "ask_error", errors.append)
     monkeypatch.setattr(menu_class, "menu", opened.append)
@@ -338,3 +339,19 @@ def test_remote_voice_factory_tracks_backend_changes(monkeypatch, next_id):
     assert labels[6].startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     if next_id == "breeze_tts_2_audiocpp":
         assert labels[7].startswith("Instructions ")
+
+
+@pytest.mark.parametrize("remote_mode,expected_opened", [(True, True), (False, False)])
+def test_model_entrypoint_allows_unselected_model_only_in_remote_mode(
+        monkeypatch, remote_mode, expected_opened):
+    # The remote-mode model picker lives inside Model settings, so an
+    # unselected model must not block entry there (or it could never be picked).
+    state = make_state("none")
+    errors, opened = [], []
+    monkeypatch.setattr(Tts, "is_remote_mode", lambda: remote_mode)
+    monkeypatch.setattr(Tts, "bind_project", lambda project: None)
+    monkeypatch.setattr(main_menu.ask, "ask_error", errors.append)
+    monkeypatch.setattr(ModelMenuShared, "menu", opened.append)
+    main_menu.on_model(state, None)
+    assert opened == ([state] if expected_opened else [])
+    assert errors == ([] if expected_opened else ["Requires TTS model"])

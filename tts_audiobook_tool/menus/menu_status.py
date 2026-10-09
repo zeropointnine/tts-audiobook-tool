@@ -123,7 +123,7 @@ class MenuStatus:
             text += f"It will now use the {qualifier} model, {current_name}"
         else:
             text += (f"It is now configured to use {current_name}, "
-                     "but the runtime is unavailable (see TTS model).")
+                     "but the runtime is unavailable (see Model settings).")
         hints.print_hint(Hint("", "FYI", text))
 
     @staticmethod

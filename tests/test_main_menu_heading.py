@@ -7,7 +7,7 @@ from tts_audiobook_tool.constants_hints import (
     HINT_CHATTERBOX_MULTILINGUAL_V3,
     HINT_SGL_OMNI_URL,
 )
-from tts_audiobook_tool.menus.main_menu import MainMenu, get_heading_tts_text, make_project_label
+from tts_audiobook_tool.menus.main_menu import MainMenu, get_heading_tts_text, make_model_label
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from project_settings_test_support import set_setting
@@ -28,25 +28,26 @@ def make_state(model: TtsModelType = TtsModelType.require_by_id("none")) -> Stat
 
 @pytest.mark.parametrize("dir_path", ["", "/example/book"])
 @pytest.mark.parametrize("available_count", [0, 1, 2, 3])
-def test_project_label_requires_selection_only_with_multiple_types(monkeypatch, dir_path, available_count):
+def test_model_label_requires_selection_only_with_project_and_multiple_types(monkeypatch, dir_path, available_count):
+    # Without a project, Model settings cannot open and must not solicit selection.
     state = make_state()
     state.project.dir_path = dir_path
     models = [TtsModelType.require_by_id("chatterbox_audiocpp"), TtsModelType.require_by_id("higgs_v3_audiocpp"),
               TtsModelType.require_by_id("echo_tts_audiocpp")]
     monkeypatch.setattr(Tts, "get_available_tts_models", lambda: models[:available_count])
 
-    expected = "Project"
-    if available_count >= 2:
+    expected = "Model settings"
+    if dir_path and available_count >= 2:
         expected += f" {COL_ERROR}(requires: TTS model selection)"
-    assert make_project_label(state) == expected
+    assert make_model_label(state) == expected
 
 
-def test_project_label_with_selected_model_does_not_check_availability(monkeypatch):
+def test_model_label_with_selected_model_does_not_check_availability(monkeypatch):
     state = make_state(TtsModelType.require_by_id("chatterbox_audiocpp"))
     monkeypatch.setattr(Tts, "get_available_tts_models",
                         lambda: pytest.fail("A selected model needs no selection suffix"))
 
-    assert make_project_label(state) == "Project"
+    assert make_model_label(state) == "Model settings"
 
 
 def _capture_and_invoke_on_shown(monkeypatch, state) -> dict:

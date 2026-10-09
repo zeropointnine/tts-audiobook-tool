@@ -321,7 +321,7 @@ class OptionsMenu:
         if snapshot.backend_kind is TtsBackendKind.AUDIO_CPP:
             count = len(snapshot.candidates)
             noun = "model" if count == 1 else "models"
-            return make_menu_label(label, f"{count} compatible {noun} available")
+            return make_menu_label(label, f"{count} supported {noun} available")
         return label
 
     @staticmethod
@@ -343,7 +343,7 @@ class OptionsMenu:
         else:
             count = len(snapshot.candidates)
             noun = make_noun("model", "models", count)
-            value = f"{snapshot.backend_kind.value if snapshot.backend_kind else 'unknown'}, {count} compatible {noun}"
+            value = f"{snapshot.backend_kind.value if snapshot.backend_kind else 'unknown'}, {count} supported {noun}"
             print_feedback("Remote TTS server refreshed:", value, long_pause=True)
 
     @staticmethod

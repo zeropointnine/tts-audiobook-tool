@@ -12,7 +12,7 @@ Install and model-download instructions can be found in the [audio.cpp documenta
 2. Start `audiocpp_server` using audio.cpp's instructions. Its web UI is useful for downloading models and testing that they work before connecting the audiobook tool.
 3. Set up and launch `tts-audiobook-tool` using the [virtual environment for remote TTS servers](<../README.md#virtual-environment-for-remote-tts-servers-sgl-omni--audiocpp>).
 4. Under `Options` > `Remote TTS server URL`, enter the audio.cpp server's base URL, typically `http://127.0.0.1:8080`. Do not append `/v1` or an endpoint path. Keep the server running while using the app.
-5. Create or open a project. If audio.cpp is configured to serve multiple models, use `Project` > `Switch TTS model` to choose among them.
+5. Create or open a project. If audio.cpp is configured to serve multiple models, use `Model settings` > `Switch TTS model` to choose among them.
 
 ## Using multiple models: configure server.json
 

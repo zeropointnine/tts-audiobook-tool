@@ -422,7 +422,7 @@ def test_model_change_hint_reports_binding_failure(monkeypatch, capsys, sole_rem
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
     assert "last used with TTS model Chatterbox TTS" in output
     assert f"It is now configured to use {sole_remote_model.value.ui['proper_name']}" in output
-    assert "runtime is unavailable (see TTS model)" in output
+    assert "runtime is unavailable (see Model settings)" in output
     assert "currently active model" not in output
     assert state.pending_tts_model_change is None
 
@@ -796,7 +796,7 @@ def test_model_switch_rearms_checks_and_prints_only_compatibility_fyis(monkeypat
         max_words_per_segment=100,
     )
 
-    # What ProjectMenu.tts_model_menu.on_select leaves behind after a switch.
+    # What ModelSelectMenu.menu.on_select leaves behind after a switch.
     state.pending_tts_model_change = None
     state.pending_project_load_checks = True
 

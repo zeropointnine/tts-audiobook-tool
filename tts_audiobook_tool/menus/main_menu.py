@@ -47,7 +47,7 @@ class MainMenu:
             items = []
             items.append(
                 MenuItem(
-                    make_project_label, lambda _, __: ProjectMenu.menu(state), hotkey="p",
+                    "Project", lambda _, __: ProjectMenu.menu(state), hotkey="p",
                     superlabel="Main", superlabel_no_blank_line=True
                 )
             )
@@ -58,7 +58,7 @@ class MainMenu:
                 MenuItem(make_voice_label, on_voice, hotkey="v")
             )
             items.append(
-                MenuItem("Model settings", on_model, hotkey="m")
+                MenuItem(make_model_label, on_model, hotkey="m")
             )
             items.append(
                 MenuItem(
@@ -152,16 +152,6 @@ def get_heading_tts_text(state: State) -> str:
 
 # ---
 
-# Project
-def make_project_label(state: State) -> str:
-    suffix = ""
-    if (
-        state.project.get_tts_model_type().id == "none"
-        and len(Tts.get_available_tts_models()) >= 2
-    ):
-        suffix = f" {COL_ERROR}(requires: TTS model selection)"
-    return f"Project{suffix}"
-
 # Voice
 def make_voice_label(state: State) -> str:
     return "Voice clone"
@@ -177,9 +167,21 @@ def on_voice(state: State, __) -> None:
     VoiceMenuShared.menu(state)
 
 # Model settings
+def make_model_label(state: State) -> str:
+    suffix = ""
+    if (
+        state.project.dir_path
+        and state.project.get_tts_model_type().id == "none"
+        and len(Tts.get_available_tts_models()) >= 2
+    ):
+        suffix = f" {COL_ERROR}(requires: TTS model selection)"
+    return f"Model settings{suffix}"
+
 def on_model(state: State, __: MenuItem) -> None:
     Tts.bind_project(state.project)
-    if state.project.get_tts_model_type().id == "none":
+    # In remote mode, the model picker lives inside Model settings,
+    # so an unselected model must not block entry.
+    if state.project.get_tts_model_type().id == "none" and not Tts.is_remote_mode():
         ask.ask_error(REQUIRES_TTS_MODEL)
         return
     if not state.project.dir_path:

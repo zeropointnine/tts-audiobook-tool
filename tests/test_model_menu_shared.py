@@ -99,6 +99,27 @@ def test_remote_model_menu_removes_controls_when_selection_is_unresolved(monkeyp
     assert captured["items"](state) == []
 
 
+@pytest.mark.parametrize("model_id", ["none", "omnivoice_audiocpp", "higgs_v3_sglomni"])
+def test_remote_model_menu_leads_with_model_picker(monkeypatch, model_id):
+    # In remote mode, the TTS model picker is the first Model settings item and
+    # the menu opens even with no model selected; model controls follow it.
+    from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type=model_id)))
+    captured = {}
+    monkeypatch.setattr(model_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [])
+    ModelMenuShared.menu(state)
+    items = captured["items"](state)
+    assert get_string_from(state, items[0].label).startswith("TTS model")
+    assert not items[0].blank_line_before
+    if model_id == "none":
+        assert len(items) == 1
+    else:
+        assert len(items) > 1 and items[1].blank_line_before
+
+
 @pytest.mark.parametrize("qualifier", ["", "Requires batch size 1."])
 def test_rolling_continuation_subheading_preserves_paragraph_spacing(monkeypatch, qualifier):
     state = cast(State, SimpleNamespace(project=Project()))

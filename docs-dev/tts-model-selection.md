@@ -34,7 +34,7 @@ Opening another project, changing the selected model, changing the server URL, a
 
 Local mode supports at most one installed supported model library. Multiple local libraries are an environment error, rejected at startup; the multiple-model selection rule below applies to remote availability, not a new local multi-model feature.
 
-Remote availability is a deduplicated list of catalog types, not a count of server entries. Discovery errors produce an empty available-model list. Normal checks reuse discovery TTL/backoff; opening **Project > TTS model** explicitly refreshes discovery. In server mode, entering **Options** also forces discovery before the heading, status, and controls render, bypassing TTL/backoff. This happens once per entry, not on ordinary redraws; the manual refresh action remains available.
+Remote availability is a deduplicated list of catalog types, not a count of server entries. Discovery errors produce an empty available-model list. Normal checks reuse discovery TTL/backoff; opening **Model settings > TTS model** explicitly refreshes discovery. In server mode, entering **Options** also forces discovery before the heading, status, and controls render, bypassing TTL/backoff. This happens once per entry, not on ordinary redraws; the manual refresh action remains available.
 
 ## 2. Reconcile the project selection
 
@@ -48,7 +48,7 @@ Before building interactive menu items and when printing the status block, compa
 | One (local mode) | Does not match, including `"none"`, another model, or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking FYI at startup or when another project is loaded; other later changes are silent. |
 | One (server mode) | Does not match, including `"none"` or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking FYI for the end of the next complete menu. |
 | More than one | Matches one of the available types | Keep it; do not prompt or choose a different type. |
-| More than one | Does not match any available type | Immediately assign `"none"`; require selection from the Project menu. |
+| More than one | Does not match any available type | Immediately assign `"none"`; require selection from **Model settings > TTS model**. |
 
 A sole-model mismatch queues this notice using the standard hint formatting only when replacing a saved ID other than `"none"`: in server mode whenever reconciliation changes that selection, and in local mode before the first main menu or while checks for a newly loaded project are pending. A matching saved selection or an initially unselected project does not trigger a model-change notice in either mode.
 
@@ -62,11 +62,11 @@ Use `sole active audio.cpp model` only for audio.cpp, which can have more than o
 
 The names are the models' UI `proper_name` values, each qualified by its backend kind (`Chatterbox TTS (local)`, `Breeze TTS 2 (audio.cpp)`). The old name describes the previous saved selection, not necessarily a loaded runtime. Unknown IDs display as `Unknown model: {raw_id}`; `"none"` is not a previous model and never queues this notice. The current name is the selected catalog model, not the exact server inference ID.
 
-If runtime binding is unavailable, the second line instead reads `It is now configured to use {current_name}, but the runtime is unavailable (see TTS model).` The selection notification does not imply successful binding or persistence; existing status errors and save-error reporting remain in effect.
+If runtime binding is unavailable, the second line instead reads `It is now configured to use {current_name}, but the runtime is unavailable (see Model settings).` The selection notification does not imply successful binding or persistence; existing status errors and save-error reporting remain in effect.
 
 Reconciliation and status printing do not display or consume the FYI. In server mode it is printed once at the bottom of the next complete menu. In local mode it is printed once at the bottom of the first main menu, or the next complete menu after a runtime project load; earlier startup submenus leave it pending, and other subsequent local changes do not queue a notice. Rendering happens through the shared `MenuStatus.show_pending_project_hints()` function after the existing `on_shown` callback and before normal menu input. The menu loop captures whether this is the first main menu before `on_shown` marks startup complete. The notices use `hints.print_hint()` directly: no Enter prompt, animation, or persisted hint preference. Heading-only prompt screens leave them pending.
 
-The shared function also checks voice-clone sample durations once per project load (startup or runtime) and once per explicit **Project > TTS model** selection, independently of whether the model changed. This check waits for the first main menu at startup, or the next complete menu after a runtime load or model selection. It uses the reconciled selection's optional `ui.voice_sample_max_duration_s` recommendation and the model-supported shared voice list, resolving files through `ProjectVoiceUtil.resolve_voice_file_path()`. Only known, unrounded durations strictly above the recommendation count; unreadable/missing samples and models without a recommendation do not trigger this FYI. It follows any model-change notice:
+The shared function also checks voice-clone sample durations once per project load (startup or runtime) and once per explicit **Model settings > TTS model** selection, independently of whether the model changed. This check waits for the first main menu at startup, or the next complete menu after a runtime load or model selection. It uses the reconciled selection's optional `ui.voice_sample_max_duration_s` recommendation and the model-supported shared voice list, resolving files through `ProjectVoiceUtil.resolve_voice_file_path()`. Only known, unrounded durations strictly above the recommendation count; unreadable/missing samples and models without a recommendation do not trigger this FYI. It follows any model-change notice:
 
 ```text
 🔔 FYI
@@ -89,13 +89,13 @@ Pending old/new IDs live on `State`, not in global or persisted storage. Repeate
 
 Automatic changes are saved when the project has a directory, then the project is bound to the runtime. Save errors are reported. A directory-less placeholder project is updated in memory without writing a project file.
 
-Selecting **None** in the Project menu is not a permanent opt-out: if exactly one model is available, the next reconciliation selects it again without an FYI in either mode. With multiple available types, None remains unselected until the user chooses a model.
+Selecting **None** in the model picker is not a permanent opt-out: if exactly one model is available, the next reconciliation selects it again without an FYI in either mode. With multiple available types, None remains unselected until the user chooses a model.
 
 ## 3. New projects, loading, and explicit selection
 
 - **New project:** initialize to the sole available type if there is exactly one; otherwise initialize to `"none"`. Because this is the initial value, it does not separately trigger the mismatch notification.
 - **Load / deserialize:** missing selection defaults to `"none"`. Reading or resolving a selection does not itself auto-select. An unknown string ID resolves through tolerant `TtsModelType.get_by_id(saved_id)` to the registered `"none"` handle for metadata access, but the raw string remains intact until interactive reconciliation changes it.
-- **Project > TTS model:** offer None plus the currently available distinct types. An explicit selection updates the project, saves it, and binds it. It clears any pending model-change notice and re-arms the duration and segmentation FYI checks for the next complete menu. Subsequent reconciliation still applies the table above.
+- **Model settings > TTS model:** (server mode only) offer None plus the currently available distinct types. An explicit selection updates the project, saves it, and binds it. It clears any pending model-change notice and re-arms the duration and segmentation FYI checks for the next complete menu. Subsequent reconciliation still applies the table above.
 - **Workers and noninteractive callers:** runtime binding does not perform interactive reconciliation, mutate the saved selection, or ask for input. They validate the selection supplied to them.
 
 Changing the selected ID does not copy or discard other models' settings or the shared project voice list. All models use the same ordered filename/transcript pairs within that project; model-specific clone/transcript capability still controls how they are consumed. For storage ownership and migration, refer to [Project Spec v4](<project-spec-v4.md>).
@@ -129,9 +129,9 @@ The parenthesized backend qualifier is gray. Local model-specific text and devic
 - When discovery finds no supported catalog variants, append red **`(server mode; audio.cpp has no supported models)`** (using the discovered server backend). Other discovery errors append their actual message in red. A selected model's binding error, such as no matching server entry, is also shown in red when discovery itself succeeded. A saved local-only selection instead shows **`(unavailable in server mode)`** when discovery succeeded.
 - A known selected model's gray backend qualifier always identifies that model, even when it differs from the connected server. For example, a preserved `moss_local` selection shows **`MOSS-TTS (local) (server mode; audio.cpp has no supported models)`**. None/unknown selections fall back to the discovered backend, or gray **`(server)`** when unidentified. Backend links to the server's model list are omitted when the selected backend differs from the discovered server backend. All of this remains on the single **TTS model** row.
 
-The main menu's **Project** label appends red **`(requires: TTS model selection)`** when the project's resolved type has `.id == "none"` and at least two distinct model types are available. The suffix is absent with zero or one available type, or when a model is already selected.
+The main menu's **Model settings** label appends red **`(requires: TTS model selection)`** when a project directory is set, the project's resolved type has `.id == "none"`, and at least two distinct model types are available. The suffix is absent without a project directory, with zero or one available type, or when a model is already selected.
 
-In the Project menu, **TTS model** shows `(currently: requires selection)` when the saved selection is `"none"` and at least two distinct types are available. Only `requires selection` is red; the surrounding qualifier retains its normal color. With zero or one available type, it remains `None (unselected)`. Known model names and unknown-ID labels are unchanged.
+In server mode, the picker is the first item of **Model settings**, followed by the selected model's controls; the menu opens even when no model is selected (local mode still requires one). Its label, **TTS model**, shows `(currently: requires selection)` when the saved selection is `"none"` and at least two distinct types are available. Only `requires selection` is red; the surrounding qualifier retains its normal color. With zero or one available type, it remains `None (unselected)`. Known model names and unknown-ID labels are unchanged.
 
 ## 6. Edge-case policies and their provenance
 
@@ -152,6 +152,6 @@ The one-model and multiple-model mismatch rules, startup/project-load local mode
 - [TTS facade](<../tts_audiobook_tool/tts.py>): process mode, availability, `reconcile_project_model()`, and `bind_project()`.
 - [Menu status](<../tts_audiobook_tool/menus/menu_status.py>): persistence, pending notification capture/display, and status formatting.
 - [Menu loop](<../tts_audiobook_tool/menus/menu_util.py>): reconciliation before menu items are built and FYI delivery after `on_shown`.
-- [State](<../tts_audiobook_tool/state.py>) and [Project menu](<../tts_audiobook_tool/menus/project_menu.py>): project initialization and explicit selection.
+- [State](<../tts_audiobook_tool/state.py>) and [model picker](<../tts_audiobook_tool/menus/model/model_select_menu.py>): project initialization and explicit selection.
 - [Remote discovery](<../tts_audiobook_tool/app_support/remote_tts_discovery.py>): cached observations, backend identification, and discovery errors.
 - [Selection tests](<../tests/test_project_tts_selection.py>), [status tests](<../tests/test_menu_status.py>), and [remote integration tests](<../tests/test_remote_tts_integration.py>): executable references for the rules and binding boundary.

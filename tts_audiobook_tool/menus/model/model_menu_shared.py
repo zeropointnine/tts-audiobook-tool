@@ -22,19 +22,18 @@ class ModelMenuShared:
     def menu(state: State) -> None:
         """
         Delegate to the settings menu for the selected backend/model.
+
+        In remote mode, a single menu hosts the model picker plus the
+        selected model's controls, including when no model is selected yet.
         """
-        audio_definition = Tts.get_audio_cpp_definition(state.project.get_tts_model_type())
-        if audio_definition is not None:
-            from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
-            ModelAudioCppMenu.menu(state)
+        model_type = state.project.get_tts_model_type()
+        if (Tts.is_remote_mode()
+                or Tts.get_audio_cpp_definition(model_type) is not None
+                or Tts.get_configured_definition(model_type) is not None):
+            ModelMenuShared.menu_wrapper(state, ModelMenuShared.make_remote_items)
             return
-        definition = Tts.get_configured_definition(state.project.get_tts_model_type())
-        if definition is not None:
-            from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
-            ModelConfiguredSglOmniMenu.menu(state)
-            return
-        # Only local models reach the legacy per-model menus; SGL-Omni
-        # variants are always handled by the configured menu above.
+        # Only local models reach the legacy per-model menus; remote
+        # variants are always handled by the remote menu above.
         match state.project.get_tts_model_type().id:
             case "chatterbox_local":
                 from tts_audiobook_tool.menus.model.model_chatterbox_menu import ModelChatterboxMenu
@@ -98,20 +97,29 @@ class ModelMenuShared:
     def make_remote_items(state: State) -> list[MenuItem]:
         """Resolve the current selection on every redraw, even across backends.
 
-        Menu reconciliation can change the selection while this menu is open.
-        Only the controls for this render retain a definition, never the menu
-        factory itself. An unselected/unknown model offers no stale controls.
+        Menu reconciliation (or the picker) can change the selection while this
+        menu is open. Only the controls for this render retain a definition,
+        never the menu factory itself. An unselected/unknown model offers no
+        stale controls. In remote mode, the TTS model picker comes first.
         """
+        items: list[MenuItem] = []
+        if Tts.is_remote_mode():
+            from tts_audiobook_tool.menus.model.model_select_menu import ModelSelectMenu
+            items.append(ModelSelectMenu.make_item(state))
         model_type = state.project.get_tts_model_type()
         audio_definition = Tts.get_audio_cpp_definition(model_type)
+        definition = Tts.get_configured_definition(model_type)
         if audio_definition is not None:
             from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
-            return ModelAudioCppMenu.make_items(state, audio_definition)
-        definition = Tts.get_configured_definition(model_type)
-        if definition is not None:
+            settings = ModelAudioCppMenu.make_items(state, audio_definition)
+        elif definition is not None:
             from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
-            return ModelConfiguredSglOmniMenu.make_items(state, definition)
-        return []
+            settings = ModelConfiguredSglOmniMenu.make_items(state, definition)
+        else:
+            settings = []
+        if items and settings:
+            settings[0].blank_line_before = True
+        return items + settings
 
     @staticmethod
     def menu_wrapper(
