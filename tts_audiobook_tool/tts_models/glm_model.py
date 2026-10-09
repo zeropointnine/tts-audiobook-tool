@@ -92,9 +92,6 @@ class GlmModel(GlmBaseModel):
 
         # TODO: Not currently parameterized
         self.use_phoneme = False
-        self.use_cache = True
-
-        self.uttid_counter = 0
 
         # Load Models
         self.frontend, \
@@ -214,46 +211,28 @@ class GlmModel(GlmBaseModel):
         except Exception as e:
             return f"Couldn't create voice clone for {prompt_speech} - {make_error_string(e)}"
 
-        synth_text = self.text_frontend.text_normalize(syn_text)
+        synth_text = self.text_frontend.text_normalize(syn_text) or ""
 
-        flow_prompt_token = voice.prompt_speech_token.squeeze().to(
-            self.device_value, dtype=torch.int32
-        ).unsqueeze(0)
-
-        # Initialize Cache
-        cache = {
-            "cache_text": [voice.prompt_text],
-            "cache_text_token": [voice.prompt_text_token],
-            "cache_speech_token": [voice.prompt_speech_token.squeeze().tolist()],
-            "use_cache": self.use_cache,
-        }
-
-        logging.info(f"Processing: {self.uttid_counter}, Syn_text: {syn_text}")
+        def speech_prompt_on_device() -> torch.Tensor:
+            return voice.prompt_speech_token.squeeze().to(
+                self.device_value, dtype=torch.int32
+            ).unsqueeze(0)
 
         # Run Generation
-        tts_speech, _, _, text_tn_dict = generate_long(
+        tts_speech = generate_single(
             frontend=self.frontend,
             text_frontend=self.text_frontend,
             llm=self.llm,
             flow=self.flow,
-            text_info=[str(self.uttid_counter), synth_text],
-            cache=cache,
+            syn_text=synth_text,
+            prompt_text_token=voice.prompt_text_token.to(self.device_value),
+            prompt_speech_token=speech_prompt_on_device(),
             embedding=voice.embedding.to(self.device_value),
             seed=seed,
-            flow_prompt_token=flow_prompt_token,
+            flow_prompt_token=speech_prompt_on_device(),
             speech_feat=voice.speech_feat.to(self.device_value),
-            device=self.device_value,
             use_phoneme=self.use_phoneme,
         )
-
-        # TODO: Not rly sure what uttid does; I'm mostly just following the glm library example,
-        # where each item in the example*.jsonl files is given an incrementing value
-        self.uttid_counter += 1
-
-        # TODO: Inspect this more
-        # json.dumps(text_tn_dict, ensure_ascii=False, indent=2)
-
-        # Save Wave and Tokens
 
         sound_data = tts_speech.detach().cpu().flatten().numpy()
         return Sound(sound_data, self.sample_rate)
@@ -379,154 +358,59 @@ def local_flow_forward(flow, token_list, prompt_speech_tokens, speech_feat, embe
     return wav.detach().cpu(), full_mel
 
 
-# --- Helper Function: Get Prompt from Cache ---
-def get_cached_prompt(cache, synth_text_token, device):
-    """
-    Constructs prompt tokens from the cache.
-    Prunes the cache if the sequence length exceeds MAX_LLM_SEQ_INP_LEN.
-    """
-    cache_text = cache["cache_text"]
-    cache_text_token = cache["cache_text_token"]
-    cache_speech_token = cache["cache_speech_token"]
-
-    def __len_cache_text_token():
-        return sum(map(lambda x: x.shape[1], cache_text_token))
-
-    def __len_cache_speech_token():
-        return sum(map(len, cache_speech_token))
-
-    # Estimate required length ratio
-    # Avoid division by zero
-    text_len = __len_cache_text_token()
-    ta_ratio = __len_cache_speech_token() / (text_len if text_len > 0 else 1.0)
-
-    __len_synth_text_token = synth_text_token.shape[1]
-    __len_synth_audi_token_estim = int(ta_ratio * __len_synth_text_token)
-
-    # Prune cache if too long.
-    # Logic: Keep the first item (original prompt), remove from the second item onwards.
-    while (
-        __len_cache_speech_token() + __len_synth_audi_token_estim > MAX_LLM_SEQ_INP_LEN
-    ):
-        if len(cache_speech_token) <= 1:
-            break  # Always keep at least the original prompt
-        # logging.debug(f'[get_cached_prompt] Cache pop. Text count before: {len(cache_text)}')
-        cache_text.pop(1)
-        cache_text_token.pop(1)
-        cache_speech_token.pop(1)
-
-    # Construct Text Prompt
-    prompt_text_token_from_cache = []
-    for a_token in cache_text_token:
-        prompt_text_token_from_cache.extend(a_token.squeeze().tolist())
-
-    prompt_text_token = torch.tensor([prompt_text_token_from_cache]).to(device)
-
-    # Construct Speech Prompt
-    speech_tokens = []
-    for a_cache_speech_token in cache_speech_token:
-        speech_tokens.extend(a_cache_speech_token)
-
-    llm_speech_token = torch.tensor([speech_tokens], dtype=torch.int32).to(device)
-
-    return prompt_text_token, llm_speech_token
-
-
 # --- Main Generation Logic ---
 
-def generate_long(
+def generate_single(
     frontend: TTSFrontEnd,
     text_frontend: TextFrontEnd,
     llm,
     flow,
-    text_info,
-    cache,
-    device,
-    embedding,
-    seed=0,
-    sample_method="ras",
-    flow_prompt_token=None,
-    speech_feat=None,
+    syn_text: str,
+    prompt_text_token: torch.Tensor,
+    prompt_speech_token: torch.Tensor,
+    embedding: torch.Tensor,
+    flow_prompt_token: torch.Tensor,
+    speech_feat: torch.Tensor,
+    seed: int = 0,
+    sample_method: str = "ras",
     local_llm_forward=local_llm_forward,
     local_flow_forward=local_flow_forward,
-    use_phoneme=False,
-):
-    outputs = []
-    output_token_list = []
-    uttid = text_info[0]
-    syn_text = text_info[1]
-    text_tn_dict = {
-        "uttid": uttid,
-        "syn_text": syn_text,
-        "syn_text_tn": [],
-        "syn_text_phoneme": [],
-    }
-    short_text_list = text_frontend.split_by_len(syn_text)
+    use_phoneme: bool = False,
+) -> torch.Tensor:
+    """
+    Generates the (already normalized) text in one LLM + flow pass.
 
-    for _, tts_text in enumerate(short_text_list):
-        seed_util.set_seed(seed)
-        tts_text_tn = text_frontend.text_normalize(tts_text) # Normalize again after splitting
-        tts_text_tn = tts_text_tn or ""
-        text_tn_dict["syn_text_tn"].append(tts_text_tn)
-        if use_phoneme:
-            tts_text_tn = text_frontend.g2p_infer(tts_text_tn)
-            text_tn_dict["syn_text_phoneme"].append(tts_text_tn)
-        tts_text_token = frontend._extract_text_token(tts_text_tn)
+    Upstream's `generate_long` (glmtts_inference.py) re-splits the text with
+    `TextFrontEnd.split_by_len` (roughly 25-30 English words, cutting at any
+    punctuation including commas) and conditions each later piece on the
+    previously generated speech. The app does its own segmentation, so that
+    internal split is intentionally skipped here.
+    """
+    seed_util.set_seed(seed)
+    if use_phoneme:
+        syn_text = text_frontend.g2p_infer(syn_text)
+    tts_text_token = frontend._extract_text_token(syn_text)
 
-        # Access cache references
-        cache_text = cache["cache_text"] # type: ignore
-        cache_text_token = cache["cache_text_token"] # type: ignore
-        cache_speech_token = cache["cache_speech_token"] # type: ignore
+    token_list = local_llm_forward(
+        llm=llm,
+        prompt_text_token=prompt_text_token,
+        tts_text_token=tts_text_token,
+        prompt_speech_token=prompt_speech_token,
+        sample_method=sample_method,
+    )
 
-        # Determine Prompts
-        if cache["use_cache"] and len(cache_text_token) > 1: # type: ignore
-            prompt_text_token, prompt_speech_token = get_cached_prompt(
-                cache, tts_text_token, device
-            )
-        else:
-            # Initial prompt case
-            prompt_text_token = cache_text_token[0].to(device)
-            prompt_speech_token = torch.tensor(
-                [cache_speech_token[0]], dtype=torch.int32
-            ).to(device)
-            logging.debug("[generate_long] Using initial prompt (empty cache history)")
+    wav, full_mel = local_flow_forward(
+        flow=flow,
+        token_list=token_list,
+        prompt_speech_tokens=flow_prompt_token,
+        speech_feat=speech_feat,
+        embedding=embedding,
+    )
+    # The mel is an on-device intermediate the app never uses; drop it now
+    # rather than holding it until the caller's frame unwinds.
+    del full_mel
 
-        # LLM Inference
-        token_list_res = local_llm_forward(
-            llm=llm,
-            prompt_text_token=prompt_text_token,
-            tts_text_token=tts_text_token,
-            prompt_speech_token=prompt_speech_token,
-            sample_method=sample_method
-        )
-
-        output_token_list.extend(token_list_res)
-
-        # Flow Inference
-        output, full_mel = local_flow_forward(
-            flow=flow,
-            token_list=token_list_res,
-            prompt_speech_tokens=flow_prompt_token,
-            speech_feat=speech_feat,
-            embedding=embedding
-        )
-        # The mel is an on-device intermediate. The chat/audiobook callers use
-        # only waveform audio, so retaining every split's mel and concatenating
-        # them at the end needlessly raises peak VRAM. Drop it before the next
-        # split instead.
-        del full_mel
-
-        # Update Cache
-        if cache is not None:
-            cache_text.append(tts_text_tn)
-            cache_text_token.append(tts_text_token)
-            cache_speech_token.append(token_list_res)
-
-        outputs.append(output)
-
-    tts_speech = torch.concat(outputs, dim=1)
-
-    return tts_speech, None, output_token_list, text_tn_dict
+    return wav
 
 
 def load_models(
@@ -584,8 +468,3 @@ def load_models(
 
     return frontend, text_frontend, speech_tokenizer, llm, token2wav
 
-# ---
-
-MAX_LLM_SEQ_INP_LEN = 750
-TOKEN_RATE = 25
-EOS_TOKEN_ID_AFTER_MINUS_BOS = None

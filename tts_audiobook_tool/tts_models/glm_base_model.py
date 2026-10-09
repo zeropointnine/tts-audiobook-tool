@@ -17,7 +17,7 @@ class GlmBaseModel(TtsBaseModel):
     def get_max_words_range_reco(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> tuple[int, int, str]:
-        return (40, 60, "")
+        return (20, 40, "")
 
     @classmethod
     def get_output_sample_rate(

@@ -15,7 +15,7 @@ class FakeTextFrontend:
         return (text or "").strip()
 
     def split_by_len(self, text: str):
-        return [text]
+        raise AssertionError("GLM's internal text splitting must not be used")
 
 
 class FakeFrontend:
@@ -51,8 +51,6 @@ def make_model() -> GlmModel:
     model._device_type = DeviceType.CPU
     model.sample_rate = 24000
     model.use_phoneme = False
-    model.use_cache = True
-    model.uttid_counter = 0
     model.frontend = FakeFrontend()
     model.text_frontend = FakeTextFrontend()
     model.llm = object()
@@ -60,12 +58,12 @@ def make_model() -> GlmModel:
     return model
 
 
-def stub_generate_long(monkeypatch, calls: list) -> None:
-    def fake_generate_long(**kwargs):
+def stub_generate_single(monkeypatch, calls: list) -> None:
+    def fake_generate_single(**kwargs):
         calls.append(kwargs)
-        return torch.zeros(1, 4000), None, [], {}
+        return torch.zeros(1, 4000)
 
-    monkeypatch.setattr(glm_model, "generate_long", fake_generate_long)
+    monkeypatch.setattr(glm_model, "generate_single", fake_generate_single)
 
 
 def generate(model: GlmModel, voice_path: str, transcript: str):
@@ -88,7 +86,7 @@ def test_glm_reuses_prepared_voice_prompt_for_a_b_a(tmp_path, monkeypatch):
     voice_b.write_bytes(b"b")
     model = make_model()
     calls: list = []
-    stub_generate_long(monkeypatch, calls)
+    stub_generate_single(monkeypatch, calls)
 
     assert not isinstance(generate(model, str(voice_a), "words a"), str)
     assert not isinstance(generate(model, str(voice_b), "words b"), str)
@@ -114,10 +112,10 @@ def test_glm_reuses_prepared_voice_prompt_for_a_b_a(tmp_path, monkeypatch):
     assert voice_a_clone.prompt_text_token.device.type == "cpu"
 
     # The per-call objects handed to generation are built from the cache:
-    # the last generate_long call (voice A again) used voice A's prompt data
+    # the last generate_single call (voice A again) used voice A's prompt data
     last_call = calls[-1]
-    assert last_call["cache"]["cache_text"] == [voice_a_clone.prompt_text]
-    assert last_call["cache"]["cache_speech_token"][0] == voice_a_clone.prompt_speech_token.squeeze().tolist()
+    assert torch.equal(last_call["prompt_text_token"], voice_a_clone.prompt_text_token)
+    assert torch.equal(last_call["prompt_speech_token"].squeeze(0), voice_a_clone.prompt_speech_token.squeeze())
     assert last_call["embedding"].device.type == "cpu"
     assert torch.equal(last_call["embedding"], voice_a_clone.embedding)
     assert last_call["flow_prompt_token"].dtype == torch.int32
@@ -129,7 +127,7 @@ def test_glm_rebuilds_changed_voice_and_clears_cache(tmp_path, monkeypatch):
     voice_path.write_bytes(b"first")
     model = make_model()
     calls: list = []
-    stub_generate_long(monkeypatch, calls)
+    stub_generate_single(monkeypatch, calls)
 
     assert not isinstance(generate(model, str(voice_path), "first transcript"), str)
     assert not isinstance(generate(model, str(voice_path), "second transcript"), str)
@@ -154,7 +152,7 @@ def test_glm_error_string_on_extraction_failure(tmp_path, monkeypatch):
     voice_path.write_bytes(b"x")
     model = make_model()
     calls: list = []
-    stub_generate_long(monkeypatch, calls)
+    stub_generate_single(monkeypatch, calls)
 
     def boom(path):
         raise RuntimeError("boom")
@@ -171,7 +169,7 @@ def test_glm_error_string_on_extraction_failure(tmp_path, monkeypatch):
 def test_glm_requires_voice_path(tmp_path, monkeypatch):
     model = make_model()
     calls: list = []
-    stub_generate_long(monkeypatch, calls)
+    stub_generate_single(monkeypatch, calls)
 
     # Empty voice path is rejected by generate_using_project() (the project
     # layer) before generate() runs
@@ -195,31 +193,28 @@ def test_glm_releases_unused_allocator_cache_at_idle_boundary(monkeypatch):
     assert calls == ["released"]
 
 
-def test_generate_long_does_not_retain_or_return_unused_full_mels():
-    class SplittingTextFrontend(FakeTextFrontend):
-        def split_by_len(self, text: str):
-            return ["first", "second"]
+def test_generate_single_runs_one_pass_without_internal_splitting():
+    # The app segments text itself, so a long, comma-heavy line must reach the
+    # LLM as one piece (FakeTextFrontend.split_by_len raises if consulted).
+    llm_calls: list = []
 
-    def fake_llm_forward(**_kwargs):
+    def fake_llm_forward(**kwargs):
+        llm_calls.append(kwargs)
         return [1, 2, 3]
 
     def fake_flow_forward(**_kwargs):
         return torch.zeros(1, 20), torch.ones(1, 80, 10)
 
     frontend = FakeFrontend()
-    tts_speech, tts_mel, output_tokens, _ = glm_model.generate_long(
+    text = "first part, second part, third part, and a long tail of words."
+    tts_speech = glm_model.generate_single(
         frontend=frontend,
-        text_frontend=SplittingTextFrontend(),
+        text_frontend=FakeTextFrontend(),
         llm=object(),
         flow=object(),
-        text_info=["0", "first second"],
-        cache={
-            "cache_text": ["prompt"],
-            "cache_text_token": [torch.ones(1, 2, dtype=torch.int64)],
-            "cache_speech_token": [[1, 2]],
-            "use_cache": True,
-        },
-        device="cpu",
+        syn_text=text,
+        prompt_text_token=torch.ones(1, 2, dtype=torch.int64),
+        prompt_speech_token=torch.ones(1, 2, dtype=torch.int32),
         embedding=torch.zeros(192),
         flow_prompt_token=torch.ones(1, 2, dtype=torch.int32),
         speech_feat=torch.ones(1, 2, 80),
@@ -227,6 +222,6 @@ def test_generate_long_does_not_retain_or_return_unused_full_mels():
         local_flow_forward=fake_flow_forward,
     )
 
-    assert tts_speech.shape == (1, 40)
-    assert tts_mel is None
-    assert output_tokens == [1, 2, 3, 1, 2, 3]
+    assert frontend.text_token_calls == [text]
+    assert len(llm_calls) == 1
+    assert tts_speech.shape == (1, 20)

@@ -733,7 +733,7 @@ def test_project_load_max_words_uses_reconciled_model(monkeypatch, capsys):
     state.pending_project_load_checks = True
     state.project.phrase_groups = [PhraseGroup([Phrase("Short text.", Reason.PARAGRAPH)])]
     state.project.book.segmentation_settings = state.project.book.segmentation_settings._replace(
-        max_words_per_segment=60,  # Within GLM's recommendation, but above Echo's.
+        max_words_per_segment=60,  # Above Echo's recommendation.
     )
     model = TtsModelType.require_by_id("echo_tts_audiocpp")
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)

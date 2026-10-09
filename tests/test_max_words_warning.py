@@ -16,9 +16,9 @@ def set_book_max_words(project: Project, max_words: int) -> None:
 
 def test_no_warning_when_at_or_below_reco_max():
     project = make_project()
-    set_book_max_words(project, 60)
-    assert Tts.get_model_support(project).get_max_words_exceed_warning(project) == ""
     set_book_max_words(project, 40)
+    assert Tts.get_model_support(project).get_max_words_exceed_warning(project) == ""
+    set_book_max_words(project, 20)
     assert Tts.get_model_support(project).get_max_words_exceed_warning(project) == ""
 
 
@@ -27,7 +27,7 @@ def test_warning_uses_proper_name_when_no_disambiguator():
     set_book_max_words(project, 80)
     result = Tts.get_model_support(project).get_max_words_exceed_warning(project)
     assert result.startswith(f"{Ansi.ITALICS}Source text's max word length (80)")
-    assert "exceeds GLM-TTS recommended model limit (60)" in result
+    assert "exceeds GLM-TTS recommended model limit (40)" in result
     assert result.endswith(f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded")
     assert result.count("\n") == 1
 
@@ -64,4 +64,4 @@ def test_base_get_warning_issues_includes_max_words_warning(monkeypatch):
     warnings = instance.get_warning_issues(project)
     assert len(warnings) == 1
     assert "Source text's max word length" in warnings[0]
-    assert "exceeds GLM-TTS recommended model limit (60)" in warnings[0]
+    assert "exceeds GLM-TTS recommended model limit (40)" in warnings[0]
