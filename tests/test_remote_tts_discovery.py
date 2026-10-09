@@ -391,35 +391,25 @@ def test_audio_detector_matches_fish_s2_tts_route_only():
     assert audio_cpp_detection.detect_audio_cpp_models([{**fish, "mode": "streaming"}]) == []
 
 
-# DISABLED (audio.cpp GLM-TTS): the catalog entry is commented out, so this
-# detector test has no declared entry to match. Restore it with the entry.
-# def test_audio_detector_matches_glm_under_either_advertised_task():
-#     # audio.cpp advertises the task token its operator configured, and this
-#     # family's two advertised routes are the same reference-conditioned path,
-#     # so both spellings select the one catalog entry.
-#     for task in ("tts", "clon"):
-#         glm = {"id": "my-glm-server-entry", "family": "glm_tts", "task": task, "mode": "offline",
-#                "session_options": {}}
-#         assert audio_cpp_detection.detect_audio_cpp_models([glm]) == [
-#             (TtsModelType.require_by_id("glm_tts_audiocpp"), "my-glm-server-entry")
-#         ]
-#     # A server entry whose ID merely mentions the model proves nothing; the
-#     # declared family/task/mode has to identify a supported route.
-#     for unsupported in (
-#         {"id": "glm_tts_zeroshot", "family": "glm"},
-#         {"id": "my-glm-server-entry", "family": "glm_tts", "task": "vdes"},
-#         {"id": "my-glm-server-entry", "family": "glm_tts", "task": "tts", "mode": "streaming"},
-#     ):
-#         model = {"family": "glm_tts", "task": "tts", "mode": "offline", "session_options": {}, **unsupported}
-#         assert audio_cpp_detection.detect_audio_cpp_models([model]) == []
-
-
-def test_audio_detector_treats_a_disabled_family_as_unsupported():
-    """While the GLM-TTS entry is commented out, its server entries are not candidates."""
+def test_audio_detector_matches_glm_under_either_advertised_task():
+    # audio.cpp advertises the task token its operator configured, and this
+    # family's two advertised routes are the same reference-conditioned path,
+    # so both spellings select the one catalog entry.
     for task in ("tts", "clon"):
         glm = {"id": "my-glm-server-entry", "family": "glm_tts", "task": task, "mode": "offline",
                "session_options": {}}
-        assert audio_cpp_detection.detect_audio_cpp_models([glm]) == []
+        assert audio_cpp_detection.detect_audio_cpp_models([glm]) == [
+            (TtsModelType.require_by_id("glm_tts_audiocpp"), "my-glm-server-entry")
+        ]
+    # A server entry whose ID merely mentions the model proves nothing; the
+    # declared family/task/mode has to identify a supported route.
+    for unsupported in (
+        {"id": "glm_tts_zeroshot", "family": "glm"},
+        {"id": "my-glm-server-entry", "family": "glm_tts", "task": "vdes"},
+        {"id": "my-glm-server-entry", "family": "glm_tts", "task": "tts", "mode": "streaming"},
+    ):
+        model = {"family": "glm_tts", "task": "tts", "mode": "offline", "session_options": {}, **unsupported}
+        assert audio_cpp_detection.detect_audio_cpp_models([model]) == []
 
 
 def test_audio_detector_matches_catalog_metadata_not_id(monkeypatch, tmp_path):

@@ -29,7 +29,7 @@ ECHO_ID = "echo_tts_audiocpp"
 OMNIVOICE_ID = "omnivoice_audiocpp"
 FISH_S2_ID = "fish_s2_audiocpp"
 DOTS_ID = "dots_audiocpp"
-# GLM_ID = "glm_tts_audiocpp"  # DISABLED; see model_catalog.toml
+GLM_ID = "glm_tts_audiocpp"
 
 
 class FakeProject:
@@ -118,36 +118,37 @@ def test_fish_s2_definition_uses_native_defaults_and_the_tts_route():
         AudioCppSettings.set(FakeProject(model_id=FISH_S2_ID), item.parameters["temperature"], 2.0)
 
 
-# DISABLED (audio.cpp GLM-TTS): restore with the catalog entry.
-# def test_glm_definition_requires_the_reference_transcript_and_keeps_upstream_defaults():
-#     item = definition(GLM_ID)
-#     # Both advertised GLM-TTS routes share one reference-conditioned path, so
-#     # the clone task is the one this client claims.
-#     assert item.family == "glm_tts" and item.tasks == ("tts", "clon") and item.mode == "offline"
-#     assert item.session_options == {} and item.reference_transcript
-#     assert {name: (parameter.type, parameter.default, parameter.target)
-#             for name, parameter in item.parameters.items()} == {
-#         "temperature": ("float", 1.0, "top_level"),
-#         "top_p": ("float", 0.8, "top_level"),
-#         "top_k": ("int", 25, "top_level"),
-#         "num_inference_steps": ("int", 10, "top_level"),
-#         "flow_guidance_scale": ("float", 0.7, "options"),
-#     }
-#     assert item.spec.requires_voice and not item.spec.can_stream
-#     # Unlike local glm, the port's output rate is fixed and unconfigurable.
-#     assert item.spec.default_output_sample_rate == 24000
-#     assert item.max_words_range_reco is None
-#     assert AudioCppModelSupport(item).get_max_words_range_reco(SimpleNamespace()) \
-#         == MAX_WORDS_PER_SEGMENT_RECO_RANGE
-#     # top_k accepts audio.cpp's documented 0 ("no limit") as well as the
-#     # official 25; the other controls keep their declared bounds.
-#     for parameter, valid, invalid in (
-#         ("top_k", 0, 101), ("top_k", 25, True),
-#         ("num_inference_steps", 1, 0), ("flow_guidance_scale", 0.0, 2.1),
-#     ):
-#         assert AudioCppSettings.set(FakeProject(model_id=GLM_ID), item.parameters[parameter], valid) == ""
-#         with pytest.raises(ValueError):
-#             AudioCppSettings.set(FakeProject(model_id=GLM_ID), item.parameters[parameter], invalid)
+def test_glm_definition_requires_the_reference_transcript_and_keeps_upstream_defaults():
+    item = definition(GLM_ID)
+    # Both advertised GLM-TTS routes share one reference-conditioned path, so
+    # the entry claims either task token.
+    assert item.family == "glm_tts" and item.tasks == ("tts", "clon") and item.mode == "offline"
+    assert item.session_options == {} and item.reference_transcript
+    assert {name: (parameter.type, parameter.default, parameter.target)
+            for name, parameter in item.parameters.items()} == {
+        "temperature": ("float", 1.0, "top_level"),
+        "top_p": ("float", 0.8, "top_level"),
+        "top_k": ("int", 25, "top_level"),
+        "num_inference_steps": ("int", 10, "top_level"),
+        "flow_guidance_scale": ("float", 0.7, "options"),
+    }
+    assert item.spec.requires_voice and not item.spec.can_stream
+    # Unlike local glm, the port's output rate is fixed and unconfigurable.
+    assert item.spec.default_output_sample_rate == 24000
+    # Segment recommendation matches local glm rather than the shared default.
+    assert item.max_words_range_reco == (20, 40, "")
+    assert AudioCppModelSupport(item).get_max_words_range_reco(SimpleNamespace()) == (20, 40, "")
+    # The session never reads a language, so none is sent.
+    assert item.language_policy == "omit"
+    # top_k accepts audio.cpp's documented 0 ("no limit") as well as the
+    # official 25; the other controls keep their declared bounds.
+    for parameter, valid, invalid in (
+        ("top_k", 0, 101), ("top_k", 25, True),
+        ("num_inference_steps", 1, 0), ("flow_guidance_scale", 0.0, 2.1),
+    ):
+        assert AudioCppSettings.set(FakeProject(model_id=GLM_ID), item.parameters[parameter], valid) == ""
+        with pytest.raises(ValueError):
+            AudioCppSettings.set(FakeProject(model_id=GLM_ID), item.parameters[parameter], invalid)
 
 
 def test_echo_definition_is_transcript_free_with_a_tighter_segment_range():
@@ -1039,41 +1040,41 @@ def test_omnivoice_audio_cpp_instructions_menu_item_sets_and_clears(monkeypatch,
     assert "(optional)" in items[0].label(state)
 
 
-# DISABLED (audio.cpp GLM-TTS): restore with the catalog entry.
-# def test_glm_payload_splits_flow_guidance_into_options(monkeypatch, tmp_path: Path):
-#     path = tmp_path / "sample.flac"
-#     sf.write(path, np.full(100, .2), 24000, format="FLAC")
-#     item = definition(GLM_ID)
-#     adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "glm-tts-q8")
-#     monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair",
-#                         lambda *args: ("sample.flac", "the exact words spoken"))
-#     monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: str(path))
-#     monkeypatch.setattr("tts_audiobook_tool.tts_models.audio_cpp_configured.random.randrange", lambda stop: 7)
-#     captured = []
-#
-#     def fake_generate(url, payload, print_request=False):
-#         captured.append(payload)
-#         return SimpleNamespace(data=np.asarray([0], dtype=np.float32), sr=24000)
-#
-#     monkeypatch.setattr(AudioCppUtil, "generate", fake_generate)
-#     project = FakeProject(model_id=GLM_ID, values={"num_inference_steps": 12})
-#     project.language_code = "en"
-#     result = adapter.generate_using_project(project, ["hello"])
-#     assert not isinstance(result, str)
-#     assert len(captured) == 1
-#     payload = captured[0]
-#     assert payload["voice_ref"]["type"] == "base64"
-#     # num_inference_steps is in audio.cpp's forwarded top-level set, while Flow
-#     # guidance is only readable inside `options`; the transcript rides as
-#     # reference_text because the family requires it.
-#     assert {key: value for key, value in payload.items() if key != "voice_ref"} == {
-#         "model": "glm-tts-q8", "input": "hello", "response_format": "wav", "seed": 7,
-#         "language": "en", "temperature": 1.0, "top_p": 0.8, "top_k": 25,
-#         "num_inference_steps": 12, "options": {"flow_guidance_scale": 0.7},
-#         "reference_text": "the exact words spoken",
-#     }
-#     assert adapter.generate_using_project(project, ["x"], on_stream_end=lambda: None) \
-#         == "GLM-TTS does not support streaming"
+def test_glm_payload_splits_flow_guidance_into_options(monkeypatch, tmp_path: Path):
+    path = tmp_path / "sample.flac"
+    sf.write(path, np.full(100, .2), 24000, format="FLAC")
+    item = definition(GLM_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "glm-tts-q8")
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair",
+                        lambda *args: ("sample.flac", "the exact words spoken"))
+    monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: str(path))
+    monkeypatch.setattr("tts_audiobook_tool.tts_models.audio_cpp_configured.random.randrange", lambda stop: 7)
+    captured = []
+
+    def fake_generate(url, payload, print_request=False):
+        captured.append(payload)
+        return SimpleNamespace(data=np.asarray([0], dtype=np.float32), sr=24000)
+
+    monkeypatch.setattr(AudioCppUtil, "generate", fake_generate)
+    project = FakeProject(model_id=GLM_ID, values={"num_inference_steps": 12})
+    project.language_code = "en"
+    result = adapter.generate_using_project(project, ["hello"])
+    assert not isinstance(result, str)
+    assert len(captured) == 1
+    payload = captured[0]
+    assert payload["voice_ref"]["type"] == "base64"
+    # num_inference_steps is in audio.cpp's forwarded top-level set, while Flow
+    # guidance is only readable inside `options`; the transcript rides as
+    # reference_text because the family requires it. No language is sent even
+    # though the project has one.
+    assert {key: value for key, value in payload.items() if key != "voice_ref"} == {
+        "model": "glm-tts-q8", "input": "hello", "response_format": "wav", "seed": 7,
+        "temperature": 1.0, "top_p": 0.8, "top_k": 25,
+        "num_inference_steps": 12, "options": {"flow_guidance_scale": 0.7},
+        "reference_text": "the exact words spoken",
+    }
+    assert adapter.generate_using_project(project, ["x"], on_stream_end=lambda: None) \
+        == "GLM-TTS does not support streaming"
 
 
 def test_http_speech_contract_and_safe_request_log(monkeypatch, capsys):

@@ -21,7 +21,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [Fish Speech S2-Pro](https://github.com/fishaudio/fish-speech) | ✅ | ✅ | ✅ |
 | [Fish Speech S1-mini](https://github.com/fishaudio/fish-speech) | ✅ | | |
 | [Fun-CosyVoice3](https://github.com/QwenAudio/CosyVoice) | | ✅ | |
-| [GLM-TTS](https://github.com/zai-org/GLM-TTS) | ✅ | | <!-- disabled --> |
+| [GLM-TTS](https://github.com/zai-org/GLM-TTS) | ✅ | | ✅ |
 | [Higgs Audio V2](https://github.com/boson-ai/higgs-audio) | ✅ | | |
 | [Higgs Audio V3](https://github.com/boson-ai/higgs-audio) | | ✅ | ✅ |
 | [IndexTTS2](https://github.com/index-tts/index-tts) | ✅ | | |
@@ -750,7 +750,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **Breeze TTS 2**
 - Supports voice clone and/or voice design
-- Temperature, guidance scale, top_p, top_k, seed
+- Temperature, top_p, top_k, guidance scale, seed
 
 **Chatterbox**
 - Multilingual V2, Multilingual V3, and English model variants
@@ -762,6 +762,9 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **Echo-TTS**
 - Steps, text guidance scale, speaker guidance scale, seed
+
+**GLM-TTS**
+- Temperature,top_p, top_k, steps, flow guidance scale, seed
 
 **Fish S2-Pro**
 - Temperature, top_p, top_k, seed
@@ -825,6 +828,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 - Added support for **dots.tts for audio.cpp** (SOAR or MeanFlow)
 - Added support for **Fish S2-Pro for audio.cpp**
+- Added support for **GLM-TTS for audio.cpp**
 
 **2026-10-06**
 

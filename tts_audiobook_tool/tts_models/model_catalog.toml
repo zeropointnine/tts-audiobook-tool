@@ -1455,8 +1455,9 @@ short_name = "Breeze TTS 2"
 voice_path_console = "Enter voice clone audio clip file path (transcript required): "
 voice_path_requestor = "Select voice clone audio clip (transcript required)"
 project_links = [
+    "https://github.com/breezeblue-ai/breeze-tts",
     "https://huggingface.co/BreezeBlue/Breeze-TTS-2",
-    "https://github.com/ggml-org/audio.cpp",
+    "https://github.com/0xShug0/audio.cpp/tree/main/docs/modelsf",
 ]
 
 [models.audio_cpp]
@@ -1555,7 +1556,8 @@ voice_path_console = "Enter voice clone audio clip file path: "
 voice_path_requestor = "Select voice clone audio clip"
 project_links = [
     "https://github.com/resemble-ai/chatterbox",
-    "https://github.com/ggml-org/audio.cpp",
+    "https://huggingface.co/ResembleAI/chatterbox",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/tts.md#chatterbox"
 ]
 
 [models.audio_cpp]
@@ -1639,7 +1641,7 @@ substitutions = []
 
 [models.spec.ui]
 proper_name = "dots.tts"
-short_name = "dots.tts audio.cpp"
+short_name = "dots.tts"
 settings_note = """
 This model uses whichever dots.tts model the audio.cpp server entry is configured
 with (SOAR or MeanFlow). MeanFlow ignores the guidance scale. """
@@ -1648,7 +1650,8 @@ voice_path_console = "Enter voice clone audio clip file path (up to 10s recommen
 voice_path_requestor = "Select voice clone audio clip (up to 10s recommended)"
 project_links = [
     "https://github.com/studio-dots-ai/dots.tts",
-    "https://huggingface.co/dots-studio/dots.tts-base"
+    "https://huggingface.co/dots-studio/dots.tts-base",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/dots_tts.md"
 ]
 
 [models.audio_cpp]
@@ -1722,8 +1725,9 @@ voice_sample_max_duration_s = 15
 voice_path_console = "Enter voice clone audio clip file path (~10s recommended, up to 15s): "
 voice_path_requestor = "Select voice clone audio clip (~10s recommended, up to 15s)"
 project_links = [
+    "https://github.com/LAION-AI/scaled-echo-tts",
     "https://huggingface.co/jordand/echo-tts-base",
-    "https://github.com/ggml-org/audio.cpp",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/community_models/echo_tts.md"
 ]
 
 [models.audio_cpp]
@@ -1868,6 +1872,117 @@ min = 1
 max = 100
 
 # ------------------------------------------------------------------------
+# GLM-TTS is a bilingual (zh, en) zero-shot clone. audio.cpp serves its two
+# routes (`tts`, `clon`) through one reference-conditioned path that always
+# needs the reference clip's exact transcript, so both tokens are claimed; a
+# server advertises whichever one its operator configured. Output is fixed at
+# 24 kHz, so this family has no samplerate setting like local `glm_local` does,
+# and its Flow/DiT controls replace that model's `sr` knob.
+[[models]]
+id = "glm_tts_audiocpp"
+settings = [
+    { name = "temperature", section = "parameters", type = "float", default = 1.0 },
+    { name = "top_p", section = "parameters", type = "float", default = 0.8 },
+    { name = "top_k", section = "parameters", type = "int", default = 25 },
+    { name = "num_inference_steps", section = "parameters", type = "int", default = 10 },
+    { name = "flow_guidance_scale", section = "parameters", type = "float", default = 0.7 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+]
+backend_kind = "audio_cpp"
+
+[models.spec]
+file_tag = "glm"
+default_output_sample_rate = 24000
+un_all_caps = false
+requirements_file_name = "requirements-remote.txt"
+# Same caesura behavior as local `glm_local`: semicolon generates a random
+# syllable; em-dash and space-en-dash-space do not create a caesura.
+substitutions = [
+    [";", ","],
+    ["—", ", "], ["─", ", "],
+    [" – ", ", "],
+]
+
+[models.spec.ui]
+proper_name = "GLM-TTS"
+short_name = "GLM"
+voice_path_console = "Enter voice clone audio clip file path (transcript required): "
+voice_path_requestor = "Select voice clone audio clip (transcript required)"
+project_links = [
+    "https://github.com/zai-org/GLM-TTS",
+    "https://huggingface.co/zai-org/GLM-TTS",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/community_models/glm_tts.md",
+]
+
+[models.audio_cpp]
+menu = [
+    { kind = "voice_samples" },
+    { parameter = "temperature", label = "Temperature", target_menu = "model" },
+    { parameter = "top_p", label = "Top-P", target_menu = "model" },
+    { parameter = "top_k", label = "Top-K", target_menu = "model" },
+    { parameter = "num_inference_steps", label = "Steps", target_menu = "model" },
+    { parameter = "flow_guidance_scale", label = "Flow guidance scale", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
+]
+# The family requires the reference transcript: without it, audio.cpp's GLM-TTS
+# session throws before synthesis, and a mismatched transcript degrades both
+# semantic and speaker conditioning. A reference clip is always required.
+reference_transcript = true
+# Same segment recommendation as local `glm_local`.
+max_words_range_reco = [20, 40]
+# The session never reads a language; send none.
+language_policy = "omit"
+# No request_options: the session has no internal text chunker, and its
+# speech-token budget is already bounded per request (2x-20x text tokens).
+
+[models.audio_cpp.match]
+family = "glm_tts"
+# audio.cpp advertises whichever task token the operator configured, and this
+# family's two advertised routes are the same reference-conditioned path, so
+# both spellings are accepted (`tts` is the common server.json value).
+tasks = ["tts", "clon"]
+mode = "offline"
+
+# temperature 0 selects greedy decoding.
+[models.audio_cpp.parameters.temperature]
+type = "float"
+default = 1.0
+min = 0.0
+max = 2.0
+
+[models.audio_cpp.parameters.top_p]
+type = "float"
+default = 0.8
+min = 0.0
+max = 1.0
+
+[models.audio_cpp.parameters.top_k]
+type = "int"
+default = 25
+min = 0
+max = 100
+input_prompt_suffix = "(0=disabled)"
+
+# Flow Euler steps; forwarded from the top-level body.
+[models.audio_cpp.parameters.num_inference_steps]
+type = "int"
+default = 10
+min = 1
+max = 50
+
+# Flow classifier-free guidance. Not one of audio.cpp's forwarded top-level
+# request fields (a top-level value is silently ignored), so it travels in
+# `options` like Chatterbox's `exaggeration`.
+[models.audio_cpp.parameters.flow_guidance_scale]
+type = "float"
+default = 0.7
+min = 0.0
+max = 2.0
+target = "options"
+
+# ------------------------------------------------------------------------
 [[models]]
 id = "higgs_v3_audiocpp"
 settings = [
@@ -1889,12 +2004,13 @@ substitutions = [["—", ", "], ["─", ", "]]
 
 [models.spec.ui]
 proper_name = "Higgs Audio V3"
-short_name = "Higgs v3 audio.cpp"
+short_name = "Higgs v3"
 voice_path_console = "Enter voice clone audio clip file path: "
 voice_path_requestor = "Select voice clone audio clip"
 project_links = [
+    "https://github.com/boson-ai/higgs-audio",
     "https://huggingface.co/bosonai/higgs-audio-v3-tts-4b",
-    "https://github.com/ggml-org/audio.cpp",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/higgs_audio_tts.md",
 ]
 
 [models.audio_cpp]
@@ -2130,13 +2246,14 @@ substitutions = []
 
 [models.spec.ui]
 proper_name = "OmniVoice"
-short_name = "OmniVoice audio.cpp"
+short_name = "OmniVoice"
 voice_sample_max_duration_s = 15
 voice_path_console = "Enter voice clone audio clip file path (3-10s recommended, up to 15s): "
 voice_path_requestor = "Select voice clone audio clip (3-10s recommended, up to 15s)"
 project_links = [
     "https://github.com/k2-fsa/OmniVoice",
-    "https://github.com/ggml-org/audio.cpp",
+    "https://huggingface.co/k2-fsa/OmniVoice",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/omnivoice.md"
 ]
 
 [models.audio_cpp]

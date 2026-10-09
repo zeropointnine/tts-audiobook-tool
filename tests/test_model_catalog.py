@@ -168,8 +168,8 @@ def test_complete_catalog_order_and_backend_suffix_ids():
         "fish_s2_sglomni", "higgs_v3_sglomni", "moss_delay_sglomni",
         "moss_local_sglomni", "qwen3tts_sglomni", "zonos2_sglomni",
         "breeze_tts_2_audiocpp", "chatterbox_audiocpp",
-        # "glm_tts_audiocpp",  # DISABLED in the catalog; see model_catalog.toml
-        "dots_audiocpp", "echo_tts_audiocpp", "fish_s2_audiocpp", "higgs_v3_audiocpp",
+        "dots_audiocpp", "echo_tts_audiocpp", "fish_s2_audiocpp", "glm_tts_audiocpp",
+        "higgs_v3_audiocpp",
         "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp",
     ]
     assert raw["schema_version"] == 1
@@ -192,8 +192,8 @@ def test_catalog_provides_canonical_lookup_handles_in_order():
     assert [spec.id for spec in specs] == ids
     assert list(TtsModelType._initial_specs) == ids
     assert [handle.id for handle in TtsModelType.all()] == ids
-    assert len(specs) == 32
-    assert len(servers) == 18  # nine SGL entries plus the nine audio.cpp entries
+    assert len(specs) == 33
+    assert len(servers) == 19  # nine SGL entries plus the ten audio.cpp entries
     assert len(fingerprint) == 64
     for spec in specs:
         handle = TtsModelType.require_by_id(spec.id)
@@ -211,15 +211,13 @@ def test_catalog_provides_canonical_lookup_handles_in_order():
     assert TtsModelType.require_by_id("higgs_v3_audiocpp").value.backend_kind is TtsBackendKind.AUDIO_CPP
     assert not TtsModelType.require_by_id("higgs_v3_audiocpp").value.requires_voice
     assert not TtsModelType.require_by_id("higgs_v3_audiocpp").value.can_stream
-    # DISABLED (audio.cpp GLM-TTS): the downloadable package for this family is
-    # broken. Restore these expectations when the catalog entry is re-enabled.
     # GLM-TTS served by audio.cpp shares local glm's output tag and 24 kHz rate
     # but has no samplerate setting: the port's output rate is fixed.
-    # assert TtsModelType.require_by_id("glm_tts_audiocpp").value.backend_kind is TtsBackendKind.AUDIO_CPP
-    # assert TtsModelType.require_by_id("glm_tts_audiocpp").value.requires_voice
-    # assert not TtsModelType.require_by_id("glm_tts_audiocpp").value.can_stream
-    # assert TtsModelType.require_by_id("glm_tts_audiocpp").value.file_tag == "glm"
-    # assert TtsModelType.require_by_id("glm_tts_audiocpp").value.default_output_sample_rate == 24000
+    assert TtsModelType.require_by_id("glm_tts_audiocpp").value.backend_kind is TtsBackendKind.AUDIO_CPP
+    assert TtsModelType.require_by_id("glm_tts_audiocpp").value.requires_voice
+    assert not TtsModelType.require_by_id("glm_tts_audiocpp").value.can_stream
+    assert TtsModelType.require_by_id("glm_tts_audiocpp").value.file_tag == "glm"
+    assert TtsModelType.require_by_id("glm_tts_audiocpp").value.default_output_sample_rate == 24000
     assert TtsModelType.require_by_id("none").value.backend_kind is None
     assert TtsModelType.find_tts_type_using_sgl_omni_model_id("tencent/AuK-Flash") is TtsModelType.require_by_id("auk_flash_sglomni")
 
@@ -344,7 +342,7 @@ def test_installing_data_only_spec_uses_lookup_without_attributes_and_reset_remo
 
 def test_catalog_is_available_at_import_before_model_classes(tmp_path):
     code = """from tts_audiobook_tool.tts_models.model_catalog import load_catalog
-assert len(load_catalog()[0]) == 32
+assert len(load_catalog()[0]) == 33
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 assert FishS2BaseModel.INFO is TtsModelType.require_by_id("fish_s2_local").value
@@ -491,8 +489,8 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
     audio = {item["id"]: item for item in raw["models"] if item.get("backend_kind") == "audio_cpp"}
     assert set(audio) == {
         "breeze_tts_2_audiocpp", "chatterbox_audiocpp",
-        # "glm_tts_audiocpp",  # DISABLED in the catalog; see model_catalog.toml
-        "dots_audiocpp", "echo_tts_audiocpp", "fish_s2_audiocpp", "higgs_v3_audiocpp",
+        "dots_audiocpp", "echo_tts_audiocpp", "fish_s2_audiocpp", "glm_tts_audiocpp",
+        "higgs_v3_audiocpp",
         "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp",
     }
 
@@ -577,25 +575,25 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
     assert omnivoice["audio_cpp"]["request_options"] == {"audio_chunk_threshold": 999.0}
     assert TtsModelType.require_by_id(omnivoice["id"]) is TtsModelType.require_by_id("omnivoice_audiocpp")
 
-    # DISABLED (audio.cpp GLM-TTS): restore this block with the catalog entry.
-    # glm = audio["glm_tts_audiocpp"]
-    # # Both advertised GLM-TTS routes share one reference-conditioned path, so
-    # # the entry claims both tokens; audio.cpp advertises whichever one the
-    # # operator configured. It still needs the reference transcript.
-    # assert glm["audio_cpp"]["match"] == {
-    #     "family": "glm_tts", "tasks": ["tts", "clon"], "mode": "offline",
-    # }
-    # assert glm["audio_cpp"]["reference_transcript"] is True
-    # assert "max_words_range_reco" not in glm["audio_cpp"]
-    # assert {name: (item["type"], item["default"], item.get("target", "top_level"))
-    #         for name, item in glm["audio_cpp"]["parameters"].items()} == {
-    #     "temperature": ("float", 1.0, "top_level"),
-    #     "top_p": ("float", 0.8, "top_level"),
-    #     "top_k": ("int", 25, "top_level"),
-    #     "num_inference_steps": ("int", 10, "top_level"),
-    #     "flow_guidance_scale": ("float", 0.7, "options"),
-    # }
-    # assert TtsModelType.require_by_id(glm["id"]) is TtsModelType.require_by_id("glm_tts_audiocpp")
+    glm = audio["glm_tts_audiocpp"]
+    # Both advertised GLM-TTS routes share one reference-conditioned path, so
+    # the entry claims both tokens; audio.cpp advertises whichever one the
+    # operator configured. It still needs the reference transcript.
+    assert glm["audio_cpp"]["match"] == {
+        "family": "glm_tts", "tasks": ["tts", "clon"], "mode": "offline",
+    }
+    assert glm["audio_cpp"]["reference_transcript"] is True
+    assert glm["audio_cpp"]["max_words_range_reco"] == [20, 40]
+    assert glm["audio_cpp"]["language_policy"] == "omit"
+    assert {name: (item["type"], item["default"], item.get("target", "top_level"))
+            for name, item in glm["audio_cpp"]["parameters"].items()} == {
+        "temperature": ("float", 1.0, "top_level"),
+        "top_p": ("float", 0.8, "top_level"),
+        "top_k": ("int", 25, "top_level"),
+        "num_inference_steps": ("int", 10, "top_level"),
+        "flow_guidance_scale": ("float", 0.7, "options"),
+    }
+    assert TtsModelType.require_by_id(glm["id"]) is TtsModelType.require_by_id("glm_tts_audiocpp")
 
 
 @pytest.mark.parametrize("model_id, expected", [
