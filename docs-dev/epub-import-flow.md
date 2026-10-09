@@ -329,7 +329,8 @@ EPUB navigation-defined boundaries and titles become `BookSection` records; they
 ### Existing generated-audio invalidation rules apply
 
 Replacing text from EPUB deletes old generated sound segments and clears section
-markers and word substitutions, matching text-file and manual import behavior.
+markers, matching text-file and manual import behavior. Word substitutions are
+kept.
 
 ### Future structure is enabled but not required
 

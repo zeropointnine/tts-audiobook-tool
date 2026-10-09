@@ -58,11 +58,14 @@ used for validation are never rewritten. The generated segment's sidecar
 described in §2.1; that is a record of what was sent, not a rewrite of any
 project or validation text.
 
-The table is discarded when the project's source text is completely replaced
-(**Text > Import from text file / Manually enter text / Import from EPUB file**),
-along with generated sound segments and section markers; the replacement
-confirmation names each of these, substitutions included. Incremental edits made
-in the text editor leave it intact, since most of the source text still matches.
+The table survives a complete replacement of the project's source text
+(**Text > Import from text file / Manually enter text / Import from EPUB file**).
+Unlike section markers and generated sound segments, which are line-indexed and
+are cleared, substitutions are keyed by word and stay meaningful against new
+text; re-importing the same book with different segmentation settings is a
+common case. When the replacement confirmation is shown (because segments or
+markers would be invalidated), it adds a dim note that the substitutions will be
+kept. Substitutions alone do not trigger the confirmation.
 
 ---
 
@@ -531,9 +534,8 @@ Behavioral invariants:
 6. A rendered table row is exactly the view width. An over-long word cell ends
    with `…` plus one blank margin cell, so the two word columns keep a
    one-character separation even when both are truncated.
-7. A full source-text replacement clears the table (in
-   `ProjectTextIOUtil.set_phrase_groups_and_save` and
-   `set_phrase_groups_chapters_and_save`); structural text-editor edits do not.
+7. Neither a full source-text replacement (`ProjectTextIOUtil.set_phrase_groups_and_save`
+   / `set_phrase_groups_chapters_and_save`) nor text-editor edits clear the table.
 8. The uncommon-words inspector is read-only and is offered only for first-class
    languages when the project has phrase groups.
 
@@ -549,7 +551,7 @@ Relevant tests:
   absence of the uncommon-words inspector (phrase groups, language support,
   alias codes), the inspector's printed report, and the text-import
   confirmation.
-- `tests/test_project_book_integration.py` — word-substitution clearing on
+- `tests/test_project_book_integration.py` — word substitutions surviving
   text-file/manual and EPUB import.
 - `tests/test_language_util.py` — the shared normalizer and the fact that the
   whitelist and word equivalence delegate to it.

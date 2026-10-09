@@ -10,6 +10,7 @@ from tts_audiobook_tool.text_ops.dialog_segmenter import (
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
@@ -251,6 +252,43 @@ class TextMenu:
 
 # ---
 
+def make_text_replacement_confirm_message(project: Project) -> str:
+    """
+    Builds the confirmation prompt shown before replacing the project text,
+    listing the text-dependent project data that would be invalidated.
+    Returns an empty string when nothing would be invalidated (no prompt needed).
+    """
+    lines: list[str] = []
+
+    num_files = project.sound_segments.num_generated()
+    if num_files > 0:
+        files_noun = make_noun("file", "files", num_files)
+        lines.append(
+            f"Generated sound segments "
+            f"({COL_ERROR}{num_files}{COL_DEFAULT} {files_noun}, deleted from disk)"
+        )
+
+    num_markers = len(project.markers)
+    if num_markers > 0:
+        marker_label = app_text.get_section_marker_label(project, is_title_case=True)
+        items_noun = make_noun("item", "items", num_markers)
+        lines.append(f"{marker_label} ({COL_ERROR}{num_markers}{COL_DEFAULT} {items_noun})")
+
+    if not lines:
+        return ""
+
+    s = "Replacing project text will invalidate the following:\n"
+    s += "".join(f"- {line}\n" for line in lines)
+
+    # Word substitutions are kept; mention them so a user importing different text can review them
+    num_substitutions = len(project.word_substitutions)
+    if num_substitutions > 0:
+        items_noun = make_noun("item", "items", num_substitutions)
+        s += f"{COL_DIM}Note: Word substitutions ({num_substitutions} {items_noun}) will be kept.{COL_DEFAULT}\n"
+
+    s += "\nAre you sure? "
+    return s
+
 def on_select_import(state: State, item: MenuItem) -> bool:
 
     # Print pseudo-menu heading
@@ -265,32 +303,10 @@ def on_select_import(state: State, item: MenuItem) -> bool:
             raise Exception("Bad value")
     MenuUtil.print_screen_heading(state, heading)
 
-    num_files = state.project.sound_segments.num_generated()
-    num_markers = len(state.project.markers)
-    num_substitutions = len(state.project.word_substitutions)
-    if num_files > 0 or num_markers > 0 or num_substitutions > 0:
-        # Confirm before discarding text-dependent project settings
-        parts: list[str] = []
-        if num_files > 0:
-            files_noun = make_noun("file", "files", num_files)
-            parts.append(
-                f"{COL_ERROR}{num_files}{COL_DEFAULT} generated sound segment {files_noun}"
-            )
-        if num_markers > 0:
-            marker_label = app_text.get_section_marker_label(
-                state.project, is_title_case=False, is_singular=(num_markers == 1)
-            )
-            parts.append(f"{COL_ERROR}{num_markers}{COL_DEFAULT} {marker_label}")
-        if num_substitutions > 0:
-            substitution_label = make_noun(
-                "word substitution", "word substitutions", num_substitutions
-            )
-            parts.append(
-                f"{COL_ERROR}{num_substitutions}{COL_DEFAULT} {substitution_label}"
-            )
-        s = f"Replacing project text will discard {' and '.join(parts)}.\n"
-        s += "Are you sure? "
-        if not ask.ask_confirm(s):
+    # Confirm before invalidating text-dependent project data
+    confirm_message = make_text_replacement_confirm_message(state.project)
+    if confirm_message:
+        if not ask.ask_confirm(confirm_message):
             return False
 
     epub_path = ""

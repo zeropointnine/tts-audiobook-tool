@@ -676,7 +676,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         )
         self.assertTrue(reloaded.book.segmentation_settings.dialog_segmentation)
 
-    def test_set_phrase_groups_and_save_clears_markers_for_plain_text_import(self):
+    def test_set_phrase_groups_and_save_clears_markers_and_keeps_substitutions_for_plain_text_import(self):
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir)
             project.word_substitutions = {"Ariekei": "AriaKay"}
@@ -696,8 +696,12 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.book.text_source_kind, "plain_text")
         self.assertEqual(project.book.title, "source-file")
         self.assertEqual(project.markers, set())
-        self.assertEqual(project.word_substitutions, {})
-        self.assertEqual(project_payload["word_substitutions_json_string"], "{}")
+        # Word substitutions are word-keyed, so they survive a text replacement
+        self.assertEqual(project.word_substitutions, {"Ariekei": "AriaKay"})
+        self.assertEqual(
+            json.loads(project_payload["word_substitutions_json_string"]),
+            {"Ariekei": "AriaKay"},
+        )
 
     def test_set_phrase_groups_chapters_and_save_creates_epub_book_sections(self):
         phrase_groups = [
@@ -727,8 +731,12 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.book.title, "Example Book")
         self.assertEqual(project.book.text_source_kind, "epub")
         self.assertEqual(project.markers, set())
-        self.assertEqual(project.word_substitutions, {})
-        self.assertEqual(project_payload["word_substitutions_json_string"], "{}")
+        # Word substitutions are word-keyed, so they survive a text replacement
+        self.assertEqual(project.word_substitutions, {"Ariekei": "AriaKay"})
+        self.assertEqual(
+            json.loads(project_payload["word_substitutions_json_string"]),
+            {"Ariekei": "AriaKay"},
+        )
         self.assertEqual(project.book.segmentation_settings.dialog_segmentation, True)
         self.assertEqual([section.title for section in project.book.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([len(section.phrase_groups) for section in project.book.sections], [2, 1])

@@ -5,6 +5,7 @@ import pytest
 
 import tts_audiobook_tool.menus.text_menu as text_menu_module
 from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
+from tts_audiobook_tool.constants import COL_DIM
 from tts_audiobook_tool.constants_hints import HINT_DIALOG_VOICE, HINT_TOLERANCE_FIRST_CLASS
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.text_menu import TextMenu, on_select_import
@@ -467,7 +468,8 @@ def run_manual_import(
     }
 
 
-def test_text_import_confirms_when_only_markers_and_substitutions_exist(monkeypatch) -> None:
+def test_text_import_confirmation_notes_kept_substitutions(monkeypatch) -> None:
+    # Substitutions are not invalidated, but get a dim note when the prompt shows anyway
     project = make_import_project(
         num_files=0,
         markers={1, 2},
@@ -477,28 +479,43 @@ def test_text_import_confirms_when_only_markers_and_substitutions_exist(monkeypa
     captured = run_manual_import(monkeypatch, project, confirm_answer=True)
 
     assert len(captured["confirm_calls"]) == 1
-    message = strip_ansi_codes(captured["confirm_calls"][0])
-    assert "2 section markers" in message
-    assert "1 word substitution" in message
-    assert "generated sound segment" not in message
+    raw_message = captured["confirm_calls"][0]
+    assert f"{COL_DIM}Note: Word substitutions (1 item) will be kept." in raw_message
+    assert strip_ansi_codes(raw_message) == (
+        "Replacing project text will invalidate the following:\n"
+        "- Section markers (2 items)\n"
+        "Note: Word substitutions (1 item) will be kept.\n"
+        "\n"
+        "Are you sure? "
+    )
     assert captured["delete_calls"] == [True]
     assert len(captured["commit_calls"]) == 1
 
 
-def test_text_import_confirmation_names_all_invalidated_categories(monkeypatch) -> None:
-    project = make_import_project(
-        num_files=3,
-        markers={1},
-        substitutions={"a": "b", "c": "d"},
-    )
+def test_text_import_confirmation_lists_all_invalidated_categories(monkeypatch) -> None:
+    project = make_import_project(num_files=3, markers={1})
 
     captured = run_manual_import(monkeypatch, project, confirm_answer=True)
 
     message = strip_ansi_codes(captured["confirm_calls"][0])
-    assert "3 generated sound segment files" in message
-    assert "1 section marker" in message
-    assert "2 word substitutions" in message
+    assert message == (
+        "Replacing project text will invalidate the following:\n"
+        "- Generated sound segments (3 files, deleted from disk)\n"
+        "- Section markers (1 item)\n"
+        "\n"
+        "Are you sure? "
+    )
     assert captured["delete_calls"] == [True]
+
+
+def test_text_import_does_not_confirm_when_only_substitutions_exist(monkeypatch) -> None:
+    # Substitutions alone don't warrant a prompt since nothing would be invalidated
+    project = make_import_project(substitutions={"a": "b", "c": "d"})
+
+    captured = run_manual_import(monkeypatch, project, confirm_answer=True)
+
+    assert captured["confirm_calls"] == []
+    assert len(captured["commit_calls"]) == 1
 
 
 def test_text_import_confirmation_uses_split_points_label_for_multi_section(
@@ -508,7 +525,7 @@ def test_text_import_confirmation_uses_split_points_label_for_multi_section(
 
     captured = run_manual_import(monkeypatch, project, confirm_answer=True)
 
-    assert "2 split points" in strip_ansi_codes(captured["confirm_calls"][0])
+    assert "- Split points (2 items)" in strip_ansi_codes(captured["confirm_calls"][0])
 
 
 def test_text_import_declined_confirmation_skips_import(monkeypatch) -> None:

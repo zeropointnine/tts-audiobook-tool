@@ -67,7 +67,8 @@ class ProjectTextIOUtil:
         project.markers = set()
         project.generate_range_string = ""
         project.realtime_line_range = None
-        project.word_substitutions = {}
+        # Word substitutions are deliberately kept: they are word-keyed rather than
+        # line-indexed, so they remain meaningful against the new text.
         ProjectTextIOUtil.save_book(project)
         project.save()
 
@@ -108,7 +109,8 @@ class ProjectTextIOUtil:
         project.markers = set()
         project.generate_range_string = ""
         project.realtime_line_range = None
-        project.word_substitutions = {}
+        # Word substitutions are deliberately kept: they are word-keyed rather than
+        # line-indexed, so they remain meaningful against the new text.
         ProjectTextIOUtil.save_book(project)
         project.save()
 
