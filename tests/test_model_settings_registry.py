@@ -12,6 +12,7 @@ from tts_audiobook_tool.project_support.model_settings import (
     Binding, ModelSettings, ModelSettingsRegistry, REGISTRY, normalize_paths,
     register_builtin_fields,
 )
+from tts_audiobook_tool.project_support.model_settings_compat import RETIRED_GROUPS
 from tts_audiobook_tool.project_support.model_settings_declarations import BUILTIN_LEGACY_FIELDS
 
 
@@ -40,7 +41,7 @@ def test_catalog_voice_and_batch_presence_comes_from_storage_bindings() -> None:
         assert model.can_batch() == (orchestration is not None)
         if orchestration is not None:
             assert orchestration.section == "orchestration"
-    assert REGISTRY.voice_binding("fish_s2_local").group == REGISTRY.voice_binding("fish_s2_sglomni").group == "fish_s2"
+    assert REGISTRY.voice_binding("qwen3tts_local").group == REGISTRY.voice_binding("qwen3tts_sglomni").group == "qwen3"
     assert REGISTRY.transcript_binding("zonos2_sglomni") is None
 
 
@@ -75,10 +76,15 @@ def test_retired_audio_cpp_concurrent_requests_is_dropped_on_load() -> None:
 
 
 def test_shared_group_owns_only_declared_fields() -> None:
-    assert REGISTRY.get("fish_s2_local", "temperature").group == "fish_s2"
-    assert REGISTRY.get("fish_s2_sglomni", "temperature").group == "fish_s2"
-    assert REGISTRY.get("fish_s2_local", "compile_enabled").group == ""
-    assert REGISTRY.get("fish_s2_sglomni", "concurrent_requests").group == ""
+    assert REGISTRY.get("qwen3tts_local", "temperature").group == "qwen3"
+    assert REGISTRY.get("qwen3tts_sglomni", "temperature").group == "qwen3"
+    assert REGISTRY.get("qwen3tts_local", "rolling_cont").group == ""
+    assert REGISTRY.get("qwen3tts_sglomni", "concurrent_requests").group == ""
+    # Fish S2's retired group left every setting private to its own model.
+    assert REGISTRY.get("fish_s2_local", "temperature").group == ""
+    assert REGISTRY.get("fish_s2_sglomni", "temperature").group == ""
+    with pytest.raises(ValueError, match="Unknown setting"):
+        REGISTRY.get("fish_s2_sglomni", "seed")
     assert REGISTRY.get("auk_flash_sglomni", "speed").group == "auk"
     assert REGISTRY.get("moss_delay_sglomni", "delay_top_k").group == ""
     with pytest.raises(ValueError, match="Unknown setting"):
@@ -90,47 +96,47 @@ def test_shared_group_owns_only_declared_fields() -> None:
 
 def test_legacy_migration_pairs_voices_and_preserves_shared_ownership() -> None:
     settings = REGISTRY.reconcile({}, {
-        "fish_s2_voice_file_name": ["a.flac", "b.flac"],
-        "fish_s2_voice_transcript": ["first"],
-        "fish_s2_temperature": -1,
-        "fish_s2_top_k": 50,
-        "fish_s2_seed": -1,
-        "fish_s2_compile_enabled": False,
-        "fish_s2_server_concurrent_requests": 3,
+        "qwen3_voice_file_name": ["a.flac", "b.flac"],
+        "qwen3_voice_transcript": ["first"],
+        "qwen3_temperature": -1,
+        "qwen3_top_k": 50,
+        "qwen3_seed": -1,
+        "qwen3_rolling_cont": 2,
+        "qwen3_server_concurrent_requests": 3,
     })
-    assert settings.shared["fish_s2"]["model_ids"] == ["fish_s2_local", "fish_s2_sglomni"]
-    assert settings.shared["fish_s2"]["voice_references"] == [
+    assert settings.shared["qwen3"]["model_ids"] == ["qwen3tts_local", "qwen3tts_sglomni"]
+    assert settings.shared["qwen3"]["voice_references"] == [
         {"file_name": "a.flac", "transcript": "first"},
         {"file_name": "b.flac", "transcript": ""},
     ]
-    assert settings.shared["fish_s2"]["parameters"] == {"top_k": 50, "seed": -1}
-    assert settings.models["fish_s2_local"]["parameters"] == {"compile_enabled": False}
-    assert settings.models["fish_s2_sglomni"]["orchestration"] == {"concurrent_requests": 3}
-    assert REGISTRY.resolve(settings, REGISTRY.get("fish_s2_local", "temperature")) == -1
-    REGISTRY.assign(settings, REGISTRY.get("fish_s2_sglomni", "temperature"), 0.8)
-    assert REGISTRY.resolve(settings, REGISTRY.get("fish_s2_local", "temperature")) == 0.8
-    REGISTRY.assign(settings, REGISTRY.get("fish_s2_local", "temperature"), None, reset=True)
-    assert "temperature" not in settings.shared["fish_s2"].get("parameters", {})
+    assert settings.shared["qwen3"]["parameters"] == {"top_k": 50, "seed": -1}
+    assert settings.models["qwen3tts_local"]["parameters"] == {"rolling_cont": 2}
+    assert settings.models["qwen3tts_sglomni"]["orchestration"] == {"concurrent_requests": 3}
+    assert REGISTRY.resolve(settings, REGISTRY.get("qwen3tts_local", "temperature")) == -1
+    REGISTRY.assign(settings, REGISTRY.get("qwen3tts_sglomni", "temperature"), 0.8)
+    assert REGISTRY.resolve(settings, REGISTRY.get("qwen3tts_local", "temperature")) == 0.8
+    REGISTRY.assign(settings, REGISTRY.get("qwen3tts_local", "temperature"), None, reset=True)
+    assert "temperature" not in settings.shared["qwen3"].get("parameters", {})
 
 
 def test_new_objects_take_precedence_and_unknown_objects_round_trip() -> None:
     source = {
         "models": {
-            "fish_s2_local": {"parameters": {"compile_enabled": False, "old_unused": 12}},
+            "qwen3tts_local": {"parameters": {"rolling_cont": 1, "old_unused": 12}},
             "absent_custom": {"experimental": {"anything": [1, 2]}},
         },
         "shared": {
-            "fish_s2": {"model_ids": ["fish_s2_local", "fish_s2_sglomni"], "parameters": {"top_k": 60, "old_unused": 12}},
+            "qwen3": {"model_ids": ["qwen3tts_local", "qwen3tts_sglomni"], "parameters": {"top_k": 60, "old_unused": 12}},
             "unavailable": {"model_ids": ["absent_custom"], "future": "untouched"},
         },
     }
     settings = REGISTRY.reconcile(source, {
-        "fish_s2_compile_enabled": True, "fish_s2_temperature": 0.7,
-        "fish_s2_top_k": 99, "fish_s2_voice_file_name": ["old.flac"],
+        "qwen3_rolling_cont": 3, "qwen3_temperature": 0.7,
+        "qwen3_top_k": 99, "qwen3_voice_file_name": ["old.flac"],
     })
-    assert settings.models["fish_s2_local"] == {"parameters": {"compile_enabled": False}}
-    assert settings.shared["fish_s2"] == {
-        "model_ids": ["fish_s2_local", "fish_s2_sglomni"], "parameters": {"top_k": 60},
+    assert settings.models["qwen3tts_local"] == {"parameters": {"rolling_cont": 1}}
+    assert settings.shared["qwen3"] == {
+        "model_ids": ["qwen3tts_local", "qwen3tts_sglomni"], "parameters": {"top_k": 60},
     }
     assert settings.models["absent_custom"] == source["models"]["absent_custom"]
     assert settings.shared["unavailable"] == source["shared"]["unavailable"]
@@ -138,26 +144,26 @@ def test_new_objects_take_precedence_and_unknown_objects_round_trip() -> None:
 
 
 def test_unauthorized_membership_rejected_without_mutating_source() -> None:
-    source = {"shared": {"fish_s2": {"model_ids": ["fish_s2_local", "unauthorized"]}}}
+    source = {"shared": {"qwen3": {"model_ids": ["qwen3tts_local", "unauthorized"]}}}
     with pytest.raises(ValueError, match="model_ids"):
         REGISTRY.reconcile(source)
-    assert source["shared"]["fish_s2"]["model_ids"] == ["fish_s2_local", "unauthorized"]
+    assert source["shared"]["qwen3"]["model_ids"] == ["qwen3tts_local", "unauthorized"]
 
 
 def test_invalid_parameters_are_pruned_without_losing_valid_overrides() -> None:
-    source = {"models": {"fish_s2_local": {"parameters": {
+    source = {"models": {"qwen3tts_local": {"parameters": {
         "temperature": 0.8,  # shared owner, not this private model object
         "future_unknown": 3,
         "rolling_cont": 2,
-        "compile_enabled": "not a boolean",
-    }}}, "shared": {"fish_s2": {
-        "model_ids": ["fish_s2_local", "fish_s2_sglomni"],
-        "parameters": {"compile_enabled": True, "temperature": 0.7},
+        "speaker_id": 7,  # wrong type
+    }}}, "shared": {"qwen3": {
+        "model_ids": ["qwen3tts_local", "qwen3tts_sglomni"],
+        "parameters": {"rolling_cont": 1, "temperature": 0.7},
     }}}
     settings = REGISTRY.reconcile(source)
-    assert settings.models["fish_s2_local"] == {"parameters": {"rolling_cont": 2}}
-    assert settings.shared["fish_s2"]["parameters"] == {"temperature": 0.7}
-    assert source["models"]["fish_s2_local"]["parameters"]["temperature"] == 0.8
+    assert settings.models["qwen3tts_local"] == {"parameters": {"rolling_cont": 2}}
+    assert settings.shared["qwen3"]["parameters"] == {"temperature": 0.7}
+    assert source["models"]["qwen3tts_local"]["parameters"]["temperature"] == 0.8
     assert REGISTRY.reconcile({"models": {"fish_s2_local": {"parameters": []}}}).models["fish_s2_local"] == {}
 
     # File references and shared-group membership retain their stricter
@@ -256,11 +262,11 @@ def test_current_bindings_retain_frozen_legacy_storage_contracts() -> None:
                 assert replace(current, name=legacy.name, group=legacy.group) == legacy, name
             continue
         current = REGISTRY.get(legacy.model_id, legacy.name)
-        if legacy.group == "moss":
-            # Historical sharing remains frozen; current MOSS ownership forked.
-            assert "moss" not in REGISTRY.members
+        if legacy.group in RETIRED_GROUPS:
+            # Historical sharing remains frozen; current ownership forked.
+            assert legacy.group not in REGISTRY.members
             assert current.group == ""
-            assert replace(current, group="moss") == legacy, attr
+            assert replace(current, group=legacy.group) == legacy, attr
         else:
             assert current == legacy, attr
         assert (current.value_type, current.list_item_type) == types[kind], attr

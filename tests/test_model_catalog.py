@@ -432,7 +432,6 @@ assert not hasattr(TtsModelType, 'SERVER_CATALOG_ONLY')
 def test_import_time_missing_hardcoded_model_id_reports_actionable_error(tmp_path, import_target):
     data = read_catalog(CATALOG_PATH)
     data["models"].remove(_entry(data, "fish_s2_local"))
-    data["setting_groups"]["fish_s2"].remove("fish_s2_local")
     path = write_catalog(tmp_path / "missing-hardcoded-id.toml", data)
     code = """import sys
 from pathlib import Path
@@ -732,7 +731,6 @@ def test_moss_settings_are_private_and_architecture_scoped(model_id, prefixes, l
     raw = read_catalog(CATALOG_PATH)
     assert raw["setting_groups"] == {
         "auk": ["auk_sglomni", "auk_flash_sglomni"],
-        "fish_s2": ["fish_s2_local", "fish_s2_sglomni"],
         "qwen3": ["qwen3tts_local", "qwen3tts_sglomni"],
     }
     expected = [
@@ -767,8 +765,8 @@ def test_moss_settings_are_private_and_architecture_scoped(model_id, prefixes, l
         _entry(data, "higgs_v3_sglomni")["settings"][0]), "unique nonempty setting names"),
     (lambda data: _entry(data, "higgs_v3_sglomni")["settings"][0].update(extra=True), "unsupported setting declaration"),
     (lambda data: _entry(data, "higgs_v3_sglomni")["settings"][0].update(default="wrong"), "default.*expected"),
-    (lambda data: data["setting_groups"]["fish_s2"].append("missing"), "setting_groups.fish_s2"),
-    (lambda data: next(s for s in _entry(data, "fish_s2_sglomni")["settings"]
+    (lambda data: data["setting_groups"]["qwen3"].append("missing"), "setting_groups.qwen3"),
+    (lambda data: next(s for s in _entry(data, "qwen3tts_sglomni")["settings"]
                        if s["name"] == "temperature").update(group="unauthorized"), "unauthorized shared group"),
 ])
 def test_rejects_invalid_setting_declarations_atomically(tmp_path, mutate, match):
@@ -797,7 +795,7 @@ def test_backend_storage_defaults_and_sentinels_match_parameter_contracts(tmp_pa
 @pytest.mark.parametrize("name", ["file_name", "transcript"])
 def test_voice_and_transcript_cannot_have_different_storage_owners(tmp_path, name):
     data = read_catalog(CATALOG_PATH)
-    setting = next(s for s in _entry(data, "fish_s2_sglomni")["settings"] if s["name"] == name)
+    setting = next(s for s in _entry(data, "qwen3tts_sglomni")["settings"] if s["name"] == name)
     setting.pop("group")
     with pytest.raises(ValueError, match="settings.transcript.*file_name storage owner"):
         load_catalog(write_catalog(tmp_path / "split-voice-owner.toml", data))

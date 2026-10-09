@@ -239,15 +239,15 @@ def test_edits_and_resets_after_fork_are_independent_and_do_not_resurrect():
 
 def test_other_groups_and_unknown_whole_objects_are_unchanged():
     source = old_source()
-    source["shared"]["fish_s2"] = {"model_ids": list(REGISTRY.members["fish_s2"]),
-                                     "parameters": {"temperature": 0.8}}
+    source["shared"]["qwen3"] = {"model_ids": list(REGISTRY.members["qwen3"]),
+                                   "parameters": {"temperature": 0.8}}
     source["shared"]["future_group"] = {"model_ids": ["future"], "future": {"x": [1, 2]}}
     source["models"]["future"] = {"future": "untouched"}
     project = Project.model_validate({"version": 3, "model_settings": source})
     assert project.model_settings.shared == {name: obj for name, obj in source["shared"].items() if name != "moss"}
     assert project.model_settings.models["future"] == source["models"]["future"]
-    project.set_model_setting("fish_s2_sglomni", "temperature", 0.9)
-    assert project.get_model_setting("fish_s2_local", "temperature") == 0.9
+    project.set_model_setting("qwen3tts_sglomni", "temperature", 0.9)
+    assert project.get_model_setting("qwen3tts_local", "temperature") == 0.9
 
 
 def test_registry_without_moss_keeps_unknown_historical_group():

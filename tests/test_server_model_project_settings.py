@@ -37,7 +37,7 @@ def test_higgs_v3_server_spec_and_project_voice_fields():
     assert "higgs_v3_voice_file_path" not in payload["model_settings"]
 
 
-def test_fish_s2_server_spec_shares_local_voice_fields():
+def test_fish_s2_server_spec_uses_project_voice_fields():
     local_info = TtsModelType.require_by_id("fish_s2_local").value
     server_info = TtsModelType.require_by_id("fish_s2_sglomni").value
     project = Project.model_validate({
@@ -48,18 +48,19 @@ def test_fish_s2_server_spec_shares_local_voice_fields():
     })
 
     assert server_info.backend_kind == TtsBackendKind.SGL_OMNI
-    assert REGISTRY.voice_binding(local_info.id).group == REGISTRY.voice_binding(server_info.id).group == "fish_s2"
-    assert REGISTRY.transcript_binding(local_info.id).group == REGISTRY.transcript_binding(server_info.id).group == "fish_s2"
+    assert REGISTRY.voice_binding(local_info.id).group == REGISTRY.voice_binding(server_info.id).group == ""
+    assert REGISTRY.transcript_binding(local_info.id).group == REGISTRY.transcript_binding(server_info.id).group == ""
     assert not server_info.requires_voice
     assert get_setting(project, "fish_s2_voice_file_name") == ["voice.flac"]
     assert get_setting(project, "fish_s2_voice_transcript") == ["reference transcript"]
 
     payload = ProjectSerializationUtil.to_project_json_dict(project)
-    shared = payload["model_settings"]["shared"]["fish_s2"]
     assert payload["voice_references"] == [
         {"file_name": "voice.flac", "transcript": "reference transcript"}
     ]
-    assert "voice_references" not in shared
+    assert "fish_s2" not in payload["model_settings"]["shared"]
+    for model_id in (local_info.id, server_info.id):
+        assert "voice_references" not in payload["model_settings"]["models"].get(model_id, {})
     assert "fish_s2_server_voice_target" not in payload["model_settings"]
     assert "fish_s2_server_voice_transcript" not in payload["model_settings"]
 

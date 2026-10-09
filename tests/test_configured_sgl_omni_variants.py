@@ -261,23 +261,30 @@ def test_streamed_payload_and_callbacks_match_legacy(model_id, server_mode, capt
         assert "response_format" not in capture[0]
 
 
-def test_fish_shared_override_cap_and_reset_preserve_local_value(server_mode, capture, monkeypatch):
+def test_fish_server_cap_and_reset_are_private_to_server(server_mode, capture, monkeypatch):
+    # Server Fish S2 caps outgoing top_k without rewriting its stored value, and
+    # its edits no longer reach local Fish S2 now that the group is retired.
     server_mode("fish_s2_sglomni")
     definition = Tts.get_configured_definition(Tts.get_active_type())
     project = Project(tts_model_type=Tts.get_active_type().id)
     monkeypatch.setattr(Project, "save", lambda self: "")
-    project.set_model_setting("fish_s2_local", "top_k", 73)
+    project.set_model_setting("fish_s2_local", "top_k", 40)
+    project.set_model_setting("fish_s2_sglomni", "top_k", 73)
     assert ConfiguredSettings.get(project, definition.parameters["top_k"], "fish_s2_sglomni") == 73
     assert any("clamp to 30" in warning for warning in Tts.get_model_support(project).get_warning_issues(project))
     Tts.get_instance().generate_using_project(project, ["hello"])
     assert capture[0]["top_k"] == 30
-    assert project.get_model_setting("fish_s2_local", "top_k") == 73
-    assert ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]["shared"]["fish_s2"]["parameters"]["top_k"] == 73
+    assert "seed" not in capture[0]
+    assert project.get_model_setting("fish_s2_sglomni", "top_k") == 73
+    saved = ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]
+    assert "fish_s2" not in saved["shared"]
+    assert saved["models"]["fish_s2_sglomni"]["parameters"]["top_k"] == 73
     assert ConfiguredSettings.set(project, definition.parameters["top_p"], 0.8, "fish_s2_sglomni") == ""
-    assert project.get_model_setting("fish_s2_local", "top_p") == 0.8
+    assert project.get_model_setting("fish_s2_sglomni", "top_p") == 0.8
+    assert project.get_model_setting("fish_s2_local", "top_p") == -1.0
     assert ConfiguredSettings.set(project, definition.parameters["top_k"], None, "fish_s2_sglomni") == ""
-    assert project.get_model_setting("fish_s2_local", "top_k") == -1
-    assert "top_k" not in project.model_settings.shared["fish_s2"].get("parameters", {})
+    assert project.get_model_setting("fish_s2_sglomni", "top_k") == -1
+    assert project.get_model_setting("fish_s2_local", "top_k") == 40
 
 
 def test_auk_speed_utf8_and_seed_are_one_per_call(server_mode, capture, tmp_path):
@@ -450,10 +457,11 @@ def test_readiness_selected_reference_and_auk_all_samples(server_mode, capture, 
         assert not capture
 
 
-def test_fish_menu_reset_and_server_edit_reach_local_owner(server_mode, monkeypatch):
+def test_fish_server_menu_reset_and_edit_stay_private(server_mode, monkeypatch):
     instance = server_mode("fish_s2_sglomni")
     project = Project(tts_model_type=Tts.get_active_type().id)
-    project.set_model_setting("fish_s2_local", "top_k", 73)
+    project.set_model_setting("fish_s2_local", "top_k", 50)
+    project.set_model_setting("fish_s2_sglomni", "top_k", 73)
     monkeypatch.setattr(Project, "save", lambda self: "")
     monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.printt", lambda *_: None)
     monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.print_feedback", lambda *_: None)
@@ -463,12 +471,13 @@ def test_fish_menu_reset_and_server_edit_reach_local_owner(server_mode, monkeypa
     state = SimpleNamespace(project=project)
     item = ModelConfiguredSglOmniMenu.make_items(state, instance.definition)[-1]
     item.handler(state, item)
-    assert project.get_model_setting("fish_s2_local", "top_k") == -1
+    assert project.get_model_setting("fish_s2_sglomni", "top_k") == -1
     item.handler(state, item)
-    assert project.get_model_setting("fish_s2_local", "top_k") == 25
+    assert project.get_model_setting("fish_s2_sglomni", "top_k") == 25
+    assert project.get_model_setting("fish_s2_local", "top_k") == 50
     saved = ProjectSerializationUtil.to_project_json_dict(project)
-    assert saved["model_settings"]["shared"]["fish_s2"]["parameters"]["top_k"] == 25
-    assert "top_k" not in saved["model_settings"]["models"].get("fish_s2_sglomni", {}).get("parameters", {})
+    assert saved["model_settings"]["models"]["fish_s2_sglomni"]["parameters"]["top_k"] == 25
+    assert saved["model_settings"]["models"]["fish_s2_local"]["parameters"]["top_k"] == 50
 
 
 def test_auk_reference_load_failure_is_forwarded(server_mode, capture, monkeypatch, tmp_path):
@@ -486,7 +495,7 @@ def test_auk_reference_load_failure_is_forwarded(server_mode, capture, monkeypat
     assert "stage_params" not in capture[0] and "speed" not in capture[0]
 
 
-def test_shared_storage_round_trip_and_v2_migration(server_mode):
+def test_retired_fish_storage_round_trip_and_v2_migration(server_mode):
     project = Project.model_validate({
         "version": 2, "fish_s2_top_k": 82, "fish_s2_seed": -1,
         "fish_s2_voice_file_name": ["one.flac"], "fish_s2_voice_transcript": ["one"],
@@ -500,13 +509,16 @@ def test_shared_storage_round_trip_and_v2_migration(server_mode):
     assert project.get_model_setting("fish_s2_local", "top_k") == 82
     assert project.get_model_setting("fish_s2_sglomni", "top_k") == 82
     assert project.get_model_setting("fish_s2_local", "seed") == -1
+    assert ("fish_s2_sglomni", "seed") not in REGISTRY.bindings
     assert project.get_model_setting("fish_s2_sglomni", "file_name") == ["one.flac"]
     assert project.get_model_setting("fish_s2_sglomni", "concurrent_requests") == 3
     saved = ProjectSerializationUtil.to_project_json_dict(project)
     assert saved["model_settings"]["models"]["future_model"] == {"future": [1, 2]}
     assert saved["model_settings"]["shared"]["future_group"]["future"] is True
     assert "fish_s2_top_k" not in saved
-    assert saved["model_settings"]["shared"]["fish_s2"]["model_ids"] == ["fish_s2_local", "fish_s2_sglomni"]
+    assert "fish_s2" not in saved["model_settings"]["shared"]
+    assert saved["model_settings"]["models"]["fish_s2_local"]["parameters"]["top_k"] == 82
+    assert saved["model_settings"]["models"]["fish_s2_sglomni"]["parameters"]["top_k"] == 82
     assert saved["model_settings"]["models"]["fish_s2_sglomni"]["orchestration"]["concurrent_requests"] == 3
 
 
@@ -514,7 +526,6 @@ def test_missing_builtin_definition_cannot_fall_back_to_legacy(tmp_path, server_
     server_mode("fish_s2_sglomni")
     data = read_catalog(DEFINITION_PATH)
     data["models"] = [entry for entry in data["models"] if entry["id"] != "fish_s2_sglomni"]
-    data["setting_groups"]["fish_s2"].remove("fish_s2_sglomni")
     path = write_catalog(tmp_path / "missing.toml", data)
     with pytest.raises(ValueError, match="missing built-in.*fish_s2_sglomni"):
         load_definitions(path)

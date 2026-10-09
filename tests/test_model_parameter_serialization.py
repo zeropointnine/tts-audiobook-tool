@@ -74,19 +74,19 @@ def test_null_is_unset_for_every_parameter_type_without_warning(caplog):
 def test_old_unset_sentinels_serialize_as_null_but_random_seed_stays_minus_one(caplog):
     project = Project.model_validate({"version": 3, "model_settings": {"models": {"zonos2_sglomni": {
         "parameters": {"temperature": -1.0},
-    }}, "shared": {"fish_s2": {
-        "model_ids": list(REGISTRY.members["fish_s2"]),
+    }}, "shared": {"qwen3": {
+        "model_ids": list(REGISTRY.members["qwen3"]),
         "parameters": {"top_k": -1, "seed": -1, "temperature": 0.7},
     }}}})
     saved = ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]
     assert saved["models"]["zonos2_sglomni"]["parameters"]["temperature"] is None
-    assert saved["shared"]["fish_s2"]["parameters"]["top_k"] is None
-    assert saved["shared"]["fish_s2"]["parameters"]["seed"] == -1
-    assert saved["shared"]["fish_s2"]["parameters"]["temperature"] == 0.7
+    assert saved["shared"]["qwen3"]["parameters"]["top_k"] is None
+    assert saved["shared"]["qwen3"]["parameters"]["seed"] == -1
+    assert saved["shared"]["qwen3"]["parameters"]["temperature"] == 0.7
     restored = Project.model_validate({"version": 3, "model_settings": saved})
     assert restored.get_model_setting("zonos2_sglomni", "temperature") == -1.0
-    assert restored.get_model_setting("fish_s2_local", "top_k") == -1
-    assert restored.get_model_setting("fish_s2_local", "seed") == -1
+    assert restored.get_model_setting("qwen3tts_local", "top_k") == -1
+    assert restored.get_model_setting("qwen3tts_local", "seed") == -1
     assert not caplog.records
 
 
@@ -98,7 +98,7 @@ def test_serialization_preserves_false_zero_empty_text_and_nonparameter_sections
     project.set_model_setting("fish_s2_sglomni", "concurrent_requests", 3)
     saved = ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]
     assert saved["models"]["fish_s2_local"]["parameters"]["compile_enabled"] is False
-    assert saved["shared"]["fish_s2"]["parameters"]["seed"] == 0
+    assert saved["models"]["fish_s2_local"]["parameters"]["seed"] == 0
     assert saved["models"]["omnivoice_local"]["parameters"]["instruct"] == ""
     assert saved["models"]["fish_s2_sglomni"]["orchestration"] == {"concurrent_requests": 3}
     assert "orchestration" not in saved["models"]["breeze_tts_2_audiocpp"]

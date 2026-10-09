@@ -193,7 +193,7 @@ def _warn_unusable_historical(group: str, detail: str) -> None:
 
 def _collect_sources(d: dict[str, Any]) -> list[VoiceReferenceSource]:
     from tts_audiobook_tool.project_support.model_settings import REGISTRY, ModelSettings
-    from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
+    from tts_audiobook_tool.project_support.model_settings_compat import RETIRED_GROUPS, SHARED_MEMBERS
     from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 
     settings = d.get('model_settings', {})
@@ -246,8 +246,8 @@ def _collect_sources(d: dict[str, Any]) -> list[VoiceReferenceSource]:
                         _warn_unusable_historical(key, 'unusable voice_references')
                         continue
                     raise
-                if key == 'moss':
-                    # Historical MOSS references only fill private lists that
+                if key in RETIRED_GROUPS:
+                    # Retired-group references only fill private lists that
                     # were not explicitly supplied (including empty lists).
                     models = settings.get('models', {})
                     ids = tuple(id for id in ids if 'voice_references' not in models.get(id, {}))
@@ -265,9 +265,9 @@ def _collect_sources(d: dict[str, Any]) -> list[VoiceReferenceSource]:
         objects = settings.get(owner[0], {})
         if owner[1] in objects:
             continue
-        # MOSS historical sharing is consumed once, before private fan-out.
+        # Retired historical sharing is consumed once, before private fan-out.
         ids = SHARED_MEMBERS.get(binding.group, (binding.model_id,)) if binding.group else (binding.model_id,)
-        if binding.group == 'moss':
+        if binding.group in RETIRED_GROUPS:
             ids = tuple(id for id in ids if 'voice_references' not in settings.get('models', {}).get(id, {}))
             if not ids:
                 continue

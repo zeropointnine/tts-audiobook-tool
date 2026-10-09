@@ -20,7 +20,7 @@ from tts_audiobook_tool.tts_models.sgl_omni_definition import MenuControl, load_
 BACKENDS = [
     (load_audio_cpp_definitions, "breeze_tts_2_audiocpp", AudioCppMenuControl,
      ModelAudioCppMenu, VoiceAudioCppMenu),
-    (load_definitions, "fish_s2_sglomni", MenuControl,
+    (load_definitions, "qwen3tts_sglomni", MenuControl,
      ModelConfiguredSglOmniMenu, VoiceConfiguredSglOmniMenu),
 ]
 
@@ -162,11 +162,11 @@ def test_voice_numeric_and_seed_edit_definition_owner_not_selected_model(backend
     assert project.get_model_setting(model_id, "seed") == 123
     assert project.get_model_setting(unrelated_id, "temperature") == 0.8
     assert project.get_model_setting(unrelated_id, "seed") == 22
-    if model_id == "fish_s2_sglomni":
-        # Shared Fish settings still belong to the registry's local owner.
-        assert project.get_model_setting("fish_s2_local", "temperature") == 0.7
-        assert project.get_model_setting("fish_s2_local", "seed") == 123
-        shared = project.model_dump(exclude={"reason_pauses"})["model_settings"]["shared"]["fish_s2"]["parameters"]
+    if model_id == "qwen3tts_sglomni":
+        # Shared Qwen3 settings still belong to the registry's shared group.
+        assert project.get_model_setting("qwen3tts_local", "temperature") == 0.7
+        assert project.get_model_setting("qwen3tts_local", "seed") == 123
+        shared = project.model_dump(exclude={"reason_pauses"})["model_settings"]["shared"]["qwen3"]["parameters"]
         assert shared["temperature"] == 0.7
         assert shared["seed"] == 123
 

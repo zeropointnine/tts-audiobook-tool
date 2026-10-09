@@ -23,7 +23,6 @@ schema_version = 1
 
 [setting_groups]
 auk = ["auk_sglomni", "auk_flash_sglomni"]
-fish_s2 = ["fish_s2_local", "fish_s2_sglomni"]
 qwen3 = ["qwen3tts_local", "qwen3tts_sglomni"]
 
 # ------------------------------------------------------------------------
@@ -190,14 +189,14 @@ project_links = [
 [[models]]
 id = "fish_s2_local"
 settings = [
-    { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "fish_s2" },
-    { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "fish_s2" },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
     { name = "rolling_cont", section = "parameters", type = "int", default = 0 },
     { name = "compile_enabled", section = "parameters", type = "bool", default = true },
-    { name = "temperature", section = "parameters", type = "float", default = -1.0, group = "fish_s2", sentinel = -1 },
-    { name = "top_p", section = "parameters", type = "float", default = -1.0, group = "fish_s2", sentinel = -1 },
-    { name = "top_k", section = "parameters", type = "int", default = -1, group = "fish_s2", sentinel = -1 },
-    { name = "seed", section = "parameters", type = "int", default = -1, group = "fish_s2", preserve_default = true },
+    { name = "temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
 ]
 backend_kind = "local"
 
@@ -852,12 +851,11 @@ label = "Repetition penalty"
 [[models]]
 id = "fish_s2_sglomni"
 settings = [
-    { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "fish_s2" },
-    { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "fish_s2" },
-    { name = "temperature", section = "parameters", type = "float", default = -1.0, group = "fish_s2", sentinel = -1 },
-    { name = "top_p", section = "parameters", type = "float", default = -1.0, group = "fish_s2", sentinel = -1 },
-    { name = "top_k", section = "parameters", type = "int", default = -1, group = "fish_s2", sentinel = -1 },
-    { name = "seed", section = "parameters", type = "int", default = -1, group = "fish_s2", preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+    { name = "temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
     { name = "concurrent_requests", section = "orchestration", type = "int", default = 1 },
 ]
 backend_kind = "sgl_omni"

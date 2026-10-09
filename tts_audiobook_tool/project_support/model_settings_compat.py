@@ -6,8 +6,9 @@ from tts_audiobook_tool.project_support.model_settings_declarations import BUILT
 if TYPE_CHECKING:
     from tts_audiobook_tool.project_support.model_settings import Binding
 
-# Historical ownership, including the now-retired MOSS group. Do not edit these
-# mappings to match current catalog ownership: old projects still need them.
+# Historical ownership, including the now-retired MOSS and Fish S2 groups. Do
+# not edit these mappings to match current catalog ownership: old projects
+# still need them.
 SHARED_MEMBERS: dict[str, tuple[str, ...]] = {
     "auk": ("auk_sglomni", "auk_flash_sglomni"),
     "fish_s2": ("fish_s2_local", "fish_s2_sglomni"),
@@ -27,6 +28,14 @@ PRIVATE_FIELDS: dict[str, set[str]] = {
     "moss": {"target", "rolling_cont"},
     "qwen3": {"target", "model_type", "rolling_cont", "speaker_id", "instructions", "batch_size", "server_concurrent_requests"},
 }
+
+# Shared groups that no longer exist in the catalog. On load, each one is
+# consumed by copying its values into its historical members' private objects
+# (see `fork_retired_group`). To retire another group: remove it from the
+# catalog's `setting_groups` and its settings' `group` keys, then append it here.
+# A local member without catalog parameter bounds should also borrow its server
+# counterpart's (`BORROWED_PARAMETER_BOUNDS` in model_settings.py).
+RETIRED_GROUPS: tuple[str, ...] = ("moss", "fish_s2")
 
 # moss_local retired its shared `seed` parameter in favor of one seed per
 # preset. Historical values migrate to all three, following the same
@@ -96,27 +105,48 @@ def _current_targets(
     )
 
 
-def fork_moss_settings(
+def fork_retired_groups(
+    source: dict[str, Any],
+    legacy: Mapping[str, Any] | None,
+    historical: Mapping[str, Binding],
+    current: Mapping[tuple[str, str], Binding],
+    members: Mapping[str, tuple[str, ...]],
+) -> tuple[dict[str, Any], Mapping[str, Any] | None]:
+    """Consume every retired shared group, in retirement order."""
+    for group in RETIRED_GROUPS:
+        if group in members:
+            continue  # Defensive: a group reinstated in the catalog is current again.
+        source, legacy = fork_retired_group(group, source, legacy, historical, current)
+    return source, legacy
+
+
+def fork_retired_group(
+    group: str,
     source: dict[str, Any],
     legacy: Mapping[str, Any] | None,
     historical: Mapping[str, Binding],
     current: Mapping[tuple[str, str], Binding],
 ) -> tuple[dict[str, Any], Mapping[str, Any] | None]:
-    """Consume historical MOSS sharing, preserving raw private-key precedence.
+    """Consume historical sharing, preserving raw private-key precedence.
+
+    Each historical value is copied to every original member that still owns a
+    same-named setting in the same section; members that no longer own it
+    simply do not receive it.
 
     This runs before reconciliation prunes nulls/empty voice lists, so those
     explicit resets cannot be replaced with an old override. Other families and
     genuinely unknown whole objects keep their normal reconciliation behavior.
     """
-    members = SHARED_MEMBERS["moss"]
-    # Probe a setting every historical member still owns; `seed` no longer
-    # qualifies since moss_local forked it per preset.
-    if not all((model_id, "batch_size") in current for model_id in members):
-        return source, legacy  # A standalone registry may not know MOSS at all.
-    moss_fields = {attr: binding for attr, binding in historical.items() if binding.group == "moss"}
-    supplied = {attr: value for attr, value in (legacy or {}).items() if attr in moss_fields}
+    members = SHARED_MEMBERS[group]
+    # A standalone registry may not know this family at all; leave the group
+    # for normal unknown-object retention.
+    known_models = {model_id for model_id, _ in current}
+    if not all(model_id in known_models for model_id in members):
+        return source, legacy
+    group_fields = {attr: binding for attr, binding in historical.items() if binding.group == group}
+    supplied = {attr: value for attr, value in (legacy or {}).items() if attr in group_fields}
     shared = source.get("shared", {})
-    if "moss" not in shared and not supplied:
+    if not isinstance(shared, dict) or group not in shared and not supplied:
         return source, legacy
 
     # Work on a copy: a later validation failure must leave the complete source
@@ -124,31 +154,33 @@ def fork_moss_settings(
     source = deepcopy(source)
     models = source.setdefault("models", {})
     shared = source.setdefault("shared", {})
-    remaining = {attr: value for attr, value in (legacy or {}).items() if attr not in moss_fields}
-    if "moss" in shared:
-        raw = shared["moss"]
+    remaining = {attr: value for attr, value in (legacy or {}).items() if attr not in group_fields}
+    where = f"model_settings.shared.{group}"
+    if group in shared:
+        raw = shared[group]
         if not isinstance(raw, dict):
-            raise ValueError("model_settings.shared.moss must be an object")
+            raise ValueError(f"{where} must be an object")
         recorded = raw.get("model_ids")
         if (not isinstance(recorded, list) or len(recorded) != len(members)
                 or not all(isinstance(model_id, str) for model_id in recorded)
                 or set(recorded) != set(members)):
-            raise ValueError(f"model_settings.shared.moss.model_ids: expected members {list(members)!r}")
+            raise ValueError(f"{where}.model_ids: expected members {list(members)!r}")
     else:
         # Pre-v3 flat fields used the same historical sharing. Materialize only
         # supplied overrides, following the frozen default/seed migration rules.
         raw = {}
+        voice_attr, transcript_attr = f"{group}_voice_file_name", f"{group}_voice_transcript"
         for attr, value in supplied.items():
-            binding = moss_fields[attr]
+            binding = group_fields[attr]
             if binding.section == "voice_references":
                 continue
             if not binding.preserve_default and value == binding.default:
                 continue
             raw.setdefault(binding.section, {})[binding.name] = deepcopy(value)
-        if "moss_voice_file_name" in supplied:
-            voices = supplied["moss_voice_file_name"]
+        if voice_attr in supplied:
+            voices = supplied[voice_attr]
             voices = [voices] if isinstance(voices, str) and voices else voices
-            transcripts = supplied.get("moss_voice_transcript", [])
+            transcripts = supplied.get(transcript_attr, [])
             transcripts = [transcripts] if isinstance(transcripts, str) and transcripts else transcripts
             if not isinstance(transcripts, list):
                 transcripts = []
@@ -165,19 +197,19 @@ def fork_moss_settings(
         parameters = {}  # Malformed parameter sections follow the usual pruning policy.
     orchestration = raw.get("orchestration", {})
     if not isinstance(orchestration, dict):
-        raise ValueError("model_settings.shared.moss.orchestration must be an object")
+        raise ValueError(f"{where}.orchestration must be an object")
     if "voice_references" in raw:
         references = raw["voice_references"]
         if not isinstance(references, list):
-            raise ValueError("model_settings.shared.moss.voice_references must be an array")
+            raise ValueError(f"{where}.voice_references must be an array")
         for index, ref in enumerate(references):
             if (not isinstance(ref, dict) or not isinstance(ref.get("file_name"), str)
                     or not isinstance(ref.get("transcript", ""), str)):
                 raise ValueError(
-                    f"model_settings.shared.moss.voice_references[{index}]: "
+                    f"{where}.voice_references[{index}]: "
                     "expected file_name and optional transcript strings")
 
-    historical_names = {(binding.section, binding.name) for binding in moss_fields.values()}
+    historical_names = {(binding.section, binding.name) for binding in group_fields.values()}
     for model_id in members:
         obj = models.setdefault(model_id, {})
         if not isinstance(obj, dict):
@@ -195,7 +227,7 @@ def fork_moss_settings(
                         destination.setdefault(target, deepcopy(value))
         if "voice_references" in raw and "voice_references" not in obj:
             obj["voice_references"] = deepcopy(raw["voice_references"])
-    shared.pop("moss", None)
+    shared.pop(group, None)
     return source, remaining or None
 
 

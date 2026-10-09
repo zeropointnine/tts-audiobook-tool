@@ -65,6 +65,14 @@ class ModelSettings:
 RETIRED_SETTINGS: dict[str, frozenset[str]] = {
     "orchestration": frozenset({"concurrent_requests"}),
 }
+# Server model ID -> local model ID that borrows its catalog parameter bounds
+# for load validation. Local models have no catalog parameter declarations;
+# while their settings were shared, the server's bounds validated them.
+BORROWED_PARAMETER_BOUNDS: dict[str, str] = {
+    "moss_delay_sglomni": "moss_local",
+    "moss_local_sglomni": "moss_local",
+    "fish_s2_sglomni": "fish_s2_local",
+}
 # Names used in the old file which differ from the actual Python field names.
 LEGACY_ALIASES = {
     "fish_s1_voice_transcript": ("fish_s1_voice_text",),
@@ -137,12 +145,13 @@ class ModelSettingsRegistry:
             for name, parameter in entry.get(entry.get("backend_kind", ""), {}).get("parameters", {}).items():
                 if parameter["type"] in ("int", "float"):
                     pending.parameter_bounds[(model_id, name)] = (parameter["min"], parameter["max"])
-        # The local MOSS implementation uses the same architecture-specific UI
-        # bounds as the catalog's server controls. Keep validating local saved
-        # values after retiring their shared storage, without coupling overrides.
+        # Local implementations of a retired group use the same UI bounds as
+        # the catalog's server controls. Keep validating local saved values
+        # after retiring their shared storage, without coupling overrides.
         for (model_id, name), bounds in tuple(pending.parameter_bounds.items()):
-            if model_id in ("moss_delay_sglomni", "moss_local_sglomni") and ("moss_local", name) in pending.bindings:
-                pending.parameter_bounds[("moss_local", name)] = bounds
+            local_id = BORROWED_PARAMETER_BOUNDS.get(model_id)
+            if local_id is not None and (local_id, name) in pending.bindings:
+                pending.parameter_bounds[(local_id, name)] = bounds
         # The v1.5 Local Transformer preset has no server counterpart to copy
         # bounds from, so its local-only settings carry the preset's own.
         from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
@@ -302,8 +311,8 @@ class ModelSettingsRegistry:
         # empty lists. Remember the originally supplied private objects for the
         # existing whole-object precedence of flat private fields (e.g. target).
         provided_models = raw_models
-        from tts_audiobook_tool.project_support.model_settings_compat import fork_moss_settings, split_moss_local_seed
-        source, legacy = fork_moss_settings(source, legacy, self.legacy, self.bindings)
+        from tts_audiobook_tool.project_support.model_settings_compat import fork_retired_groups, split_moss_local_seed
+        source, legacy = fork_retired_groups(source, legacy, self.legacy, self.bindings, self.members)
         source = split_moss_local_seed(source, self.bindings)
         raw_models, raw_shared = source.get("models", {}), source.get("shared", {})
         result = ModelSettings()

@@ -301,8 +301,8 @@ def test_historical_moss_flat_fallback_survives_partial_private_override():
 
 
 def test_invalid_shared_voice_membership_fails_without_source_mutation():
-    source = {'model_settings': {'shared': {'fish_s2': {
-        'model_ids': ['fish_s2_local', 'unexpected'], 'voice_references': [ref()],
+    source = {'model_settings': {'shared': {'qwen3': {
+        'model_ids': ['qwen3tts_local', 'unexpected'], 'voice_references': [ref()],
     }}}}
     original = deepcopy(source)
     with pytest.raises(ValueError, match='expected members'):
