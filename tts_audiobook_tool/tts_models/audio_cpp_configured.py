@@ -271,7 +271,9 @@ class AudioCppBackendAdapter:
             language = MossBaseModel.get_language_name(language)
         # Keep other families' existing empty/ISO language fields, but omit an
         # unknown MOSS hint instead of inserting a tag the model wasn't trained on.
-        if language or self.definition.language_policy == "project_code":
+        # An "omit" family auto-detects and never receives a language field.
+        if self.definition.language_policy != "omit" and (
+                language or self.definition.language_policy == "project_code"):
             if self.definition.language_target == "options":
                 options["language"] = language
             else:

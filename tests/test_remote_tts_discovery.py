@@ -366,6 +366,18 @@ def test_audio_detector_matches_omnivoice_offline_route_only():
     assert audio_cpp_detection.detect_audio_cpp_models([{**omnivoice, "mode": "streaming"}]) == []
 
 
+def test_audio_detector_matches_fish_s2_tts_route_only():
+    # The Fish session rejects any task but `tts`, despite its spec listing
+    # `clone`, so a `clon` entry is not a usable candidate.
+    fish = {"id": "fish-audio-s2-pro", "family": "fish_audio", "task": "tts", "mode": "offline",
+            "session_options": {}}
+    assert audio_cpp_detection.detect_audio_cpp_models([fish]) == [
+        (TtsModelType.require_by_id("fish_s2_audiocpp"), "fish-audio-s2-pro")
+    ]
+    assert audio_cpp_detection.detect_audio_cpp_models([{**fish, "task": "clon"}]) == []
+    assert audio_cpp_detection.detect_audio_cpp_models([{**fish, "mode": "streaming"}]) == []
+
+
 # DISABLED (audio.cpp GLM-TTS): the catalog entry is commented out, so this
 # detector test has no declared entry to match. Restore it with the entry.
 # def test_audio_detector_matches_glm_under_either_advertised_task():

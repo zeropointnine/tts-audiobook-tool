@@ -91,6 +91,7 @@ class AudioCppModelDefinition:
     request_options: dict[str, int | float] = field(default_factory=dict)
     settings: tuple[dict[str, Any], ...] = ()
     # MOSS prompt templates use full language names; other families keep ISO codes.
+    # "omit" sends no language at all (families that auto-detect, e.g. Fish S2-Pro).
     language_policy: str = "project_code"
     # Community MOSS reads options.language, while Local reads Transcript.language.
     language_target: str = "top_level"

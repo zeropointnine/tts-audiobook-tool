@@ -27,6 +27,7 @@ HIGGS_ID = "higgs_v3_audiocpp"
 BREEZE_ID = "breeze_tts_2_audiocpp"
 ECHO_ID = "echo_tts_audiocpp"
 OMNIVOICE_ID = "omnivoice_audiocpp"
+FISH_S2_ID = "fish_s2_audiocpp"
 # GLM_ID = "glm_tts_audiocpp"  # DISABLED; see model_catalog.toml
 
 
@@ -93,6 +94,27 @@ def test_higgs_definition_declares_its_own_controls():
     for invalid in (True, 0, 101, 2.5):
         with pytest.raises(ValueError):
             AudioCppSettings.set(FakeProject(model_id=HIGGS_ID), item.parameters["top_k"], invalid)
+
+
+def test_fish_s2_definition_uses_native_defaults_and_the_tts_route():
+    # Fish only accepts task `tts` (cloning is an optional voice_ref on it), and
+    # the controls keep audio.cpp's own defaults rather than local S2's.
+    item = definition(FISH_S2_ID)
+    assert item.family == "fish_audio" and item.tasks == ("tts",) and item.mode == "offline"
+    assert item.reference_transcript and not item.voice_required and not item.spec.requires_voice
+    assert item.language_policy == "omit"
+    assert item.request_options == {"max_tokens": 2048, "text_chunk_size": 100000}
+    assert {name: (parameter.type, parameter.default, parameter.min, parameter.max, parameter.target)
+            for name, parameter in item.parameters.items()} == {
+        "temperature": ("float", 0.8, 0.01, 1.99, "top_level"),
+        "top_p": ("float", 0.8, 0.01, 1.0, "top_level"),
+        "top_k": ("int", 30, 1, 100, "top_level"),
+    }
+    assert item.spec.file_tag == "s2-pro" and item.spec.default_output_sample_rate == 44100
+    assert item.spec.ui["short_name"] == "S2-Pro"
+    # The server requires temperature < 2.
+    with pytest.raises(ValueError):
+        AudioCppSettings.set(FakeProject(model_id=FISH_S2_ID), item.parameters["temperature"], 2.0)
 
 
 # DISABLED (audio.cpp GLM-TTS): restore with the catalog entry.
@@ -836,7 +858,36 @@ def test_omnivoice_sends_instruction_and_omits_voice_ref_without_a_sample(monkey
     assert clone["options"]["instruction"] == "female, young adult, high pitch"
 
 
-@pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID])
+def test_fish_s2_payload_omits_language_and_pins_token_and_chunk_options(monkeypatch, tmp_path: Path):
+    # Fish auto-detects language, so no language field is sent even though the
+    # project has one; the reference transcript and top-level controls ride along.
+    path = tmp_path / "sample.flac"
+    sf.write(path, np.full(100, .2), 24000, format="FLAC")
+    item = definition(FISH_S2_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "fish-audio-s2-pro")
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair",
+                        lambda *args: ("sample.flac", "the exact words spoken"))
+    monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: str(path))
+    captured = []
+
+    def fake_generate(url, payload, print_request=False):
+        captured.append(payload)
+        return SimpleNamespace(data=np.asarray([0], dtype=np.float32), sr=44100)
+
+    monkeypatch.setattr(AudioCppUtil, "generate", fake_generate)
+    project = FakeProject(model_id=FISH_S2_ID, values={"seed": 7, "top_k": 100})
+    assert not isinstance(adapter.generate_using_project(project, ["hello"]), str)
+    payload = captured[0]
+    assert payload["voice_ref"]["data"].startswith("data:audio/wav;base64,")
+    assert {key: value for key, value in payload.items() if key != "voice_ref"} == {
+        "model": "fish-audio-s2-pro", "input": "hello", "response_format": "wav",
+        "seed": 7, "temperature": 0.8, "top_p": 0.8, "top_k": 100,
+        "reference_text": "the exact words spoken",
+        "options": {"max_tokens": 2048, "text_chunk_size": 100000},
+    }
+
+
+@pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, FISH_S2_ID])
 def test_optional_voice_requires_a_reference_transcript_when_a_voice_is_set(monkeypatch, model_id):
     """audio.cpp rejects a reference WAV without reference_text; report it first."""
     item = definition(model_id)
@@ -850,7 +901,7 @@ def test_optional_voice_requires_a_reference_transcript_when_a_voice_is_set(monk
     )
 
 
-@pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, HIGGS_ID])
+@pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, HIGGS_ID, FISH_S2_ID])
 def test_voice_readiness_is_lazy_for_every_audio_cpp_family(monkeypatch, model_id):
     item = definition(model_id)
     support = AudioCppModelSupport(item)

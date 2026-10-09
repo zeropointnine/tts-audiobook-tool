@@ -8,6 +8,7 @@ import pytest
 from textual.widgets import Input, Static
 
 from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.model_worker_protocol import ConsoleOutput
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import worker_app as worker_app_module
 from tts_audiobook_tool.textual.generation_app import GenerationApp, GenerationTranscript
@@ -72,6 +73,37 @@ def test_escape_cancels_then_resets_but_ctrl_c_does_neither(session) -> None:
             assert cancellations == ["job"]
             assert resets == [True]
             assert app.terminal_result.hard_reset_cause is HardResetCause.USER_ESCALATION
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("backend_mode", [TtsRuntimeMode.LOCAL, TtsRuntimeMode.REMOTE_CLIENT])
+def test_cancellation_notice_leaves_one_blank_before_worker_summary(
+    session, monkeypatch, backend_mode
+) -> None:
+    # App notices must not add padding on top of the worker's normal blank line.
+    app, cancellations, resets = session
+    monkeypatch.setattr(Tts, "_backend_mode", backend_mode)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            app._handle_console_output(ConsoleOutput("job", "stdout", "request details\n"))
+            await pilot.press("escape")
+            assert cancellations == ["job"]
+            assert resets == []
+            log = app.query_one(WorkerLogContentArea).worker_log
+            notice_lines = ["", "Cancellation requested, please wait"]
+            if backend_mode is TtsRuntimeMode.LOCAL:
+                notice_lines.append("Or press [ESC] again to hard-reset")
+            assert log.line_texts() == ["request details", *notice_lines, ""]
+
+            # Inference finishes after cancellation, then prints its usual separator.
+            app._handle_console_output(
+                ConsoleOutput("job", "stdout", "\nGenerated audio in 4.2s\n")
+            )
+            assert log.line_texts() == [
+                "request details", *notice_lines, "", "Generated audio in 4.2s", ""
+            ]
 
     asyncio.run(exercise())
 

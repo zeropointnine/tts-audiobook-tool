@@ -18,7 +18,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [Chatterbox (Multilingual V3, Turbo)](https://github.com/resemble-ai/chatterbox) | ✅ | ✅ | ✅ |
 | [dots.tts](https://github.com/studio-dots-ai/dots.tts) | ✅ | | |
 | [Echo-TTS](https://github.com/jordandare/echo-tts) | | | ✅ |
-| [Fish Speech S2-Pro](https://github.com/fishaudio/fish-speech) | ✅ | ✅ | |
+| [Fish Speech S2-Pro](https://github.com/fishaudio/fish-speech) | ✅ | ✅ | ✅ |
 | [Fish Speech S1-mini](https://github.com/fishaudio/fish-speech) | ✅ | | |
 | [Fun-CosyVoice3](https://github.com/QwenAudio/CosyVoice) | | ✅ | |
 | [GLM-TTS](https://github.com/zai-org/GLM-TTS) | ✅ | | <!-- disabled --> |
@@ -659,11 +659,10 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature, top_p, repetition penalty, seed
 
 **Fish S2-Pro**
-- Emotion tags
 - Torch compile (togglable)
 - Experimental rolling continuation mode
 - Temperature, top_p, top_k, seed
-- SGL-Omni backend inference support (including concurrent requests and streaming)
+- Emotion tags
 
 **Higgs Audio V2**
 - Temperature, top_p, top_k, seed
@@ -724,10 +723,11 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Seed
 
 **Fish S2-Pro**
-- Emotion tags
+- Streaming support (for the stand-alone server and LLM chat mode)
+- Concurrent requests
 - Experimental rolling continuation mode
 - Temperature, top_p, top_k, seed
-- SGL-Omni backend inference support (including concurrent requests and streaming)
+- Emotion tags
 
 **Higgs Audio V3**
 - Streaming support (for the stand-alone server and LLM chat mode)
@@ -758,6 +758,10 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **Echo-TTS**
 - Steps, text guidance scale, speaker guidance scale, seed
+
+**Fish S2-Pro**
+- Temperature, top_p, top_k, seed
+- Emotion tags
 
 **Higgs Audio V3**
 - Temperature, top_p, top_k, seed
@@ -813,13 +817,17 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-10-06 to 07**
+**2026-10-06**
+
+- Added support for **Fish S2-Pro for audio.cpp**
+
+**2026-10-06**
 
 - The `Voice clone and model settings` menu has been split into `Voice clone` and `Model settings` menus.
 - Projects now use a **unified voice clone list** instead of a separate list for each TTS model. This makes it more convenient to switch between models mid-project.
 - Added **trim voice sample audio** full-screen interface. This can be useful when your clip is, say, 15s, but the TTS model you're using has a lower recommended duration (eg, Echo TTS recommends 10s).
 
-**2026-10-04 to 05**
+**2026-10-04**
 
 - Added support for [**audio.cpp**](https://github.com/0xShug0/audio.cpp) as an alternative TTS backend, along with the following models:
     - Breeze TTS 2

@@ -1704,6 +1704,89 @@ kind = "seed"
 target_menu = "model"
 
 # ------------------------------------------------------------------------
+# fish_s2_audiocpp: shares the output tag with local/SGL-Omni S2 but keeps its
+# own settings and audio.cpp's native sampling defaults. Rolling continuation
+# and multi_reference_cond (server-side file paths only) are not offered.
+[[models]]
+id = "fish_s2_audiocpp"
+settings = [
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+    { name = "temperature", section = "parameters", type = "float", default = 0.8 },
+    { name = "top_p", section = "parameters", type = "float", default = 0.8 },
+    { name = "top_k", section = "parameters", type = "int", default = 30 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+]
+backend_kind = "audio_cpp"
+
+[models.spec]
+file_tag = "s2-pro"
+default_output_sample_rate = 44100
+un_all_caps = false
+requirements_file_name = "requirements-remote.txt"
+# Em dash does not reliably induce caesura.
+substitutions = [["—", ", "], ["─", ", "]]
+
+[models.spec.ui]
+proper_name = "Fish S2-Pro"
+short_name = "S2-Pro"
+voice_sample_max_duration_s = 30
+voice_path_console = "Enter voice clone audio clip file path (10-30s): "
+voice_path_requestor = "Select voice clone audio clip (10-30s)"
+project_links = [
+    "https://github.com/fishaudio/fish-speech",
+    "https://huggingface.co/fishaudio/s2-pro",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/fish_audio.md",
+]
+
+[models.audio_cpp]
+# audio.cpp throws when inline reference audio arrives without reference_text.
+reference_transcript = true
+# Plain TTS without a reference is supported on the same `tts` route.
+voice_required = false
+# The family auto-detects language and ignores the field; send none.
+language_policy = "omit"
+menu = [
+    { kind = "voice_samples" },
+    { parameter = "temperature", label = "Temperature", target_menu = "model" },
+    { parameter = "top_p", label = "Top-P", target_menu = "model" },
+    { parameter = "top_k", label = "Top-K", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
+]
+# max_tokens matches local S2's 2048 semantic-token budget (native default
+# 1024); audio.cpp truncates silently at the cap rather than erroring.
+# text_chunk_size disables the native 200-codepoint splitter, which would
+# otherwise sub-split ordinary app segments.
+request_options = { max_tokens = 2048, text_chunk_size = 100000 }
+
+# The family only accepts task `tts` (voice cloning is an optional voice_ref
+# on that route); its spec's advertised `clone` is rejected by the session.
+[models.audio_cpp.match]
+family = "fish_audio"
+task = "tts"
+mode = "offline"
+
+# audio.cpp native defaults (types.h), not local/SGL-Omni S2's 0.7 / 0.9.
+[models.audio_cpp.parameters.temperature]
+type = "float"
+default = 0.8
+min = 0.01
+# The session requires temperature < 2.
+max = 1.99
+
+[models.audio_cpp.parameters.top_p]
+type = "float"
+default = 0.8
+min = 0.01
+max = 1.0
+
+[models.audio_cpp.parameters.top_k]
+type = "int"
+default = 30
+min = 1
+max = 100
+
+# ------------------------------------------------------------------------
 [[models]]
 id = "higgs_v3_audiocpp"
 settings = [

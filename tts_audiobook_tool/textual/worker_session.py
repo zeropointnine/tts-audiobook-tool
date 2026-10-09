@@ -402,12 +402,13 @@ class WorkerSessionMixin(Generic[ResultT], _SessionHostBase):
             self.cancel_requested = ModelWorker.request_cancel(operation_id)
             if self.cancel_requested:
                 self.phase = "Cancellation requested"
-                lines = ["", f"{COL_ERROR}Cancellation requested, please wait\n"]
+                # These are logical lines, not print() arguments. Leave trailing
+                # spacing to the worker so its next blank line is not duplicated.
+                lines = ["", f"{COL_ERROR}Cancellation requested, please wait"]
                 if self.hard_reset_available:
                     lines.append(
-                        f"{COL_ERROR}Or press [{COL_DEFAULT}ESC{COL_ERROR}] again to hard-reset\n"
+                        f"{COL_ERROR}Or press [{COL_DEFAULT}ESC{COL_ERROR}] again to hard-reset"
                     )
-                lines.append(" \n")
                 self._append_application_lines(lines)
                 self._update_header()
             return

@@ -425,7 +425,8 @@ def test_existing_families_keep_default_language_policy_and_postprocessing():
     for model_id, item in load_audio_cpp_definitions().models.items():
         if model_id in IDS:
             continue
-        assert item.language_policy == "project_code" and item.language_target == "top_level"
+        expected_policy = "omit" if model_id == "fish_s2_audiocpp" else "project_code"
+        assert item.language_policy == expected_policy and item.language_target == "top_level"
         assert not item.music_and_trim
         support = AudioCppModelSupport(item)
         assert not support.can_hallucinate_music(Project(tts_model_type=model_id))

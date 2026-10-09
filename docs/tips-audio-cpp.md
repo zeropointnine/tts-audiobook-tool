@@ -102,6 +102,27 @@ The IDs can be arbitrary: discovery matches the declared family, task, and mode.
 
 Voice samples and generation settings belong to each backend variant independently; switching from local or SGL-Omni does not copy them into audio.cpp.
 
+## Fish S2-Pro
+
+audio.cpp serves Fish S2-Pro as family `fish_audio`. Configure it with `"task": "tts"`: the family's session rejects any other task, and voice cloning is an optional reference on the same route.
+
+```json
+{
+  "id": "my-fish-s2-pro",
+  "family": "fish_audio",
+  "path": "/path/to/models/Fish-Audio-S2-Pro-GGUF/fish-audio-s2-pro-q8_0.gguf",
+  "task": "tts",
+  "mode": "offline"
+}
+```
+
+- A voice sample is optional. When one is set, its transcript is required (audio.cpp rejects reference audio without `reference_text`), so the app transcribes the sample on import.
+- Controls default to audio.cpp's own values (temperature `0.8`, top-p `0.8`, top-k `30`), which differ from the local/SGL-Omni S2-Pro defaults (`0.7 / 0.9 / 30`).
+- The app pins a 2048 semantic-token budget per segment (matching local S2) and disables audio.cpp's internal 200-character text chunker. Unlike local S2, audio.cpp truncates silently at the token cap; the app's speech-to-text validation catches such takes.
+- No language field is sent; the model detects language itself.
+- Rolling continuation and audio.cpp's `multi_reference_cond` (which needs server-side file paths) are not supported.
+- VRAM-constrained GPUs can use the server-side session options `fish_audio.mem_saver`, `fish_audio.weight_type` and `fish_audio.codec_weight_type`; see audio.cpp's [Fish Audio docs](https://github.com/0xShug0/audio.cpp/blob/main/docs/models/fish_audio.md).
+
 ## Keep one TTS model loaded at a time
 
 **For most single-GPU setups, start with `"max_loaded_models": 1`.** You can set this directly at the top level of the JSON config, as shown above (or, alternatively, as a command-line option).

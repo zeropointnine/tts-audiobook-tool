@@ -269,8 +269,8 @@ def parse_audio_cpp_declaration(entry: dict[str, Any], where: str) -> dict[str, 
     if type(voice_required) is not bool:
         _fail(f"{where}.audio_cpp.voice_required", "expected a boolean")
     language_policy = group.get("language_policy", "project_code")
-    if language_policy not in ("project_code", "moss"):
-        _fail(f"{where}.audio_cpp.language_policy", "expected project_code or moss")
+    if language_policy not in ("project_code", "moss", "omit"):
+        _fail(f"{where}.audio_cpp.language_policy", "expected project_code, moss or omit")
     language_target = group.get("language_target", "top_level")
     if language_target not in _AUDIO_CPP_TARGETS:
         _fail(f"{where}.audio_cpp.language_target", "expected top_level or options")
