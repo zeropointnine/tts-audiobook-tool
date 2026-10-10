@@ -51,7 +51,8 @@ def _field(obj: dict, key: str, where: str, typ: type) -> Any:
 # audio.cpp entries name their own request controls; the backend detector and
 # adapter interpret whatever a family declares here.
 _AUDIO_CPP_GROUP_KEYS = {"match", "parameters", "menu", "reference_transcript", "max_words_range_reco",
-                         "request_options", "voice_required", "language_policy", "language_target", "music_and_trim"}
+                         "request_options", "voice_required", "language_policy", "language_target",
+                         "language_hint_note", "music_and_trim"}
 _AUDIO_CPP_MATCH_KEYS = {"task", "tasks", "family", "mode", "session_options"}
 _AUDIO_CPP_PARAMETER_KEYS = {"type", "default", "min", "max", "default_sentinel", "request_key", "target",
                              "input_prompt_suffix"}
@@ -274,6 +275,11 @@ def parse_audio_cpp_declaration(entry: dict[str, Any], where: str) -> dict[str, 
     language_target = group.get("language_target", "top_level")
     if language_target not in _AUDIO_CPP_TARGETS:
         _fail(f"{where}.audio_cpp.language_target", "expected top_level or options")
+    language_hint_note = group.get("language_hint_note", "")
+    if type(language_hint_note) is not str:
+        _fail(f"{where}.audio_cpp.language_hint_note", "expected a string")
+    if language_hint_note and language_policy != "normalized":
+        _fail(f"{where}.audio_cpp.language_hint_note", "only applies to language_policy normalized")
     music_and_trim = group.get("music_and_trim", False)
     if type(music_and_trim) is not bool:
         _fail(f"{where}.audio_cpp.music_and_trim", "expected a boolean")
@@ -287,6 +293,7 @@ def parse_audio_cpp_declaration(entry: dict[str, Any], where: str) -> dict[str, 
             "session_options": dict(session_options), "reference_transcript": reference_transcript,
             "voice_required": voice_required,
             "language_policy": language_policy, "language_target": language_target,
+            "language_hint_note": language_hint_note.strip(),
             "music_and_trim": music_and_trim,
             "parameters": parameters, "menu": menu, "max_words_range_reco": word_range,
             "request_options": request_options}

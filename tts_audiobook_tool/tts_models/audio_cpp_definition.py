@@ -95,6 +95,9 @@ class AudioCppModelDefinition:
     language_policy: str = "project_code"
     # Community MOSS reads options.language, while Local reads Transcript.language.
     language_target: str = "top_level"
+    # Qualifier appended to the "normalized" policy's pre-flight language-hint
+    # warning, eg when only some served variants read the hint.
+    language_hint_note: str = ""
     music_and_trim: bool = False
 
 
@@ -141,6 +144,7 @@ def load_audio_cpp_definitions(path: Path = CATALOG_PATH) -> AudioCppDefinitions
             parse_model_settings(entry),
             language_policy=declaration["language_policy"],
             language_target=declaration["language_target"],
+            language_hint_note=declaration["language_hint_note"],
             music_and_trim=declaration["music_and_trim"],
         )
     return AudioCppDefinitions(models, fingerprint)

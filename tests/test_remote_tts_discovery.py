@@ -379,6 +379,18 @@ def test_audio_detector_matches_dots_under_either_task_but_not_streaming():
     assert audio_cpp_detection.detect_audio_cpp_models([{**dots, "mode": "streaming"}]) == []
 
 
+def test_audio_detector_matches_indextts2_either_variant_and_task():
+    # IndexTTS2 and IndexTTS2.5 share family `index_tts2` and identical
+    # metadata, so both select the one entry under either clone task token.
+    expected_handle = TtsModelType.require_by_id("indextts2_audiocpp")
+    for model_id, path in (("index-tts2", "models/IndexTTS-2"), ("index-tts2.5", "models/IndexTTS2.5-GGUF")):
+        index = {"id": model_id, "family": "index_tts2", "task": "tts", "mode": "offline",
+                 "session_options": {}, "path": path}
+        assert audio_cpp_detection.detect_audio_cpp_models([index]) == [(expected_handle, model_id)]
+        assert audio_cpp_detection.detect_audio_cpp_models([{**index, "task": "clon"}]) == [(expected_handle, model_id)]
+        assert audio_cpp_detection.detect_audio_cpp_models([{**index, "mode": "streaming"}]) == []
+
+
 def test_audio_detector_matches_fish_s2_tts_route_only():
     # The Fish session rejects any task but `tts`, despite its spec listing
     # `clone`, so a `clon` entry is not a usable candidate.

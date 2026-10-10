@@ -30,6 +30,7 @@ OMNIVOICE_ID = "omnivoice_audiocpp"
 FISH_S2_ID = "fish_s2_audiocpp"
 DOTS_ID = "dots_audiocpp"
 GLM_ID = "glm_tts_audiocpp"
+INDEXTTS2_ID = "indextts2_audiocpp"
 
 
 class FakeProject:
@@ -948,6 +949,88 @@ def test_dots_payload_places_controls_and_normalizes_language(monkeypatch, tmp_p
     if expected:
         expected_payload["language"] = expected
     assert payload == expected_payload
+
+
+def test_indextts2_definition_serves_either_variant_with_local_defaults():
+    # One entry covers IndexTTS2 and IndexTTS2.5: audio.cpp serves both as
+    # family `index_tts2` and does not advertise which variant is loaded.
+    item = definition(INDEXTTS2_ID)
+    assert item.family == "index_tts2" and item.tasks == ("tts", "clon") and item.mode == "offline"
+    assert item.session_options == {} and item.request_options == {}
+    assert item.voice_required and item.spec.requires_voice and not item.reference_transcript
+    assert item.language_policy == "normalized" and item.language_target == "options"
+    assert item.max_words_range_reco == (40, 60, "")
+    assert {name: (parameter.type, parameter.default, parameter.min, parameter.max, parameter.target)
+            for name, parameter in item.parameters.items()} == {
+        "temperature": ("float", 0.8, 0.01, 2.0, "top_level"),
+        "top_p": ("float", 0.8, 0.01, 1.0, "top_level"),
+        "top_k": ("int", 30, 1, 100, "top_level"),
+        "duration_factor": ("float", 1.0, 0.5, 2.0, "options"),
+    }
+    assert [(control.kind, control.parameter) for control in item.menu] == [
+        ("voice_samples", ""), ("parameter", "temperature"), ("parameter", "top_p"),
+        ("parameter", "top_k"), ("parameter", "duration_factor"), ("seed", ""),
+    ]
+    assert item.spec.default_output_sample_rate == 22050 and item.spec.file_tag == "indextts2"
+
+
+@pytest.mark.parametrize("project_language, expected", [
+    ("es", "es"), ("ja-JP", "ja"), ("English", "en"), ("", None),
+])
+def test_indextts2_payload_sends_language_and_duration_in_options(
+        monkeypatch, tmp_path: Path, project_language, expected):
+    # IndexTTS2.5 auto-detects only zh-vs-en, so the base language code rides in
+    # `options` (where the session reads it) beside duration_factor; no
+    # transcript is sent and no text_chunk_size is pinned.
+    path = tmp_path / "sample.flac"
+    sf.write(path, np.full(100, .2), 24000, format="FLAC")
+    item = definition(INDEXTTS2_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "index-tts2.5")
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair",
+                        lambda *args: ("sample.flac", "ignored transcript"))
+    monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: str(path))
+    captured = []
+
+    def fake_generate(url, payload, print_request=False):
+        captured.append(payload)
+        return SimpleNamespace(data=np.asarray([0], dtype=np.float32), sr=22050)
+
+    monkeypatch.setattr(AudioCppUtil, "generate", fake_generate)
+    project = FakeProject(model_id=INDEXTTS2_ID, values={"seed": 7, "duration_factor": 1.2})
+    project.language_code = project_language
+    assert not isinstance(adapter.generate_using_project(project, ["hola"]), str)
+    payload = captured[0]
+    assert payload.pop("voice_ref")["data"].startswith("data:audio/wav;base64,")
+    options: dict = {"duration_factor": 1.2}
+    if expected:
+        options["language"] = expected
+    assert payload == {
+        "model": "index-tts2.5", "input": "hola", "response_format": "wav", "seed": 7,
+        "temperature": 0.8, "top_p": 0.8, "top_k": 30, "options": options,
+    }
+
+
+def test_indextts2_requires_a_voice_sample_before_network(monkeypatch):
+    item = definition(INDEXTTS2_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "index-tts2")
+    monkeypatch.setattr(AudioCppUtil, "generate", lambda *args, **kwargs: pytest.fail("network attempted"))
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair", lambda *args: ("", ""))
+    assert adapter.generate_using_project(FakeProject(model_id=INDEXTTS2_ID), ["hello"]) == (
+        "A voice clone sample is required"
+    )
+
+
+@pytest.mark.parametrize("project_language, expected", [
+    ("es-MX", "Passing language hint to model: es (applies to IndexTTS2.5 only)"),
+    ("", "Passing language hint to model: auto (applies to IndexTTS2.5 only)"),
+])
+def test_indextts2_preflight_reports_language_hint_with_variant_note(project_language, expected):
+    # The warning shows the code actually sent and qualifies it, since IndexTTS2
+    # ignores the hint and the server does not reveal which variant is loaded.
+    item = definition(INDEXTTS2_ID)
+    project = FakeProject(model_id=INDEXTTS2_ID)
+    project.language_code = project_language
+    assert expected in AudioCppModelSupport(item).get_warning_issues(project)
 
 
 @pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, FISH_S2_ID, DOTS_ID])

@@ -2059,6 +2059,109 @@ max = 100
 input_prompt_suffix = "(low values may prevent generation from terminating correctly)"
 
 # ------------------------------------------------------------------------
+# IndexTTS2 / IndexTTS2.5 via audio.cpp. One entry serves whichever variant the
+# server entry points at: both run as family `index_tts2` (the engine selects
+# the variant from the model config's `version`), share one request contract
+# and output 22.05 kHz, and `/v1/models` cannot tell them apart.
+# Emotion controls (vector, alpha, emotion text, emotion clip) are not wired yet.
+[[models]]
+id = "indextts2_audiocpp"
+settings = [
+    { name = "temperature", section = "parameters", type = "float", default = 0.8 },
+    { name = "top_p", section = "parameters", type = "float", default = 0.8 },
+    { name = "top_k", section = "parameters", type = "int", default = 30 },
+    { name = "duration_factor", section = "parameters", type = "float", default = 1.0 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+]
+backend_kind = "audio_cpp"
+
+[models.spec]
+file_tag = "indextts2"
+default_output_sample_rate = 22050
+un_all_caps = false
+requirements_file_name = "requirements-remote.txt"
+# Same as local `indextts2_local`: em-dash often does not create a caesura;
+# en-dash often generates a random syllable.
+substitutions = [["—", ", "], ["─", ", "], ["–", ", "]]
+
+[models.spec.ui]
+# proper_name names both variants; the server config decides which one runs.
+proper_name = "IndexTTS2 / 2.5"
+short_name = "IndexTTS2"
+settings_note = """
+This model uses whichever IndexTTS model the audio.cpp server entry is configured
+with (IndexTTS2 or IndexTTS2.5). IndexTTS2 supports Chinese and English;
+IndexTTS2.5 adds Japanese, Spanish and Arabic. """
+# The family's reference frontend discards audio past 15 seconds.
+voice_sample_max_duration_s = 15
+voice_path_console = "Enter voice clone audio clip file path (up to 15s): "
+voice_path_requestor = "Select voice clone audio clip (up to 15s)"
+project_links = [
+    "https://github.com/index-tts/index-tts",
+    "https://huggingface.co/IndexTeam/IndexTTS-2.5",
+    "https://huggingface.co/IndexTeam/IndexTTS-2",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/index_tts.md",
+]
+
+[models.audio_cpp]
+# A speaker reference is required and the family never reads reference_text.
+reference_transcript = false
+# Same segment recommendation as local `indextts2_local`.
+max_words_range_reco = [40, 60]
+# IndexTTS2.5 reads `options.language` (empty/omitted = auto: zh when the text
+# has Han characters, otherwise en), so non-zh/en projects must send a base
+# code. IndexTTS2 accepts the option and ignores it.
+language_policy = "normalized"
+language_target = "options"
+language_hint_note = "applies to IndexTTS2.5 only"
+menu = [
+    { kind = "voice_samples" },
+    { parameter = "temperature", label = "Temperature", target_menu = "model" },
+    { parameter = "top_p", label = "Top-P", target_menu = "model" },
+    { parameter = "top_k", label = "Top-K", target_menu = "model" },
+    { parameter = "duration_factor", label = "Duration factor", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
+]
+# No request_options: without text_chunk_size the session keeps the input as
+# one framework chunk (an explicit value would force the splitter on). Its own
+# tokenizer segmentation (120 text tokens) is not configurable.
+
+[models.audio_cpp.match]
+family = "index_tts2"
+tasks = ["tts", "clon"]
+mode = "offline"
+
+# Sampling defaults are the family's own, which are also the local model's.
+[models.audio_cpp.parameters.temperature]
+type = "float"
+default = 0.8
+min = 0.01
+max = 2.0
+
+[models.audio_cpp.parameters.top_p]
+type = "float"
+default = 0.8
+min = 0.01
+max = 1.0
+
+[models.audio_cpp.parameters.top_k]
+type = "int"
+default = 30
+min = 1
+max = 100
+
+# Speech-rate control (upstream IndexTTS2.5 range 0.5-2.0); audio.cpp applies
+# it to both variants. Not a forwarded top-level field, so it rides in options.
+[models.audio_cpp.parameters.duration_factor]
+type = "float"
+default = 1.0
+min = 0.5
+max = 2.0
+target = "options"
+input_prompt_suffix = "(favor values near 1.0)"
+
+# ------------------------------------------------------------------------
 [[models]]
 id = "moss_delay_audiocpp"
 settings = [

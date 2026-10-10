@@ -143,6 +143,12 @@ class AudioCppModelSupport:
             from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
             language = MossBaseModel.get_language_name(project.language_code)
             warnings.append(f"Using MOSS-TTS language value: {language or 'None'}")
+        if self.definition.language_policy == "normalized":
+            # Mirrors build_payload: an empty code is omitted, so the server auto-detects.
+            from tts_audiobook_tool.text_ops.language_util import normalize_language_code
+            language = normalize_language_code(project.language_code or "")
+            note = f" ({self.definition.language_hint_note})" if self.definition.language_hint_note else ""
+            warnings.append(f"Passing language hint to model: {language or 'auto'}{note}")
         if not self.definition.voice_required and not self.get_primary_voice_value(project):
             warnings.append("Note: Generated voices may vary because no voice reference has been configured.")
         warning = self.get_max_words_exceed_warning(project)

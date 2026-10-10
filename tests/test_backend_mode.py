@@ -229,6 +229,7 @@ def test_catalog_helpers_classify_by_backend_kind():
                            TtsModelType.require_by_id("fish_s2_audiocpp"),
                            TtsModelType.require_by_id("glm_tts_audiocpp"),
                            TtsModelType.require_by_id("higgs_v3_audiocpp"),
+                           TtsModelType.require_by_id("indextts2_audiocpp"),
                            TtsModelType.require_by_id("moss_delay_audiocpp"),
                            TtsModelType.require_by_id("moss_local_audiocpp"),
                            TtsModelType.require_by_id("omnivoice_audiocpp")]

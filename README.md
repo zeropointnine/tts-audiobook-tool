@@ -24,7 +24,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [GLM-TTS](https://github.com/zai-org/GLM-TTS) | ✅ | | ✅ |
 | [Higgs Audio V2](https://github.com/boson-ai/higgs-audio) | ✅ | | |
 | [Higgs Audio V3](https://github.com/boson-ai/higgs-audio) | | ✅ | ✅ |
-| [IndexTTS2](https://github.com/index-tts/index-tts) | ✅ | | |
+| [IndexTTS2 (2, 2.5)](https://github.com/index-tts/index-tts) | ✅ | | ✅ |
 | [MiraTTS](https://github.com/ysharma3501/MiraTTS) | ✅ | | |
 | [MOSS-TTS v1.5 (Delay, Local)](https://github.com/OpenMOSS/MOSS-TTS) | ✅ | ✅ | ✅ |
 | [OmniVoice](https://github.com/k2-fsa/OmniVoice) | ✅ | | ✅ |
@@ -773,6 +773,9 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 **Higgs Audio V3**
 - Temperature, top_p, top_k, seed
 
+**IndexTTS2/2.5**
+- Temperature, top_p, top_k, duration factor (speech rate), seed
+
 **MOSS-TTS**
 - MOSS-TTS v1.5 8B Delay and MOSS-TTS-Local v1.5
 - Temperature, top_p, top_k, seed
@@ -829,6 +832,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 - Added support for **dots.tts for audio.cpp** (SOAR or MeanFlow)
 - Added support for **Fish S2-Pro for audio.cpp**
 - Added support for **GLM-TTS for audio.cpp**
+- Added support for **IndexTTS2 / IndexTTS2.5 for audio.cpp**
 
 **2026-10-06**
 
