@@ -151,6 +151,7 @@ class ModelMenuShared:
             name: str = "instruct",
             label: str = "Voice design instructions",
             validate_omnivoice: bool = False,
+            required_label: str | None = None,
     ) -> list[MenuItem]:
         """
         Makes the voice-design/edit item for a string instruction setting, plus
@@ -158,11 +159,15 @@ class ModelMenuShared:
 
         Shared by local and audio.cpp models. OmniVoice callers opt into their
         tag-based validation; other models accept free-form instructions.
+        `required_label` (eg "required for Instruct") replaces "(optional)"
+        while the value is empty, in the error color; the corresponding
+        readiness blocker is what actually stops generation.
         """
         def make_label(current: State) -> str:
             value = current.project.get_model_setting(model_id, name)
             if not value:
-                suffix = f"{COL_DIM}(optional)"
+                suffix = (f"{COL_DIM}({COL_ERROR}{required_label}{COL_DIM})" if required_label
+                          else f"{COL_DIM}(optional)")
             else:
                 suffix = make_currently_string(truncate_pretty(value, 40, content_color=COL_ACCENT))
             return f"{label} {suffix}"

@@ -82,7 +82,7 @@ def test_shipped_voice_sample_duration_recommendations():
         "higgs_v2_local": 15, "mira_local": 8, "omnivoice_local": 15, "pocket_local": 15,
         "auk_sglomni": 5, "auk_flash_sglomni": 5, "cosyvoice3_sglomni": 30,
         "fish_s2_sglomni": 30, "zonos2_sglomni": 20,
-        "dots_audiocpp": 10, "echo_tts_audiocpp": 15, "fish_s2_audiocpp": 30,
+        "cosyvoice3_audiocpp": 30, "dots_audiocpp": 10, "echo_tts_audiocpp": 15, "fish_s2_audiocpp": 30,
         "indextts2_audiocpp": 15, "omnivoice_audiocpp": 15,
     }
 
@@ -168,7 +168,7 @@ def test_complete_catalog_order_and_backend_suffix_ids():
         "auk_sglomni", "auk_flash_sglomni", "cosyvoice3_sglomni",
         "fish_s2_sglomni", "higgs_v3_sglomni", "moss_delay_sglomni",
         "moss_local_sglomni", "qwen3tts_sglomni", "zonos2_sglomni",
-        "breeze_tts_2_audiocpp", "chatterbox_audiocpp",
+        "breeze_tts_2_audiocpp", "chatterbox_audiocpp", "cosyvoice3_audiocpp",
         "dots_audiocpp", "echo_tts_audiocpp", "fish_s2_audiocpp", "glm_tts_audiocpp",
         "higgs_v3_audiocpp", "indextts2_audiocpp",
         "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp",
@@ -193,8 +193,8 @@ def test_catalog_provides_canonical_lookup_handles_in_order():
     assert [spec.id for spec in specs] == ids
     assert list(TtsModelType._initial_specs) == ids
     assert [handle.id for handle in TtsModelType.all()] == ids
-    assert len(specs) == 34
-    assert len(servers) == 20  # nine SGL entries plus the eleven audio.cpp entries
+    assert len(specs) == 35
+    assert len(servers) == 21  # nine SGL entries plus the twelve audio.cpp entries
     assert len(fingerprint) == 64
     for spec in specs:
         handle = TtsModelType.require_by_id(spec.id)
@@ -343,7 +343,7 @@ def test_installing_data_only_spec_uses_lookup_without_attributes_and_reset_remo
 
 def test_catalog_is_available_at_import_before_model_classes(tmp_path):
     code = """from tts_audiobook_tool.tts_models.model_catalog import load_catalog
-assert len(load_catalog()[0]) == 34
+assert len(load_catalog()[0]) == 35
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 assert FishS2BaseModel.INFO is TtsModelType.require_by_id("fish_s2_local").value
@@ -489,7 +489,7 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
     raw = read_catalog(CATALOG_PATH)
     audio = {item["id"]: item for item in raw["models"] if item.get("backend_kind") == "audio_cpp"}
     assert set(audio) == {
-        "breeze_tts_2_audiocpp", "chatterbox_audiocpp",
+        "breeze_tts_2_audiocpp", "chatterbox_audiocpp", "cosyvoice3_audiocpp",
         "dots_audiocpp", "echo_tts_audiocpp", "fish_s2_audiocpp", "glm_tts_audiocpp",
         "higgs_v3_audiocpp", "indextts2_audiocpp",
         "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp",
@@ -712,6 +712,30 @@ def test_audio_cpp_menu_is_required(model_id):
      lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed", "target_menu": "model"},
                                                    {"kind": "voice_instructions", "parameter": "speed", "target_menu": "model"}]),
      "requires a string parameter"),
+    # Fixed-choice string parameters (CosyVoice3's "Mode").
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["parameters"]["template_name"].update(default="sft"),
+     "default must be one of the choices"),
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["parameters"]["template_name"].update(choices=[]),
+     "nonempty array of choices"),
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["parameters"]["template_name"]["choices"].append(
+         {"value": "instruct", "label": "Again"}),
+     "duplicate choice"),
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["parameters"]["top_k"].update(choices=[{"value": "1", "label": "One"}]),
+     "choices.*only supported for string parameters"),
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["menu"][1].update(kind="voice_instructions", label=None) or entry["audio_cpp"]["menu"][1].pop("label"),
+     "requires the choice control"),
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["menu"][2].update(kind="choice", label="Instruction"),
+     "choice requires a string parameter with choices"),
+    # Choices are plain data; conditional behavior lives in AudioCppModelBehavior subclasses.
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["parameters"]["template_name"]["choices"][0].update(reference_transcript=False),
+     "unsupported.*reference_transcript"),
 ])
 def test_audio_cpp_catalog_rejects_invalid_declarations(tmp_path, entry_id, mutate, match):
     data = read_catalog(CATALOG_PATH)

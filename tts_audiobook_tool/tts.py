@@ -199,6 +199,12 @@ class Tts:
             raise RuntimeError("Remote backend definitions have different catalog fingerprints")
         if definitions.setting_groups is not None:
             REGISTRY.members = dict(definitions.setting_groups)
+        # Build each audio.cpp behavior once so a subclass whose declared
+        # parameters disagree with the catalog fails here, at startup, rather
+        # than when that model is first selected.
+        from tts_audiobook_tool.tts_models.audio_cpp_behavior import get_audio_cpp_behavior
+        for audio_definition in audio_definitions.models.values():
+            get_audio_cpp_behavior(audio_definition)
         for definition in (*definitions.models.values(), *audio_definitions.models.values()):
             TtsModelType.install_spec(definition.spec)
             REGISTRY.register_model_settings(definition.spec.id, definition.settings)
@@ -428,6 +434,23 @@ class Tts:
         """
         definition = Tts._configured_definitions.get(tts_type.id)
         return definition.can_batch if definition is not None else True
+
+    @staticmethod
+    def requires_reference_transcript(project: Project) -> bool:
+        """Whether generating with this project's current settings requires
+        the voice sample transcript.
+
+        The single runtime authority for the voice pre-flight, server startup
+        and the audio.cpp adapter. Differs from `REGISTRY.transcript_binding()`,
+        which only says whether the model stores (and lets the user edit) a
+        transcript: each model's support answers for its current settings
+        (eg MOSS local never reads it; Qwen3 only for its Base checkpoint;
+        CosyVoice3 on audio.cpp only in Zero-shot mode).
+        """
+        model_type = project.get_tts_model_type()
+        if REGISTRY.transcript_binding(model_type.id) is None:
+            return False  # Nothing stored, so nothing can be required.
+        return Tts.get_model_support_for_type(model_type).uses_reference_transcript(project)
 
     @staticmethod
     def get_model_support(project: Project) -> ModelSupport:

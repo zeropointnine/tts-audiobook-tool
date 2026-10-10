@@ -1616,6 +1616,107 @@ max = 2.0
 target = "options"
 
 # ------------------------------------------------------------------------
+# Fun-CosyVoice3 via audio.cpp. Unlike `cosyvoice3_sglomni`, the port has no
+# temperature or repetition penalty and a fixed top-p (0.8); its session also
+# rejects any request option its spec does not declare, so only declared
+# controls may be sent. "Mode" selects the request template; every template
+# still conditions the audio decoder on the full voice sample.
+[[models]]
+id = "cosyvoice3_audiocpp"
+settings = [
+    { name = "template_name", section = "parameters", type = "str", default = "zero_shot" },
+    { name = "instruction", section = "parameters", type = "str", default = "" },
+    { name = "top_k", section = "parameters", type = "int", default = 25 },
+    { name = "num_inference_steps", section = "parameters", type = "int", default = 10 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+]
+backend_kind = "audio_cpp"
+
+[models.spec]
+file_tag = "cosyvoice3"
+default_output_sample_rate = 24000
+# Same text handling as `cosyvoice3_sglomni`.
+un_all_caps = true
+substitutions = [["—", ", "], ["─", ", "]] # em-dash oftentimes truncates rest of gen
+requirements_file_name = "requirements-remote.txt"
+
+[models.spec.ui]
+proper_name = "Fun-CosyVoice3"
+short_name = "CosyVoice3"
+voice_sample_max_duration_s = 30
+voice_path_console = "Enter voice clone audio clip file path (up to 30s): "
+voice_path_requestor = "Select voice clone audio clip (up to 30s)"
+project_links = [
+    "https://github.com/QwenAudio/CosyVoice",
+    "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/cosyvoice3.md",
+]
+
+[models.audio_cpp]
+menu = [
+    { kind = "voice_samples" },
+    { kind = "choice", parameter = "template_name", label = "Mode", target_menu = "model" },
+    { kind = "voice_instructions", parameter = "instruction", target_menu = "model" },
+    { parameter = "top_k", label = "Top-K", target_menu = "model" },
+    { parameter = "num_inference_steps", label = "Steps", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
+]
+# The `zero_shot` template conditions on the reference transcript; the other
+# templates ignore it (`CosyVoice3Behavior` then drops it from the request). A
+# reference clip is always required, in every template.
+reference_transcript = true
+# The session never reads a language (top-level `language` would be ignored).
+language_policy = "omit"
+
+# Guarantee one generation per request: the native splitter otherwise chunks
+# at 600 codepoints. max_tokens stays unset, so the session bounds speech
+# tokens per request at 2x-20x the text tokens.
+[models.audio_cpp.request_options]
+text_chunk_size = 100000
+
+# The session runs the same reference-conditioned path under either task token.
+[models.audio_cpp.match]
+family = "cosyvoice3"
+tasks = ["tts", "clon"]
+mode = "offline"
+
+# Request template. Each one changes only what the speech-token LM is
+# conditioned on: zero_shot sees the sample's transcript and speech tokens,
+# cross_lingual sees neither, instruct sees the instruction text instead.
+[models.audio_cpp.parameters.template_name]
+type = "str"
+default = "zero_shot"
+target = "options"
+choices = [
+    { value = "zero_shot", label = "Zero-shot", description = "Follows the voice sample's timbre and speaking style (uses its transcript)" },
+    { value = "cross_lingual", label = "Cross-lingual", description = "Follows the voice sample's timbre only; suits a sample in a different language from the text" },
+    { value = "instruct", label = "Instruct", description = "Follows the voice sample's timbre; speaking style follows the instructions" },
+]
+
+# Read only by the `instruct` template; blank/cleared is omitted from the
+# request, which the session treats as an empty instruction.
+[models.audio_cpp.parameters.instruction]
+type = "str"
+default = ""
+target = "options"
+
+# Forwarded from the top-level body; the session requires a positive value.
+[models.audio_cpp.parameters.top_k]
+type = "int"
+default = 25
+min = 1
+max = 100
+
+# Flow decoder Euler steps; forwarded from the top-level body.
+[models.audio_cpp.parameters.num_inference_steps]
+type = "int"
+default = 10
+min = 1
+max = 50
+
+# ------------------------------------------------------------------------
 # dots.tts via audio.cpp. One entry serves whichever dots.tts model the server is
 # configured with (SOAR or MeanFlow): audio.cpp advertises them identically, so
 # the operator chooses by pointing the server entry at a GGUF. Defaults are SOAR's.

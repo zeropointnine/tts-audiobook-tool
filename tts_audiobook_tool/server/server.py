@@ -60,6 +60,24 @@ def get_blocking_issues_error(project: Project, instance: object | None) -> str:
     return "TTS model is not ready for inference:\n" + format_issues(issues, verbose=True)
 
 
+def is_missing_required_transcript(project: Project) -> bool:
+    """
+    Whether the first voice sample lacks a transcript that generation with
+    the project's current settings requires (server startup check).
+    """
+    if not project.voice_references or not Tts.requires_reference_transcript(project):
+        return False
+    from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+    # Validate the transcript generation will actually use: when a crop is
+    # active on the first sample, that is the cropped span's transcript (with
+    # the same missing-crop-file fallback generation applies), not the
+    # original sample's transcript.
+    _, effective_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+        project, project.get_tts_model_type(), 0
+    )
+    return not effective_transcript.strip()
+
+
 class Server:
 
     def __init__(self, project_dir: str = ""):
@@ -93,22 +111,7 @@ class Server:
             exit(1)
         self._project = result
 
-        from tts_audiobook_tool.project_support.model_settings import REGISTRY
-        from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-        # Validate the transcript generation will actually use: when a crop
-        # is active on the first sample, that is the cropped span's
-        # transcript (with the same missing-crop-file fallback generation
-        # applies), not the original sample's transcript.
-        effective_transcript = ""
-        if self._project.voice_references:
-            _, effective_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-                self._project, self._project.get_tts_model_type(), 0
-            )
-        if (
-            REGISTRY.transcript_binding(self._project.tts_model_type) is not None
-            and self._project.voice_references
-            and not effective_transcript.strip()
-        ):
+        if is_missing_required_transcript(self._project):
             printt(f"{COL_ERROR}Voice clone is missing required accompanying transcript.")
             printt("Run the interactive app (tts-audiobook-tool), open this project, and add")
             printt("a transcript for the first voice clone. Then re-start this server.")

@@ -14,11 +14,16 @@ from tts_audiobook_tool.tts_models.audio_cpp_definition import (
     AudioCppParameter,
     AudioCppTextParameter,
 )
+from tts_audiobook_tool.tts_models.audio_cpp_behavior import get_audio_cpp_behavior
 from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+
+# Request fields only the adapter decides; `AudioCppModelBehavior.adjust_payload`
+# must leave them untouched.
+_ADAPTER_OWNED_PAYLOAD_KEYS = ("model", "input", "response_format", "seed", "voice_ref", "reference_text")
 
 
 class AudioCppSettings:
@@ -53,8 +58,28 @@ class AudioCppModelSupport:
 
     def __init__(self, definition: AudioCppModelDefinition):
         self.definition = definition
+        self.behavior = get_audio_cpp_behavior(definition)
         self.INFO = definition.spec
         self.model_type = TtsModelType.require_by_id(self.INFO.id)
+
+    def get_values(self, project: Project) -> dict[str, int | float | str]:
+        """Resolved, validated parameter values; raises ValueError on invalid storage."""
+        return {name: AudioCppSettings.get(project, parameter)
+                for name, parameter in self.definition.parameters.items()}
+
+    def uses_reference_transcript(self, project: Project) -> bool:
+        """Whether generation with this project's settings reads (and so
+        requires) the voice sample transcript.
+
+        The runtime authority for every entry point (adapter, voice pre-flight,
+        server startup). Invalid stored settings fall back to the catalog's
+        static flag; readiness blocks them anyway.
+        """
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            return self.definition.reference_transcript
+        return self.behavior.uses_reference_transcript(values)
 
     def massage_for_inference(self, text: str) -> str:
         for before, after in self.INFO.substitutions:
@@ -116,11 +141,15 @@ class AudioCppModelSupport:
         # validated lazily by the interactive pre-flight (validate_voices) and
         # at generation time; WAV conversion/size checks also happen during
         # generation, not redraw.
-        for parameter in self.definition.parameters.values():
+        values: dict[str, int | float | str] = {}
+        for name, parameter in self.definition.parameters.items():
             try:
-                AudioCppSettings.get(project, parameter)
+                values[name] = AudioCppSettings.get(project, parameter)
             except ValueError as exc:
                 issues.append(ReadinessIssue(parameter.name, str(exc)))
+        if not issues:
+            # Behavior rules assume valid values; invalid ones are reported above.
+            issues.extend(self.behavior.get_blocking_issues(project, values))
         try:
             seed = project.get_model_setting(self.INFO.id, "seed")
             if type(seed) is not int or seed < -1 or seed > 2**32 - 1:
@@ -151,6 +180,12 @@ class AudioCppModelSupport:
             warnings.append(f"Passing language hint to model: {language or 'auto'}{note}")
         if not self.definition.voice_required and not self.get_primary_voice_value(project):
             warnings.append("Note: Generated voices may vary because no voice reference has been configured.")
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            pass  # Invalid settings are reported as blocking issues instead.
+        else:
+            warnings.extend(self.behavior.get_warning_issues(project, values))
         warning = self.get_max_words_exceed_warning(project)
         if warning:
             warnings.append(warning)
@@ -217,8 +252,12 @@ class AudioCppBackendAdapter:
         if not prompts:
             return []
         try:
-            values = {name: AudioCppSettings.get(project, parameter)
-                      for name, parameter in self.definition.parameters.items()}
+            values = self.support.get_values(project)
+            # Readiness normally stops these first; recheck so no caller can
+            # send a request the behavior has ruled out.
+            blockers = self.support.behavior.get_blocking_issues(project, values)
+            if blockers:
+                return blockers[0].verbose
             seed = -1 if force_random_seed else project.get_model_setting(self.INFO.id, "seed")
             if type(seed) is not int or seed < -1 or seed > 2**32 - 1:
                 return "seed must be -1 or uint32"
@@ -228,9 +267,13 @@ class AudioCppBackendAdapter:
                 project, self.support.model_type, voice_selection_index)
             if not voice and self.definition.voice_required:
                 return "A voice clone sample is required"
+            # A model can ignore the transcript under some settings (eg
+            # CosyVoice3's cross-lingual mode); then it is neither checked nor
+            # sent, so the printed request shows only what the model reads.
+            uses_transcript = self.support.uses_reference_transcript(project)
             voice_ref: dict[str, str] | None = None
             if voice:
-                if self.definition.reference_transcript and not transcript:
+                if uses_transcript and not transcript:
                     # App policy: provide a transcript with reference audio
                     # whenever the family supports reference_text.
                     return "Voice clone transcript required when a voice clone sample is supplied"
@@ -239,7 +282,7 @@ class AudioCppBackendAdapter:
         except (ValueError, OSError) as exc:
             return str(exc)
         payloads = [self._make_payload(prompt, values, voice_ref, seed, project.language_code,
-                                       transcript if self.definition.reference_transcript else "")
+                                       transcript if uses_transcript else "")
                     for prompt in prompts]
         # One request at a time: the audio.cpp server serializes requests per model,
         # so fanning out would only queue them behind its model lock.
@@ -288,7 +331,10 @@ class AudioCppBackendAdapter:
                 options["language"] = language
             else:
                 payload["language"] = language
+        ignored = self.support.behavior.get_ignored_parameters(values)
         for name, parameter in self.definition.parameters.items():
+            if name in ignored:
+                continue  # The model reads nothing from it under these settings.
             value = values[name]
             if isinstance(parameter, AudioCppTextParameter) and value == "":
                 # A cleared text control is "unset", not an empty instruction:
@@ -303,5 +349,14 @@ class AudioCppBackendAdapter:
             payload["options"] = options
         if transcript:
             payload["reference_text"] = transcript
+        owned = {key: payload.get(key) for key in _ADAPTER_OWNED_PAYLOAD_KEYS}
+        self.support.behavior.adjust_payload(payload, values)
+        changed = sorted(key for key, value in owned.items() if payload.get(key) != value)
+        if changed:
+            # A programming error in the behavior subclass, not a settings problem.
+            raise RuntimeError(f"{type(self.support.behavior).__name__}.adjust_payload changed "
+                             f"adapter-owned request fields: {', '.join(changed)}")
+        if not payload.get("options", True):
+            del payload["options"]  # A family hook may have emptied it.
         return payload
 

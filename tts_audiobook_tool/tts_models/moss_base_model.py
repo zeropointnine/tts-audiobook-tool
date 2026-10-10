@@ -100,6 +100,12 @@ class MossBaseModel(TtsBaseModel):
         raise NotImplementedError()
 
     @classmethod
+    def uses_reference_transcript(cls, project: Project) -> bool:
+        # Voice cloning encodes only the reference audio; the stored paired
+        # transcript is kept for other backends but never read here.
+        return False
+
+    @classmethod
     def can_hallucinate_music(cls, project: Project, instance: TtsBaseModel | None=None) -> bool:
 
         if instance is not None:

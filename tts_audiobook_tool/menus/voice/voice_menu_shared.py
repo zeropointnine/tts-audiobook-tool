@@ -336,7 +336,8 @@ class VoiceMenuShared:
                 )
                 return message, False
             return "", False
-        return "", REGISTRY.transcript_binding(model_type.id) is not None
+        # Runtime requirement (settings-aware), not mere transcript storage.
+        return "", Tts.requires_reference_transcript(project)
 
     @staticmethod
     def _check_voice_sample(

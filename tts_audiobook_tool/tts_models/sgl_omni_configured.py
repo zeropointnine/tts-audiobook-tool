@@ -121,6 +121,13 @@ class ConfiguredModelSupport:
             value = COL_ERROR + ("required" if self.INFO.requires_voice else "none")
         return VoiceDisplayInfo("Voice clone", "current voice clone", value)
 
+    def uses_reference_transcript(self, project: Project) -> bool:
+        """Whether generation requires the voice sample transcript. Mirrors the
+        storage binding, so "optional" policies still count as required here
+        (the pre-flight fills them in)."""
+        from tts_audiobook_tool.project_support.model_settings import REGISTRY
+        return REGISTRY.transcript_binding(self.INFO.id) is not None
+
     def get_blocking_issues(self, project: Project, instance: object = None) -> list[ReadinessIssue]:
         issues = []
         if self.definition.language_policy == "moss":

@@ -455,6 +455,20 @@ class TtsBaseModel(ABC):
         return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id(cls.INFO.id))
 
     @classmethod
+    def uses_reference_transcript(cls, project: Project) -> bool:
+        """
+        Whether generating with the project's current settings requires the
+        voice sample transcript (voice pre-flight and server startup ask this
+        via `Tts.requires_reference_transcript`).
+
+        Defaults to the model's transcript storage binding. Override when the
+        model stores transcripts (so shared voice samples keep their paired
+        text) but does not need one, always or under some settings.
+        """
+        from tts_audiobook_tool.project_support.model_settings import REGISTRY
+        return REGISTRY.transcript_binding(cls.INFO.id) is not None
+
+    @classmethod
     def should_trim_trailing_token_noise(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> bool:

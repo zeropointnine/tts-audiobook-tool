@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from dataclasses import replace
 import json
 from io import BytesIO
 from pathlib import Path
@@ -19,7 +20,7 @@ from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.tts_models.audio_cpp_configured import AudioCppBackendAdapter, AudioCppModelSupport, AudioCppSettings
-from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
+from tts_audiobook_tool.tts_models.audio_cpp_definition import AudioCppTextParameter, load_audio_cpp_definitions
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 MODEL_ID = "chatterbox_audiocpp"
@@ -31,6 +32,7 @@ FISH_S2_ID = "fish_s2_audiocpp"
 DOTS_ID = "dots_audiocpp"
 GLM_ID = "glm_tts_audiocpp"
 INDEXTTS2_ID = "indextts2_audiocpp"
+COSYVOICE3_ID = "cosyvoice3_audiocpp"
 
 
 class FakeProject:
@@ -464,7 +466,9 @@ def test_chatterbox_menu_preserves_control_order_without_headings(monkeypatch):
     monkeypatch.setattr(ModelAudioCppMenu, "make_parameter_item",
                         lambda _state, _parameter, label, **_: MenuItem(label, lambda *_: None))
 
-    items = ModelAudioCppMenu.make_items(SimpleNamespace(), definition())
+    # The menu reads resolved settings to ask the model's behavior which
+    # controls are visible, so the state needs a project.
+    items = ModelAudioCppMenu.make_items(SimpleNamespace(project=Project(tts_model_type=MODEL_ID)), definition())
 
     assert [item.label for item in items] == [
         "Temperature", "Exaggeration", "CFG/pace",
@@ -1048,7 +1052,7 @@ def test_optional_voice_requires_a_reference_transcript_when_a_voice_is_set(monk
 
 
 @pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, HIGGS_ID, FISH_S2_ID, DOTS_ID])
-def test_voice_readiness_is_lazy_for_every_audio_cpp_family(monkeypatch, model_id):
+def test_voice_readiness_is_lazy_for_every_audio_cpp_behavior(monkeypatch, model_id):
     item = definition(model_id)
     support = AudioCppModelSupport(item)
     project = FakeProject(model_id=model_id, values={"seed": -1})
@@ -1160,6 +1164,227 @@ def test_glm_payload_splits_flow_guidance_into_options(monkeypatch, tmp_path: Pa
         == "GLM-TTS does not support streaming"
 
 
+def test_cosyvoice3_definition_declares_only_controls_the_session_accepts():
+    # The audio.cpp port rejects undeclared request options and has no
+    # temperature/top-p/repetition-penalty knobs, unlike `cosyvoice3_sglomni`.
+    item = definition(COSYVOICE3_ID)
+    assert item.family == "cosyvoice3" and item.tasks == ("tts", "clon") and item.mode == "offline"
+    assert item.session_options == {}
+    assert item.voice_required and item.spec.requires_voice and item.reference_transcript
+    assert item.language_policy == "omit"
+    assert item.request_options == {"text_chunk_size": 100000}
+    numeric = {name: parameter for name, parameter in item.parameters.items()
+               if not isinstance(parameter, AudioCppTextParameter)}
+    assert {name: (parameter.type, parameter.default, parameter.min, parameter.max, parameter.target)
+            for name, parameter in numeric.items()} == {
+        "top_k": ("int", 25, 1, 100, "top_level"),
+        "num_inference_steps": ("int", 10, 1, 50, "top_level"),
+    }
+    # "Mode" picks audio.cpp's request template from a fixed list; the
+    # instruction is free text, read only by the `instruct` template.
+    template = item.parameters["template_name"]
+    assert isinstance(template, AudioCppTextParameter) and template.target == "options"
+    assert template.default == "zero_shot"
+    assert [choice.value for choice in template.choices] == ["zero_shot", "cross_lingual", "instruct"]
+    instruction = item.parameters["instruction"]
+    assert isinstance(instruction, AudioCppTextParameter) and instruction.target == "options"
+    assert instruction.default == "" and instruction.choices == ()
+    assert [(control.kind, control.parameter, control.target_menu) for control in item.menu] == [
+        ("voice_samples", "", None), ("choice", "template_name", "model"),
+        ("voice_instructions", "instruction", "model"), ("parameter", "top_k", "model"),
+        ("parameter", "num_inference_steps", "model"), ("seed", "", "model"),
+    ]
+    assert item.spec.default_output_sample_rate == 24000 and item.spec.file_tag == "cosyvoice3"
+    assert not item.spec.can_stream
+
+
+def test_cosyvoice3_mode_rejects_values_outside_its_choices():
+    item = definition(COSYVOICE3_ID)
+    template = item.parameters["template_name"]
+    for value in ("cross_lingual", "instruct", "zero_shot"):
+        assert AudioCppSettings.set(FakeProject(model_id=COSYVOICE3_ID), template, value) == ""
+    # A hand-edited project value outside the list surfaces as a readiness issue
+    # rather than reaching the server, which would reject the unknown template.
+    for invalid in ("sft", "", 1):
+        with pytest.raises(ValueError, match="must be"):
+            AudioCppSettings.get(FakeProject(model_id=COSYVOICE3_ID, values={"template_name": invalid}), template)
+
+
+def _capture_cosyvoice3_payload(monkeypatch, tmp_path: Path, values: dict) -> dict:
+    path = tmp_path / "sample.flac"
+    sf.write(path, np.full(100, .2), 24000, format="FLAC")
+    item = definition(COSYVOICE3_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "cosyvoice3-q8")
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair",
+                        lambda *args: ("sample.flac", "the exact words spoken"))
+    monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: str(path))
+    captured = []
+
+    def fake_generate(url, payload, print_request=False):
+        captured.append(payload)
+        return SimpleNamespace(data=np.asarray([0], dtype=np.float32), sr=24000)
+
+    monkeypatch.setattr(AudioCppUtil, "generate", fake_generate)
+    project = FakeProject(model_id=COSYVOICE3_ID, values={"seed": 3, **values})
+    assert not isinstance(adapter.generate_using_project(project, ["hello"]), str)
+    payload = captured[0]
+    assert payload.pop("voice_ref")["data"].startswith("data:audio/wav;base64,")
+    return payload
+
+
+def test_cosyvoice3_payload_sends_transcript_without_language(monkeypatch, tmp_path: Path):
+    # The zero_shot template (the session default) conditions on reference_text;
+    # no language is sent, an unset instruction is omitted, and the native
+    # 600-codepoint splitter is disabled so one app segment stays one generation.
+    payload = _capture_cosyvoice3_payload(monkeypatch, tmp_path, {"top_k": 40})
+    assert payload == {
+        "model": "cosyvoice3-q8", "input": "hello", "response_format": "wav", "seed": 3,
+        "top_k": 40, "num_inference_steps": 10,
+        "options": {"text_chunk_size": 100000, "template_name": "zero_shot"},
+        "reference_text": "the exact words spoken",
+    }
+
+
+def test_cosyvoice3_payload_sends_mode_and_instruction_in_options(monkeypatch, tmp_path: Path):
+    # Both are audio.cpp request options, not forwarded top-level fields. The
+    # instruct template ignores the transcript, so it is left out of the request.
+    payload = _capture_cosyvoice3_payload(monkeypatch, tmp_path, {
+        "template_name": "instruct", "instruction": "Speak warmly with clear articulation.",
+    })
+    assert payload["options"] == {
+        "text_chunk_size": 100000, "template_name": "instruct",
+        "instruction": "Speak warmly with clear articulation.",
+    }
+    assert "reference_text" not in payload
+
+
+def test_cosyvoice3_cross_lingual_omits_and_does_not_require_transcript(monkeypatch, tmp_path: Path):
+    # CosyVoice3Behavior withdraws the transcript for templates that ignore it:
+    # it is not sent, and a missing one does not block generation. A stored
+    # instruction is likewise dropped outside the instruct template.
+    payload = _capture_cosyvoice3_payload(monkeypatch, tmp_path, {
+        "template_name": "cross_lingual", "instruction": "Speak warmly.",
+    })
+    assert payload["options"] == {"text_chunk_size": 100000, "template_name": "cross_lingual"}
+    assert "reference_text" not in payload
+
+    item = definition(COSYVOICE3_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "cosyvoice3-q8")
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair", lambda *args: ("sample.flac", ""))
+    project = FakeProject(model_id=COSYVOICE3_ID, values={"template_name": "cross_lingual"})
+    assert not isinstance(adapter.generate_using_project(project, ["hello"]), str)
+
+
+def test_cosyvoice3_zero_shot_drops_a_stored_instruction(monkeypatch, tmp_path: Path):
+    # Only the instruct template reads `instruction`; a value left over from an
+    # earlier instruct session must not appear in a zero_shot request.
+    payload = _capture_cosyvoice3_payload(monkeypatch, tmp_path, {"instruction": "Speak warmly."})
+    assert payload["options"] == {"text_chunk_size": 100000, "template_name": "zero_shot"}
+    assert payload["reference_text"] == "the exact words spoken"
+
+
+def test_adjust_payload_cannot_change_adapter_owned_fields(monkeypatch, tmp_path: Path):
+    # adjust_payload is an escape hatch, but model identity, the resolved seed,
+    # voice and transcript stay the adapter's decisions; a hook that rewrites
+    # them is a programming error, caught before the request is sent.
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_cosyvoice3 import CosyVoice3Behavior
+    monkeypatch.setattr(CosyVoice3Behavior, "adjust_payload",
+                        lambda self, payload, values: payload.update(seed=0, model="other"))
+    with pytest.raises(RuntimeError, match="adapter-owned request fields: model, seed"):
+        _capture_cosyvoice3_payload(monkeypatch, tmp_path, {})
+
+
+INSTRUCT_BLOCKER = "Instructions are required when Mode is Instruct"
+
+
+@pytest.mark.parametrize("values, expected", [
+    ({"template_name": "instruct"}, [INSTRUCT_BLOCKER]),
+    ({"template_name": "instruct", "instruction": "   "}, [INSTRUCT_BLOCKER]),
+    ({"template_name": "instruct", "instruction": "Speak warmly."}, []),
+    ({"template_name": "zero_shot"}, []),
+])
+def test_cosyvoice3_blocks_instruct_mode_without_instructions(values, expected):
+    # audio.cpp would accept an empty instruction but fall back to a generic
+    # prompt (effectively cross-lingual), so readiness blocks it instead.
+    item = definition(COSYVOICE3_ID)
+    support = AudioCppModelSupport(item)
+    project = FakeProject(model_id=COSYVOICE3_ID, values=values)
+    issues = [issue for issue in support.get_blocking_issues(project) if issue.short != "audio.cpp server"]
+    assert [issue.verbose for issue in issues] == expected
+    assert all(issue.short == "instructions" for issue in issues)
+    assert INSTRUCT_BLOCKER not in support.get_warning_issues(project)
+
+
+def test_cosyvoice3_behavior_blockers_wait_for_valid_values():
+    # Behavior rules only see validated values; an invalid stored Mode is
+    # reported as that parameter's own issue instead of reaching the hook.
+    item = definition(COSYVOICE3_ID)
+    project = FakeProject(model_id=COSYVOICE3_ID, values={"template_name": "sft"})
+    issues = [issue for issue in AudioCppModelSupport(item).get_blocking_issues(project)
+              if issue.short != "audio.cpp server"]
+    assert [issue.short for issue in issues] == ["template_name"]
+
+
+def test_cosyvoice3_generation_refuses_instruct_without_instructions(monkeypatch):
+    # The adapter rechecks behavior blockers, so a caller that skipped readiness
+    # still never sends the request.
+    item = definition(COSYVOICE3_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "cosyvoice3-q8")
+    monkeypatch.setattr(AudioCppUtil, "generate", lambda *args, **kwargs: pytest.fail("network attempted"))
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair",
+                        lambda *args: ("sample.flac", "the exact words spoken"))
+    project = FakeProject(model_id=COSYVOICE3_ID, values={"template_name": "instruct"})
+    assert adapter.generate_using_project(project, ["hello"]) == INSTRUCT_BLOCKER
+
+
+def test_models_default_to_catalog_driven_behavior():
+    # Entries without a registered subclass get the base behavior, which answers
+    # from the catalog alone and leaves payloads untouched. Constructing every
+    # shipped behavior also verifies each subclass's REQUIRED_PARAMETERS against
+    # the shipped catalog.
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior import AudioCppModelBehavior
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_cosyvoice3 import CosyVoice3Behavior
+    for model_id, item in load_audio_cpp_definitions().models.items():
+        behavior = AudioCppModelSupport(item).behavior
+        expected = CosyVoice3Behavior if model_id == COSYVOICE3_ID else AudioCppModelBehavior
+        assert type(behavior) is expected
+        if expected is AudioCppModelBehavior:
+            assert behavior.uses_reference_transcript({}) == item.reference_transcript
+
+
+@pytest.mark.parametrize("mutate, match", [
+    (lambda parameters: parameters.pop("template_name"), "requires catalog parameter 'template_name'"),
+    (lambda parameters: parameters.update(
+        template_name=replace(parameters["template_name"], choices=())),
+     "expects 'template_name' to be a choice parameter, not text"),
+    (lambda parameters: parameters.update(instruction=parameters["top_k"]),
+     "expects 'instruction' to be a text parameter, not number"),
+])
+def test_behavior_rejects_catalog_parameters_it_cannot_read(mutate, match):
+    # A catalog rename or retype of a parameter a subclass reads fails when the
+    # behavior is built, not as a KeyError partway through a generation.
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_cosyvoice3 import CosyVoice3Behavior
+    item = definition(COSYVOICE3_ID)
+    parameters = dict(item.parameters)
+    mutate(parameters)
+    with pytest.raises(ValueError, match=match):
+        CosyVoice3Behavior(replace(item, parameters=parameters))
+
+
+def test_cosyvoice3_requires_voice_and_transcript_before_network(monkeypatch):
+    item = definition(COSYVOICE3_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "cosyvoice3-q8")
+    monkeypatch.setattr(AudioCppUtil, "generate", lambda *args, **kwargs: pytest.fail("network attempted"))
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair", lambda *args: ("", ""))
+    assert adapter.generate_using_project(FakeProject(model_id=COSYVOICE3_ID), ["hello"]) == (
+        "A voice clone sample is required"
+    )
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair", lambda *args: ("sample.flac", ""))
+    assert adapter.generate_using_project(FakeProject(model_id=COSYVOICE3_ID), ["hello"]) == (
+        "Voice clone transcript required when a voice clone sample is supplied"
+    )
+
+
 def test_http_speech_contract_and_safe_request_log(monkeypatch, capsys):
     wav = BytesIO()
     sf.write(wav, np.full(40, .2), 24000, format="WAV", subtype="PCM_16")
@@ -1252,11 +1477,18 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
     monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", make_voice_items)
     monkeypatch.setattr(ModelAudioCppMenu, "make_parameter_item",
                         lambda _state, parameter, _label, *_, **__: MenuItem(parameter.name, lambda *_: None))
+    monkeypatch.setattr(ModelAudioCppMenu, "make_choice_item",
+                        lambda _state, parameter, _label: MenuItem(parameter.name, lambda *_: None))
     monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("seed", lambda *_: None))
     monkeypatch.setattr(ModelMenuShared, "make_voice_instructions_item",
                         lambda *_, **__: [MenuItem("instructions", lambda *_: None),
                                           MenuItem("clear instructions", lambda *_: None)])
+
+    # Controls the model's behavior hides at its defaults (eg CosyVoice3's
+    # Instructions outside Instruct mode) are absent; order is otherwise kept.
+    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import AudioCppMenuContext
+    context = AudioCppMenuContext(state, definition)
 
     actual_voice = VoiceAudioCppMenu.make_items(state, definition)
     voice_control_count = sum(control.kind == "voice_samples" for control in definition.menu)
@@ -1264,7 +1496,7 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
     for control in definition.menu:
         if control.kind == "voice_samples":
             expected_voice.extend(item.label for item in voice_items)
-        elif control.target_menu == "voice":
+        elif control.target_menu == "voice" and context.is_visible(control):
             if control.kind == "voice_instructions":
                 expected_voice.extend(("instructions", "clear instructions"))
             elif control.kind == "seed":
@@ -1279,7 +1511,7 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
     actual_model = ModelAudioCppMenu.make_items(state, definition)
     expected = []
     for control in definition.menu:
-        if control.target_menu != "model":
+        if control.target_menu != "model" or not context.is_visible(control):
             continue
         if control.kind == "seed":
             expected.append("seed")

@@ -764,6 +764,17 @@ def test_get_voice_problems_lists_every_problem_without_side_effects(tmp_path, m
     assert not (tmp_path / "project.json").exists()
 
 
+def test_voice_preflight_skips_transcript_for_model_that_stores_but_never_reads_it(tmp_path, monkeypatch):
+    # MOSS local keeps shared transcripts in storage but clones from audio
+    # alone, so an empty transcript neither blocks nor triggers STT.
+    (tmp_path / "a.flac").write_bytes(b"valid")
+    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: object())
+    monkeypatch.setattr(VoiceMenuShared, "transcribe_voice_sample_to_text", lambda *_: pytest.fail("must not transcribe"))
+    state = _validate_state(tmp_path, "moss_local", [{"file_name": "a.flac", "transcript": ""}])
+    assert VoiceMenuShared.get_voice_problems(state) == []
+    assert VoiceMenuShared.validate_voices(state) is True
+
+
 def test_get_voice_problems_ignores_empty_transcript_for_model_without_transcripts(tmp_path, monkeypatch):
     (tmp_path / "a.flac").write_bytes(b"valid")
     monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: object())

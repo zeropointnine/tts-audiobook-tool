@@ -115,6 +115,12 @@ class Qwen3BaseModel(TtsBaseModel):
     # ---
 
     @classmethod
+    def uses_reference_transcript(cls, project: Project) -> bool:
+        # Only the Base checkpoint clones from voice samples (an unset
+        # model_type means Base); CustomVoice and VoiceDesign ignore them.
+        return project.get_model_setting('qwen3tts_local', 'model_type') not in ("custom_voice", "voice_design")
+
+    @classmethod
     def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
     ) -> list[ReadinessIssue]:

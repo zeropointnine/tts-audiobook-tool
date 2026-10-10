@@ -37,8 +37,17 @@ class AudioCppParameter:
 
 
 @dataclass(frozen=True)
+class AudioCppChoice:
+    value: str
+    label: str
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class AudioCppTextParameter:
-    """A free-text request control, eg OmniVoice's voice-design `instruction`.
+    """A string request control: free text (eg OmniVoice's voice-design
+    `instruction`) or, when ``choices`` is set, one of a fixed list of values
+    (eg CosyVoice3's `template_name`).
 
     audio.cpp has no text control that is not read from the request's
     ``options`` map, so ``target`` is fixed rather than declared, and there are
@@ -51,10 +60,14 @@ class AudioCppTextParameter:
     request_key: str = ""
     type: str = "str"
     target: str = "options"
+    choices: tuple[AudioCppChoice, ...] = ()
 
     def validate(self, value: object) -> str:
         if not isinstance(value, str):
             raise ValueError(f"{self.model_id}.{self.name} must be a string")
+        if self.choices and value not in (choice.value for choice in self.choices):
+            allowed = ", ".join(choice.value for choice in self.choices)
+            raise ValueError(f"{self.model_id}.{self.name} must be one of: {allowed}")
         return value
 
 
@@ -126,7 +139,10 @@ def load_audio_cpp_definitions(path: Path = CATALOG_PATH) -> AudioCppDefinitions
         parameters: dict[str, AudioCppParameterTypes] = {}
         for name, raw in declaration["parameters"].items():
             if raw["type"] == "str":
-                parameters[name] = AudioCppTextParameter(spec.id, name, raw["default"], raw["request_key"])
+                choices = tuple(AudioCppChoice(item["value"], item["label"], item["description"])
+                                for item in raw["choices"])
+                parameters[name] = AudioCppTextParameter(
+                    spec.id, name, raw["default"], raw["request_key"], choices=choices)
             else:
                 parameters[name] = AudioCppParameter(
                     spec.id, name, raw["type"], raw["default"], raw["min"], raw["max"],

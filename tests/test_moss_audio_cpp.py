@@ -426,6 +426,7 @@ def test_existing_families_keep_default_language_policy_and_postprocessing():
         if model_id in IDS:
             continue
         expected_policy = {"fish_s2_audiocpp": "omit", "glm_tts_audiocpp": "omit",
+                           "cosyvoice3_audiocpp": "omit",
                            "dots_audiocpp": "normalized",
                            "indextts2_audiocpp": "normalized"}.get(model_id, "project_code")
         # IndexTTS2.5 reads its language from `options`, not the top level.

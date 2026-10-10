@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.constants import COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
 from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
@@ -87,7 +88,7 @@ def test_each_destination_delegates_only_its_settings_to_model_control_helper(ba
     state = SimpleNamespace(project=Project(tts_model_type=definition.spec.id))
     calls = []
 
-    def expand(current, current_definition, control):
+    def expand(current, current_definition, control, *_):
         assert current is state and current_definition is definition
         calls.append(control)
         return [MenuItem(control.kind, lambda *_: None)]
@@ -196,3 +197,133 @@ def test_shipped_audio_cpp_instructions_and_clear_belong_to_voice_menu(
     assert len(model_labels) == setting_count  # Numeric settings and seed.
     assert not any(value.startswith(label + " ") or value == "Clear instructions"
                    for value in model_labels)
+
+
+def test_cosyvoice3_mode_item_shows_choice_label_and_saves_via_option_submenu(monkeypatch):
+    # "Mode" is a fixed-choice control: its label shows the choice's display
+    # name, and selecting from the option submenu persists the template value.
+    from tts_audiobook_tool.menus.menu_util import MenuUtil
+    model_id = "cosyvoice3_audiocpp"
+    definition = load_audio_cpp_definitions().models[model_id]
+    project = Project(tts_model_type=model_id)
+    monkeypatch.setattr(Project, "save", lambda self: "")
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_audio_cpp_menu.print_feedback",
+                        lambda *_, **__: None)
+    state = SimpleNamespace(project=project)
+    items = ModelAudioCppMenu.make_items(state, definition)
+    labels = [get_string_from(state, item.label) for item in items]
+    assert labels[0].startswith("Mode ") and "Zero-shot" in labels[0]
+    # Instructions are hidden outside Instruct mode.
+    assert labels[1].startswith("Top-K ")
+
+    offered = {}
+
+    def fake_options_menu(**kwargs):
+        offered.update(kwargs)
+        kwargs["on_select"]("instruct")
+
+    monkeypatch.setattr(MenuUtil, "options_menu", fake_options_menu)
+    items[0].handler(state, items[0])
+    assert offered["values"] == ["zero_shot", "cross_lingual", "instruct"]
+    assert offered["labels"] == ["Zero-shot", "Cross-lingual", "Instruct"]
+    assert offered["current_value"] == offered["default_value"] == "zero_shot"
+    assert project.get_model_setting(model_id, "template_name") == "instruct"
+    assert "Instruct" in get_string_from(state, items[0].label)
+
+
+def _cosyvoice3_model_labels(project: Project) -> list[str]:
+    model_id = "cosyvoice3_audiocpp"
+    definition = load_audio_cpp_definitions().models[model_id]
+    state = SimpleNamespace(project=project)
+    return [get_string_from(state, item.label) for item in ModelAudioCppMenu.make_items(state, definition)]
+
+
+def test_cosyvoice3_instructions_appear_only_in_instruct_mode():
+    # The behavior hides Instructions (and its Clear row) unless Mode is
+    # Instruct; the menu rebuilds on every redraw, so it follows Mode live.
+    # A stored instruction survives while hidden.
+    model_id = "cosyvoice3_audiocpp"
+    project = Project(tts_model_type=model_id)
+    project.set_model_setting(model_id, "instruction", "Speak warmly.")
+    for mode in ("zero_shot", "cross_lingual"):
+        project.set_model_setting(model_id, "template_name", mode)
+        labels = _cosyvoice3_model_labels(project)
+        assert not any(label.startswith("Instructions") or label == "Clear instructions" for label in labels)
+    assert project.get_model_setting(model_id, "instruction") == "Speak warmly."
+
+    project.set_model_setting(model_id, "template_name", "instruct")
+    labels = _cosyvoice3_model_labels(project)
+    assert labels[0].startswith("Mode ")
+    assert labels[1].startswith("Instructions ") and "Speak warmly." in labels[1]
+    assert labels[2] == "Clear instructions"
+
+
+def test_cosyvoice3_empty_instructions_are_labeled_required_in_instruct_mode():
+    # In Instruct mode the readiness blocker requires instructions, so the
+    # label must not claim they are optional.
+    model_id = "cosyvoice3_audiocpp"
+    project = Project(tts_model_type=model_id)
+    project.set_model_setting(model_id, "template_name", "instruct")
+    labels = _cosyvoice3_model_labels(project)
+    assert labels[1].startswith("Instructions ") and "(" + COL_ERROR + "required for Instruct" in labels[1]
+    assert "optional" not in labels[1]
+    assert "Clear instructions" not in labels
+
+
+def test_invalid_stored_values_show_every_control():
+    # With an invalid stored value the behavior hooks are skipped, so nothing is
+    # hidden: a broken value must never hide the item needed to fix it.
+    model_id = "cosyvoice3_audiocpp"
+    project = Project(tts_model_type=model_id)
+    project.set_model_setting(model_id, "top_k", 0)  # Below the catalog minimum of 1.
+    labels = _cosyvoice3_model_labels(project)
+    assert any(label.startswith("Instructions ") and "optional" in label for label in labels)
+
+
+@pytest.mark.parametrize("model_id, label", [
+    ("breeze_tts_2_audiocpp", "Instructions"),
+    ("omnivoice_audiocpp", "Voice design instructions"),
+])
+def test_other_instruction_controls_stay_visible_and_optional(monkeypatch, model_id, label):
+    # Models without a behavior subclass are unaffected by the new hooks: their
+    # instruction controls (hosted in the Voice clone menu) always show as optional.
+    definition = load_audio_cpp_definitions().models[model_id]
+    state = SimpleNamespace(project=Project(tts_model_type=model_id))
+    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
+                        lambda *_: [MenuItem("Samples", lambda *_: None)])
+    labels = [get_string_from(state, item.label) for item in VoiceAudioCppMenu.make_items(state, definition)]
+    assert labels[0] == "Samples"
+    assert labels[1].startswith(label + " ") and "(optional)" in labels[1]
+
+
+def test_cosyvoice3_invalid_mode_is_shown_and_any_choice_repairs_it(monkeypatch):
+    # An invalid stored Mode must not masquerade as the default: the label shows
+    # the broken value and the submenu marks nothing selected, so picking the
+    # default (Zero-shot) still saves instead of being skipped as "unchanged".
+    from tts_audiobook_tool.menus.menu_util import MenuUtil
+    model_id = "cosyvoice3_audiocpp"
+    definition = load_audio_cpp_definitions().models[model_id]
+    project = Project(tts_model_type=model_id)
+    project.set_model_setting(model_id, "template_name", "sft")
+    monkeypatch.setattr(Project, "save", lambda self: "")
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_audio_cpp_menu.print_feedback",
+                        lambda *_, **__: None)
+    state = SimpleNamespace(project=project)
+    item = ModelAudioCppMenu.make_items(state, definition)[0]
+    label = get_string_from(state, item.label)
+    assert label.startswith("Mode ") and "invalid: 'sft'" in label and "Zero-shot" not in label
+
+    offered = {}
+
+    def fake_options_menu(**kwargs):
+        offered.update(kwargs)
+        # Mirrors MenuUtil.options_menu: a pick equal to current_value is skipped.
+        if kwargs["current_value"] != "zero_shot":
+            kwargs["on_select"]("zero_shot")
+
+    monkeypatch.setattr(MenuUtil, "options_menu", fake_options_menu)
+    item.handler(state, item)
+    assert offered["current_value"] is None
+    # Selecting the default resets storage to "unset", which reads back as valid.
+    assert project.get_model_setting(model_id, "template_name") == "zero_shot"
+    assert "Zero-shot" in get_string_from(state, item.label)

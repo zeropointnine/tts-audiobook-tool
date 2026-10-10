@@ -224,6 +224,7 @@ def test_catalog_helpers_classify_by_backend_kind():
     audio_items = TtsModelType.get_items_by_backend(TtsBackendKind.AUDIO_CPP)
     assert local_items and sgl_items
     assert audio_items == [TtsModelType.require_by_id("breeze_tts_2_audiocpp"), TtsModelType.require_by_id("chatterbox_audiocpp"),
+                           TtsModelType.require_by_id("cosyvoice3_audiocpp"),
                            TtsModelType.require_by_id("dots_audiocpp"),
                            TtsModelType.require_by_id("echo_tts_audiocpp"),
                            TtsModelType.require_by_id("fish_s2_audiocpp"),

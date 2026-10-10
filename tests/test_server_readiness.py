@@ -146,3 +146,28 @@ def test_server_startup_requires_first_voice_transcript(
         with pytest.raises(ModelBindingReached):
             Server()
         assert "Voice clone is missing accompanying transcript." not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("model_id, settings, expected", [
+    ("glm_local", {}, True),
+    # Stores transcripts but clones from the audio alone.
+    ("moss_local", {}, False),
+    # Only Qwen3's Base checkpoint (or an unset type) reads voice samples.
+    ("qwen3tts_local", {}, True),
+    ("qwen3tts_local", {"model_type": "base"}, True),
+    ("qwen3tts_local", {"model_type": "custom_voice"}, False),
+    ("qwen3tts_local", {"model_type": "voice_design"}, False),
+    # No transcript storage at all.
+    ("pocket_local", {}, False),
+])
+def test_server_transcript_check_follows_the_models_runtime_requirement(tmp_path, model_id, settings, expected):
+    # The startup check asks the model's support (via
+    # Tts.requires_reference_transcript) rather than the static storage binding,
+    # so it agrees with the voice pre-flight.
+    from tts_audiobook_tool.server.server import is_missing_required_transcript
+    project = Project(dir_path=str(tmp_path), tts_model_type=model_id,
+                      voice_references=[{"file_name": "a.flac", "transcript": ""}])
+    for name, value in settings.items():
+        project.set_model_setting(model_id, name, value)
+    assert Tts.requires_reference_transcript(project) is expected
+    assert is_missing_required_transcript(project) is expected

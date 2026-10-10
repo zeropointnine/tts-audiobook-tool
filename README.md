@@ -20,7 +20,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [Echo-TTS](https://github.com/jordandare/echo-tts) | | | ✅ |
 | [Fish Speech S2-Pro](https://github.com/fishaudio/fish-speech) | ✅ | ✅ | ✅ |
 | [Fish Speech S1-mini](https://github.com/fishaudio/fish-speech) | ✅ | | |
-| [Fun-CosyVoice3](https://github.com/QwenAudio/CosyVoice) | | ✅ | |
+| [Fun-CosyVoice3](https://github.com/QwenAudio/CosyVoice) | | ✅ | ✅ |
 | [GLM-TTS](https://github.com/zai-org/GLM-TTS) | ✅ | | ✅ |
 | [Higgs Audio V2](https://github.com/boson-ai/higgs-audio) | ✅ | | |
 | [Higgs Audio V3](https://github.com/boson-ai/higgs-audio) | | ✅ | ✅ |
@@ -722,6 +722,11 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Speech speed
 - Seed
 
+**CosyVoice3**
+- Concurrent requests
+- Streaming support (for the stand-alone server and LLM chat mode)
+- Temperature, top_p, top_k, repetition_penalty
+
 **Fish S2-Pro**
 - Streaming support (for the stand-alone server and LLM chat mode)
 - Concurrent requests
@@ -755,6 +760,10 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 **Chatterbox**
 - Multilingual V2, Multilingual V3, and English model variants
 - Exaggeration, CFG, temperature, top_p, top_k, repetition_penalty, seed
+
+**CosyVoice3**
+- Modes: zero-shot, cross-lingual, or instruct
+- Top_k, steps, seed
 
 **dots.tts**
 - SOAR or MeanFlow (whichever the server entry is configured with)
@@ -827,12 +836,13 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-10-09**
+**2026-10-09+**
 
 - Added support for **dots.tts for audio.cpp** (SOAR or MeanFlow)
 - Added support for **Fish S2-Pro for audio.cpp**
 - Added support for **GLM-TTS for audio.cpp**
 - Added support for **IndexTTS2 / IndexTTS2.5 for audio.cpp**
+- Added support for **CosyVoice3 for audio.cpp**
 
 **2026-10-06**
 

@@ -55,8 +55,35 @@ _AUDIO_CPP_GROUP_KEYS = {"match", "parameters", "menu", "reference_transcript", 
                          "language_hint_note", "music_and_trim"}
 _AUDIO_CPP_MATCH_KEYS = {"task", "tasks", "family", "mode", "session_options"}
 _AUDIO_CPP_PARAMETER_KEYS = {"type", "default", "min", "max", "default_sentinel", "request_key", "target",
-                             "input_prompt_suffix"}
+                             "input_prompt_suffix", "choices"}
+_AUDIO_CPP_CHOICE_KEYS = {"value", "label", "description"}
 _AUDIO_CPP_TARGETS = ("top_level", "options")
+
+
+def _parse_audio_cpp_choices(value: Any, default: str, where: str) -> list[dict[str, str]]:
+    """Validate a string parameter's fixed option list (eg CosyVoice3's template).
+
+    Choices are plain data. Behavior that depends on the selected choice
+    belongs in an ``AudioCppModelBehavior`` subclass, not in further choice keys.
+    """
+    if not isinstance(value, list) or not value:
+        _fail(where, "expected a nonempty array of choices")
+    choices: list[dict[str, str]] = []
+    for index, raw in enumerate(value):
+        item_where = f"{where}[{index}]"
+        choice = _object(raw, item_where, _AUDIO_CPP_CHOICE_KEYS)
+        for key in ("value", "label"):
+            if not _field(choice, key, item_where, str).strip():
+                _fail(f"{item_where}.{key}", "must not be empty")
+        description = choice.get("description", "")
+        if type(description) is not str:
+            _fail(f"{item_where}.description", "expected a string")
+        if any(existing["value"] == choice["value"] for existing in choices):
+            _fail(item_where, f"duplicate choice {choice['value']!r}")
+        choices.append({"value": choice["value"], "label": choice["label"], "description": description})
+    if default not in (choice["value"] for choice in choices):
+        _fail(f"{where}", "default must be one of the choices")
+    return choices
 
 
 def _audio_cpp_number(param: dict[str, Any], key: str, where: str, typ: str, value_type: Any) -> int | float:
@@ -98,9 +125,14 @@ def _parse_audio_cpp_parameters(value: Any, where: str) -> dict[str, dict[str, A
             default = _field(param, "default", item_where, str)
             if target != "options":
                 _fail(f"{item_where}.target", "a string parameter must travel in options")
+            choices = (_parse_audio_cpp_choices(param["choices"], default, f"{item_where}.choices")
+                       if "choices" in param else [])
             parameters[name] = {"type": typ, "default": default, "min": None, "max": None,
-                                "default_sentinel": None, "request_key": request_key, "target": target}
+                                "default_sentinel": None, "request_key": request_key, "target": target,
+                                "choices": choices}
             continue
+        if "choices" in param:
+            _fail(f"{item_where}.choices", "only supported for string parameters")
         value_type = int if typ == "int" else (int, float)
         minimum = _audio_cpp_number(param, "min", item_where, typ, value_type)
         default = _audio_cpp_number(param, "default", item_where, typ, value_type)
@@ -135,6 +167,8 @@ def _parse_audio_cpp_menu(value: Any, parameters: dict[str, dict[str, Any]], whe
             control = _object(item, item_where, {"kind", "target_menu"})
         elif kind == "voice_instructions":
             control = _object(item, item_where, {"kind", "parameter", "target_menu"})
+        elif kind == "choice":
+            control = _object(item, item_where, {"kind", "parameter", "label", "target_menu"})
         elif "kind" not in item:
             control = _object(item, item_where, {"parameter", "label", "target_menu"})
         else:
@@ -153,15 +187,22 @@ def _parse_audio_cpp_menu(value: Any, parameters: dict[str, dict[str, Any]], whe
             # control, so name it explicitly rather than by position.
             if parameters[name]["type"] != "str":
                 _fail(f"{item_where}.{name}", "voice_instructions requires a string parameter")
+            if parameters[name]["choices"]:
+                _fail(f"{item_where}.{name}", "a parameter with choices requires the choice control")
             menu.append({"kind": kind, "parameter": name, "target_menu": target_menu})
             continue
-        if parameters[name]["type"] == "str":
-            _fail(f"{item_where}.{name}", "a string parameter requires the voice_instructions control")
+        if kind == "choice":
+            if parameters[name]["type"] != "str" or not parameters[name]["choices"]:
+                _fail(f"{item_where}.{name}", "choice requires a string parameter with choices")
+        elif parameters[name]["type"] == "str":
+            _fail(f"{item_where}.{name}", "a string parameter requires the voice_instructions control "
+                                          "(or the choice control, when it declares choices)")
         label = _field(control, "label", item_where, str)
         if not label:
             _fail(f"{item_where}.{name}.label", "must not be empty")
-        menu.append({"kind": "parameter", "parameter": name, "label": label, "target_menu": target_menu})
-    if (sorted(item["parameter"] for item in menu if item["kind"] in ("parameter", "voice_instructions"))
+        menu.append({"kind": "choice" if kind == "choice" else "parameter", "parameter": name, "label": label,
+                     "target_menu": target_menu})
+    if (sorted(item["parameter"] for item in menu if item["kind"] in ("parameter", "voice_instructions", "choice"))
             != sorted(parameters)):
         _fail(where, "expected each parameter exactly once")
     if (sum(item["kind"] == "seed" for item in menu) != 1

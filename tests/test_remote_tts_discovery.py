@@ -379,6 +379,16 @@ def test_audio_detector_matches_dots_under_either_task_but_not_streaming():
     assert audio_cpp_detection.detect_audio_cpp_models([{**dots, "mode": "streaming"}]) == []
 
 
+def test_audio_detector_matches_cosyvoice3_under_either_task():
+    # The session runs the same reference-conditioned path for `tts` and `clon`.
+    cosy = {"id": "my-cosyvoice3", "family": "cosyvoice3", "task": "tts", "mode": "offline",
+            "session_options": {}}
+    expected = [(TtsModelType.require_by_id("cosyvoice3_audiocpp"), "my-cosyvoice3")]
+    assert audio_cpp_detection.detect_audio_cpp_models([cosy]) == expected
+    assert audio_cpp_detection.detect_audio_cpp_models([{**cosy, "task": "clon"}]) == expected
+    assert audio_cpp_detection.detect_audio_cpp_models([{**cosy, "mode": "streaming"}]) == []
+
+
 def test_audio_detector_matches_indextts2_either_variant_and_task():
     # IndexTTS2 and IndexTTS2.5 share family `index_tts2` and identical
     # metadata, so both select the one entry under either clone task token.
