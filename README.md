@@ -836,6 +836,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
+**2026-10-10**
+
+- "Quick generate" (within `Generate > Review sound segments`) now allows for A/B playback comparisons before saving new version.
+
 **2026-10-09+**
 
 - Added support for **dots.tts for audio.cpp** (SOAR or MeanFlow)

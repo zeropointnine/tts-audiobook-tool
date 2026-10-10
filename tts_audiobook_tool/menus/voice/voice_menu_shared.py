@@ -234,14 +234,13 @@ class VoiceMenuShared:
 
             # Retain sidecar text for every primary sample, so switching to a
             # transcript-requiring model does not lose available reference text.
-            transcript_path = Path(path).with_suffix(".txt")
-            if transcript_path.exists():
-                transcript = text_util.load_text_file(str(transcript_path), errors="replace").strip()
-                if transcript:
-                    printt(f"Loaded transcript text from")
-                    printt(f"{transcript_path}:")
-                    printt(f"{COL_DIM_ITALICS}{transcript}")
-                    printt()
+            sidecar = VoiceMenuShared.load_transcript_sidecar(path)
+            if sidecar:
+                transcript_path, transcript = sidecar
+                printt(f"Loaded transcript text from")
+                printt(f"{transcript_path}:")
+                printt(f"{COL_DIM_ITALICS}{transcript}")
+                printt()
 
             if not transcript:
                 # [2] No sidecar text: transcribe every primary sample.
@@ -272,6 +271,27 @@ class VoiceMenuShared:
 
         if force_enter_prompt:
             ask.ask_enter_to_continue()
+
+    @staticmethod
+    def load_transcript_sidecar(path: str) -> tuple[Path, str] | None:
+        """
+        Returns the transcript text file accompanying a voice sample and its
+        stripped text, if any.
+        Checks "voice.txt" first, then "voice.flac.txt"; a blank or unreadable
+        candidate is skipped in favor of the next one.
+        """
+        audio_path = Path(path)
+        candidates = [
+            audio_path.with_suffix(".txt"),
+            audio_path.with_name(audio_path.name + ".txt"),
+        ]
+        for candidate in candidates:
+            if not candidate.is_file():
+                continue
+            text = text_util.load_text_file(str(candidate), errors="replace").strip()
+            if text:
+                return candidate, text
+        return None
 
     @staticmethod
     def transcribe_voice_sample_to_text(state: State, sound: "Sound") -> tuple[str, str]:

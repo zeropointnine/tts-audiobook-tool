@@ -211,6 +211,23 @@ def test_import_nonrequiring_model_retains_sidecar_but_secondary_ignores_it(tmp_
     assert project.voice_references == ([] if secondary else [{"file_name": "clip.flac", "transcript": "Sidecar text"}])
 
 
+def test_transcript_sidecar_prefers_stem_txt_and_skips_blank(tmp_path):
+    # "clip.txt" wins over "clip.wav.txt", but a blank one falls through to
+    # the appended-extension file instead of hiding it.
+    path = tmp_path / "clip.wav"
+    stem_txt = path.with_suffix(".txt")
+    appended_txt = tmp_path / "clip.wav.txt"
+    appended_txt.write_text("Appended text", encoding="utf-8")
+    assert VoiceMenuShared.load_transcript_sidecar(str(path)) == (appended_txt, "Appended text")
+    stem_txt.write_text("  \n", encoding="utf-8")
+    assert VoiceMenuShared.load_transcript_sidecar(str(path)) == (appended_txt, "Appended text")
+    stem_txt.write_text("Stem text\n", encoding="utf-8")
+    assert VoiceMenuShared.load_transcript_sidecar(str(path)) == (stem_txt, "Stem text")
+    appended_txt.unlink()
+    stem_txt.write_text("", encoding="utf-8")
+    assert VoiceMenuShared.load_transcript_sidecar(str(path)) is None
+
+
 def _setup_short_import(tmp_path, monkeypatch, raw_seconds, trimmed_seconds):
     path = tmp_path / "clip.wav"
     path.write_bytes(b"sound")

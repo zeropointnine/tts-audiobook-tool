@@ -14,6 +14,7 @@ from tts_audiobook_tool.project_support.model_settings import REGISTRY, SettingR
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.project_support.segment_staging_util import delete_segments_temp
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.tts import Tts
@@ -143,7 +144,12 @@ class GenerateMenu:
         if range_save_error:
             ask.ask_error(range_save_error)
 
-        run_result = run_content_textual_app(GenerateEditor(state))
+        try:
+            run_result = run_content_textual_app(GenerateEditor(state))
+        finally:
+            # Housekeeping: quick-gen output that was never kept. Any owned
+            # worker job was cancelled or reset by the modal's teardown.
+            delete_segments_temp(state.project.dir_path)
         if not isinstance(run_result, ContentAppCompleted):
             ask.ask_error(run_result.message)
             return

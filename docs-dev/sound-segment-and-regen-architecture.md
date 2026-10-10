@@ -131,7 +131,7 @@ Key behaviors:
 
 - Failure is computed **dynamically** against the project's current "Word error tolerance" setting — changing tolerance can change which segments are considered failed without touching any files.
 - If there are multiple files for the same index (multiple generation attempts), the index is considered "failed" if **any** of them exceeds the threshold.
-- `get_best_item_for()` selects the file with the lowest `num_errors` for each index. A value of `-1` is treated as 9999 (worst possible) for ranking purposes.
+- `get_best_item_for()` selects the file with the lowest rank for each index, via `get_segment_error_rank()` (`sound_segment_util.py`). A file name carries a count only when it is non-zero, so an untagged take **with** an STT `.json` sidecar was validated clean and ranks 0; an untagged take without one (never validated, or legacy) ranks 9999 (worst). Quick-gen staging (`segment_staging_util.py`) uses the same function.
 - `get_word_error_counts_in_generate_range()` returns the `num_errors` for existing items — used during regen to track whether a retry improved the error count.
 - `delete_redundants_for()` keeps only the best (lowest-error) file per index and deletes the rest.
 
@@ -196,7 +196,7 @@ A segment with exactly 99 genuine word errors is indistinguishable from a music-
 
 ### 2. `-1` / `9999` asymmetry for legacy files
 
-`is_segment_failed()` treats `num_errors == -1` as **not-failed** (conservative). `get_best_item_for()` treats `-1` as **9999** (worst possible rank). A file with an unknown error count is therefore safe from re-generation but ranks last when multiple candidates exist for the same index. This asymmetry is intentional but could be surprising — worth a comment at the call sites.
+`is_segment_failed()` treats `num_errors == -1` as **not-failed** (conservative). `get_best_item_for()` ranks an untagged file without an STT sidecar as **9999** (worst possible rank). Such a file is therefore safe from re-generation but ranks last when multiple candidates exist for the same index. (An untagged file *with* a sidecar is a validated clean take and ranks 0; before that distinction, a failed→clean retry pruned the clean take.)
 
 ### 3. "strictness" vs "tolerance" nomenclature
 

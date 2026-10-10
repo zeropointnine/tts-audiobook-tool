@@ -24,6 +24,7 @@ from tts_audiobook_tool.gen_timeout_util import make_backend_gen_timeout_tracker
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
+from tts_audiobook_tool.project_support.segment_staging_util import prune_staged_segments
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project import Project
@@ -94,7 +95,8 @@ class GenerateUtil:
             state: State,
             indices_set: set[int],
             batch_size: int,
-            is_regen: bool
+            is_regen: bool,
+            staging_dir: str = "",
     ) -> bool:
         """
         Subroutine for doing a series of audio generations to files
@@ -102,6 +104,11 @@ class GenerateUtil:
 
         :param batch_size:
             When set to 1, batch mode is effectively disabled.
+        :param staging_dir:
+            When set, output is saved to this directory for later review instead
+            of the project's segments directory: existing project segments are
+            left untouched, redundant takes are pruned within the staging
+            directory, and the project's generation range is not updated.
 
         Returns:
             True if ended because interrupted (user pressed control-c)
@@ -450,12 +457,16 @@ class GenerateUtil:
                         is_real_time=False,
                         voice_tag=getattr(validation_result, "voice_tag", ""),
                         stt_info=stt_info,
+                        dir_path=staging_dir or None,
                     )
                     if err:
                         save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
                     else:
                         saved_indices.add(index)
-                        project.sound_segments.delete_redundants_for(index)
+                        if staging_dir:
+                            prune_staged_segments(staging_dir, index)
+                        else:
+                            project.sound_segments.delete_redundants_for(index)
 
                         url = saved_path
                         text = Path(saved_path).name
@@ -539,8 +550,9 @@ class GenerateUtil:
             printt()
 
         # Update the persisted queue once per generation run, based only on files
-        # that were actually saved successfully.
-        if saved_indices:
+        # that were actually saved successfully. Staged output is not part of
+        # the project until the user accepts it.
+        if saved_indices and not staging_dir:
             selected_indices = ProjectUtil.get_indices_to_generate(project)
             remaining_indices = selected_indices - saved_indices
             updated_range_string = RangeStringUtil.make_ranges_string(
@@ -905,17 +917,23 @@ class GenerateUtil:
         validation_result: ValidationResult,
         is_real_time: bool,
         voice_tag: str = "",
-        stt_info: SegmentTranscriptData | None = None
+        stt_info: SegmentTranscriptData | None = None,
+        dir_path: str | None = None,
     ) -> tuple[str, str]:
         """
         Saves sound segment and timing info json
         Returns error string (if any), saved file path
+
+        :param dir_path:
+            Output directory; defaults to the project's realtime or segments
+            directory. The sidecar json is always saved alongside the sound.
         """
 
         project = state.project
 
         # Save sound
-        dir_path = project.realtime_path if is_real_time else project.sound_segments_path
+        if not dir_path:
+            dir_path = project.realtime_path if is_real_time else project.sound_segments_path
         os.makedirs(dir_path, exist_ok=True)
 
         file_name = SoundSegmentUtil.make_file_name(

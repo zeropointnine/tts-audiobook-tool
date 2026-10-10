@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -45,6 +46,7 @@ from tts_audiobook_tool.textual.quick_gen_modal import (
     QuickGenJob,
     QuickGenModal,
     QuickGenResult,
+    QuickGenReview,
 )
 from textual_editor_stubs import (
     make_phrase_group,
@@ -283,40 +285,69 @@ def patch_quick_job(
     produce_segment: bool = True,
     status: GenerationTerminalStatus = GenerationTerminalStatus.COMPLETED,
 ):
-    """Patch the editor's job factory with a fake worker job.
+    """Patch the editor's job factory with a fake staged worker job.
 
-    The job's submit stands in for the model worker: it "writes" the
-    regenerated segment into the stub catalog, then a canned finish event is
-    delivered when the modal polls the worker.
+    The job's submit stands in for the model worker: it writes a staged
+    segment file into a real per-job staging directory, then a canned finish
+    event is delivered when the modal polls the worker. Accepting it is faked
+    against the stub catalog, and review playback is stubbed out.
     """
     submitted: list[int] = []
+    staging_root = Path(tempfile.mkdtemp(prefix="quick-gen-test-"))
 
     def make_job(_state, phrase_index: int) -> QuickGenJob:
+        staging_dir = staging_root / f"job-{len(submitted)}"
+
         def submit() -> str:
             submitted.append(phrase_index)
             if produce_segment:
-                project.sound_segments.sound_segments_map[phrase_index] = [  # type: ignore[union-attr]
-                    StubSoundSegment("quick.flac")
-                ]
+                staging_dir.mkdir(parents=True)
+                write_staged_segment(staging_dir, phrase_index)
             return "job"
 
         return QuickGenJob(
             title=f"Quick generate - line {phrase_index + 1}",
             submit=submit,
             problems=problems,
+            review=QuickGenReview(str(staging_dir), phrase_index),
         )
 
+    def accept(project_arg, phrase_index: int, staged_path: Path) -> str:
+        accepted.append((phrase_index, staged_path.name))
+        project_arg.sound_segments.sound_segments_map[phrase_index] = [
+            StubSoundSegment("quick.flac")
+        ]
+        return ""
+
+    accepted: list[tuple[int, str]] = []
     events = [[GenerationFinished("job", status, "")]]
     patches = [
         patch.object(generate_editor_module, "make_generation_job", make_job),
+        patch.object(generate_editor_module, "accept_staged_segment", accept),
         patch.object(
             ModelWorker,
             "drain_events",
             staticmethod(lambda max_events=1000: events.pop(0) if events else []),
         ),
         patch.object(worker_app_module, "EVENT_POLL_SECONDS", 0.02),
+        patch.object(
+            PlaySoundUtil, "play_sound_file_async", return_value=("review-sound", "")
+        ),
+        patch.object(PlaySoundUtil, "current_sound_id", return_value="review-sound"),
+        patch.object(PlaySoundUtil, "stop_sound_async"),
     ]
-    return submitted, patches
+    submitted_info = SimpleNamespace(
+        indices=submitted, accepted=accepted, staging_root=staging_root
+    )
+    return submitted_info, patches
+
+
+def write_staged_segment(staging_dir: Path, phrase_index: int) -> Path:
+    path = staging_dir / (
+        f"[{phrase_index + 1:05d}] [0123456789abcdef] [none] [voice] new.flac"
+    )
+    path.write_bytes(b"flac")
+    return path
 
 
 def run_with_patches(patches, coroutine) -> None:
@@ -353,7 +384,7 @@ def test_q_preflight_problems_show_in_modal_without_saving_or_deleting() -> None
     # Problems (readiness, voices, busy worker) are listed in the modal itself
     # and leave the project untouched: no queue save, no deleted segment.
     app, project = make_app(2)
-    submitted, patches = patch_quick_job(
+    info, patches = patch_quick_job(
         project, problems=("Choose a voice", "Configure the model")
     )
 
@@ -371,14 +402,15 @@ def test_q_preflight_problems_show_in_modal_without_saving_or_deleting() -> None
             assert app.modal_session_active is False
 
     run_with_patches(patches, exercise())
-    assert submitted == []
+    assert info.indices == []
 
 
-def test_q_saves_staged_range_deletes_item_and_keeps_editor_alive() -> None:
-    # Quick gen is in place: the editor stays running underneath the modal,
-    # after persisting the staged queue and deleting the line's old sound.
+def test_q_leaves_project_untouched_while_job_runs() -> None:
+    # Quick gen is staged and in place: the editor stays running underneath
+    # the modal, the line's old sound survives, and the staged queue edit is
+    # not saved behind the user's back.
     app, project = make_app(3, {1, 2})
-    submitted, patches = patch_quick_job(project, status=GenerationTerminalStatus.FAILED)
+    info, patches = patch_quick_job(project, status=GenerationTerminalStatus.FAILED)
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
@@ -386,17 +418,17 @@ def test_q_saves_staged_range_deletes_item_and_keeps_editor_alive() -> None:
             await pilot.pause(0.3)
             assert isinstance(app.screen, QuickGenModal)
             assert app.is_running is True
-            assert project.generate_range_string == "1"
-            assert project.save_calls[0] == "1"
-            assert project.sound_segments.deleted_index_batches == [{1}]
+            assert project.save_calls == []
+            assert project.sound_segments.deleted_index_batches == []
+            assert 1 in app.generated_indices
 
     run_with_patches(patches, exercise())
-    assert submitted == [1]
+    assert info.indices == [1]
 
 
 def test_q_uses_highlighted_project_index_under_filter() -> None:
     app, project = make_app(5, {1, 3})
-    submitted, patches = patch_quick_job(project, status=GenerationTerminalStatus.FAILED)
+    info, patches = patch_quick_job(project, status=GenerationTerminalStatus.FAILED)
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
@@ -404,41 +436,56 @@ def test_q_uses_highlighted_project_index_under_filter() -> None:
             await pilot.pause(0.3)
 
     run_with_patches(patches, exercise())
-    assert project.sound_segments.deleted_index_batches == [{3}]
-    assert submitted == [3]
+    assert info.indices == [3]
 
 
-def test_clean_quick_gen_refreshes_row_keeps_selection_and_plays() -> None:
-    # On success the modal disappears, the same editor instance resumes with the
-    # selection intact and the regenerated row refreshed, and the new sound plays.
+def test_quick_gen_review_enter_keeps_new_sound_and_refreshes_row() -> None:
+    # A staged result waits in the review panel; ENTER keeps it, and the same
+    # editor instance resumes with the selection intact and the row refreshed.
     app, project = make_app(4, {0, 1, 2, 3})
-    submitted, patches = patch_quick_job(project)
+    info, patches = patch_quick_job(project)
 
     async def exercise() -> None:
-        with (
-            patch.object(
-                PlaySoundUtil,
-                "play_sound_file_async",
-                return_value=("quick-sound", ""),
-            ) as play_sound,
-            patch.object(
-                PlaySoundUtil, "current_sound_id", return_value="quick-sound"
-            ),
-        ):
-            async with app.run_test() as pilot:
-                await pilot.press("down", "down", "q")
-                await pilot.pause(0.6)
-                assert not isinstance(app.screen, QuickGenModal)
-                assert app.is_running is True
-                assert app.selected_index == 2
-                assert app.selected_indices == {2}
-                assert app.modal_session_active is False
-                assert 2 in app.generated_indices
-                assert app.playing_phrase_index == 2
-                play_sound.assert_called_once_with("/project/segments/quick.flac")
+        async with app.run_test() as pilot:
+            await pilot.press("down", "down", "q")
+            await pilot.pause(0.6)
+            assert isinstance(app.screen, QuickGenModal)
+            assert app.screen.review_pending
+            await pilot.press("enter")
+            await pilot.pause()
+            assert not isinstance(app.screen, QuickGenModal)
+            assert app.is_running is True
+            assert app.selected_index == 2
+            assert app.selected_indices == {2}
+            assert app.modal_session_active is False
+            assert 2 in app.generated_indices
 
     run_with_patches(patches, exercise())
-    assert submitted == [2]
+    assert info.indices == [2]
+    assert [index for index, _ in info.accepted] == [2]
+    # The job's staging directory is cleaned up once the decision is applied.
+    assert not (info.staging_root / "job-1").exists()
+
+
+def test_quick_gen_review_escape_discards_new_sound() -> None:
+    # ESC in the review panel discards the staged take; the old audio stays.
+    app, project = make_app(3, {0, 1, 2})
+    info, patches = patch_quick_job(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down", "q")
+            await pilot.pause(0.6)
+            assert app.screen.review_pending  # type: ignore[attr-defined]
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not isinstance(app.screen, QuickGenModal)
+            assert 1 in app.generated_indices
+
+    run_with_patches(patches, exercise())
+    assert info.accepted == []
+    assert project.sound_segments.deleted_index_batches == []
+    assert not any(info.staging_root.iterdir())
 
 
 def test_quick_gen_preserves_multiple_selection_anchor_and_scroll() -> None:
@@ -448,34 +495,29 @@ def test_quick_gen_preserves_multiple_selection_anchor_and_scroll() -> None:
     _, patches = patch_quick_job(project)
 
     async def exercise() -> None:
-        with (
-            patch.object(
-                PlaySoundUtil, "play_sound_file_async", return_value=("quick-sound", "")
-            ),
-            patch.object(PlaySoundUtil, "current_sound_id", return_value="quick-sound"),
-            patch.object(PlaySoundUtil, "stop_sound_async"),
-        ):
-            async with app.run_test(size=(80, 24)) as pilot:
-                await pilot.press("end", "up", "shift+up", "shift+up")
-                option_list = app.query_one("#line-list", NonWrappingOptionList)
-                old_scroll_offset = option_list.scroll_offset
-                assert old_scroll_offset.y > 0
-                assert app.selected_index == 36
-                assert app.selected_indices == {36, 37, 38}
-                assert app.selection_anchor_index == 38
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("end", "up", "shift+up", "shift+up")
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            old_scroll_offset = option_list.scroll_offset
+            assert old_scroll_offset.y > 0
+            assert app.selected_index == 36
+            assert app.selected_indices == {36, 37, 38}
+            assert app.selection_anchor_index == 38
 
-                await pilot.press("q")
-                await pilot.pause(0.6)
-                assert not isinstance(app.screen, QuickGenModal)
-                assert app.selected_index == 36
-                assert app.selected_indices == {36, 37, 38}
-                assert app.selection_anchor_index == 38
-                assert option_list.inactive_selection_indices == {37, 38}
-                assert option_list.scroll_offset == old_scroll_offset
+            await pilot.press("q")
+            await pilot.pause(0.6)
+            await pilot.press("enter")
+            await pilot.pause()
+            assert not isinstance(app.screen, QuickGenModal)
+            assert app.selected_index == 36
+            assert app.selected_indices == {36, 37, 38}
+            assert app.selection_anchor_index == 38
+            assert option_list.inactive_selection_indices == {37, 38}
+            assert option_list.scroll_offset == old_scroll_offset
 
-                await pilot.press("shift+up")
-                assert app.selected_indices == {35, 36, 37, 38}
-                assert app.selection_anchor_index == 38
+            await pilot.press("shift+up")
+            assert app.selected_indices == {35, 36, 37, 38}
+            assert app.selection_anchor_index == 38
 
     run_with_patches(patches, exercise())
 
@@ -488,11 +530,11 @@ def test_quick_gen_preserves_multiple_selection_anchor_and_scroll() -> None:
         (FilterType.GENERATED_WITH_ERRORS, 4),
     ],
 )
-def test_quick_gen_plays_filtered_out_phrase_and_selects_nearest_remaining_line(
+def test_kept_quick_gen_selects_nearest_remaining_line_when_filtered_out(
     filter_type: FilterType, expected_highlight: int
 ) -> None:
-    # A clean segment leaves these filters, but playback still belongs to the
-    # requested phrase; the highlight moves nearby instead of jumping to row 0.
+    # A kept clean segment leaves these filters; the highlight moves nearby
+    # instead of jumping to row 0.
     generated_indices = set() if filter_type == FilterType.UNGENERATED else {0, 2, 4}
     app, project = make_app(5, generated_indices)
     for index in generated_indices:
@@ -503,28 +545,21 @@ def test_quick_gen_plays_filtered_out_phrase_and_selects_nearest_remaining_line(
     _, patches = patch_quick_job(project)
 
     async def exercise() -> None:
-        with (
-            patch.object(
-                PlaySoundUtil, "play_sound_file_async", return_value=("quick-sound", "")
-            ) as play_sound,
-            patch.object(PlaySoundUtil, "current_sound_id", return_value="quick-sound"),
-            patch.object(PlaySoundUtil, "stop_sound_async"),
-        ):
-            async with app.run_test() as pilot:
-                app.handle_filter_selection(filter_type)
-                option_list = app.query_one("#line-list", NonWrappingOptionList)
-                option_list.highlighted = app.phrase_indices.index(2)
-                await pilot.pause()
-                await pilot.press("q")
-                await pilot.pause(0.6)
+        async with app.run_test() as pilot:
+            app.handle_filter_selection(filter_type)
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            option_list.highlighted = app.phrase_indices.index(2)
+            await pilot.pause()
+            await pilot.press("q")
+            await pilot.pause(0.6)
+            await pilot.press("enter")
+            await pilot.pause()
 
-                assert app.filter_type == filter_type
-                assert 2 not in app.phrase_indices
-                assert app.highlighted_content_line_index() == expected_highlight
-                assert app.selected_indices == {app.selected_index}
-                assert app.selection_anchor_index == app.selected_index
-                assert app.playing_phrase_index == 2
-                play_sound.assert_called_once_with("/project/segments/quick.flac")
+            assert app.filter_type == filter_type
+            assert 2 not in app.phrase_indices
+            assert app.highlighted_content_line_index() == expected_highlight
+            assert app.selected_indices == {app.selected_index}
+            assert app.selection_anchor_index == app.selected_index
 
     run_with_patches(patches, exercise())
 
@@ -550,80 +585,114 @@ def test_quick_gen_preserves_surviving_selection_across_section_row_removal() ->
     _, patches = patch_quick_job(project)
 
     async def exercise() -> None:
-        with (
-            patch.object(
-                PlaySoundUtil, "play_sound_file_async", return_value=("quick-sound", "")
-            ),
-            patch.object(PlaySoundUtil, "current_sound_id", return_value="quick-sound"),
-            patch.object(PlaySoundUtil, "stop_sound_async"),
-        ):
-            async with app.run_test() as pilot:
-                app.handle_filter_selection(FilterType.UNGENERATED)
-                await pilot.press(
-                    "end", "shift+up", "shift+up", "shift+up", "shift+up", "shift+up"
-                )
-                assert app.selected_content_line_indices() == {0, 1, 2, 3, 4}
-                assert app.selection_anchor_index == 6
-                assert app.highlighted_content_line_index() == 0
+        async with app.run_test() as pilot:
+            app.handle_filter_selection(FilterType.UNGENERATED)
+            await pilot.press(
+                "end", "shift+up", "shift+up", "shift+up", "shift+up", "shift+up"
+            )
+            assert app.selected_content_line_indices() == {0, 1, 2, 3, 4}
+            assert app.selection_anchor_index == 6
+            assert app.highlighted_content_line_index() == 0
 
-                await pilot.press("q")
-                await pilot.pause(0.6)
-                assert len(app.list_items) == 5
-                assert isinstance(app.list_items[0], GenerateSectionItem)
-                assert app.highlighted_content_line_index() == 1
-                assert app.selected_content_line_indices() == {1, 2, 3, 4}
-                assert app.selected_indices == {0, 1, 2, 3, 4}
-                assert app.selection_anchor_index == 4
-                assert app.playing_phrase_index == 0
+            await pilot.press("q")
+            await pilot.pause(0.6)
+            await pilot.press("enter")
+            await pilot.pause()
+            assert len(app.list_items) == 5
+            assert isinstance(app.list_items[0], GenerateSectionItem)
+            assert app.highlighted_content_line_index() == 1
+            assert app.selected_content_line_indices() == {1, 2, 3, 4}
+            assert app.selected_indices == {0, 1, 2, 3, 4}
+            assert app.selection_anchor_index == 4
 
     run_with_patches(patches, exercise())
 
 
-def test_completed_quick_gen_plays_when_no_filtered_rows_remain() -> None:
-    # An empty filtered view has no highlight at all, but still has new audio.
-    app, project = make_app(1, set())
-    app.handle_filter_selection(FilterType.UNGENERATED)
-    project.sound_segments.sound_segments_map[0] = [StubSoundSegment("quick.flac")]
-    with patch.object(app, "play_sound_for_phrase") as play_sound:
+def test_failed_keep_leaves_line_queued_and_ungenerated() -> None:
+    # A keep that fails (and rolls back) reports the error but must not drop
+    # the still-ungenerated line from the queue saved on exit.
+    app, _project = make_app(2, set())
+    app.staged_queued_indices = {0}
+    with (
+        patch.object(
+            generate_editor_module,
+            "accept_staged_segment",
+            return_value="Couldn't keep new sound: OSError: disk full",
+        ),
+        patch.object(app, "notify") as notify,
+    ):
         app.handle_quick_gen_result(
-            QuickGenResult(GenerationTerminalStatus.COMPLETED), 0
+            QuickGenResult(
+                GenerationTerminalStatus.COMPLETED,
+                staged_path="/tmp/staging/new.flac",
+                accepted=True,
+            ),
+            0,
+        )
+    notify.assert_called_once()
+    assert app.staged_queued_indices == {0}
+    assert 0 in app.ungenerated_indices
+
+
+def test_kept_quick_gen_unqueues_line_when_no_filtered_rows_remain() -> None:
+    # An empty filtered view has no highlight at all; keeping a staged take
+    # still marks the line generated and drops it from the staged queue.
+    app, project = make_app(1, set())
+    app.staged_queued_indices = {0}
+    app.handle_filter_selection(FilterType.UNGENERATED)
+
+    def accept(project_arg, phrase_index: int, staged_path: Path) -> str:
+        project_arg.sound_segments.sound_segments_map[phrase_index] = [
+            StubSoundSegment("quick.flac")
+        ]
+        return ""
+
+    with patch.object(generate_editor_module, "accept_staged_segment", accept):
+        app.handle_quick_gen_result(
+            QuickGenResult(
+                GenerationTerminalStatus.COMPLETED,
+                staged_path="/tmp/staging/new.flac",
+                accepted=True,
+            ),
+            0,
         )
     assert app.phrase_indices == []
     assert app.selected_index is None
     assert app.selected_indices == set()
     assert app.selection_anchor_index is None
-    play_sound.assert_called_once_with(0)
+    assert 0 in app.generated_indices
+    assert app.staged_queued_indices == set()
 
 
-def test_failed_quick_gen_leaves_line_ungenerated_and_does_not_play() -> None:
-    # Delete-first is retained: a failed job leaves the line without audio, and
-    # nothing autoplays once the user closes the modal.
+def test_failed_quick_gen_keeps_original_sound_and_shows_no_review() -> None:
+    # Without a staged candidate there is nothing to review: the modal shows
+    # its summary, ESC closes it, and the line keeps its original audio.
     app, project = make_app(3, {0, 1, 2})
-    submitted, patches = patch_quick_job(
+    info, patches = patch_quick_job(
         project, produce_segment=False, status=GenerationTerminalStatus.FAILED
     )
 
     async def exercise() -> None:
-        with patch.object(PlaySoundUtil, "play_sound_file_async") as play_sound:
-            async with app.run_test() as pilot:
-                await pilot.press("down", "q")
-                await pilot.pause(0.6)
-                assert isinstance(app.screen, QuickGenModal)
-                await pilot.press("escape")
-                await pilot.pause()
-                assert not isinstance(app.screen, QuickGenModal)
-                assert 1 in app.ungenerated_indices
-                assert 1 not in app.generated_indices
-                play_sound.assert_not_called()
+        async with app.run_test() as pilot:
+            await pilot.press("down", "q")
+            await pilot.pause(0.6)
+            assert isinstance(app.screen, QuickGenModal)
+            assert not app.screen.review_pending
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not isinstance(app.screen, QuickGenModal)
+            assert 1 in app.generated_indices
+            PlaySoundUtil.play_sound_file_async.assert_not_called()  # type: ignore[attr-defined]
 
     run_with_patches(patches, exercise())
+    assert info.accepted == []
 
 
 def test_editor_find_and_select_all_are_blocked_while_modal_is_open() -> None:
     # The editor's priority bindings resolve before a modal sees the key, so
     # they are disabled for the duration of the session.
     app, project = make_app(2)
-    submitted, patches = patch_quick_job(project, problems=("Choose a voice",))
+    _, patches = patch_quick_job(project, problems=("Choose a voice",))
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
@@ -1344,8 +1413,7 @@ def test_q_in_info_dialog_closes_it_and_quick_generates_displayed_segment() -> N
                 assert app.is_running is True
 
     run_with_patches(patches, exercise())
-    assert project.sound_segments.deleted_index_batches == [{1}]
-    assert submitted == [1]
+    assert submitted.indices == [1]
 
 
 def test_info_dialog_omits_duration_when_audio_load_fails() -> None:

@@ -71,6 +71,47 @@ def test_clean_quick_generation_retries_then_omits_metrics_summary(monkeypatch) 
     project.save.assert_called_once_with()
 
 
+def test_staged_generation_leaves_project_segments_and_range_alone(monkeypatch) -> None:
+    # A staged (reviewable) run saves into the staging directory, prunes takes
+    # there instead of in segments/, and does not touch the generation range.
+    monkeypatch.setattr(generate_util, "printt", lambda text="": None)
+    phrase_group = PhraseGroup([Phrase("Hello world.", Reason.SENTENCE)])
+    sound_segments = MagicMock()
+    sound_segments.get_word_error_counts_in_generate_range.return_value = {}
+    project = SimpleNamespace(
+        max_retries=1,
+        phrase_groups=[phrase_group],
+        sound_segments=sound_segments,
+        generate_range_string="all",
+        save=MagicMock(return_value=""),
+    )
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=project,
+            prefs=SimpleNamespace(stt_variant=None, stt_config=None, save_debug_files=False),
+        ),
+    )
+    results = [StubValidationResult(True), StubValidationResult(False)]
+
+    with (
+        generate_files_mock_stack(lambda **_: [results.pop(0)]),
+        patch.object(generate_util, "prune_staged_segments") as prune,
+    ):
+        save = cast(MagicMock, GenerateUtil.save_sound_and_timing_json)
+        did_interrupt = GenerateUtil.generate_files(
+            state, {0}, batch_size=1, is_regen=True, staging_dir="/staging/job"
+        )
+        save_dirs = [c.kwargs["dir_path"] for c in save.call_args_list]
+
+    assert not did_interrupt
+    assert save_dirs == ["/staging/job", "/staging/job"]
+    assert prune.call_args_list == [call("/staging/job", 0), call("/staging/job", 0)]
+    sound_segments.delete_redundants_for.assert_not_called()
+    assert project.generate_range_string == "all"
+    project.save.assert_not_called()
+
+
 def test_failed_quick_generation_keeps_metrics_summary(monkeypatch) -> None:
     output: list[str] = []
     monkeypatch.setattr(generate_util, "printt", lambda text="": output.append(text))

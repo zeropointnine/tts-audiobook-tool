@@ -14,6 +14,8 @@ ASSETS_DIR_NAME = "assets"
 CHROME_USER_DATA_DIR_NAME = "chromium-user-data"
 
 PROJECT_SOUND_SEGMENTS_SUBDIR = "segments"
+# Pending (not yet accepted) quick-generation outputs; disposable.
+PROJECT_SEGMENTS_TEMP_SUBDIR = "segments_temp"
 PROJECT_CONCAT_SUBDIR = "combined"
 PROJECT_VOICE_SUBDIR = "voice"
 PROJECT_REALTIME_OUTPUT_SUBDIR = "realtime"

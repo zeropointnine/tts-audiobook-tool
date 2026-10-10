@@ -31,6 +31,7 @@ from tts_audiobook_tool.textual.quick_gen_modal import (
     QuickGenJob,
     QuickGenModal,
     QuickGenResult,
+    QuickGenReview,
 )
 from tts_audiobook_tool.textual.worker_content import WorkerLogContentArea
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -548,15 +549,164 @@ def test_exit_during_reset_finishes_existing_reset_once(monkeypatch) -> None:
     assert modal.terminal_result.hard_reset_cause is HardResetCause.USER_ESCALATION
 
 
-def test_generation_job_supplies_abnormal_exit_reconciliation(monkeypatch) -> None:
-    # Only line regeneration mutates persisted project audio; preview jobs
-    # intentionally have no project reconciliation hook.
+def test_generation_job_is_staged_and_needs_no_reconciliation(monkeypatch) -> None:
+    # A line regeneration writes only to its own staging directory, so there is
+    # no project state to reconcile; the submit forwards that directory.
     monkeypatch.setattr(quick_gen_module, "collect_preflight_problems", lambda *_, **__: ())
-    reconcile = Mock(return_value="")
-    monkeypatch.setattr(quick_gen_module, "reconcile_generation_state", reconcile)
+    submit = Mock(return_value="job")
+    monkeypatch.setattr(ModelWorker, "submit_generation", submit)
     state = make_state()
-    generation_job = quick_gen_module.make_generation_job(state, 0)
-    assert generation_job.reconcile is not None
-    assert generation_job.reconcile("2") == ""
-    reconcile.assert_called_once_with(state, "2")
-    assert quick_gen_module.make_preview_job(state, "Preview", "test").reconcile is None
+    state.project.dir_path = "/project"  # type: ignore[misc]
+    state.project.sound_segments_path = "/project/segments"  # type: ignore[attr-defined]
+    state.project.sound_segments = SimpleNamespace(  # type: ignore[attr-defined]
+        get_best_item_for=lambda _index: SimpleNamespace(file_name="old.flac")
+    )
+    monkeypatch.setattr(
+        quick_gen_module.ProjectVoiceUtil, "get_batch_size", staticmethod(lambda _p: 1)
+    )
+    job = quick_gen_module.make_generation_job(state, 0)
+    assert job.reconcile is None
+    assert job.review is not None
+    assert job.review.staging_dir.startswith("/project/segments_temp/")
+    assert job.review.original_path == "/project/segments/old.flac"
+    assert job.submit() == "job"
+    assert submit.call_args.kwargs["staging_dir"] == job.review.staging_dir
+    assert quick_gen_module.make_preview_job(state, "Preview", "test").review is None
+
+
+def make_staged_job(tmp_path, *, original: bool = True) -> tuple[QuickGenJob, str, str]:
+    staging_dir = tmp_path / "segments_temp" / "job"
+    staged = staging_dir / "[00003] [0123456789abcdef] [none] [voice] [2] New.flac"
+    original_path = tmp_path / "segments" / "[00003] [0123456789abcdef] [none] [voice] [5] Old.flac"
+
+    def submit() -> str:
+        staging_dir.mkdir(parents=True)
+        staged.write_bytes(b"new")
+        return "job"
+
+    job = QuickGenJob(
+        title="Quick generate - line 3",
+        submit=submit,
+        review=QuickGenReview(
+            str(staging_dir), 2, str(original_path) if original else ""
+        ),
+    )
+    return job, str(staged), str(original_path)
+
+
+def review_text(modal: QuickGenModal) -> str:
+    return str(modal.query_one("#quick-gen-review-text", Static).render())
+
+
+@pytest.mark.parametrize(("key", "accepted"), [("enter", True), ("escape", False)])
+def test_staged_job_shows_review_and_returns_decision(monkeypatch, tmp_path, key, accepted) -> None:
+    # A clean staged job does not auto-dismiss: the review panel appears, the
+    # new sound autoplays, and ENTER keeps / ESC discards the staged take.
+    feed_events(monkeypatch, [[GenerationFinished("job", GenerationTerminalStatus.COMPLETED, "")]])
+    play = Mock(return_value=("sound", ""))
+    monkeypatch.setattr(quick_gen_module.PlaySoundUtil, "play_sound_file_async", play)
+    monkeypatch.setattr(quick_gen_module.PlaySoundUtil, "current_sound_id", lambda: "sound")
+    monkeypatch.setattr(quick_gen_module.PlaySoundUtil, "stop_sound_async", Mock())
+    job, staged, _original = make_staged_job(tmp_path)
+    app = HostApp()
+    modal = QuickGenModal(make_state(), job)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            app.push_screen(modal, app.results.append)
+            await pilot.pause()
+            modal._drain_worker_events()
+            await pilot.pause(0.4)
+            assert app.results == []
+            assert modal.review_pending
+            assert modal.query_one("#quick-gen-review").display
+            text = review_text(modal)
+            assert "[1] Play original sound  (5 word errors)" in text
+            assert "[2] Play new sound  (2 word errors)  playing" in text
+            assert "to keep new sound" in text
+            # The review panel carries the prompt; the header row is blank.
+            assert "to close" not in header_text(modal)
+            play.assert_called_once_with(staged)
+            await pilot.press(key)
+            await pilot.pause()
+
+    run(exercise())
+    assert len(app.results) == 1
+    result = app.results[0]
+    assert result is not None
+    assert result.staged_path == staged
+    assert result.accepted is accepted
+
+
+def test_review_keys_switch_and_toggle_playback(monkeypatch, tmp_path) -> None:
+    # [1] plays the original over the new sound; pressing it again stops it.
+    feed_events(monkeypatch, [[GenerationFinished("job", GenerationTerminalStatus.COMPLETED, "")]])
+    play = Mock(return_value=("sound", ""))
+    stop = Mock()
+    monkeypatch.setattr(quick_gen_module.PlaySoundUtil, "play_sound_file_async", play)
+    monkeypatch.setattr(quick_gen_module.PlaySoundUtil, "current_sound_id", lambda: "sound")
+    monkeypatch.setattr(quick_gen_module.PlaySoundUtil, "stop_sound_async", stop)
+    job, staged, original = make_staged_job(tmp_path)
+    app = HostApp()
+    modal = QuickGenModal(make_state(), job)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            app.push_screen(modal, app.results.append)
+            await pilot.pause()
+            modal._drain_worker_events()
+            await pilot.pause(0.4)
+            await pilot.press("1")
+            assert modal.review_playing == "original"
+            await pilot.press("1")
+            assert modal.review_playing is None
+
+    run(exercise())
+    assert [call.args[0] for call in play.call_args_list] == [staged, original]
+    assert stop.call_count == 2
+
+
+def test_review_without_original_shows_it_unavailable(monkeypatch, tmp_path) -> None:
+    # A never-generated line has no original to compare against.
+    feed_events(monkeypatch, [[GenerationFinished("job", GenerationTerminalStatus.COMPLETED, "")]])
+    monkeypatch.setattr(
+        quick_gen_module.PlaySoundUtil, "play_sound_file_async", Mock(return_value=("s", ""))
+    )
+    monkeypatch.setattr(quick_gen_module.PlaySoundUtil, "current_sound_id", lambda: "s")
+    job, _staged, _original = make_staged_job(tmp_path, original=False)
+    app = HostApp()
+    modal = QuickGenModal(make_state(), job)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            app.push_screen(modal, app.results.append)
+            await pilot.pause()
+            modal._drain_worker_events()
+            await pilot.pause(0.4)
+            assert "[1] Play original sound (none)" in review_text(modal)
+
+    run(exercise())
+
+
+def test_cancelled_staged_job_offers_no_review(monkeypatch, tmp_path) -> None:
+    # Only a completed job is reviewable, even if a take was already staged.
+    feed_events(monkeypatch, [[GenerationFinished("job", GenerationTerminalStatus.CANCELLED, "")]])
+    job, _staged, _original = make_staged_job(tmp_path)
+    app = HostApp()
+    modal = QuickGenModal(make_state(), job)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            app.push_screen(modal, app.results.append)
+            await pilot.pause()
+            modal._drain_worker_events()
+            await pilot.pause(0.4)
+            assert not modal.review_pending
+            assert "to close" in header_text(modal)
+            await pilot.press("enter")
+            await pilot.pause()
+
+    run(exercise())
+    assert app.results[0] is not None
+    assert app.results[0].staged_path == ""
+    assert not app.results[0].accepted

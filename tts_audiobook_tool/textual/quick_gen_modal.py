@@ -3,25 +3,29 @@
 ``QuickGenModal`` hosts one model-worker job (a single-line regeneration or a
 literal diagnostic preview) on a ``ModalScreen``, so the editor underneath is
 never torn down. The worker-job lifecycle comes from ``WorkerSessionMixin``;
-this module supplies the modal's chrome (a two-row header, a divider, and the
-live worker log), the job specs, and the mapping from worker events to a
-``QuickGenResult``.
+this module supplies the modal's chrome (a two-row header, a divider, the
+live worker log, and the review panel), the job specs, and the mapping from
+worker events to a ``QuickGenResult``.
 
 Lifecycle of the modal:
 
 - A job with pre-flight problems submits nothing; the problems are listed in
   red and the modal waits for ESC.
-- A cleanly completed job dismisses itself immediately.
-- Anything else (cancelled, failed, reset, or completed with word errors) stays
-  open until ESC/ENTER so the output can be reviewed.
+- A line regeneration is staged (see ``segment_staging_util``). When the job
+  leaves a staged candidate, the review panel appears and the new sound plays;
+  ENTER keeps it, ESC discards it. The host applies the decision.
+- A cleanly completed preview dismisses itself immediately.
+- Anything else (cancelled, failed, reset, or completed with word errors and no
+  candidate) stays open until ESC/ENTER so the output can be reviewed.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import ClassVar, cast
+from dataclasses import dataclass, replace
+from typing import ClassVar, Literal, cast
 
 from rich.text import Text
 from textual.app import ComposeResult
@@ -36,6 +40,7 @@ from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import (
     COL_ACCENT,
     COL_DEFAULT,
+    COL_DIM,
     COL_DIM_ITALICS,
     COL_ERROR,
 )
@@ -54,13 +59,18 @@ from tts_audiobook_tool.model_worker_protocol import (
     WorkerExited,
 )
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.project_support.segment_staging_util import (
+    describe_segment_word_errors,
+    get_best_staged_segment,
+    make_staging_dir_path,
+)
+from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import worker_app
 from tts_audiobook_tool.textual.generation_header import make_cancel_pending_prompt
 from tts_audiobook_tool.textual.generation_app import (
     GenerationTranscript,
     make_generation_transcript_path,
-    reconcile_generation_state,
 )
 from tts_audiobook_tool.textual.worker_content import WorkerLogContentArea
 from tts_audiobook_tool.textual.worker_session import (
@@ -73,6 +83,11 @@ from tts_audiobook_tool.worker_reset import HardResetCause, HardResetRequest
 
 # A preview's worker prints only a heading and a few status lines.
 PREVIEW_DIALOG_HEIGHT = "16"
+
+# How often the review panel re-checks whether its sound is still playing.
+REVIEW_PLAYBACK_POLL_SECONDS = 0.1
+
+ReviewSound = Literal["original", "new"]
 
 
 @dataclass(frozen=True)
@@ -90,6 +105,10 @@ class QuickGenResult:
     hard_reset_cause: HardResetCause | None = None
     # False when pre-flight problems stopped the job before submission.
     submitted: bool = True
+    # The staged candidate segment of a reviewable job ("" when none).
+    staged_path: str = ""
+    # Whether the user chose to keep the staged candidate.
+    accepted: bool = False
 
     @property
     def completed(self) -> bool:
@@ -99,6 +118,18 @@ class QuickGenResult:
     def completed_cleanly(self) -> bool:
         """Whether the job completed without any item needing attention."""
         return self.completed and not (self.failed_items or self.errored_items)
+
+
+@dataclass(frozen=True)
+class QuickGenReview:
+    """Where a reviewable job stages its output, and what it would replace."""
+
+    # Per-job directory the worker saves into (created by the worker).
+    staging_dir: str
+    # The line being regenerated.
+    phrase_index: int
+    # The line's current best segment, left in place during the job ("" if none).
+    original_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -118,8 +149,10 @@ class QuickGenJob:
     # Dialog height as a CSS value. A preview prints little, so it is compact.
     height: str = "80%"
     # Reconcile persisted project state if the host closes without receiving
-    # a dismissal result. Preview jobs have no project audio to reconcile.
+    # a dismissal result. Preview and staged jobs leave the project untouched.
     reconcile: Callable[[str], str] | None = None
+    # Set for a staged line regeneration whose output awaits user review.
+    review: QuickGenReview | None = None
 
 
 def collect_preflight_problems(state: State, *, for_preview: bool) -> tuple[str, ...]:
@@ -148,19 +181,33 @@ def collect_preflight_problems(state: State, *, for_preview: bool) -> tuple[str,
 
 
 def make_generation_job(state: State, phrase_index: int) -> QuickGenJob:
-    """Job that regenerates exactly one project line."""
+    """Job that regenerates exactly one project line into a staging directory.
+
+    Nothing in the project changes until the host accepts the staged result.
+    """
     project = state.project
+    best_segment = project.sound_segments.get_best_item_for(phrase_index)
+    review = QuickGenReview(
+        staging_dir=make_staging_dir_path(project.dir_path),
+        phrase_index=phrase_index,
+        original_path=(
+            os.path.join(project.sound_segments_path, best_segment.file_name)
+            if best_segment is not None
+            else ""
+        ),
+    )
     return QuickGenJob(
         title=f"Quick generate - line {phrase_index + 1}",
         noun="Generation",
         problems=collect_preflight_problems(state, for_preview=False),
         use_transcript=True,
-        reconcile=lambda remaining: reconcile_generation_state(state, remaining),
+        review=review,
         submit=lambda: ModelWorker.submit_generation(
             state=state,
             indices={phrase_index},
             batch_size=ProjectVoiceUtil.get_batch_size(project),
             is_regen=True,
+            staging_dir=review.staging_dir,
         ),
     )
 
@@ -241,6 +288,8 @@ class QuickGenModal(WorkerSessionMixin[QuickGenResult], ModalScreen[QuickGenResu
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "cancel_or_continue", show=False, priority=True),
         Binding("enter", "continue", show=False, priority=True),
+        Binding("1", "play_review_sound('original')", show=False),
+        Binding("2", "play_review_sound('new')", show=False),
     ]
 
     CSS = """
@@ -257,9 +306,19 @@ class QuickGenModal(WorkerSessionMixin[QuickGenResult], ModalScreen[QuickGenResu
         background: ansi_default;
     }
 
-    #quick-gen-divider {
+    #quick-gen-divider, #quick-gen-review-divider {
         color: #888888;
         margin: 0;
+    }
+
+    #quick-gen-review {
+        height: auto;
+        display: none;
+    }
+
+    #quick-gen-review-text {
+        height: auto;
+        padding: 0 1;
     }
     """
 
@@ -272,6 +331,10 @@ class QuickGenModal(WorkerSessionMixin[QuickGenResult], ModalScreen[QuickGenResu
         self.transcript: GenerationTranscript | None = None
         self.sleep_lock: SystemSleepLock | None = None
         self._result_delivered = False
+        # Set while the review panel awaits the keep/discard decision.
+        self.review_pending = False
+        self.review_sound_id = ""
+        self.review_playing: ReviewSound | None = None
 
     # ----------------------------------------------------------------
     # composition and startup
@@ -285,6 +348,9 @@ class QuickGenModal(WorkerSessionMixin[QuickGenResult], ModalScreen[QuickGenResu
                 output_filters=Tts.get_info(self.state.project).output_filters,
                 id="quick-gen-output-shell",
             )
+            with Vertical(id="quick-gen-review"):
+                yield Rule(id="quick-gen-review-divider")
+                yield Static("", id="quick-gen-review-text")
 
     def on_mount(self) -> None:
         self.query_one("#quick-gen-dialog").styles.height = self.job.height
@@ -303,6 +369,7 @@ class QuickGenModal(WorkerSessionMixin[QuickGenResult], ModalScreen[QuickGenResu
     async def on_unmount(self) -> None:
         """Do not strand an owned job when the editor exits or its UI fails."""
         self._session_closed = True
+        self._stop_review_playback()
         try:
             if self._result_delivered or self.operation_id is None:
                 return
@@ -406,6 +473,7 @@ class QuickGenModal(WorkerSessionMixin[QuickGenResult], ModalScreen[QuickGenResu
                 remaining_range_string=event.remaining_range_string,
                 failed_items=self.failed_items,
                 errored_items=self.errored_items,
+                staged_path=self._find_staged_candidate(event.status),
             )
         else:
             sound = cast(Sound | None, event.sound)
@@ -472,8 +540,9 @@ class QuickGenModal(WorkerSessionMixin[QuickGenResult], ModalScreen[QuickGenResu
         }
 
     def should_auto_exit(self, result: QuickGenResult) -> bool:
-        """A cleanly completed job returns to the editor with no review."""
-        return result.completed_cleanly
+        """A cleanly completed preview returns to the editor at once; a staged
+        regeneration always waits for the user."""
+        return result.completed_cleanly and self.job.review is None
 
     def _suppress_terminal_summary_ui(self) -> bool:
         # Nothing worth flashing for the instant before the auto-dismissal.
@@ -515,12 +584,116 @@ class QuickGenModal(WorkerSessionMixin[QuickGenResult], ModalScreen[QuickGenResu
         ):
             app_support.play_fatal_gen_sound()
         super()._post_terminal_summary(result)
+        if result.staged_path:
+            self._show_review()
+
+    # ----------------------------------------------------------------
+    # review
+    # ----------------------------------------------------------------
+
+    def _find_staged_candidate(self, status: GenerationTerminalStatus) -> str:
+        """The staged segment to review, for a completed staged job only."""
+        if self.job.review is None or status is not GenerationTerminalStatus.COMPLETED:
+            return ""
+        review = self.job.review
+        best = get_best_staged_segment(review.staging_dir, review.phrase_index)
+        return str(best[0]) if best is not None else ""
+
+    def _review_path(self, which: ReviewSound) -> str:
+        result = self.terminal_result
+        if which == "new":
+            return result.staged_path if result is not None else ""
+        return self.job.review.original_path if self.job.review is not None else ""
+
+    def _show_review(self) -> None:
+        self.review_pending = True
+        self.query_one("#quick-gen-review").display = True
+        self._update_header()
+        self._update_review_text()
+        self.set_interval(REVIEW_PLAYBACK_POLL_SECONDS, self._poll_review_playback)
+        self.action_play_review_sound("new")
+
+    def _make_review_line(self, key: str, which: ReviewSound, label: str) -> str:
+        path = self._review_path(which)
+        if not path:
+            return f"{COL_DIM}[{key}] {label} (none){COL_DEFAULT}"
+        details = describe_segment_word_errors(path)
+        details_text = f"  {COL_DIM}({details}){COL_DEFAULT}" if details else ""
+        playing_text = (
+            f"  {COL_DIM_ITALICS}playing{COL_DEFAULT}"
+            if self.review_playing == which
+            else ""
+        )
+        return (
+            f"[{COL_ACCENT}{key}{COL_DEFAULT}] {label}{details_text}{playing_text}"
+        )
+
+    def _update_review_text(self) -> None:
+        lines = [
+            self._make_review_line("1", "original", "Play original sound"),
+            self._make_review_line("2", "new", "Play new sound"),
+            f"Press [{COL_ACCENT}ENTER{COL_DEFAULT}] to keep new sound, "
+            f"[{COL_ACCENT}ESC{COL_DEFAULT}] to discard",
+        ]
+        self.query_one("#quick-gen-review-text", Static).update(
+            Text.from_ansi("\n".join(lines))
+        )
+
+    def action_play_review_sound(self, which: ReviewSound) -> None:
+        """Play the original or new sound; the playing one toggles off."""
+        if not self.review_pending:
+            return
+        was_playing = self.review_playing
+        self._stop_review_playback()
+        path = self._review_path(which)
+        if was_playing != which and path:
+            sound_id, error = PlaySoundUtil.play_sound_file_async(path)
+            if error:
+                self.notify(f"Couldn't play sound: {error}", severity="error")
+            else:
+                self.review_sound_id = sound_id
+                self.review_playing = which
+        self._update_review_text()
+
+    def _poll_review_playback(self) -> None:
+        if self.review_sound_id and PlaySoundUtil.current_sound_id() != self.review_sound_id:
+            self.review_sound_id = ""
+            self.review_playing = None
+            self._update_review_text()
+
+    def _stop_review_playback(self) -> None:
+        if self.review_sound_id and PlaySoundUtil.current_sound_id() == self.review_sound_id:
+            PlaySoundUtil.stop_sound_async()
+        self.review_sound_id = ""
+        self.review_playing = None
+
+    def _finish_review(self, accepted: bool) -> None:
+        result = self.terminal_result
+        assert result is not None
+        self.review_pending = False
+        self._stop_review_playback()
+        self._leave_session(replace(result, accepted=accepted))
+
+    def action_continue(self) -> None:
+        if self.review_pending:
+            self._finish_review(accepted=True)
+            return
+        super().action_continue()
+
+    def action_cancel_or_continue(self) -> None:
+        if self.review_pending:
+            self._finish_review(accepted=False)
+            return
+        super().action_cancel_or_continue()
 
     # ----------------------------------------------------------------
     # header and exit
     # ----------------------------------------------------------------
 
     def _prompt_text(self) -> str:
+        if self.review_pending:
+            # The review panel carries the prompt.
+            return ""
         if self.terminal_result is not None:
             return "" if self.auto_exit else f"Press [{COL_ACCENT}ESC{COL_DEFAULT}] to close"
         if self.cancel_pending:

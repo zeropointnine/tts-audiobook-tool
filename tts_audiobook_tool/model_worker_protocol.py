@@ -69,6 +69,9 @@ class GenerateCommand:
     batch_size: int
     is_regen: bool
     settings: GenerationSettings
+    # When set, output goes here for review instead of the project's segments
+    # directory, and the project's generation range is left untouched.
+    staging_dir: str = ""
 
 
 @dataclass(frozen=True)

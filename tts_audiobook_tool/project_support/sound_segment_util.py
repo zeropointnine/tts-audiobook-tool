@@ -22,6 +22,24 @@ def get_segment_stt_info_path(sound_path: str | Path) -> Path:
     return Path(sound_path).with_suffix(".json")
 
 
+# Ranking value of a take whose word-error count is unknown (worst).
+UNKNOWN_ERROR_RANK = 9999
+
+
+def get_segment_error_rank(segment: SoundSegment, dir_path: str | Path) -> int:
+    """Word-error count used to rank takes of one line (lower is better).
+
+    A file name carries a count only when it is non-zero, so an untagged take
+    with an STT sidecar was validated with no word errors. An untagged take
+    without one (never validated, or a legacy file) ranks worst.
+    """
+    if segment.num_errors != -1:
+        return segment.num_errors
+    if get_segment_stt_info_path(Path(dir_path) / segment.file_name).exists():
+        return 0
+    return UNKNOWN_ERROR_RANK
+
+
 class SoundSegmentUtil:
     """
     Logic for managing sound segment files 

@@ -36,16 +36,21 @@ class MenuStatus:
             not Tts.is_remote_mode() and getattr(state, "has_shown_main_menu", False)
             and not getattr(state, "pending_project_load_checks", False)
         )
-        if local_startup_finished or (changed is not None and changed.id == "none"):
+        if local_startup_finished or (
+            changed is not None and changed.id == "none" and not Tts.is_remote_mode()
+        ):
             state.pending_tts_model_change = None
         elif changed is not None:
             pending = getattr(state, "pending_tts_model_change", None)
             old_id = (pending.old_model_id if pending is not None
                       and pending.new_model_id == previous_id else previous_id)
-            # An unselected project has no previous model to announce replacing.
+            # Clearing selection only announces an unavailable audio.cpp model.
+            announce = old_id not in ("none", changed.id) and (
+                changed.id != "none"
+                or TtsModelType.get_by_id(old_id).value.backend_kind is TtsBackendKind.AUDIO_CPP
+            )
             state.pending_tts_model_change = (
-                PendingTtsModelChange(old_id, changed.id)
-                if old_id not in ("none", changed.id) else None
+                PendingTtsModelChange(old_id, changed.id) if announce else None
             )
 
     @staticmethod
@@ -114,6 +119,12 @@ class MenuStatus:
         state.pending_tts_model_change = None
 
         old_name = _make_model_name(pending.old_model_id)
+        if pending.new_model_id == "none":
+            hints.print_hint(Hint("", "FYI", (
+                f"This project was last used with TTS model {old_name}, which is currently unavailable.\n"
+                "Select a TTS model in Model settings > TTS model."
+            )))
+            return
         current_name = _make_model_name(pending.new_model_id)
         text = f"This project was last used with TTS model {old_name};\n"
         active = Tts.get_active_type()

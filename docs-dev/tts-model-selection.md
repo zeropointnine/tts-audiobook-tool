@@ -48,7 +48,7 @@ Before building interactive menu items and when printing the status block, compa
 | One (local mode) | Does not match, including `"none"`, another model, or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking FYI at startup or when another project is loaded; other later changes are silent. |
 | One (server mode) | Does not match, including `"none"` or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking FYI for the end of the next complete menu. |
 | More than one | Matches one of the available types | Keep it; do not prompt or choose a different type. |
-| More than one | Does not match any available type | Immediately assign `"none"`; require selection from **Model settings > TTS model**. |
+| More than one | Does not match any available type | Immediately assign `"none"`; require selection from **Model settings > TTS model**. If the previous selection was an audio.cpp model, queue a nonblocking unavailable-model FYI for the end of the next complete menu; other previous types stay silent. |
 
 A sole-model mismatch queues this notice using the standard hint formatting only when replacing a saved ID other than `"none"`: in server mode whenever reconciliation changes that selection, and in local mode before the first main menu or while checks for a newly loaded project are pending. A matching saved selection or an initially unselected project does not trigger a model-change notice in either mode.
 
@@ -63,6 +63,14 @@ Use `sole active audio.cpp model` only for audio.cpp, which can have more than o
 The names are the models' UI `proper_name` values, each qualified by its backend kind (`Chatterbox TTS (local)`, `Breeze TTS 2 (audio.cpp)`). The old name describes the previous saved selection, not necessarily a loaded runtime. Unknown IDs display as `Unknown model: {raw_id}`; `"none"` is not a previous model and never queues this notice. The current name is the selected catalog model, not the exact server inference ID.
 
 If runtime binding is unavailable, the second line instead reads `It is now configured to use {current_name}, but the runtime is unavailable (see Model settings).` The selection notification does not imply successful binding or persistence; existing status errors and save-error reporting remain in effect.
+
+When multiple types are available but the saved audio.cpp model is unavailable, clearing the selection to `"none"` queues this notice instead. Previous local, SGL-Omni, unknown, or unselected types do not trigger it:
+
+```text
+🔔 FYI
+This project was last used with TTS model {old_model_name}, which is currently unavailable.
+Select a TTS model in Model settings > TTS model.
+```
 
 Reconciliation and status printing do not display or consume the FYI. In server mode it is printed once at the bottom of the next complete menu. In local mode it is printed once at the bottom of the first main menu, or the next complete menu after a runtime project load; earlier startup submenus leave it pending, and other subsequent local changes do not queue a notice. Rendering happens through the shared `MenuStatus.show_pending_project_hints()` function after the existing `on_shown` callback and before normal menu input. The menu loop captures whether this is the first main menu before `on_shown` marks startup complete. The notices use `hints.print_hint()` directly: no Enter prompt, animation, or persisted hint preference. Heading-only prompt screens leave them pending.
 
@@ -85,7 +93,7 @@ exceeding the current model's recommended maximum of 60.
 Output accuracy on longer prompts may be degraded.
 ```
 
-Pending old/new IDs live on `State`, not in global or persisted storage. Repeated checks preserve the pending notice. Multiple automatic changes before display coalesce to the first old ID and latest new ID; a net return to the original selection cancels it. Project replacement/reset, explicit model selection, and reconciliation clearing selection to `"none"` clear the pending notice. Rendering also discards a notice whose new ID no longer matches the selection. Clearing an unavailable selection to `"none"` does not itself notify.
+Pending old/new IDs live on `State`, not in global or persisted storage. Repeated checks preserve the pending notice. Multiple automatic changes before display coalesce to the first old ID and latest new ID; a net return to the original selection cancels it. Project replacement/reset, explicit model selection, and local reconciliation clearing selection to `"none"` clear the pending notice. Rendering also discards a notice whose new ID no longer matches the selection. Remote reconciliation clearing an unavailable audio.cpp selection to `"none"` queues the unavailable-model notice above; clearing other previous types discards the pending notice.
 
 Automatic changes are saved when the project has a directory, then the project is bound to the runtime. Save errors are reported. A directory-less placeholder project is updated in memory without writing a project file.
 

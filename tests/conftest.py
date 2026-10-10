@@ -46,6 +46,19 @@ def initialize_app_logger():
 
 
 @pytest.fixture(autouse=True)
+def stub_notification_sounds(monkeypatch):
+    """Keep UI tests off real audio devices.
+
+    A live callback stream can hang PortAudio's interpreter-exit cleanup, even
+    with a daemon playback thread. Sound-selection tests install recording fakes.
+    """
+    from tts_audiobook_tool import app_support
+
+    monkeypatch.setattr(app_support, "play_done_sound", lambda: None)
+    monkeypatch.setattr(app_support, "play_fatal_gen_sound", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def stub_system_sleep_inhibitor(monkeypatch):
     """Keeps the suite off the host's power-management stack.
 

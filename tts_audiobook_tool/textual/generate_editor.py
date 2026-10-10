@@ -33,7 +33,10 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
 )
 from tts_audiobook_tool.textual.filter_dialog import FilterDialog
-from tts_audiobook_tool.textual.generation_app import reconcile_generation_state
+from tts_audiobook_tool.project_support.segment_staging_util import (
+    accept_staged_segment,
+    delete_staging_dir,
+)
 from tts_audiobook_tool.textual.quick_gen_modal import (
     QuickGenModal,
     QuickGenResult,
@@ -769,62 +772,67 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         """Regenerate a specific phrase in a modal over the editor.
 
         The modal runs its own pre-flight (readiness, voices, busy worker) and
-        lists any problems in red; only when there are none does the editor
-        persist the staged queue and delete the line's existing sound.
+        lists any problems in red. The job is staged: the line's existing sound
+        and the project are untouched until the user keeps the new sound.
         """
         if self.modal_session_active:
             return
 
         job = make_generation_job(self.state, phrase_index)
         if not job.problems:
-            save_error = self.persist_staged_queue()
-            if save_error:
-                self.notify(save_error, severity="error")
-            if self.playing_phrase_index == phrase_index:
-                self.stop_tracked_playback()
-            self.project.sound_segments.delete_by_indices({phrase_index})
-            self.project.sound_segments.force_invalidate()
+            # The review panel plays sounds; don't talk over it.
+            self.stop_tracked_playback()
 
+        staging_dir = job.review.staging_dir if job.review is not None else ""
         self.modal_session_active = True
         self.push_screen(
             QuickGenModal(self.state, job),
-            lambda result: self.handle_quick_gen_result(result, phrase_index),
+            lambda result: self.handle_quick_gen_result(
+                result, phrase_index, staging_dir
+            ),
         )
 
     def handle_quick_gen_result(
-        self, result: QuickGenResult | None, phrase_index: int
+        self,
+        result: QuickGenResult | None,
+        phrase_index: int,
+        staging_dir: str = "",
     ) -> None:
-        """Re-sync the live editor with what the quick generation produced."""
+        """Apply the review decision of a quick generation to the project.
+
+        The job's staging directory is deleted in every case: a discarded,
+        cancelled or failed job may still have left takes in it.
+        """
         self.modal_session_active = False
-        if result is None or not result.submitted:
+        accepted = result is not None and result.accepted and bool(result.staged_path)
+        error = ""
+        if accepted:
+            assert result is not None
+            if self.playing_phrase_index == phrase_index:
+                self.stop_tracked_playback()
+            error = accept_staged_segment(
+                self.project, phrase_index, Path(result.staged_path)
+            )
+        delete_staging_dir(staging_dir)
+        if not accepted:
+            return
+        if error:
+            # The acceptance rolled back: the line keeps its old audio (or
+            # none) and its queued state.
+            self.notify(error, severity="error")
             return
 
-        save_error = reconcile_generation_state(
-            self.state, result.remaining_range_string
-        )
-        if save_error:
-            self.notify(save_error, severity="error")
-
-        # The worker updated the persisted generation range; adopt it as the
-        # new baseline for the queue.
-        old_staged_indices = self.staged_queued_indices
-        queued_indices = ProjectUtil.get_indices_to_generate(self.project)
-        self.original_queued_indices = queued_indices & set(self.all_phrase_indices)
-        self.staged_queued_indices = set(self.original_queued_indices)
-
+        # The line is generated now; it leaves the queue like any generated
+        # line (the in-memory range only: queue edits are saved on exit).
+        old_staged_indices = set(self.staged_queued_indices)
+        self.staged_queued_indices.discard(phrase_index)
         self.refresh_phrase_classifications()
         changed_indices = (old_staged_indices ^ self.staged_queued_indices) | {
             phrase_index
         }
         self.refresh_filtered_rows_preserving_selection(changed_indices)
         self.update_pinned_status()
-        has_new_segment = (
-            self.get_phrase_segment_status(phrase_index).best_segment is not None
-        )
         self.phrase_segment_statuses.clear()
-
-        if has_new_segment and result.completed:
-            self.play_sound_for_phrase(phrase_index)
 
     def action_show_info(self) -> None:
         """Show dialog with info for the highlighted segment."""

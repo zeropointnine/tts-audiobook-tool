@@ -4,7 +4,12 @@ from typing import Callable, Collection
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from tts_audiobook_tool.project_support.sound_segment_util import SoundSegment, SoundSegmentUtil, get_segment_stt_info_path
+from tts_audiobook_tool.project_support.sound_segment_util import (
+    SoundSegment,
+    SoundSegmentUtil,
+    get_segment_error_rank,
+    get_segment_stt_info_path,
+)
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
@@ -106,14 +111,14 @@ class ProjectSoundSegments:
     def get_best_item_for(self, index: int) -> SoundSegment | None:
         """ For the given index, returns the sound segment with the least number of word fails """
         sound_segments = self.sound_segments_map.get(index, [])
-        best_sound_segment = None
-        best_fails = 9999 + 1
-        for item in sound_segments:
-            item_fails = item.num_errors if item.num_errors != -1 else 9999
-            if item_fails < best_fails:
-                best_sound_segment = item
-                best_fails = item_fails
-        return best_sound_segment
+        if len(sound_segments) <= 1:
+            # The common case; ranking would only cost a sidecar lookup.
+            return sound_segments[0] if sound_segments else None
+        # min() keeps the first of equally ranked takes.
+        return min(
+            sound_segments,
+            key=lambda item: get_segment_error_rank(item, self.project.sound_segments_path),
+        )
 
     def get_best_file_for(self, index: int) -> str:
         item = self.get_best_item_for(index)

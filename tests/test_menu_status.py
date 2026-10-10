@@ -468,8 +468,8 @@ def test_model_change_hint_discards_cancelled_or_stale_notice(
         monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [TtsModelType.require_by_id("auk_sglomni")])
         MenuStatus.prepare_tts(state)
     elif reason == "cleared":
-        monkeypatch.setattr(Tts, "get_available_tts_models",
-                            lambda **kwargs: [TtsModelType.require_by_id("auk_sglomni"), TtsModelType.require_by_id("fish_s2_sglomni")])
+        monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.LOCAL)
+        monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [])
         MenuStatus.prepare_tts(state)
     elif reason == "explicit-change":
         state.project.tts_model_type = "fish_s2_sglomni"
@@ -830,8 +830,14 @@ def test_status_clears_and_saves_local_selection_when_no_model_is_available(monk
                       ("bind", "none")]
 
 
-def test_status_clears_unavailable_selection_with_multiple_models(monkeypatch, capsys):
-    state = make_state(TtsModelType.require_by_id("mira_local"))
+@pytest.mark.parametrize("runtime_load", [False, True])
+@pytest.mark.parametrize("saved", ["echo_tts_audiocpp", "mira_local", "auk_sglomni", "future_catalog_id", "none"])
+def test_status_clears_unavailable_selection_with_multiple_models(monkeypatch, capsys, runtime_load, saved):
+    # Startup/runtime loads announce only unavailable audio.cpp selections; other old types stay silent.
+    state = make_state()
+    state.project.tts_model_type = saved
+    state.has_shown_main_menu = runtime_load
+    state.pending_project_load_checks = True
     state.project.dir_path = "/example/book"
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     models = [TtsModelType.require_by_id("chatterbox_audiocpp"), TtsModelType.require_by_id("higgs_v3_audiocpp")]
@@ -846,7 +852,23 @@ def test_status_clears_unavailable_selection_with_multiple_models(monkeypatch, c
     MenuStatus.print_block(state)
 
     assert state.project.tts_model_type == "none"
-    assert saves == ["none"]
+    assert saves == ([] if saved == "none" else ["none"])
+    assert "FYI" not in capsys.readouterr().out
+    should_notify = saved == "echo_tts_audiocpp"
+    assert state.pending_tts_model_change == (
+        PendingTtsModelChange(saved, "none") if should_notify else None
+    )
+
+    MenuStatus.show_pending_project_hints(state, is_first_main_menu=not runtime_load)
+    MenuStatus.show_pending_project_hints(state)
+    output = text_util.strip_ansi_codes(capsys.readouterr().out)
+    old_name = (f"Unknown model: {saved}" if saved == "future_catalog_id" else
+                _display_name(TtsModelType.get_by_id(saved)))
+    assert output == ("" if not should_notify else (
+        f"🔔 FYI\nThis project was last used with TTS model {old_name}, which is currently unavailable.\n"
+        "Select a TTS model in Model settings > TTS model.\n\n"
+    ))
+    assert state.pending_tts_model_change is None
 
 
 def test_remote_unselected_project_still_reports_connection_failure(monkeypatch, capsys):
