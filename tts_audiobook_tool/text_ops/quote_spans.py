@@ -34,7 +34,7 @@ class _QuoteStyle:
 _QUOTE_STYLES = {
     # Straight and curly glyphs are deliberately compatible within each family.
     # Imperfectly normalized ebooks commonly mix them within one quote pair.
-    "double": _QuoteStyle(frozenset({'"', "“"}), frozenset({'"', "”"}), frozenset({'"'})),
+    "double": _QuoteStyle(frozenset({'"', "“", "„"}), frozenset({'"', "”", "“"}), frozenset({'"', "“"})),
     "single": _QuoteStyle(frozenset({"'", "‘"}), frozenset({"'", "’"}), frozenset({"'"})),
     "guillemet": _QuoteStyle(frozenset({"«"}), frozenset({"»"})),
     "single_guillemet": _QuoteStyle(frozenset({"‹"}), frozenset({"›"})),
