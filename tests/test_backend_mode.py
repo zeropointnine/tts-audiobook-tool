@@ -227,6 +227,7 @@ def test_catalog_helpers_classify_by_backend_kind():
                            TtsModelType.require_by_id("cosyvoice3_audiocpp"),
                            TtsModelType.require_by_id("dots_audiocpp"),
                            TtsModelType.require_by_id("echo_tts_audiocpp"),
+                           TtsModelType.require_by_id("fireredtts3_audiocpp"),
                            TtsModelType.require_by_id("fish_s2_audiocpp"),
                            TtsModelType.require_by_id("glm_tts_audiocpp"),
                            TtsModelType.require_by_id("higgs_v3_audiocpp"),

@@ -26,11 +26,15 @@ class ProjectNewMenu:
         def on_make_new_project_using_abr(_: State, __: MenuItem) -> None:
             ProjectNewMenu.make_new_project_using_abr(state)
 
-        items = [
-            MenuItem("Make new project", on_make_new_project, False),
-            MenuItem("Make new project using current project's settings", on_make_new_project, True),
-            MenuItem("Make new project using settings from an existing tts-audiobook \"abr\" audiofile", on_make_new_project_using_abr),
-        ]
+        items = [MenuItem("Make new project", on_make_new_project, False)]
+        # Only offer settings migration when a project is currently loaded
+        if state.project.dir_path:
+            items.append(
+                MenuItem("Make new project using current project's settings", on_make_new_project, True)
+            )
+        items.append(
+            MenuItem("Make new project using settings from an existing tts-audiobook \"abr\" audiofile", on_make_new_project_using_abr)
+        )
 
         MenuUtil.menu(
             state,

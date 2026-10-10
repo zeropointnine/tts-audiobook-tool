@@ -1,5 +1,6 @@
 from tts_audiobook_tool.app_support import app_text, hints
 from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
+from tts_audiobook_tool.constants_config import PROJECT_DEFAULT_SEGMENTATION_STRATEGY
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops import language_util
@@ -160,7 +161,7 @@ class TextMenu:
             values=[item for item in list(SegmentationStrategy)],
             sublabels=[item.description for item in list(SegmentationStrategy)],
             current_value=state.project.segmentation_strategy,
-            default_value=list(SegmentationStrategy)[0],
+            default_value=PROJECT_DEFAULT_SEGMENTATION_STRATEGY,
             on_select=on_select,
             breadcrumb="Segmentation strategy",
         )

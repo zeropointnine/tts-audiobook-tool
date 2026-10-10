@@ -118,8 +118,10 @@ def get_audio_cpp_behavior(definition: AudioCppModelDefinition) -> AudioCppModel
     """Return the behavior object for a catalog entry, keyed by catalog model ID."""
     # Imported here so subclasses can import this module's base class.
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_cosyvoice3 import CosyVoice3Behavior
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_fireredtts3 import FireRedTts3Behavior
 
     registry: dict[str, type[AudioCppModelBehavior]] = {
         "cosyvoice3_audiocpp": CosyVoice3Behavior,
+        "fireredtts3_audiocpp": FireRedTts3Behavior,
     }
     return registry.get(definition.spec.id, AudioCppModelBehavior)(definition)

@@ -401,6 +401,18 @@ def test_audio_detector_matches_indextts2_either_variant_and_task():
         assert audio_cpp_detection.detect_audio_cpp_models([{**index, "mode": "streaming"}]) == []
 
 
+def test_audio_detector_matches_fireredtts3_clone_but_not_voice_design():
+    # Base is served as `clon` (Instruct clone as `tts`/`clon`); voice design
+    # (`vdes`) and streaming are not supported routes.
+    expected_handle = TtsModelType.require_by_id("fireredtts3_audiocpp")
+    model = {"id": "firered", "family": "fireredtts3", "task": "clon", "mode": "offline",
+             "session_options": {}, "path": "models/FireRedTTS3-Base-GGUF/fireredtts3-base-q8_0.gguf"}
+    assert audio_cpp_detection.detect_audio_cpp_models([model]) == [(expected_handle, "firered")]
+    assert audio_cpp_detection.detect_audio_cpp_models([{**model, "task": "tts"}]) == [(expected_handle, "firered")]
+    assert audio_cpp_detection.detect_audio_cpp_models([{**model, "task": "vdes"}]) == []
+    assert audio_cpp_detection.detect_audio_cpp_models([{**model, "mode": "streaming"}]) == []
+
+
 def test_audio_detector_matches_fish_s2_tts_route_only():
     # The Fish session rejects any task but `tts`, despite its spec listing
     # `clone`, so a `clon` entry is not a usable candidate.

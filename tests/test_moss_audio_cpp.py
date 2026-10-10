@@ -428,9 +428,10 @@ def test_existing_families_keep_default_language_policy_and_postprocessing():
         expected_policy = {"fish_s2_audiocpp": "omit", "glm_tts_audiocpp": "omit",
                            "cosyvoice3_audiocpp": "omit",
                            "dots_audiocpp": "normalized",
-                           "indextts2_audiocpp": "normalized"}.get(model_id, "project_code")
-        # IndexTTS2.5 reads its language from `options`, not the top level.
-        expected_target = "options" if model_id == "indextts2_audiocpp" else "top_level"
+                           "indextts2_audiocpp": "normalized",
+                           "fireredtts3_audiocpp": "normalized"}.get(model_id, "project_code")
+        # IndexTTS2.5 and FireRedTTS3 read their language from `options`, not the top level.
+        expected_target = "options" if model_id in ("indextts2_audiocpp", "fireredtts3_audiocpp") else "top_level"
         assert item.language_policy == expected_policy and item.language_target == expected_target
         assert not item.music_and_trim
         support = AudioCppModelSupport(item)

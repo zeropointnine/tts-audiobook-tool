@@ -32,6 +32,7 @@ FISH_S2_ID = "fish_s2_audiocpp"
 DOTS_ID = "dots_audiocpp"
 GLM_ID = "glm_tts_audiocpp"
 INDEXTTS2_ID = "indextts2_audiocpp"
+FIREREDTTS3_ID = "fireredtts3_audiocpp"
 COSYVOICE3_ID = "cosyvoice3_audiocpp"
 
 
@@ -1037,6 +1038,86 @@ def test_indextts2_preflight_reports_language_hint_with_variant_note(project_lan
     assert expected in AudioCppModelSupport(item).get_warning_issues(project)
 
 
+def test_fireredtts3_definition_is_clone_only_with_pinned_chunking():
+    # Base (`clon`) is assumed; an Instruct package served as tts/clon behaves the
+    # same without `template_name`. No speed control exists in the family.
+    item = definition(FIREREDTTS3_ID)
+    assert item.family == "fireredtts3" and item.tasks == ("tts", "clon") and item.mode == "offline"
+    assert item.session_options == {} and item.request_options == {"text_chunk_size": 100000}
+    assert item.voice_required and item.reference_transcript
+    assert item.language_policy == "normalized" and item.language_target == "options"
+    assert {name: (parameter.type, parameter.default, parameter.min, parameter.max, parameter.target)
+            for name, parameter in item.parameters.items()} == {
+        "num_inference_steps": ("int", 10, 1, 50, "top_level"),
+        "guidance_scale": ("float", 2.0, 0.1, 10.0, "top_level"),
+        "stop_threshold": ("float", 0.5, 0.0, 1.0, "options"),
+    }
+    assert [(control.kind, control.parameter) for control in item.menu] == [
+        ("voice_samples", ""), ("parameter", "num_inference_steps"), ("parameter", "guidance_scale"),
+        ("parameter", "stop_threshold"), ("seed", ""),
+    ]
+    assert item.spec.default_output_sample_rate == 24000 and "voice_sample_max_duration_s" not in item.spec.ui
+
+
+@pytest.mark.parametrize("project_language, tag", [
+    ("en", "English"), ("en-US", "English"), ("English", "English"), ("zh", "Chinese"),
+    ("zh-CN", "Chinese"), ("yue", "Cantonese"), ("de_DE", "German"), ("ja", "Japanese"),
+    ("spa", "Spanish"), ("Ukrainian", "Ukrainian"),
+])
+def test_fireredtts3_payload_sends_exact_language_tag_in_options(monkeypatch, tmp_path: Path, project_language, tag):
+    # The session needs a tag such as "German", not an ISO code, and defaults to
+    # Chinese when none is sent; the transcript and pinned chunk size ride along.
+    path = tmp_path / "sample.flac"
+    sf.write(path, np.full(100, .2), 24000, format="FLAC")
+    item = definition(FIREREDTTS3_ID)
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "firered-base")
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair",
+                        lambda *args: ("sample.flac", "the transcript"))
+    monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: str(path))
+    captured = []
+
+    def fake_generate(url, payload, print_request=False):
+        captured.append(payload)
+        return SimpleNamespace(data=np.asarray([0], dtype=np.float32), sr=24000)
+
+    monkeypatch.setattr(AudioCppUtil, "generate", fake_generate)
+    project = FakeProject(model_id=FIREREDTTS3_ID, values={"seed": 7, "stop_threshold": 0.4})
+    project.language_code = project_language
+    assert not isinstance(adapter.generate_using_project(project, ["hello"]), str)
+    payload = captured[0]
+    assert payload.pop("voice_ref")["data"].startswith("data:audio/wav;base64,")
+    assert payload == {
+        "model": "firered-base", "input": "hello", "response_format": "wav", "seed": 7,
+        "num_inference_steps": 10, "guidance_scale": 2.0, "reference_text": "the transcript",
+        "options": {"text_chunk_size": 100000, "language": tag, "stop_threshold": 0.4},
+    }
+
+
+@pytest.mark.parametrize("project_language", ["", "sw", "tlh", "  "])
+def test_fireredtts3_blocks_unmapped_project_language_before_network(monkeypatch, project_language):
+    # No fallback: an unmapped language is a readiness blocker and also stops
+    # the adapter itself, so no request is sent under the wrong frontend.
+    item = definition(FIREREDTTS3_ID)
+    support = AudioCppModelSupport(item)
+    project = FakeProject(model_id=FIREREDTTS3_ID)
+    project.language_code = project_language
+    issues = [issue for issue in support.get_blocking_issues(project) if issue.short == "language"]
+    assert len(issues) == 1
+    monkeypatch.setattr(AudioCppUtil, "generate", lambda *args, **kwargs: pytest.fail("network attempted"))
+    result = AudioCppBackendAdapter(item, support, "firered-base").generate_using_project(project, ["hello"])
+    assert isinstance(result, str) and "does not support project language" in result
+
+
+@pytest.mark.parametrize("project_language, weaker_note", [("en", False), ("zh", False), ("yue", False), ("fr", True)])
+def test_fireredtts3_warns_only_for_less_supported_languages(project_language, weaker_note):
+    # Native text normalization exists only for English/Chinese/Cantonese;
+    # audio.cpp reports weaker quality elsewhere.
+    project = FakeProject(model_id=FIREREDTTS3_ID)
+    project.language_code = project_language
+    warnings = AudioCppModelSupport(definition(FIREREDTTS3_ID)).get_warning_issues(project)
+    assert any("may be weaker" in warning for warning in warnings) is weaker_note
+
+
 @pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, FISH_S2_ID, DOTS_ID])
 def test_optional_voice_requires_a_reference_transcript_when_a_voice_is_set(monkeypatch, model_id):
     """audio.cpp rejects a reference WAV without reference_text; report it first."""
@@ -1344,9 +1425,11 @@ def test_models_default_to_catalog_driven_behavior():
     # the shipped catalog.
     from tts_audiobook_tool.tts_models.audio_cpp_behavior import AudioCppModelBehavior
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_cosyvoice3 import CosyVoice3Behavior
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_fireredtts3 import FireRedTts3Behavior
+    registered = {COSYVOICE3_ID: CosyVoice3Behavior, FIREREDTTS3_ID: FireRedTts3Behavior}
     for model_id, item in load_audio_cpp_definitions().models.items():
         behavior = AudioCppModelSupport(item).behavior
-        expected = CosyVoice3Behavior if model_id == COSYVOICE3_ID else AudioCppModelBehavior
+        expected = registered.get(model_id, AudioCppModelBehavior)
         assert type(behavior) is expected
         if expected is AudioCppModelBehavior:
             assert behavior.uses_reference_transcript({}) == item.reference_transcript

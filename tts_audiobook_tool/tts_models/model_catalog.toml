@@ -1890,6 +1890,92 @@ kind = "seed"
 target_menu = "model"
 
 # ------------------------------------------------------------------------
+# FireRedTTS3 via audio.cpp, clone use only. Assumes the server entry serves the
+# Base package (task `clon`). An Instruct package served as `tts`/`clon` is also
+# matched and accepts the same request (without `template_name` it defaults to
+# plain reference cloning, same fields and defaults), but it is a different
+# generation path: no language tag in its prompt (language only picks the text
+# normalizer), no speaker embedding, so output differs from Base.
+# Instruct-only features (voice design, semantic/acoustic edit) are not wired.
+[[models]]
+id = "fireredtts3_audiocpp"
+settings = [
+    { name = "num_inference_steps", section = "parameters", type = "int", default = 10 },
+    { name = "guidance_scale", section = "parameters", type = "float", default = 2.0 },
+    { name = "stop_threshold", section = "parameters", type = "float", default = 0.5 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+]
+backend_kind = "audio_cpp"
+
+[models.spec]
+file_tag = "fireredtts3"
+default_output_sample_rate = 24000
+un_all_caps = false
+requirements_file_name = "requirements-remote.txt"
+substitutions = []
+
+[models.spec.ui]
+proper_name = "FireRedTTS3"
+short_name = "FireRedTTS3"
+settings_note = """
+Designed for FireRedTTS3 Base (voice cloning). Instruct also works, minus its instruct features. """
+voice_path_console = "Enter voice clone audio clip file path (transcript required): "
+voice_path_requestor = "Select voice clone audio clip (transcript required)"
+project_links = [
+    "https://github.com/FireRedTeam/FireRedTTS3",
+    "https://huggingface.co/FireRedTeam/FireRedTTS3",
+    "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/fireredtts3.md",
+]
+
+[models.audio_cpp]
+menu = [
+    { kind = "voice_samples" },
+    { parameter = "num_inference_steps", label = "Steps", target_menu = "model" },
+    { parameter = "guidance_scale", label = "Guidance scale", target_menu = "model" },
+    { parameter = "stop_threshold", label = "Stop threshold", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
+]
+# The Base prompt concatenates the reference transcript with the text.
+reference_transcript = true
+# The session wants an exact language tag ("English", "Chinese", ...), not an
+# ISO code, and defaults to Chinese when none is sent. The "normalized" policy
+# puts the base code in `options`; `FireRedTts3Behavior` maps it to the tag and
+# blocks projects whose language has no tag.
+language_policy = "normalized"
+language_target = "options"
+language_hint_note = "mapped to a FireRedTTS3 language tag"
+
+[models.audio_cpp.request_options]
+text_chunk_size = 100000
+
+[models.audio_cpp.match]
+family = "fireredtts3"
+tasks = ["tts", "clon"]
+mode = "offline"
+
+[models.audio_cpp.parameters.num_inference_steps]
+type = "int"
+default = 10
+min = 1
+max = 50
+
+[models.audio_cpp.parameters.guidance_scale]
+type = "float"
+default = 2.0
+min = 0.1
+max = 10.0
+
+# Probability above which the AR stage ends the clip
+[models.audio_cpp.parameters.stop_threshold]
+type = "float"
+default = 0.5
+min = 0.0
+max = 1.0
+target = "options"
+
+# ------------------------------------------------------------------------
 # fish_s2_audiocpp: shares the output tag with local/SGL-Omni S2 but keeps its
 # own settings and audio.cpp's native sampling defaults. Rolling continuation
 # and multi_reference_cond (server-side file paths only) are not offered.

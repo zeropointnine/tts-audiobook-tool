@@ -56,7 +56,7 @@ class SegmentTranscriptUtil:
         normalized_source, normalized_transcript = TextNormalizer.normalize_source_and_transcript(
             source, transcript, project.language_code
         )
-        
+
         findings = validation_result.findings
 
         return SegmentTranscriptData(
@@ -245,7 +245,7 @@ class SegmentTranscriptUtil:
         """
         Builds ANSI-formatted lines with info about a transcribed sound segment instance.
         """
-        
+
         best_item = project.sound_segments.get_best_item_for(sound_segment_index)
         index_string = str(sound_segment_index + 1)
 
@@ -341,7 +341,7 @@ class SegmentTranscriptUtil:
             lines.extend(
                 [
                     "",
-                    f"{COL_ACCENT}Word error visualization: {COL_DIM}[-: missing], [+: extra], [=/=: expected/heard], [!: diagnostic], <word> = skipped uncommon word",
+                    f"{COL_ACCENT}Word error visualization: {COL_DIM}[-: missing], [+: extra], [=/=: expected/heard], [!: diagnostic], <word> = skipped uncommon",
                     SegmentTranscriptUtil.make_word_error_visualization(info),
                 ]
             )
