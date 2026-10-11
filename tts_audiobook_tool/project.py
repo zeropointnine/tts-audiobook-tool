@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, 
 
 from tts_audiobook_tool.app_support import path_norm
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
-from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomTone, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -170,7 +170,7 @@ class Project(BaseModel):
     # - empty string means "all items" for compatibility reasons
     # - string literal "none" means no selection
     generate_range_string: str = Field(default="", alias="generate_range")
-    
+
     marker_indices: set[int] = Field(default_factory=set, alias="markers")
     subdivide_phrases: bool = False
     export_type: ExportType = list(ExportType)[0]
@@ -183,18 +183,20 @@ class Project(BaseModel):
     realtime_line_range: tuple[int, int] | None = None
     limit_silence_gaps: bool = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
+    min_segment_sentence_silence: MinSegmentSentenceSilence = MinSegmentSentenceSilence.get_default()
+    room_tone: RoomTone = RoomTone.get_default()
     gen_auto_concat: bool = PROJECT_DEFAULT_GEN_AUTO_CONCAT
     streaming_chat: bool = PROJECT_DEFAULT_STREAMING_CHAT
-    
+
     # Rem, UI nomenclature for this is "tolerance"
     strictness: Strictness = list(Strictness)[0]
-    
+
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
     chapter_mode: SectionMarkerMode = list(SectionMarkerMode)[0]
     voice_select_mode: VoiceSelectMode = VoiceSelectMode.get_default()
 
     # Placeholder attribute used when no TTS model exists
-    none_voice_file_name: str = "" 
+    none_voice_file_name: str = ""
 
     def model_post_init(self, __context: Any) -> None:
         # A `dir_path` written by another operating system's path grammar is not
@@ -240,7 +242,7 @@ class Project(BaseModel):
         return os.path.join(self.dir_path, PROJECT_TEXT_FILE_NAME)
 
     def save(self) -> str:
-        
+
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
 
         def make_payload() -> dict:

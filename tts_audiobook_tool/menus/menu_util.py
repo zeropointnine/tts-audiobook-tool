@@ -382,6 +382,7 @@ class MenuUtil:
         default_value: int | float | None = None,
         is_minus_one_default: bool = True,
         num_decimals: int = 1,
+        value_suffix: str = "",
     ) -> str:
 
         from tts_audiobook_tool.ask import _get_saveable_attr
@@ -392,7 +393,7 @@ class MenuUtil:
             if default_value is None:
                 raise ValueError("Default value required")
             label_value = default_value
-        label = make_menu_label(base_label, label_value, default_value, num_decimals=num_decimals)
+        label = make_menu_label(base_label, label_value, default_value, num_decimals=num_decimals, value_suffix=value_suffix)
         return label
 
     @staticmethod
@@ -405,11 +406,13 @@ class MenuUtil:
         num_decimals: int,
         prompt: str,
         min_value: int | float,
-        max_value: int | float
+        max_value: int | float,
+        value_suffix: str = "",
     ) -> MenuItem:
         """
         Makes "self-contained" MenuItem that displays a number value,
         and does stock "ask_number()" action on select.
+        `value_suffix` is a unit (eg, "s") shown after the number.
         """
 
         if isinstance(min_value, int) and isinstance(max_value, int) and (isinstance(default_value, int) or default_value is None):
@@ -440,10 +443,58 @@ class MenuUtil:
             base_label=base_label,
             default_value=default_value,
             is_minus_one_default=is_minus_one_default,
-            num_decimals=num_decimals
+            num_decimals=num_decimals,
+            value_suffix=value_suffix,
         )
 
         return MenuItem(label, on_item)
+
+    @staticmethod
+    def make_cycle_item(
+        label: str,
+        values: list[T],
+        value_labels: list[str],
+        get_value: Callable[[], T],
+        default_value: T | None,
+        on_select: Callable[[T], None],
+    ) -> MenuItem:
+        """
+        Makes a self-contained MenuItem that displays the current value of a
+        setting (eg, `Value: enabled`) and, on select, advances to the next of
+        `values`, wrapping from the last to the first. Use with a menu that
+        stays open (not `one_shot`) so repeated selection keeps cycling.
+
+        The "cycle" alternative to `options_menu()` for small enumerations.
+        Appends " (default)" when the current value is `default_value`.
+
+        `values` and `value_labels` are parallel lists. `get_value` is read each
+        time the label is drawn and when selected, so it reflects current state.
+        `on_select` receives the new value and should apply and persist it.
+        """
+        if len(values) != len(value_labels):
+            raise ValueError("values and value_labels lists must have same size")
+        if not values:
+            raise ValueError("values must not be empty")
+
+        def index_of_current() -> int:
+            try:
+                return values.index(get_value())
+            except ValueError:
+                return -1
+
+        def make_label(_: State) -> str:
+            i = index_of_current()
+            value_label = value_labels[i] if i >= 0 else "?"
+            s = f"{label}: {COL_ACCENT}{value_label}"
+            if i >= 0 and values[i] == default_value:
+                s += f" {COL_DIM}(default)"
+            return s
+
+        def on_item(_: State, __: MenuItem) -> None:
+            # An unrecognized current value (-1) cycles to the first
+            on_select(values[(index_of_current() + 1) % len(values)])
+
+        return MenuItem(make_label, on_item)
 
 # ---
 

@@ -67,7 +67,6 @@ SHORTER_REASON_PAUSES = MappingProxyType(
     }
 )
 
-
 class ReasonPauseTypes(Enum):
     """Enumerates the available pause-duration policies."""
 
@@ -82,7 +81,7 @@ class ReasonPauseTypes(Enum):
         id="shorter",
         label="Shorter",
         menu_label="shorter",
-        description='Enabling "Generate > Limit silence gaps" works well with this setting',
+        description="",
         pauses=SHORTER_REASON_PAUSES,
     )
 

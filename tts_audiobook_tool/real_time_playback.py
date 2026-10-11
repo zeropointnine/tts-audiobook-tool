@@ -42,6 +42,7 @@ from tts_audiobook_tool.real_time_playback_events import (
     RealTimePlaybackStarted,
 )
 from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPhase, ModelUnhealthy
+from tts_audiobook_tool.sound.noise_bed import NoiseBed
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -52,7 +53,9 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.app_types.validation_result import ValidationResult
+from tts_audiobook_tool.app_types.validation_result import TranscriptResult, ValidationResult
+from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
+from tts_audiobook_tool.transcriber import Transcriber
 
 
 class ContinueEvent(Protocol):
@@ -177,6 +180,12 @@ def _start_impl(
         start_group_index=start_index,
     )
 
+    # Constant noise bed under the output (same setting as concat). Created
+    # lazily at the first segment's sample rate; one per run, so the noise
+    # stream is seamless across segments.
+    room_tone_db = state.project.room_tone.level_db
+    noise_bed: NoiseBed | None = None
+
     for index in range(start_index, end_index + 1):
 
         RealTimePlaybackEvents.emit(GenerationPhase("Generating audio"))
@@ -214,7 +223,7 @@ def _start_impl(
             and stream.buffer_duration >= REQUIRED_BUFFER_SECONDS_FOR_VALIDATION
         )
 
-        sound_opt, did_interrupt, consecutive_model_errors = generate_full_flow(
+        result_opt, did_interrupt, consecutive_model_errors = generate_full_flow(
             state,
             phrase_groups,
             index,
@@ -237,16 +246,19 @@ def _start_impl(
             # the submit; the run ends, but the audio plays out of the buffer
             # while the session waits for Enter. With no sound there is
             # nothing to submit, so break now.
-            if sound_opt is None:
+            if result_opt is None:
                 Tts.clear_continuation()
                 break
-        if not sound_opt:
+        if result_opt is None:
             printt(f"{COL_ERROR}Couldn't generate sound{COL_DIM}, continuing to next segment")
             printt()
             continue
-        else:
-            sound = sound_opt
+        validation_result = result_opt
 
+        # Post-processing, in the same order as concat: sentence gaps extended,
+        # then playback shaping (gap limiting, resample, high shelf), then the
+        # trailing pause/effect and the room tone noise bed
+        sound = extend_sentence_gaps(state, phrase_group, validation_result)
         original_duration = sound.duration
         sound = SoundPipeline.prepare_generated_sound_for_playback(
             sound=sound,
@@ -287,6 +299,17 @@ def _start_impl(
                 silence_duration = state.project.reason_pauses.get_pause_for(phrase.reason)
                 appended_sound = np.zeros(int(sound.sr * silence_duration), dtype=sound.data.dtype)
 
+        # The bed's stream continues across calls, so the segment and its pause
+        # are fed in turn. No appended sound means the run ends here, so the bed
+        # fades out at the end of the segment.
+        if room_tone_db is not None and sound.data.size > 0:
+            if noise_bed is None:
+                noise_bed = NoiseBed(sound.sr, room_tone_db)
+            sound = noise_bed.apply(sound, is_last=appended_sound is None)
+            if appended_sound is not None and appended_sound.size > 0:
+                appended_sound = noise_bed.apply(
+                    Sound(appended_sound.astype(sound.data.dtype), sound.sr)).data
+
         # Start stream lazy
         if not stream:
             # Keep other audio users' larger/high-latency stream defaults;
@@ -313,6 +336,12 @@ def _start_impl(
         if appended_sound is not None:
             # Add page-turn sound
             _, segment_end = stream.add_data(appended_sound)
+
+        if state.project.realtime_save:
+            played = sound
+            if appended_sound is not None:
+                played = Sound(np.concatenate([sound.data, appended_sound]), sound.sr)
+            save_played_sound(state, phrase_group, index, validation_result, played)
 
         RealTimePlaybackEvents.emit(RealTimePlaybackBuffer(stream.buffer_duration))
         if segment_end > segment_start:
@@ -402,10 +431,11 @@ def generate_full_flow(
         consecutive_model_errors: int = 0,
         max_consecutive_model_errors: int = 5,
         gen_timeout_tracker: GenTimeoutTracker | None = None,
-) -> tuple[Sound | None, bool, int]:
+) -> tuple[ValidationResult | None, bool, int]:
     """
     Similar to `GenerateUtil.generate_full_flow()` but simpler control flow.
-    Returns tuple: (Sound or None if problem, did_interrupt, consecutive_model_errors)
+    Returns tuple: (ValidationResult or None if problem, did_interrupt, consecutive_model_errors)
+    The result's sound is the raw generation; the caller does all post-processing.
 
     Params:
         gen_timeout_tracker:
@@ -499,25 +529,67 @@ def generate_full_flow(
         Tts.clear_continuation()
         return None, did_interrupt, consecutive_model_errors  # is error
     else:
-        validation_result = gen_result
         Tts.clear_continuation_if_reason(phrase_group.last_reason)
-        if project.realtime_save:
-            err, saved_path = GenerateUtil.save_sound_and_timing_json(
-                state,
-                phrase_group,
-                index,
-                validation_result,
-                is_real_time=True,
-                voice_tag=getattr(validation_result, "voice_tag", ""),
-            )
-            if err:
-                printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")
-            else:
-                url = saved_path
-                text = Path(saved_path).name
-                link = text_util.make_terminal_hyperlink(url=url, text=text, is_file=True)
-                printt(f"Saved: {COL_DIM}{link}")
-        return validation_result.sound, did_interrupt, consecutive_model_errors
+        return gen_result, did_interrupt, consecutive_model_errors
+
+
+def save_played_sound(
+        state: State,
+        phrase_group: PhraseGroup,
+        index: int,
+        validation_result: ValidationResult,
+        played: Sound,
+) -> None:
+    """
+    Saves a realtime segment as it was played: after all post-processing,
+    including its trailing pause or break effect. These files are free-standing
+    artifacts (no STT sidecar), not inputs for concat.
+    """
+    err, saved_path = GenerateUtil.save_sound_and_timing_json(
+        state,
+        phrase_group,
+        index,
+        validation_result,
+        is_real_time=True,
+        voice_tag=getattr(validation_result, "voice_tag", ""),
+        sound=played,
+    )
+    if err:
+        printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")
+    else:
+        text = Path(saved_path).name
+        link = text_util.make_terminal_hyperlink(url=saved_path, text=text, is_file=True)
+        printt(f"Saved: {COL_DIM}{link}")
+
+
+def extend_sentence_gaps(
+        state: State,
+        phrase_group: PhraseGroup,
+        validation_result: ValidationResult,
+) -> Sound:
+    """
+    Applies the project's "minimum sentence silence inside segments" setting,
+    like concat does, but using the in-memory STT word timings rather than the
+    sidecar. Realtime only transcribes once the buffer has enough runway (and
+    with Whisper enabled), so segments without transcript words are returned
+    unchanged.
+    """
+    sound = validation_result.sound
+    if not isinstance(validation_result, TranscriptResult):
+        return sound  # STT skipped
+    min_gap = state.project.min_segment_sentence_silence.duration
+    if min_gap <= 0 or not validation_result.transcript_words or len(phrase_group.phrases) < 2:
+        return sound
+
+    timed_phrases = SegmentTranscriptUtil.make_timed_phrases(phrase_group, validation_result)
+    words = Transcriber.words_to_json(validation_result.transcript_words)
+    sound, insertions = SoundPipeline.extend_sentence_gaps_with_insertions(
+        sound, timed_phrases, words, min_gap
+    )
+    if insertions:
+        added = sum(insertion.duration for insertion in insertions)
+        printt(f"{COL_DIM}Extended {len(insertions)} sentence gap(s) (+{added:.2f}s)")
+    return sound
 
 # ---
 

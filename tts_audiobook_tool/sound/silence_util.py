@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import librosa
 import numpy as np
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.sound.sentence_gap_util import SentenceGapInsertion
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 
@@ -39,23 +40,33 @@ class SilenceGapTrim:
 
 class GapTrimMap:
     """
-    Maps a time in the pre-gap-limiting sound to the corresponding time in the
-    post-gap-limiting sound.
+    Maps a time in the sound as saved (the coordinates of the STT sidecar's word
+    timings) to the corresponding time in the sound as rendered by concat.
 
-    Built from the SilenceGapTrim records of one limit_silence_gaps() call, so
-    word timings recorded against the un-limited audio (the STT sidecar) can be
-    re-expressed against audio that was cut at concat time.
+    Up to two edits are accounted for, applied in this order:
+
+    1. Silence insertions (sentence-gap extension): `insertions` are in the
+       saved sound's coordinates.
+    2. Silence gap trims (limit_silence_gaps): `trims` are in the coordinates of
+       the sound *after* the insertions, since that is what the limiter saw.
 
     map_time() is monotonic non-decreasing, map_time(0) == 0, and
     map_time(original_duration) == new_duration. A time that lands inside a
     removed region clamps to the end of the kept piece that precedes it.
     """
 
-    def __init__(self, original_duration: float, trims: Sequence[SilenceGapTrim] | None = None):
+    def __init__(
+            self,
+            original_duration: float,
+            trims: Sequence[SilenceGapTrim] | None = None,
+            insertions: Sequence[SentenceGapInsertion] | None = None,
+    ):
         self.original_duration = original_duration
         self.trims = sorted(trims or [], key=lambda trim: trim.original_start)
+        self.insertions = sorted(insertions or [], key=lambda ins: ins.position)
+        self.inserted_duration = sum(ins.duration for ins in self.insertions)
         total_removed = sum(trim.removed_duration for trim in self.trims)
-        self.new_duration = max(original_duration - total_removed, 0.0)
+        self.new_duration = max(original_duration + self.inserted_duration - total_removed, 0.0)
 
     @staticmethod
     def identity(original_duration: float) -> "GapTrimMap":
@@ -63,15 +74,18 @@ class GapTrimMap:
 
     @property
     def is_identity(self) -> bool:
-        return not self.trims
+        return not self.trims and not self.insertions
 
     def map_time(self, time: float) -> float:
         """
-        Map one time from the pre-limiting to the post-limiting coordinate space.
+        Map one time from the saved to the rendered coordinate space.
         """
         if time <= 0.0:
             return 0.0
+        time += sum(ins.duration for ins in self.insertions if time > ins.position)
+        return self._map_through_trims(time)
 
+    def _map_through_trims(self, time: float) -> float:
         removed_before = 0.0
 
         for trim in self.trims:

@@ -629,9 +629,23 @@ For transcript-bearing results (`TranscriptResult` and subclasses), it also buil
 
 - the source/prompt and flattened transcript text,
 - the **normalized source and normalized transcript** strings,
-- the force-aligned phrase-level timing (`TimedPhrase`s) produced by `ForceAlignUtil.make_timed_phrases()` (`tts_audiobook_tool/app_types/force_align_util.py`),
+- the force-aligned phrase-level timing (`TimedPhrase`s) produced by `ForceAlignUtil.make_timed_phrases()` (`tts_audiobook_tool/app_types/force_align_util.py`), each with the `reason` its text was split off at its end (sidecar version 4+; see below),
 - the timestamped transcript words,
 - and the `ValidationFindings` (error codes, truncation flag, invalid reason).
+
+### Sidecar format version (`SegmentTranscriptUtil.VERSION`)
+
+The sidecar has its own `version`, independent of the project settings version (`PROJECT_SPEC_VERSION`, see [Project Spec v4](<project-spec-v4.md>)) and the ABR metadata version. History: v2 -> v3 moved validation facts into `findings`; **v3 -> v4 added an optional `reason` to each `timed_phrases` entry**.
+
+Rationale for v4: sentence-gap extension (`tts_audiobook_tool/sound/sentence_gap_util.py`) inserts silence at sentence boundaries inside a saved segment so that short gaps reach a minimum duration. It operates on the saved audio plus the sidecar and has no access to the project text, so it cannot tell a sentence boundary from a mere phrase boundary unless the sidecar says so. Guessing from the text (e.g. trailing punctuation) is unreliable; the segmenter already knows why it split (`Reason`), so that is recorded at generation time by `ForceAlignUtil` and written by `TimedPhrase.to_dict(..., include_reason=True)`. The ABR metadata, which shares `TimedPhrase`, does not include `reason` and is unchanged.
+
+A candidate pause belongs only to the uniquely closest word-timing bracket, considering all adjacent transcript words, not just sentence boundaries. This rejects unrelated word pauses inside widened search windows. Ambiguous or overlapping claims are skipped, preventing short consecutive sentences from extending the same pause twice. At concat time, malformed sidecars or non-finite/invalid timing fields produce a warning and leave that segment's sentence gaps unchanged; export continues.
+
+Gaps are extended with digital silence, with a short raised-cosine fade of the host audio on each side. (An earlier room-tone fill, synthesized from a noise patch sampled inside the gap, was removed: TTS pauses are mostly near digital silence or breath, so it either fell back to silence or stretched a breath. A steady background is now the job of the project-wide room tone noise bed; see [room-tone.md](<room-tone.md>).)
+
+Realtime playback applies the same extension (`real_time_playback.extend_sentence_gaps`), but from the in-memory validation result instead of a sidecar: timed phrases come from `SegmentTranscriptUtil.make_timed_phrases` and words from `Transcriber.words_to_json`, before playback shaping (silence-gap limiting, resampling). It only runs when the segment was actually transcribed, i.e. Whisper is enabled and the output buffer has reached `REQUIRED_BUFFER_SECONDS_FOR_VALIDATION`; earlier segments play unextended. Saved realtime segments (`realtime_save`) are free-standing artifacts, not concat inputs: they are written after all post-processing (including the trailing pause or break effect and the room tone noise bed), exactly as played, with no sidecar.
+
+Compatibility: `reason` is optional on read, so v1-v3 sidecars load unchanged (`TimedPhrase.reason is None`, meaning unknown). The loader does not reject or migrate by version, and old sidecars are never rewritten. A boundary with an unknown reason is deliberately skipped by sentence-gap extension (the safe outcome), so only segments generated at v4 or later benefit; older ones must be regenerated. `project.json` is unaffected, so no project migration or backup occurs.
 
 ### Word error counts are persisted in filenames
 

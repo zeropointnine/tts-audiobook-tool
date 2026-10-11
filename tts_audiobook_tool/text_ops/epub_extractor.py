@@ -929,7 +929,61 @@ class EpubExtractor:
         return ""
 
     @staticmethod
+    def extract_navigation_document_targets(book: Any) -> list[EpubNavigationTarget]:
+        # EbookLib reads only a label element's direct .text, losing inline markup such as
+        # <a><strong>Part One</strong></a>. Read EPUB 3 labels from the document instead.
+        for item in getattr(book, "items", []):
+            properties = getattr(item, "properties", []) or []
+            if "nav" not in properties and type(item).__name__ != "EpubNav":
+                continue
+            # EbookLib's get_content() pretty-prints XHTML, adding whitespace between adjacent spans.
+            # Read the original navigation bytes when available so labels retain source adjacency.
+            raw_content = getattr(item, "content", None)
+            if isinstance(raw_content, bytes):
+                html = raw_content.decode("utf-8", errors="replace")
+            elif isinstance(raw_content, str):
+                html = raw_content
+            else:
+                html = EpubExtractor.decode_item_content(item)
+            if not html:
+                continue
+            BeautifulSoup = BeautifulSoupEpubChapterTextExtractor.import_beautiful_soup()
+            soup = BeautifulSoup(html, "html.parser")
+            navigation_base_path = posixpath.dirname(getattr(item, "file_name", "") or "")
+            for nav in soup.find_all("nav"):
+                if "toc" not in str(nav.get("epub:type", "")).split():
+                    continue
+                nav_list = nav.find("ol")
+                if nav_list is None:
+                    continue
+                navigation_targets: list[EpubNavigationTarget] = []
+                for link in nav_list.find_all("a", href=True):
+                    # Inline markup is not a word boundary; preserve adjacency and source whitespace.
+                    title = BeautifulSoupEpubChapterTextExtractor.normalize_inline_text(link.get_text())
+                    depth = 0
+                    parent_list = link.find_parent("ol")
+                    while parent_list is not None and parent_list is not nav_list:
+                        depth += 1
+                        parent_list = parent_list.find_parent("ol")
+                    target = EpubExtractor.make_navigation_target(
+                        link.get("href", ""),
+                        title,
+                        len(navigation_targets),
+                        navigation_base_path,
+                        depth,
+                    )
+                    if target is not None:
+                        navigation_targets.append(target)
+                if navigation_targets:
+                    return navigation_targets
+        return []
+
+    @staticmethod
     def extract_navigation_targets(book: Any) -> list[EpubNavigationTarget]:
+        document_targets = EpubExtractor.extract_navigation_document_targets(book)
+        if document_targets:
+            return document_targets
+
         try:
             toc = getattr(book, "toc", [])
         except Exception:
@@ -975,7 +1029,8 @@ class EpubExtractor:
             return
 
         href = getattr(toc_items, "href", "")
-        title = BeautifulSoupEpubChapterTextExtractor.normalize_inline_text(getattr(toc_items, "title", ""))
+        raw_title = getattr(toc_items, "title", "")
+        title = BeautifulSoupEpubChapterTextExtractor.normalize_inline_text(raw_title) if isinstance(raw_title, str) else ""
         navigation_target = EpubExtractor.make_navigation_target(
             href,
             title,

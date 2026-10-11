@@ -14,5 +14,8 @@ plans/
 
 AGENTS.local.md
 
+# Developer-local hooks (see app_support/dev_hooks_loader.py)
+tts_audiobook_tool/dev_hooks.py
+
 # Disposable diagnostic scripts
 *_probe.py

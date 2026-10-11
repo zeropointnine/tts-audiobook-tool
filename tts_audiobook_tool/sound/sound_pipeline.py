@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import bisect
-from typing import TYPE_CHECKING
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
 from tts_audiobook_tool.app_types import HighShelfEq, Sound
 from tts_audiobook_tool.constants import *
@@ -10,7 +11,9 @@ from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.sound.silence_util import SilenceGapTrim, SilenceUtil
+from tts_audiobook_tool.sound.sentence_gap_util import SentenceGapInsertion, SentenceGapParams, SentenceGapUtil
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
+from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.reason_pauses import ReasonPauses
 from tts_audiobook_tool.util import *
 
@@ -273,6 +276,32 @@ class SoundPipeline:
             return SoundUtil.add_silence(sound, pause_duration)
 
         return sound
+
+    @staticmethod
+    def extend_sentence_gaps_with_insertions(
+        sound: Sound,
+        timed_phrases: Sequence[TimedPhrase],
+        words: Sequence[Mapping[str, Any]],
+        min_gap_duration: float,
+    ) -> tuple[Sound, list[SentenceGapInsertion]]:
+        """
+        Extends short silences at sentence boundaries inside `sound` to at least
+        `min_gap_duration` seconds, using the segment sidecar's timings.
+        Returns the new sound and a record of every insertion (positions are in
+        the coordinates of the given sound), so callers can remap timings that
+        were measured against the unextended audio.
+        A `min_gap_duration` of 0 or less does nothing.
+        """
+        if min_gap_duration <= 0:
+            return sound, []
+
+        report = SentenceGapUtil.extend_sentence_gaps(
+            sound,
+            timed_phrases,
+            words,
+            SentenceGapParams(min_gap_s=min_gap_duration),
+        )
+        return report.sound, report.insertions
 
     @staticmethod
     def limit_silence_gaps_with_trims(

@@ -22,7 +22,12 @@ from tts_audiobook_tool.util import *
 
 class SegmentTranscriptUtil:
 
-    VERSION = 3
+    # Sidecar format version. History:
+    #   2 -> 3: validation facts moved into `findings`
+    #   3 -> 4: each `timed_phrases` entry may carry a "reason" (why the text was
+    #           split off at its end), so sentence boundaries can be identified from
+    #           the sidecar alone. Older sidecars simply lack it (reason unknown).
+    VERSION = 4
     TYPE = "segment_stt_info"
     EXCEPTION_MUSIC_DETECTED = ValidationInvalidReason.MUSIC_DETECTED.value
     EXCEPTION_EXCESSIVE_DURATION = ValidationInvalidReason.EXCESSIVE_DURATION.value
@@ -111,7 +116,7 @@ class SegmentTranscriptUtil:
             "normalized_source": info.normalized_source,
             "normalized_transcript": info.normalized_transcript,
             "findings": info.findings.to_dict(),
-            "timed_phrases": TimedPhrase.timed_phrases_to_dicts(info.timed_phrases),
+            "timed_phrases": TimedPhrase.timed_phrases_to_dicts(info.timed_phrases, include_reason=True),
             "transcript_words": info.transcript_words,
         }
 

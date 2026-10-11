@@ -270,7 +270,7 @@ def test_realtime_first_gen_is_exempt_from_gen_timeout(monkeypatch) -> None:
         "generate_and_validate_batch",
         side_effect=slow_batch,
     ):
-        sound, did_interrupt, _consecutive = real_time_playback.generate_full_flow(
+        result, did_interrupt, _consecutive = real_time_playback.generate_full_flow(
             state,
             [phrase_group],
             0,
@@ -278,5 +278,5 @@ def test_realtime_first_gen_is_exempt_from_gen_timeout(monkeypatch) -> None:
             gen_timeout_tracker=GenTimeoutTracker(),
         )
 
-    assert sound is sentinel
+    assert result is not None and result.sound is sentinel
     assert did_interrupt is False

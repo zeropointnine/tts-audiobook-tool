@@ -1,5 +1,5 @@
 from tts_audiobook_tool.app_support import app_paths
-from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomTone
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
@@ -116,8 +116,15 @@ class ConcatMenu:
 
             items.append(
                 MenuItem(
-                    make_prosody_modulation_label,
+                    "Prosody modulation",
                     lambda _, __: ConcatMenu.prosody_modulation_menu(state)
+                )
+            )
+
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label(ROOM_TONE_TITLE, state.project.room_tone.label),
+                    lambda _, __: ConcatMenu.room_tone_menu(state)
                 )
             )
 
@@ -134,7 +141,7 @@ class ConcatMenu:
             items.append(
                 MenuItem(
                     lambda _: make_menu_label(
-                        label="Treble lift",
+                        label="Treble EQ",
                         value=state.project.get_high_shelf().id,
                     ),
                     lambda _, __: ConcatMenu.high_shelf_menu(state)
@@ -189,12 +196,44 @@ class ConcatMenu:
                     make_limit_silence_gaps_label,
                     lambda _, __: ConcatMenu.limit_silence_gaps_menu(state)
                 ),
+                MenuItem(
+                    lambda _: make_menu_label(
+                        MIN_SEGMENT_SENTENCE_SILENCE_TITLE,
+                        state.project.min_segment_sentence_silence.label,
+                    ),
+                    lambda _, __: ConcatMenu.min_segment_sentence_silence_menu(state),
+                ),
             ]
 
         MenuUtil.menu(
             state=state,
             heading="Prosody modulation",
             items=make_items,
+        )
+
+    @staticmethod
+    def min_segment_sentence_silence_menu(state: State) -> None:
+
+        def on_select(value: MinSegmentSentenceSilence) -> None:
+            state.project.min_segment_sentence_silence = value
+            state.project.save()
+            print_feedback(f"Value set to: {value.label}")
+
+        item = MenuUtil.make_cycle_item(
+            label="Value",
+            values=list(MinSegmentSentenceSilence),
+            value_labels=[v.label for v in MinSegmentSentenceSilence],
+            get_value=lambda: state.project.min_segment_sentence_silence,
+            default_value=MinSegmentSentenceSilence.get_default(),
+            on_select=on_select,
+        )
+
+        MenuUtil.menu(
+            state=state,
+            heading=MIN_SEGMENT_SENTENCE_SILENCE_TITLE,
+            items=[item],
+            subheading=MIN_SEGMENT_SENTENCE_SILENCE_SUBHEADING,
+            breadcrumb=MIN_SEGMENT_SENTENCE_SILENCE_TITLE,
         )
 
     @staticmethod
@@ -245,13 +284,13 @@ class ConcatMenu:
         def on_select(value: HighShelfEq) -> None:
             state.project.high_shelf = value.id
             state.project.save()
-            print_feedback(f"Treble lift set to: {value.id}")
+            print_feedback(f"Treble EQ set to: {value.id}")
 
         current = state.project.get_high_shelf()
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Treble lift",
+            heading_text="Treble EQ",
             labels=[item.id.capitalize() for item in list(HighShelfEq)],
             values=[item for item in list(HighShelfEq)],
             current_value=current,
@@ -263,65 +302,46 @@ class ConcatMenu:
     @staticmethod
     def limit_silence_gaps_menu(state: State) -> None:
 
-        def make_enabled_label(_: State) -> str:
-            value = state.project.limit_silence_gaps
-            value_str = "True" if value else "False"
-            label = f"Enabled: {COL_ACCENT}{value_str}"
-            if value == PROJECT_DEFAULT_LIMIT_SILENCE_GAPS:
-                label += f" {COL_DIM}(default)"
-            return label
+        def on_enabled_select(value: bool) -> None:
+            state.project.limit_silence_gaps = value
+            state.project.save()
+            print_feedback(f"{LIMIT_SILENCE_GAPS_TITLE} set to: {'enabled' if value else 'disabled'}")
 
         def make_items(_: State) -> list[MenuItem]:
-            items = []
-
-            # Enabled
-            items.append(
-                MenuItem(
-                    make_enabled_label,
-                    lambda _, __: ConcatMenu._limit_silence_gaps_enabled_menu(state),
+            items = [
+                MenuUtil.make_cycle_item(
+                    label="Value",
+                    values=[False, True],
+                    value_labels=["disabled", "enabled"],
+                    get_value=lambda: state.project.limit_silence_gaps,
+                    default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS,
+                    on_select=on_enabled_select,
                 )
-            )
-            # Gap duration threshold
-            items.append(
-                MenuUtil.make_number_item(
-                    state=state,
-                    target="limit_silence_gaps_duration",
-                    base_label="Gap duration threshold",
-                    default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
-                    is_minus_one_default=False,
-                    num_decimals=2,
-                    prompt="Enter gap duration threshold (seconds):",
-                    min_value=SILENCE_GAP_DURATION_MIN,
-                    max_value=SILENCE_GAP_DURATION_MAX,
+            ]
+            # Duration only applies when enabled
+            if state.project.limit_silence_gaps:
+                items.append(
+                    MenuUtil.make_number_item(
+                        state=state,
+                        target="limit_silence_gaps_duration",
+                        base_label="Duration",
+                        default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
+                        is_minus_one_default=False,
+                        num_decimals=2,
+                        prompt="Enter maximum silence duration (seconds):",
+                        min_value=SILENCE_GAP_DURATION_MIN,
+                        max_value=SILENCE_GAP_DURATION_MAX,
+                        value_suffix="s",
+                    )
                 )
-            )
             return items
 
         MenuUtil.menu(
             state=state,
-            heading="Limit silence gaps",
+            heading=LIMIT_SILENCE_GAPS_TITLE,
             items=make_items,
             subheading=LIMIT_SILENCE_GAPS_SUBHEADING,
-            breadcrumb="Limit silence gaps",
-        )
-
-    @staticmethod
-    def _limit_silence_gaps_enabled_menu(state: State) -> None:
-
-        def on_select(value: bool) -> None:
-            state.project.limit_silence_gaps = value
-            state.project.save()
-            print_feedback(f"Limit silence gaps set to: {value}")
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text="Limit silence gaps",
-            labels=["True", "False"],
-            values=[True, False],
-            current_value=state.project.limit_silence_gaps,
-            default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS,
-            on_select=on_select,
-            breadcrumb="Limit silence gaps > Enabled",
+            breadcrumb=LIMIT_SILENCE_GAPS_TITLE,
         )
 
     @staticmethod
@@ -380,6 +400,29 @@ class ConcatMenu:
             default_value=False,
             on_select=on_select,
             subheading=SUBDIVIDE_SUBHEADING,
+        )
+
+    @staticmethod
+    def room_tone_menu(state: State) -> None:
+
+        def on_select(value: RoomTone) -> None:
+            state.project.room_tone = value
+            state.project.save()
+            print_feedback(f"{ROOM_TONE_TITLE} set to: {value.label}")
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text=ROOM_TONE_TITLE,
+            labels=[item.label for item in RoomTone],
+            values=list(RoomTone),
+            current_value=state.project.room_tone,
+            default_value=RoomTone.get_default(),
+            on_select=on_select,
+            sublabels=[
+                f"{item.level_db:g} dBFS" if item.level_db is not None else "No added noise"
+                for item in RoomTone
+            ],
+            subheading=ROOM_TONE_SUBHEADING,
         )
 
     @staticmethod
@@ -458,7 +501,7 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
         lines.append(f"- Treble uplift: {high_shelf.id.capitalize()}")
     if state.project.limit_silence_gaps:
         lines.append(
-            f"- Limit silence gaps: True {state.project.limit_silence_gaps_duration:.2f}s"
+            f"- Maximum silence inside segments: True {state.project.limit_silence_gaps_duration:.2f}s"
         )
     return lines
 
@@ -570,23 +613,14 @@ chromium_info = get_chromium_info()
 
 def make_limit_silence_gaps_label(state: State) -> str:
     if state.project.limit_silence_gaps:
-        value = f"True {state.project.limit_silence_gaps_duration:.2f}s"
+        value = f"enabled {state.project.limit_silence_gaps_duration:.2f}s"
     else:
-        value = "False"
+        value = "disabled"
     return make_menu_label(
-        label="Limit silence gaps",
+        label="Maximum silence inside segments",
         value=value,
         default=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     )
-
-def make_prosody_modulation_label(state: State) -> str:
-    parts = []
-    if state.project.reason_pauses.id != ReasonPauseTypes.default().value.id:
-        parts.append(f"segment pauses: {state.project.reason_pauses.menu_label}")
-    if state.project.limit_silence_gaps:
-        parts.append(f"limit silence gaps: {state.project.limit_silence_gaps_duration:.2f}s")
-    value = ", ".join(parts) if parts else "default"
-    return f"Prosody modulation {make_currently_string(value)}"
 
 LOUDNORM_SUBHEADING = \
 """Applies a final pass after concatenation to standardize overall loudness and
@@ -615,28 +649,33 @@ to enable opening local audio files without user input:
 
 HIGH_SHELF_SUBHEADING = \
 """Applies a high-shelf equalizer pass to compensate for dull or muffled-sounding TTS output.
-May be useful for lower-fidelity TTS models.
+May be useful for lower-fidelity TTS models."""
 
-This setting also applies to:
-Realtime playback, LLM voice chat, and stand-alone server"""
+LIMIT_SILENCE_GAPS_TITLE = "Maximum silence inside segments"
 
 LIMIT_SILENCE_GAPS_SUBHEADING = \
 """Limits instances of silence within sound segment from extending beyond
 a certain duration.
 
-Larger values can be used to prevent long pauses (eg, 1-2 seconds).
+Large values can be used to prevent long pauses (eg, 1s-2s);
+small values can be used to influence pacing and prosody (eg, 0s-0.3s).
+(Consider using \"Text segmentation strategy: Sentence.\" in that case)"""
 
-Small values can be used to influence pacing and prosody (eg, 0.0-0.3 seconds).
-(Consider using \"Text segmentation strategy: Sentence.\" in that case)
+MIN_SEGMENT_SENTENCE_SILENCE_TITLE = "Minimum sentence silence inside segments"
 
-Applied when creating the audiobook file, so re-creating it with a different
-threshold re-cuts the existing audio rather than regenerating it.
+MIN_SEGMENT_SENTENCE_SILENCE_SUBHEADING = \
+f"""Enforces a minimum amount of silence between sentences within a sound segment ({MinSegmentSentenceSilence.ENABLED.duration:g}s).
+Requires audio to have been generated using STT validation.
+Also applies to realtime playback."""
 
-This setting also applies to realtime playback, voice chat, stand-alone server."""
+ROOM_TONE_TITLE = "Room tone"
+
+ROOM_TONE_SUBHEADING = \
+"""Adds subtle room tone under the audio, preventing unnatural digital silence. ACX-recommended practice.
+Is also applied to realtime playback."""
 
 REASON_PAUSES_SUBHEADING = \
-"""Controls the silence inserted between generated segments.
-Applies to audiobook export, realtime playback, voice chat, and the standalone server."""
+"""Controls the silence inserted between generated segments."""
 
 UPSAMPLE_SUBHEADING = \
 """Uses %1 to enhance speech and generate higher-frequency detail,

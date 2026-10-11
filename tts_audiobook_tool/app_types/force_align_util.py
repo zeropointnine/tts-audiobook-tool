@@ -22,7 +22,7 @@ class ForceAlignUtil:
         if len(phrases) == 0:
             raise ValueError("phrases must not be empty")
         if len(phrases) == 1 or not words:
-            return [ TimedPhrase(phrases[0].text, 0.0, time_end=sound_duration) ]
+            return [ TimedPhrase(phrases[0].text, 0.0, time_end=sound_duration, reason=phrases[0].reason) ]
         
         # The important part
         phrase_strings = [phrase.text for phrase in phrases]
@@ -44,7 +44,7 @@ class ForceAlignUtil:
             else:
                 time_end = sound_duration
             
-            timed_phrases.append(TimedPhrase(phrase.text, time_start, time_end))
+            timed_phrases.append(TimedPhrase(phrase.text, time_start, time_end, reason=phrase.reason))
 
         return timed_phrases
 

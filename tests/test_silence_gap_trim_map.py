@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.sound.sentence_gap_util import SentenceGapInsertion
 from tts_audiobook_tool.sound.silence_util import GapTrimMap, SilenceGapTrim, SilenceUtil
 
 
@@ -158,3 +159,46 @@ class TestGapTrimMap:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))
+
+
+class TestInsertionsComposedWithTrims:
+
+    def test_insertions_shift_later_times(self) -> None:
+        # A 0.3s insertion at 2.0s pushes every later saved time 0.3s later;
+        # earlier times are untouched.
+        gap_map = GapTrimMap(10.0, insertions=[SentenceGapInsertion(2.0, 0.3)])
+
+        assert not gap_map.is_identity
+        assert gap_map.new_duration == pytest.approx(10.3)
+        assert gap_map.map_time(1.0) == pytest.approx(1.0)
+        assert gap_map.map_time(2.0) == pytest.approx(2.0)
+        assert gap_map.map_time(5.0) == pytest.approx(5.3)
+        assert gap_map.map_time(10.0) == pytest.approx(10.3)
+
+    def test_trims_are_in_post_insertion_coordinates(self) -> None:
+        # Saved audio is 10s. 0.5s is inserted at 1.0s, so a saved-time 4.0s is
+        # 4.5s in the extended audio. The limiter then cut 4.0s-6.0s (extended
+        # coordinates) down to 0.4s, removing 1.6s. Saved 8.0s -> 8.5 -> 6.9.
+        gap_map = GapTrimMap(
+            10.0,
+            trims=[make_trim(4.0, 6.0, 4.8, 5.2)],
+            insertions=[SentenceGapInsertion(1.0, 0.5)],
+        )
+
+        assert gap_map.new_duration == pytest.approx(10.0 + 0.5 - 1.6)
+        assert gap_map.map_time(0.5) == pytest.approx(0.5)
+        assert gap_map.map_time(8.0) == pytest.approx(6.9)
+        assert gap_map.map_time(10.0) == pytest.approx(gap_map.new_duration)
+
+    def test_composed_map_is_monotonic(self) -> None:
+        gap_map = GapTrimMap(
+            10.0,
+            trims=[make_trim(4.0, 6.0, 4.8, 5.2)],
+            insertions=[SentenceGapInsertion(1.0, 0.5), SentenceGapInsertion(7.0, 0.3)],
+        )
+        previous = 0.0
+        for step in range(1, 1001):
+            mapped = gap_map.map_time(step * 0.01)
+            assert mapped >= previous - 1e-9
+            previous = mapped
+        assert previous == pytest.approx(gap_map.new_duration)

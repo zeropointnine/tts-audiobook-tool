@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -14,6 +16,7 @@ from tts_audiobook_tool.concat_util import (
 )
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
+from tts_audiobook_tool.sound.sentence_gap_util import SentenceGapUtil
 from tts_audiobook_tool.sound.silence_util import GapTrimMap, SilenceGapTrim
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 
@@ -462,8 +465,13 @@ def make_gap_sound() -> Sound:
     return Sound(np.concatenate([tone, silence, tone]), GAP_SR)
 
 
-def concatenate_gap_sound(limit_silence_gaps: bool) -> object:
-    sound = make_gap_sound()
+def concatenate_gap_sound(
+    limit_silence_gaps: bool,
+    sound: Sound | None = None,
+    min_sentence_silence: float = 0.0,
+    segment_path: str = "segment.flac",
+) -> object:
+    sound = sound if sound is not None else make_gap_sound()
     phrase = Phrase("Gap phrase.", Reason.SENTENCE)
 
     with patch.object(ConcatUtil, "init_ffmpeg_stream", return_value=MagicMock()), \
@@ -474,13 +482,14 @@ def concatenate_gap_sound(limit_silence_gaps: bool) -> object:
          patch.object(SoundPipeline, "append_pause_or_section_effect", side_effect=lambda sound_in, **kwargs: sound_in):
         return ConcatUtil.concatenate_sound_segments(
             dest_path="output.flac",
-            phrases_and_paths=[(phrase, "segment.flac")],
+            phrases_and_paths=[(phrase, segment_path)],
             use_break_sound_effect=False,
             high_shelf=HighShelfEq.DISABLED,
             reason_pauses=ReasonPauseTypes.NORMAL.value,
             print_progress=False,
             limit_silence_gaps=limit_silence_gaps,
             limit_silence_gaps_duration=0.2,
+            min_sentence_silence=min_sentence_silence,
         )
 
 
@@ -543,3 +552,190 @@ def test_subdivided_metadata_maps_word_timings_through_gap_cut() -> None:
     assert segments[0][1].time_start == pytest.approx(1.0)
     # Tail is clamped to the (cut) segment duration.
     assert segments[0][-1].time_end == 2.5
+
+
+@pytest.fixture
+def sentence_gap_sidecar(tmp_path: Path):
+    from test_sentence_gap_util import Utterance
+
+    u = Utterance(gap_s=0.15)
+    payload = {
+        "version": 4, "type": "segment_stt_info", "language_code": "en",
+        "index_1b": 1, "source": "Hello there friend. How are you today",
+        "prompt": "", "transcript": "", "normalized_source": "",
+        "normalized_transcript": "", "findings": {},
+        "timed_phrases": TimedPhrase.timed_phrases_to_dicts(u.timed_phrases, include_reason=True),
+        "transcript_words": u.words,
+    }
+    segment_path = tmp_path / "segment.flac"
+    sidecar_path = segment_path.with_suffix(".json")
+    sidecar_path.write_text(json.dumps(payload), encoding="utf-8")
+    return u.sound, segment_path, sidecar_path, payload
+
+
+@pytest.mark.parametrize("collection,field,value", [
+    ("transcript_words", "start", "not a time"),
+    ("transcript_words", "start", None),
+    ("transcript_words", "start", True),
+    ("transcript_words", "start", float("nan")),
+    ("transcript_words", "end", float("inf")),
+    ("transcript_words", "end", float("-inf")),
+    ("transcript_words", "word", 42),
+    ("timed_phrases", "time_start", "not a time"),
+    ("timed_phrases", "time_end", float("nan")),
+    ("timed_phrases", "time_end", float("inf")),
+    ("timed_phrases", "text", None),
+    ("timed_phrases", "reason", 4),
+    ("timed_phrases", "reason", []),
+])
+def test_sentence_gap_extension_rejects_malformed_fields(
+    sentence_gap_sidecar, collection, field, value,
+) -> None:
+    # Real JSON parsing can succeed while leaving unsafe values in timing objects.
+    sound, segment_path, sidecar_path, payload = sentence_gap_sidecar
+    payload[collection][0][field] = value
+    sidecar_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with patch("tts_audiobook_tool.concat_util.L.w") as warning:
+        result, insertions = ConcatUtil.extend_sentence_gaps_for_segment(sound, str(segment_path), 0.4)
+
+    assert result is sound
+    assert insertions == []
+    warning.assert_called_once()
+    assert str(sidecar_path) in warning.call_args.args[0]
+
+
+@pytest.mark.parametrize("collection,field", [
+    ("transcript_words", "start"),
+    ("transcript_words", "end"),
+    ("transcript_words", "word"),
+    ("timed_phrases", "time_end"),
+])
+def test_sentence_gap_extension_missing_fields_do_not_abort_concat(
+    sentence_gap_sidecar, collection, field,
+) -> None:
+    # The original missing-word-start crash must leave both the segment and concat intact.
+    sound, segment_path, sidecar_path, payload = sentence_gap_sidecar
+    del payload[collection][0][field]
+    sidecar_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with patch("tts_audiobook_tool.concat_util.L.w") as warning:
+        unchanged, insertions = ConcatUtil.extend_sentence_gaps_for_segment(sound, str(segment_path), 0.4)
+        result = concatenate_gap_sound(False, sound, 0.4, str(segment_path))
+
+    assert unchanged is sound
+    assert insertions == []
+    assert isinstance(result, ConcatRenderResult)
+    assert result.durations == [sound.duration]
+    assert result.gap_trim_maps == [None]
+    assert warning.call_count == 2
+    assert all(str(sidecar_path) in call.args[0] for call in warning.call_args_list)
+
+
+@pytest.mark.parametrize("malformation", ["invalid_json", "legacy_missing_field", "non_dict_word"])
+def test_sentence_gap_extension_handles_sidecar_parsing_failures(sentence_gap_sidecar, malformation) -> None:
+    # In particular, from_dict's legacy branch can raise outside load's JSON guard.
+    sound, segment_path, sidecar_path, payload = sentence_gap_sidecar
+    if malformation == "legacy_missing_field":
+        del payload["findings"]
+        del payload["normalized_source"]
+    elif malformation == "non_dict_word":
+        payload["transcript_words"][0] = None
+    sidecar_path.write_text("{" if malformation == "invalid_json" else json.dumps(payload), encoding="utf-8")
+
+    with patch("tts_audiobook_tool.concat_util.L.w") as warning:
+        result, insertions = ConcatUtil.extend_sentence_gaps_for_segment(sound, str(segment_path), 0.4)
+
+    assert result is sound
+    assert insertions == []
+    warning.assert_called_once()
+    assert str(sidecar_path) in warning.call_args.args[0]
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_sentence_gap_extension_accepts_valid_sidecars(sentence_gap_sidecar, legacy) -> None:
+    # Existing sidecars without reasons still skip safely; modern ones still extend.
+    sound, segment_path, sidecar_path, payload = sentence_gap_sidecar
+    # Whisper may emit zero-length/overlapping words or times just beyond the clip.
+    payload["transcript_words"][0]["end"] = 0
+    payload["transcript_words"][1]["start"] = 0
+    payload["transcript_words"][-1]["end"] = sound.duration + 0.01
+    if legacy:
+        for phrase in payload["timed_phrases"]:
+            del phrase["reason"]
+    sidecar_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with patch("tts_audiobook_tool.concat_util.L.w") as warning:
+        result, insertions = ConcatUtil.extend_sentence_gaps_for_segment(sound, str(segment_path), 0.4)
+
+    warning.assert_not_called()
+    if legacy:
+        assert result is sound
+        assert insertions == []
+    else:
+        assert len(insertions) == 1
+        assert result.duration > sound.duration + 0.2
+
+
+def test_sentence_gap_extension_inserts_digital_silence(sentence_gap_sidecar) -> None:
+    # Even a gap with an audible noise floor is extended with digital silence
+    from test_sentence_gap_util import Utterance
+
+    _, segment_path, _, _ = sentence_gap_sidecar
+    sound = Utterance(gap_s=0.15, floor_level=0.0003).sound  # same timings as the sidecar
+    result, insertions = ConcatUtil.extend_sentence_gaps_for_segment(sound, str(segment_path), 0.4)
+
+    assert len(insertions) == 1
+    start = round(insertions[0].position * sound.sr)
+    stop = start + round(insertions[0].duration * sound.sr)
+    assert not np.any(result.data[start:stop])
+
+
+@pytest.mark.parametrize("error", [ValueError("pipeline bug"), RuntimeError("runtime failure")])
+def test_sentence_gap_extension_does_not_hide_pipeline_errors(sentence_gap_sidecar, error) -> None:
+    # Data fallback must not silently swallow unrelated failures in audio processing.
+    sound, segment_path, _, _ = sentence_gap_sidecar
+    with patch.object(SoundPipeline, "extend_sentence_gaps_with_insertions", side_effect=error), \
+         pytest.raises(type(error), match=str(error)):
+        ConcatUtil.extend_sentence_gaps_for_segment(sound, str(segment_path), 0.4)
+
+
+def test_sentence_gap_extension_runs_before_limiting_and_map_composes() -> None:
+    # A 0.15s sentence gap is extended to 0.4s, then the limiter (max 0.2s) cuts
+    # it back down: the two steps overlap, extension first. The recorded map
+    # must take a sidecar time through both so it lands on the final audio.
+    from test_sentence_gap_util import Utterance
+
+    u = Utterance(gap_s=0.15)
+    info = MagicMock(transcript_words=u.words, timed_phrases=u.timed_phrases)
+    sidecar_path = MagicMock()
+    sidecar_path.exists.return_value = True
+
+    with patch("tts_audiobook_tool.concat_util.get_segment_stt_info_path", return_value=sidecar_path), \
+         patch("tts_audiobook_tool.concat_util.SegmentTranscriptUtil.load", return_value=info):
+        extended_only = concatenate_gap_sound(False, u.sound, min_sentence_silence=0.4)
+        both = concatenate_gap_sound(True, u.sound, min_sentence_silence=0.4)
+        disabled = concatenate_gap_sound(False, u.sound, min_sentence_silence=0.0)
+
+    assert isinstance(extended_only, ConcatRenderResult)
+    assert isinstance(both, ConcatRenderResult)
+    assert isinstance(disabled, ConcatRenderResult)
+
+    # Disabled: untouched, no map
+    assert disabled.gap_trim_maps == [None]
+
+    # Extension alone: audio grows and the map shifts later words by the insertion
+    ext_map = extended_only.gap_trim_maps[0]
+    assert ext_map is not None
+    assert extended_only.durations[0] > u.sound.duration + 0.2
+    assert extended_only.durations[0] == pytest.approx(ext_map.new_duration, abs=0.01)
+    last_word_start = u.words[3]["start"]
+    assert ext_map.map_time(last_word_start + 0.01) > last_word_start + 0.2
+
+    # Both: limiter acts on the extended audio, and the map agrees with the result
+    both_map = both.gap_trim_maps[0]
+    assert both_map is not None
+    assert len(both_map.insertions) == 1
+    assert both.durations[0] < extended_only.durations[0]
+    assert both_map.new_duration == pytest.approx(both.durations[0], abs=0.01)
+    assert both_map.map_time(u.sound.duration) == pytest.approx(both.durations[0], abs=0.01)

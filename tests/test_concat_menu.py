@@ -9,6 +9,7 @@ from tts_audiobook_tool.app_types import (
     ExportType,
     HighShelfEq,
     NormalizationType,
+    RoomTone,
     SectionMarkerMode,
 )
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
@@ -74,7 +75,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     project.limit_silence_gaps = True
     project.limit_silence_gaps_duration = 0.35
     assert concat_menu.make_enabled_option_confirmation_lines(state)[-1] == (
-        "- Limit silence gaps: True 0.35s"
+        "- Maximum silence inside segments: True 0.35s"
     )
 
     project.normalization_type = NormalizationType.DISABLED
@@ -217,34 +218,47 @@ def test_concat_menu_offers_limit_silence_gaps() -> None:
         items = menu.call_args.args[2](state)
 
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
-    assert "Limit silence gaps (currently: True 0.40s)" in labels
+    assert "Maximum silence inside segments (currently: enabled 0.40s)" in labels
 
     project.limit_silence_gaps = False
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
-    assert "Limit silence gaps (currently: False)" in labels
+    assert "Maximum silence inside segments (currently: disabled)" in labels
 
 
 def test_limit_silence_gaps_menu_writes_project_setting() -> None:
     project = Project.model_validate({"limit_silence_gaps": False})
     state = cast(State, SimpleNamespace(project=project))
 
+    # The first item cycles disabled/enabled; the Duration item (shown with a
+    # trailing "s" unit) only exists while the setting is enabled
     with patch.object(concat_menu.MenuUtil, "menu") as menu, patch.object(
-        concat_menu.MenuUtil, "options_menu"
-    ) as options_menu, patch.object(Project, "save") as save, patch.object(
-        concat_menu, "print_feedback"
-    ):
+        Project, "save"
+    ) as save, patch.object(concat_menu, "print_feedback"):
         ConcatMenu.limit_silence_gaps_menu(state)
         subheading = menu.call_args.kwargs["subheading"]
-        items = menu.call_args.kwargs["items"](state)
-        items[0].handler(state, None)  # "Enabled"
-        options_menu.call_args.kwargs["on_select"](True)
+        make_items = menu.call_args.kwargs["items"]
 
-    assert project.limit_silence_gaps
-    save.assert_called_once()
+        items = make_items(state)
+        assert len(items) == 1
+        label = strip_ansi_codes(get_string_from(state, items[0].label))
+        assert label == "Value: disabled (default)"
+
+        items[0].handler(state, items[0])
+        assert project.limit_silence_gaps
+        save.assert_called_once()
+
+        items = make_items(state)
+        assert len(items) == 2
+        assert strip_ansi_codes(get_string_from(state, items[0].label)) == "Value: enabled"
+        assert strip_ansi_codes(get_string_from(state, items[1].label)).startswith(
+            "Duration (currently: 1.00s default)"
+        )
+
+        items[0].handler(state, items[0])
+        assert not project.limit_silence_gaps
+        assert len(make_items(state)) == 1
+
     assert "realtime playback" in subheading
-    assert strip_ansi_codes(get_string_from(state, items[1].label)).startswith(
-        "Gap duration threshold (currently: 1.00 default)"
-    )
 
 
 @pytest.mark.parametrize("sample_rate", [24000, 48000])
@@ -287,3 +301,77 @@ def test_concat_menu_prevents_enabling_unavailable_lava_sr() -> None:
     ask_error.assert_called_once_with(
         "LavaSR v2 is not installed; generative upsampling cannot be enabled"
     )
+
+
+def test_min_segment_sentence_silence_menu_cycles_and_saves() -> None:
+    # The submenu has one cycling item; selecting it toggles the project value and saves
+    from types import SimpleNamespace
+    from typing import cast
+    from unittest.mock import patch
+    from tts_audiobook_tool.app_types import MinSegmentSentenceSilence
+    from tts_audiobook_tool.menus.concat_menu import ConcatMenu
+    from tts_audiobook_tool.menus.menu_util import get_string_from
+    from tts_audiobook_tool.project import Project
+    from tts_audiobook_tool.state import State
+
+    project = Project.model_validate({})
+    state = cast(State, SimpleNamespace(project=project))
+
+    with patch.object(Project, "save") as save, \
+            patch("tts_audiobook_tool.menus.concat_menu.MenuUtil.menu") as menu, \
+            patch("tts_audiobook_tool.menus.concat_menu.print_feedback"):
+        ConcatMenu.min_segment_sentence_silence_menu(state)
+        kwargs = menu.call_args.kwargs
+        assert kwargs["heading"] == "Minimum sentence silence inside segments"
+        assert "(0.5s)" in kwargs["subheading"]
+        (item,) = kwargs["items"]
+
+        assert "disabled" in get_string_from(state, item.label)
+        assert "(default)" in get_string_from(state, item.label)
+
+        item.handler(state, item)
+        assert project.min_segment_sentence_silence is MinSegmentSentenceSilence.ENABLED
+        assert "(default)" not in get_string_from(state, item.label)
+        save.assert_called_once()
+
+        item.handler(state, item)
+        assert project.min_segment_sentence_silence is MinSegmentSentenceSilence.DISABLED
+
+
+def test_concat_menu_offers_room_tone_after_prosody_modulation() -> None:
+    project = Project()
+    state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
+
+    with patch("tts_audiobook_tool.menus.concat_menu.MenuUtil.menu") as menu, patch(
+        "tts_audiobook_tool.menus.concat_menu.ProjectUtil.get_latest_concat_files",
+        return_value=[],
+    ), patch.object(LavaSrUtil, "has_lava_sr", return_value=False):
+        ConcatMenu.menu(state)
+        items = menu.call_args.args[2](state)
+
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+    index = labels.index("Room tone (currently: Off)")
+    assert labels[index - 1].startswith("Prosody modulation")
+
+
+def test_room_tone_menu_writes_project_setting() -> None:
+    project = Project()
+    state = cast(State, SimpleNamespace(project=project))
+
+    with patch.object(concat_menu.MenuUtil, "options_menu") as options_menu, patch.object(
+        Project, "save"
+    ) as save, patch.object(concat_menu, "print_feedback"):
+        ConcatMenu.room_tone_menu(state)
+        kwargs = options_menu.call_args.kwargs
+        assert kwargs["heading_text"] == "Room tone"
+        assert kwargs["labels"] == ["Off", "Low", "Medium", "High"]
+        assert kwargs["values"] == list(RoomTone)
+        assert kwargs["sublabels"][1:] == ["-75 dBFS", "-70 dBFS", "-65 dBFS"]
+        assert kwargs["current_value"] is RoomTone.OFF
+        assert kwargs["default_value"] is RoomTone.OFF
+        assert kwargs["subheading"]
+
+        kwargs["on_select"](RoomTone.MEDIUM)
+
+    assert project.room_tone is RoomTone.MEDIUM
+    save.assert_called_once()

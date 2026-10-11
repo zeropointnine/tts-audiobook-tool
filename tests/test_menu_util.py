@@ -88,3 +88,42 @@ def test_subheading_has_a_trailing_blank_line(monkeypatch, is_screen, subheading
             assert "Item" in printed[2]
         else:
             assert "Item" in printed[0]
+
+
+def test_cycle_item_advances_wraps_and_marks_default(monkeypatch) -> None:
+    # A cycle item shows the current value, advances to the next on select,
+    # wraps from last to first, and tags only the default value with "(default)"
+    state = cast(State, SimpleNamespace())
+    current = ["a"]
+    selected: list[str] = []
+
+    def on_select(value: str) -> None:
+        selected.append(value)
+        current[0] = value
+
+    item = MenuUtil.make_cycle_item(
+        label="Value",
+        values=["a", "b", "c"],
+        value_labels=["Alpha", "Beta", "Gamma"],
+        get_value=lambda: current[0],
+        default_value="a",
+        on_select=on_select,
+    )
+
+    def label() -> str:
+        return menu_util.get_string_from(state, item.label)
+
+    assert "Alpha" in label() and "(default)" in label()
+
+    item.handler(state, item)
+    assert "Beta" in label() and "(default)" not in label()
+
+    item.handler(state, item)
+    item.handler(state, item)  # wraps c -> a
+    assert selected == ["b", "c", "a"]
+    assert "Alpha" in label()
+
+
+def test_cycle_item_rejects_mismatched_lists() -> None:
+    with pytest.raises(ValueError):
+        MenuUtil.make_cycle_item("Value", [1, 2], ["one"], lambda: 1, None, lambda v: None)

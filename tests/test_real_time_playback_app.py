@@ -10,7 +10,8 @@ from textual.geometry import Size
 from textual.widgets import Input, Rule, Static
 
 from tts_audiobook_tool import real_time_playback
-from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_types import RoomTone, SttVariant
+from tts_audiobook_tool.app_types.validation_result import SkippedResult
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut, ModelUnhealthy
 from tts_audiobook_tool.model_worker import ModelWorker
@@ -814,7 +815,7 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
         gen_timeout_tracker=None,
     ):
         runway_checks.append(has_runway)
-        return sound, False, 0
+        return SkippedResult(sound, message=""), False, 0
 
     monkeypatch.setattr(real_time_playback, "SoundDeviceStream", fake_stream_factory)
     monkeypatch.setattr(
@@ -875,6 +876,7 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
                 reason_pauses=SimpleNamespace(get_pause_for=lambda reason: 0.0),
                 get_high_shelf=lambda: 0,
                 realtime_save=False,
+                room_tone=RoomTone.OFF,
             ),
         ),
     )
@@ -995,7 +997,7 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
         # generate_full_flow() clears Interrupts at the end; the external
         # cancel event intentionally stays set until the next submit.
         Interrupts().clear()
-        return sound, did_interrupt, consecutive_model_errors
+        return SkippedResult(sound, message=""), did_interrupt, consecutive_model_errors
 
     tracker_calls: list[int] = []
 
@@ -1066,6 +1068,7 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
                 reason_pauses=SimpleNamespace(get_pause_for=lambda reason: 0.0),
                 get_high_shelf=lambda: 0,
                 realtime_save=False,
+                room_tone=RoomTone.OFF,
             ),
         ),
     )
@@ -1291,3 +1294,100 @@ def test_interface_failure_cleanup_reports_worker_restart_failure(
     assert result.hard_reset_cause is HardResetCause.INTERFACE_FAILURE
     assert "RuntimeError: interface exploded" in result.message
     assert "replacement worker failed to start" in result.message
+
+
+def test_realtime_save_writes_exactly_what_was_played(monkeypatch) -> None:
+    # Saved realtime segments are free-standing artifacts of the playback: the
+    # file must hold the post-processed audio (room tone bed, pause) sent to the
+    # output stream, not the raw generation
+    from tts_audiobook_tool.app_types import Sound
+
+    class FakeStream:
+        def __init__(self) -> None:
+            self.chunks: list[np.ndarray] = []
+            self.total = 0
+
+        def start(self) -> bool:
+            return True
+
+        def add_data(self, data: np.ndarray) -> tuple[int, int]:
+            self.chunks.append(np.copy(data))
+            start = self.total
+            self.total += len(data)
+            return start, self.total
+
+        buffer_duration = 1.0
+        played_samples = 0
+
+        def shut_down(self) -> None:
+            pass
+
+    streams: list[FakeStream] = []
+
+    def fake_stream_factory(**_) -> FakeStream:
+        streams.append(FakeStream())
+        return streams[0]
+
+    raw = Sound(np.zeros(48000, dtype=np.float32), 48000)
+    saved: list[np.ndarray] = []
+
+    monkeypatch.setattr(real_time_playback, "SoundDeviceStream", fake_stream_factory)
+    monkeypatch.setattr(
+        real_time_playback, "generate_full_flow",
+        lambda *args, **kwargs: (SkippedResult(raw, message=""), False, 0),
+    )
+    monkeypatch.setattr(
+        real_time_playback, "save_played_sound",
+        lambda state, phrase_group, index, validation_result, played: saved.append(played.data),
+    )
+    monkeypatch.setattr(
+        real_time_playback.SoundPipeline, "prepare_generated_sound_for_playback",
+        lambda sound, high_shelf, limit_silence_gaps, limit_silence_gaps_duration: sound,
+    )
+    monkeypatch.setattr(real_time_playback.ProjectBookUtil, "get_section_start_indices", lambda project: [])
+    monkeypatch.setattr(
+        real_time_playback.ModelManager, "warm_up_models",
+        lambda state: SimpleNamespace(should_stop=False, error=None, did_interrupt=False),
+    )
+    monkeypatch.setattr(real_time_playback.readiness, "get_generate_blocker_text", lambda state, verbose=False: None)
+    monkeypatch.setattr(real_time_playback.app_memory, "show_vram_memory_warning_if_necessary", lambda: False)
+    monkeypatch.setattr(real_time_playback.Tts, "clear_continuation", lambda: None)
+    monkeypatch.setattr(real_time_playback.Tts, "reset_voice_selection_index", lambda: None)
+    monkeypatch.setattr(
+        real_time_playback.Tts, "get_instance",
+        lambda: SimpleNamespace(get_warning_issues=lambda project: None),
+    )
+    monkeypatch.setattr(real_time_playback.GenerateUtil, "print_batch_heading", lambda indices, voice_index=None: None)
+
+    state = cast(
+        State,
+        SimpleNamespace(
+            prefs=SimpleNamespace(stt_variant=SttVariant.DISABLED),
+            project=SimpleNamespace(
+                max_retries=0,
+                limit_silence_gaps=False,
+                limit_silence_gaps_duration=0.5,
+                use_break_sound_effect=False,
+                reason_pauses=SimpleNamespace(get_pause_for=lambda reason: 0.5),
+                get_high_shelf=lambda: 0,
+                realtime_save=True,
+                room_tone=RoomTone.HIGH,
+            ),
+        ),
+    )
+    phrase_groups = [
+        PhraseGroup([Phrase(f"Segment {i}.", Reason.SENTENCE)], voice_index=0) for i in range(2)
+    ]
+    Interrupts().clear()
+    continue_event = threading.Event()
+    continue_event.set()
+    real_time_playback.start(state, phrase_groups, (1, 2), continue_event=continue_event)
+
+    played = streams[0].chunks
+    # First segment: content + pause; last segment: content only
+    assert len(played) == 3 and len(saved) == 2
+    np.testing.assert_array_equal(saved[0], np.concatenate(played[:2]))
+    np.testing.assert_array_equal(saved[1], played[2])
+    # Post-processed: the room tone bed was added to the silent raw generation
+    assert np.any(saved[0] != 0)
+    assert len(saved[0]) == 48000 + 24000

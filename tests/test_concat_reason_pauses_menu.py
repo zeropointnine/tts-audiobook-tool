@@ -37,7 +37,7 @@ def test_concat_menu_places_reason_pauses_under_post_processing_options() -> Non
     assert "currently:" in labels[post_processing_index]
     assert ReasonPauseTypes.NORMAL.value.menu_label in labels[post_processing_index]
 
-    assert labels[post_processing_index + 1].startswith("Limit silence gaps")
+    assert labels[post_processing_index + 1].startswith("Maximum silence inside segments")
 
     loudness_index = next(
         index

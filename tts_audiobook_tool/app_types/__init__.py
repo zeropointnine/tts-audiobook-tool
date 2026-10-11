@@ -182,6 +182,79 @@ class HighShelfEq(tuple[str, float, float, float], Enum):
 
 # ---
 
+class MinSegmentSentenceSilence(tuple[str, float, str], Enum):
+    """
+    Whether to enforce a minimum silence duration at sentence boundaries inside
+    a sound segment (applied during concatenation; see sound/sentence_gap_util.py).
+    Value shape: (id, duration_seconds, label); `id` is the JSON serialization value.
+    """
+
+    DISABLED = ("disabled", 0.0, "disabled")
+    ENABLED = ("enabled", 0.5, "enabled")
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def duration(self) -> float:
+        return self.value[1]
+
+    @property
+    def label(self) -> str:
+        return self.value[2]
+
+    @staticmethod
+    def get_default() -> MinSegmentSentenceSilence:
+        return MinSegmentSentenceSilence.DISABLED
+
+    @staticmethod
+    def get_by_id(id: str) -> MinSegmentSentenceSilence | None:
+        for item in list(MinSegmentSentenceSilence):
+            if id == item.id:
+                return item
+        return None
+
+# ---
+
+class RoomTone(tuple[str, float | None, str], Enum):
+    """
+    Constant low-level noise bed added under the whole output (concat and
+    realtime playback; see sound/noise_bed.py).
+    Value shape: (id, level_dbfs or None when off, label); `id` is the JSON
+    serialization value. Levels are noise RMS before loudness normalization.
+    """
+
+    OFF = ("off", None, "Off")
+    LOW = ("low", -75.0, "Low")
+    MEDIUM = ("medium", -70.0, "Medium")
+    HIGH = ("high", -65.0, "High")
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def level_db(self) -> float | None:
+        return self.value[1]
+
+    @property
+    def label(self) -> str:
+        return self.value[2]
+
+    @staticmethod
+    def get_default() -> RoomTone:
+        return RoomTone.OFF
+
+    @staticmethod
+    def get_by_id(id: str) -> RoomTone | None:
+        for item in list(RoomTone):
+            if id == item.id:
+                return item
+        return None
+
+# ---
+
 class SttVariant(tuple[str, str], Enum):
     """ Applies to both whisper implementations (faster-whisper and mlx-whisper) """
 

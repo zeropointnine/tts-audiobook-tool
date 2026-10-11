@@ -38,6 +38,7 @@ class SegmentTranscriptData:
     normalized_transcript: str
 
     # Phrase-level timings used to subdivide app metadata during concat.
+    # From version 4 each may record its split `reason`; earlier sidecars lack it.
     timed_phrases: list[TimedPhrase]
 
     # Word-level STT transcript data, including word text and timestamps.

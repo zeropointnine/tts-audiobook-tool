@@ -919,6 +919,7 @@ class GenerateUtil:
         voice_tag: str = "",
         stt_info: SegmentTranscriptData | None = None,
         dir_path: str | None = None,
+        sound: Sound | None = None,
     ) -> tuple[str, str]:
         """
         Saves sound segment and timing info json
@@ -927,6 +928,9 @@ class GenerateUtil:
         :param dir_path:
             Output directory; defaults to the project's realtime or segments
             directory. The sidecar json is always saved alongside the sound.
+        :param sound:
+            Audio to save instead of `validation_result.sound`. Realtime uses
+            this to save what was actually played (it writes no sidecar).
         """
 
         project = state.project
@@ -947,7 +951,7 @@ class GenerateUtil:
         )
         sound_path = os.path.join(dir_path, file_name)
 
-        err = SoundFileUtil.save_flac(validation_result.sound, sound_path)
+        err = SoundFileUtil.save_flac(sound if sound is not None else validation_result.sound, sound_path)
         if err:
             return err, sound_path
 

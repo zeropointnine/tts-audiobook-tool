@@ -186,10 +186,12 @@ def make_menu_label(
         value_prefix: str="currently: ",
         color_code=COL_ACCENT,
         num_decimals=0,
-        required_predicate: Callable[[], bool] | None = None
+        required_predicate: Callable[[], bool] | None = None,
+        value_suffix: str="",
     ) -> str:
     currently = make_currently_string(
-        value, value_prefix, default, color_code, num_decimals, required_predicate
+        value, value_prefix, default, color_code, num_decimals, required_predicate,
+        value_suffix=value_suffix,
     )
     return f"{label} {currently}"
 
@@ -203,7 +205,8 @@ def make_currently_string(
         color_code=COL_ACCENT,
         num_decimals=0,
         required_predicate: Callable[[], bool] | None = None,
-        required_label="required"
+        required_label="required",
+        value_suffix: str="",
     ) -> str:
     """
     Used for presenting the current value for a menu item in a consistent style
@@ -216,7 +219,7 @@ def make_currently_string(
         return f"{COL_DIM}({COL_ERROR}{required_label}{COL_DIM})"
 
     value_string = make_parameter_value_string(
-        value=value, default=default, num_decimals=num_decimals
+        value=value, default=default, num_decimals=num_decimals, suffix=value_suffix
     )
     return f"{COL_DIM}({value_prefix}{color_code}{value_string}{COL_DIM})"
 
@@ -224,8 +227,10 @@ def make_currently_string(
 def make_parameter_value_string(
     value: float | int | bool,
     default: float | int | bool,
-    num_decimals: int=0
+    num_decimals: int=0,
+    suffix: str="",
 ) -> str:
+    """ `suffix` (eg, a unit such as "s") is appended to the number, before any default marker """
 
     DEFAULT_LABEL = f" {COL_DIM}default"
 
@@ -246,6 +251,8 @@ def make_parameter_value_string(
             s = f"{value:.{num_decimals}f}"
     else:
         s = str(value)
+
+    s += suffix
 
     if value == default:
         s += DEFAULT_LABEL

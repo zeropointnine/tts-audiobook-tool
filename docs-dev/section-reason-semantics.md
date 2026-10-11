@@ -69,6 +69,22 @@ Consequences of removing the import-time downgrades:
 - The browser player shows a horizontal rule at each blank-line run (previously
   consecutive ones were hidden by rewriting trailing whitespace).
 
+## Background noise at segment joins
+
+When the project setting `room_tone` is not Off (default Off), concat runs a
+constant generated noise bed under the whole output, so the pauses inserted
+between segments carry a steady background instead of digital silence. See
+[room-tone.md](room-tone.md). Real-time playback applies the same bed.
+
+- Scope: every segment, every inserted pause (including the output's trailing
+  pause), and the stretch under both SPACE_BREAK and SECTION_BREAK effects.
+- Durations are unchanged, so recorded segment durations and word timings are
+  unaffected.
+
+(This replaced an earlier per-join room tone fill, which copied noise from the
+neighbouring segments into each pause, and then an adaptive "noise floor layer";
+see room-tone.md for why both were dropped.)
+
 ## EPUB logical-section boundaries
 
 EPUB import assembles readable spine content into logical sections defined by EPUB

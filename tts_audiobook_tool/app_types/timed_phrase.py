@@ -1,20 +1,33 @@
 from __future__ import annotations
 import json
 
-from tts_audiobook_tool.app_types.phrase import Phrase
+from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.util import *
 
 class TimedPhrase:
     """
     A phrase (piece of text) with a start and end time.
     Used for the app metadata; the text gets displayed as-is in the player UI.
-    Note how does not have/need 'reason' at this stage in teh pipeline.
+
+    `reason` is why the text was split off at its end (see `Reason`). It is optional:
+    most users of this class (app metadata, the player) neither have nor need it.
+    The segment sidecar JSON records it, so later processing of a saved segment can
+    tell sentence boundaries from phrase boundaries without the project text.
+    It is only written to a dict when asked for (`to_dict(..., include_reason=True)`),
+    so the app metadata format is unaffected. None means unknown (e.g. a sidecar
+    written before it was recorded).
     """
 
-    def __init__(self, text: str, time_start: float, time_end: float):
+    # Class-level default so TimedPhrase objects unpickled from before this
+    # attribute existed (enhance artifacts) still have it.
+    reason: Reason | None = None
+
+    def __init__(self, text: str, time_start: float, time_end: float, reason: Reason | str | None = None):
         self.text = text
         self.time_start = time_start
         self.time_end = time_end
+        # A str is the JSON form, as read from a sidecar
+        self.reason = Reason.from_json_value(reason) if isinstance(reason, str) else reason
 
     def __str__(self) -> str:
         s1 = ellipsize(self.text.strip(), 50)
@@ -34,22 +47,30 @@ class TimedPhrase:
         return TimedPhrase(
             text=phrase.text,
             time_start=time_start,
-            time_end=time_end
+            time_end=time_end,
+            reason=phrase.reason,
         )
 
     @staticmethod
-    def to_dict(timed_text_segment: TimedPhrase) -> dict:
-        return {
+    def to_dict(timed_text_segment: TimedPhrase, include_reason: bool = False) -> dict:
+        """
+        `include_reason` adds a "reason" key (when the reason is known). Leave it off
+        for the app metadata, which has a fixed format.
+        """
+        d = {
             "text": timed_text_segment.text,
             "time_start": timed_text_segment.time_start,
             "time_end": timed_text_segment.time_end
         }
+        if include_reason and timed_text_segment.reason is not None:
+            d["reason"] = timed_text_segment.reason.json_value
+        return d
 
     @staticmethod
-    def timed_phrases_to_dicts(timed_text_segments: list[TimedPhrase]) -> list[dict]:
+    def timed_phrases_to_dicts(timed_text_segments: list[TimedPhrase], include_reason: bool = False) -> list[dict]:
         result = []
         for item in timed_text_segments:
-            result.append(TimedPhrase.to_dict(item))
+            result.append(TimedPhrase.to_dict(item, include_reason))
         return result
 
     @staticmethod

@@ -43,7 +43,7 @@ EPUB file selected in Text menu
   ↓
 EpubExtractor.import_epub(...)
   ↓
-EbookLib reads the EPUB package and navigation
+EbookLib reads the EPUB package; the extractor reads full EPUB 3 navigation labels from XHTML, with EbookLib/NCX fallback
   ↓
 Spine XHTML documents are loaded in reading order
   ↓

@@ -293,6 +293,8 @@ class Start:
         printt()
         if DEV:
             printt(f"### DEV ###")
+            from tts_audiobook_tool.app_support import dev_hooks_loader
+            dev_hooks_loader.load()
 
     def start_app_or_server(self) -> None:
         # Start

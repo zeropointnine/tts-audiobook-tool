@@ -45,7 +45,7 @@ class StubEpubBook:
 
 
 class StubTocItem:
-    def __init__(self, title: str, href: str, subitems=None):
+    def __init__(self, title: str | None, href: str, subitems=None):
         self.title = title
         self.href = href
         self.subitems = subitems or []
@@ -725,6 +725,166 @@ class TestEpubExtractor(unittest.TestCase):
                 ("Text/chapter 02.xhtml", "start", "Chapter Two"),
             ],
         )
+
+    def test_extract_navigation_targets_keeps_children_of_missing_toc_labels(self):
+        # A missing library label must not crash normalization or discard nested chapters.
+        book = StubEpubBookWithSpine(
+            items=[],
+            toc=[
+                (StubTocItem(None, "part.xhtml"), [StubTocItem("Chapter One", "one.xhtml")]),
+                StubTocItem(None, "other-part.xhtml", [StubTocItem("Chapter Two", "two.xhtml")]),
+            ],
+        )
+
+        targets = EpubExtractor.extract_navigation_targets(book)
+
+        self.assertEqual([(target.title, target.depth) for target in targets], [("Chapter One", 1), ("Chapter Two", 1)])
+
+    def test_extract_navigation_targets_reads_inline_labels_from_epub3_toc_only(self):
+        # Full label text, nesting, and resource-relative fragments survive; page lists do not become sections.
+        nav = StubEpubSpineItem(
+            "navigation",
+            "Navigation/nav.xhtml",
+            '''<html><body>
+                <nav epub:type="page-list"><ol><li><a href="../Text/part%20one.xhtml#start">1</a></li></ol></nav>
+                <nav epub:type="toc"><ol>
+                    <li><a href="../Text/part%20one.xhtml#start"><strong>Part One</strong></a><ol>
+                        <li><a href="../Text/chapter.xhtml#one">Chapter <em>One</em></a></li>
+                        <li><a href="../Text/chapter.xhtml#two"><span>Chapter Two</span></a></li>
+                    </ol></li>
+                    <li><a href="https://example.com">External</a></li>
+                    <li><a href="../Text/empty.xhtml"></a></li>
+                </ol></nav>
+                <nav epub:type="landmarks"><ol><li><a href="../Text/part%20one.xhtml">Body</a></li></ol></nav>
+            </body></html>''',
+        )
+        nav.properties = ["nav"]
+        book = StubEpubBookWithSpine(items=[nav], toc=[StubTocItem(None, "Text/part%20one.xhtml#start")])
+
+        targets = EpubExtractor.extract_navigation_targets(book)
+
+        self.assertEqual(
+            [(target.title, target.href, target.order, target.depth) for target in targets],
+            [
+                ("Part One", "Text/part one.xhtml#start", 0, 0),
+                ("Chapter One", "Text/chapter.xhtml#one", 1, 1),
+                ("Chapter Two", "Text/chapter.xhtml#two", 2, 1),
+            ],
+        )
+
+    def test_extract_navigation_targets_preserves_inline_label_adjacency_and_whitespace(self):
+        # Inline tags must not split punctuation, CJK, or words; source whitespace still separates words.
+        cases = [
+            ("The <em>King</em>'s Return", "The King's Return"),
+            ("<span>第一</span><span>章</span>", "第一章"),
+            ("<em>Re</em>turn", "Return"),
+            ("<span>Chapter</span> \n\t <em>One</em>", "Chapter One"),
+        ]
+        for label_html, expected_title in cases:
+            with self.subTest(label_html=label_html):
+                nav = StubEpubSpineItem(
+                    "navigation",
+                    "Navigation/nav.xhtml",
+                    f'<html><body><nav epub:type="toc"><ol><li>'
+                    f'<a href="../Text/chapter.xhtml#start">{label_html}</a>'
+                    f'</li></ol></nav></body></html>',
+                )
+                nav.properties = ["nav"]
+                book = StubEpubBookWithSpine(items=[nav])
+
+                targets = EpubExtractor.extract_navigation_targets(book)
+
+                self.assertEqual([(target.title, target.href) for target in targets], [
+                    (expected_title, "Text/chapter.xhtml#start"),
+                ])
+
+    def test_import_epub_preserves_inline_label_adjacency_and_whitespace(self):
+        # Exercise real EbookLib serialization/import, not just a parsed navigation stub.
+        from ebooklib import epub
+
+        labels = [
+            ("The <em>King</em>'s Return", "The King's Return"),
+            ("<span>第一</span><span>章</span>", "第一章"),
+            ("<span>Chapter</span> \n\t <em>Three</em>", "Chapter Three"),
+        ]
+        book = epub.EpubBook()
+        book.set_identifier("inline-label-adjacency-test")
+        book.set_title("Inline Label Test")
+        book.set_language("en")
+        chapters = []
+        for index, (_, title) in enumerate(labels):
+            chapter = epub.EpubHtml(uid=f"chapter{index}", file_name=f"Text/chapter{index}.xhtml", title=title)
+            chapter.content = f'<html><body><h1 id="start">{title}</h1><p>Chapter {index} prose.</p></body></html>'
+            book.add_item(chapter)
+            chapters.append(chapter)
+        # EpubItem writes the original bytes; EpubHtml would pretty-print spaces between the CJK spans.
+        nav = epub.EpubItem(uid="nav", file_name="Navigation/nav.xhtml", media_type="application/xhtml+xml")
+        nav.properties = ["nav"]
+        nav.content = '<html><body><nav epub:type="toc"><ol>' + "".join(
+            f'<li><a href="../Text/chapter{index}.xhtml#start">{label_html}</a></li>'
+            for index, (label_html, _) in enumerate(labels)
+        ) + '</ol></nav></body></html>'
+        book.add_item(nav)
+        book.spine = chapters
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "book.epub")
+            epub.write_epub(path, book)
+            result = EpubExtractor.import_epub(
+                epub_path=path,
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual([chapter.title for chapter in result.chapters], [title for _, title in labels])
+        self.assertEqual(len(result.section_start_indices), len(labels) - 1)
+        for index, chapter in enumerate(result.chapters):
+            self.assertIn(labels[index][1], chapter.text)
+            self.assertIn(f"Chapter {index} prose.", chapter.text)
+        self.assertEqual(result.significant_warnings, [])
+
+    def test_import_epub_preserves_formatted_navigation_labels_and_part_boundaries(self):
+        # Reproduce the real EbookLib path: <strong>-wrapped part labels become None in book.toc.
+        from ebooklib import epub
+
+        book = epub.EpubBook()
+        book.set_identifier("formatted-navigation-test")
+        book.set_title("Example Book")
+        book.set_language("en")
+        part = epub.EpubHtml(uid="part", file_name="Text/part.xhtml", title="Part One")
+        part.content = '<html><body><h1 id="start">Part One</h1><p>Opening prose.</p></body></html>'
+        chapter = epub.EpubHtml(uid="chapter", file_name="Text/chapter.xhtml", title="Chapter One")
+        chapter.content = '<html><body><h1 id="start">Chapter One</h1><p>Chapter prose.</p></body></html>'
+        # EpubHtml preserves supplied nav markup; EpubNav's writer would regenerate it from book.toc.
+        nav = epub.EpubHtml(uid="nav", file_name="Navigation/nav.xhtml")
+        nav.properties = ["nav"]
+        nav.content = '''<html><body><nav epub:type="toc"><ol>
+            <li><a href="../Text/part.xhtml#start"><strong>Part One</strong></a><ol>
+                <li><a href="../Text/chapter.xhtml#start">Chapter <em>One</em></a></li>
+            </ol></li>
+        </ol></nav></body></html>'''
+        for item in (part, chapter, nav):
+            book.add_item(item)
+        book.spine = [part, chapter]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "book.epub")
+            epub.write_epub(path, book)
+            result = EpubExtractor.import_epub(
+                epub_path=path,
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual(result.book_title, "Example Book")
+        self.assertEqual([chapter.title for chapter in result.chapters], ["Part One", "Chapter One"])
+        self.assertEqual(len(result.section_start_indices), 1)
+        self.assertIn("Opening prose.", result.chapters[0].text)
+        self.assertNotIn("Chapter prose.", result.chapters[0].text)
+        self.assertIn("Chapter prose.", result.chapters[1].text)
+        self.assertEqual(result.significant_warnings, [])
 
     def test_extract_navigation_targets_resolves_ncx_links_relative_to_ncx_resource(self):
         book = StubEpubBookWithSpine(

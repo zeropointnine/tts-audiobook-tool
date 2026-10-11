@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 import json
+import math
 import os
 import subprocess
 import time
@@ -12,6 +13,7 @@ from numpy import ndarray
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.app_support import app_paths
+from tts_audiobook_tool.app_support import dev_hooks_loader
 from tts_audiobook_tool.system_support.browser import get_chromium_info, launch_player_with_chromium
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, Sound
 from tts_audiobook_tool import ask
@@ -25,6 +27,8 @@ from tts_audiobook_tool.sound import m4b_chapter_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.reason_pauses import ReasonPauses
+from tts_audiobook_tool.sound.noise_bed import NoiseBed
+from tts_audiobook_tool.sound.sentence_gap_util import SentenceGapInsertion
 from tts_audiobook_tool.sound.silence_util import GapTrimMap, SilenceUtil
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
@@ -39,12 +43,38 @@ from tts_audiobook_tool.app_types.app_metadata import (
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
 from tts_audiobook_tool.text_util import make_terminal_hyperlink
 from tts_audiobook_tool.util import *
+
+
+def _validate_sentence_gap_timings(
+    timed_phrases: list[TimedPhrase], transcript_words: list[dict],
+) -> None:
+    """Validate sidecar fields consumed by gap extension, without rewriting timings."""
+    def check_time(value: object) -> None:
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value)):
+            raise ValueError("Sentence gap timings must be finite numbers")
+
+    for phrase in timed_phrases:
+        if not isinstance(phrase.text, str):
+            raise ValueError("Invalid timed phrase text")
+        if phrase.reason is not None and not isinstance(phrase.reason, Reason):
+            raise ValueError("Invalid timed phrase reason")
+        check_time(phrase.time_start)
+        check_time(phrase.time_end)
+
+    for word in transcript_words:
+        if not isinstance(word, dict):
+            raise ValueError("Invalid transcript word")
+        if not isinstance(word["word"], str):
+            raise ValueError("Invalid transcript word text")
+        check_time(word["start"])
+        check_time(word["end"])
 
 
 @dataclass
@@ -56,10 +86,10 @@ class ConcatRenderResult:
     generated audio) and includes each segment's trailing pause or break effect.
 
     gap_trim_maps is aligned the same way and holds, for every segment whose
-    internal silence gaps were shortened, the map from the un-cut rendered
-    segment to the cut one (None where nothing was cut). STT word timings are
-    recorded against the un-cut saved audio, so subdivision has to push them
-    through this map.
+    internal silences were edited (sentence gaps extended and/or over-long gaps
+    shortened), the map from the saved segment to the edited one (None where
+    nothing was edited). STT word timings are recorded against the unedited
+    saved audio, so subdivision has to push them through this map.
     """
 
     durations: list[float]
@@ -155,6 +185,7 @@ class ConcatUtil:
             file_cut_indices = [0]
 
         last_dest_path = ""
+        dest_paths: list[str] = []
         for i, file_cut_index in enumerate(file_cut_indices):
 
             message = "Creating concatenated audiobook file"
@@ -191,6 +222,7 @@ class ConcatUtil:
                 ask.ask_error(err)
                 return
             last_dest_path = dest_path
+            dest_paths.append(dest_path)
 
             printt(f"{COL_ACCENT}Saved {COL_DEFAULT}{make_terminal_hyperlink(dest_path)}")
             printt()
@@ -201,6 +233,11 @@ class ConcatUtil:
         elapsed = duration_string(time.time() - start_time)
         printt(f"Finished{COL_DIM} (elapsed: {elapsed})")
         printt()
+
+        dev_hooks_loader.call(
+            "on_concat_done",
+            state=state, dest_dir=dest_dir, dest_paths=dest_paths, last_dest_path=last_dest_path
+        )
 
         app_hint_util.show_player_hint(state.prefs)
 
@@ -326,6 +363,8 @@ class ConcatUtil:
                 use_upsampler=use_upsampler,
                 limit_silence_gaps=state.project.limit_silence_gaps,
                 limit_silence_gaps_duration=state.project.limit_silence_gaps_duration,
+                min_sentence_silence=state.project.min_segment_sentence_silence.duration,
+                room_tone_db=state.project.room_tone.level_db,
             )
         finally:
             # LavaSR lives in the model worker. Always explicitly unload it at
@@ -494,6 +533,8 @@ class ConcatUtil:
         use_upsampler: bool = False,
         limit_silence_gaps: bool = False,
         limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
+        min_sentence_silence: float = 0.0,
+        room_tone_db: float | None = None,
     ) -> ConcatRenderResult | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
@@ -514,6 +555,16 @@ class ConcatUtil:
             different threshold doesn't need a regeneration pass.
         :param limit_silence_gaps_duration:
             Maximum duration of an internal silence gap, in seconds.
+        :param min_sentence_silence:
+            Minimum duration, in seconds, of the silence at sentence boundaries
+            inside each segment (0 disables). Short gaps are extended using the
+            segment sidecar's timings; segments without a usable sidecar are
+            left alone. Applied before limit_silence_gaps. Gaps are extended
+            with digital silence.
+        :param room_tone_db:
+            Level (dBFS RMS) of the constant noise bed run under the whole
+            output, including pauses and break effects (see NoiseBed). None
+            disables it.
 
         Returns a ConcatRenderResult: the duration of each added segment (for app
         metadata) plus the gap-cut maps needed to remap STT word timings.
@@ -547,6 +598,10 @@ class ConcatUtil:
         # pending = (sound_no_pause, phrase, index, path)
         pending: tuple[Sound, Phrase, int, str] | None = None
 
+        # Room tone setting: a constant noise bed under the whole output.
+        # Created on first use, at the rendered audio's sample rate.
+        noise_bed: NoiseBed | None = None
+
         def flush_pending(next_sound: Sound | None) -> None:
             """
             Appends the (possibly compensated) trailing pause to the held
@@ -554,7 +609,7 @@ class ConcatUtil:
             segment's rendered sound (without pause), or None for the final
             segment (no compensation applied).
             """
-            nonlocal duration_sum
+            nonlocal duration_sum, noise_bed
             assert pending is not None
             sound, phrase, idx, path = pending
             is_final_segment = next_sound is None
@@ -596,6 +651,13 @@ class ConcatUtil:
                 break_effect=break_effect,
                 pause_duration_override=override,
             )
+
+            # Constant noise bed under the segment and its pause or break
+            # effect alike. Same duration.
+            if room_tone_db is not None:
+                if noise_bed is None:
+                    noise_bed = NoiseBed(sound.sr, room_tone_db)
+                sound = noise_bed.apply(sound, is_last=is_final_segment)
 
             durations[idx] = sound.duration
             duration_sum += sound.duration
@@ -646,6 +708,14 @@ class ConcatUtil:
 
             curr_sound = result
 
+            # Short sentence-boundary silences are extended first, then over-long
+            # gaps are cut (so the two can partly undo each other if configured
+            # that way). Sidecar timings are against the saved audio, hence the
+            # map below accounts for both steps.
+            curr_sound, insertions = ConcatUtil.extend_sentence_gaps_for_segment(
+                curr_sound, path, min_sentence_silence
+            )
+
             # Over-long internal silence gaps are cut here rather than at
             # generation time, so re-concatenating saved audio with a different
             # threshold re-cuts it without regenerating. Word timings were
@@ -655,8 +725,8 @@ class ConcatUtil:
                 enabled=limit_silence_gaps,
                 max_gap_duration=limit_silence_gaps_duration,
             )
-            if gap_trims:
-                gap_trim_maps[i] = GapTrimMap(result.duration, gap_trims)
+            if gap_trims or insertions:
+                gap_trim_maps[i] = GapTrimMap(result.duration, gap_trims, insertions)
 
             if Interrupts().did_interrupt:
                 Interrupts().clear()
@@ -682,6 +752,12 @@ class ConcatUtil:
             printt()
         printt()
 
+        insertion_count = sum(len(gap_map.insertions) for gap_map in gap_trim_maps if gap_map)
+        if insertion_count and print_progress:
+            added = sum(gap_map.inserted_duration for gap_map in gap_trim_maps if gap_map)
+            printt(f"Extended sentence gaps: {insertion_count} gaps, {added:.2f}s added")
+            printt()
+
         gap_trim_count = sum(len(gap_map.trims) for gap_map in gap_trim_maps if gap_map)
         if gap_trim_count and print_progress:
             removed = sum(
@@ -695,6 +771,42 @@ class ConcatUtil:
         Interrupts().clear()
         ConcatUtil.close_ffmpeg_stream(process)
         return ConcatRenderResult(durations=durations, gap_trim_maps=gap_trim_maps)
+
+    @staticmethod
+    def extend_sentence_gaps_for_segment(
+            sound: Sound,
+            segment_path: str,
+            min_sentence_silence: float,
+    ) -> tuple[Sound, list[SentenceGapInsertion]]:
+        """
+        Loads the segment's sidecar and extends its short sentence-boundary
+        silences (with digital silence). Returns the sound unchanged (and no
+        insertions) if disabled or if the sidecar is missing/unreadable/has
+        unusable timings.
+        """
+        if min_sentence_silence <= 0:
+            return sound, []
+
+        sidecar_path = get_segment_stt_info_path(segment_path)
+        if not sidecar_path.exists():
+            return sound, []
+        try:
+            # from_dict can raise on malformed legacy metadata even when the
+            # JSON itself loaded successfully. Keep this guard around data only,
+            # not the audio pipeline, so unrelated processing errors still surface.
+            info = SegmentTranscriptUtil.load(sidecar_path)
+            if isinstance(info, str):
+                raise ValueError(info)
+            _validate_sentence_gap_timings(info.timed_phrases, info.transcript_words)
+        except (KeyError, TypeError, ValueError, OverflowError) as error:
+            L.w(f"Couldn't use sidecar for sentence gap extension: {sidecar_path}: {error}")
+            return sound, []
+        if not info.transcript_words or len(info.timed_phrases) < 2:
+            return sound, []
+
+        return SoundPipeline.extend_sentence_gaps_with_insertions(
+            sound, info.timed_phrases, info.transcript_words, min_sentence_silence
+        )
 
     @staticmethod
     def init_ffmpeg_stream(

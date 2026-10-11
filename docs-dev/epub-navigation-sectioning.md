@@ -13,7 +13,7 @@ The importer therefore reads content in spine order while deriving audiobook sec
 
 ## Navigation Source Selection
 
-EbookLib reads the EPUB package and exposes its navigation structure. The importer prefers an EPUB 3 navigation document (`nav.xhtml` with a table of contents). When EPUB 3 navigation is absent, EbookLib falls back to the EPUB 2 NCX table of contents.
+EbookLib reads the EPUB package. The importer prefers an EPUB 3 navigation document (`nav.xhtml` with a table of contents), reading its link labels directly so inline markup such as `<strong>` and `<em>` does not lose or truncate titles. Resource-relative links are resolved against the navigation document, and nested lists supply entry depth. Page lists and landmarks are not section sources. When the document yields no targets, the importer uses EbookLib's navigation structure, including its EPUB 2 NCX fallback; missing library labels are ignored without discarding their children.
 
 The selected table is flattened in navigation order while retaining each entry's label and target. Nested entries are valid boundaries; nesting describes the publication's hierarchy but does not create a second hierarchy in the current project model.
 
