@@ -47,6 +47,10 @@ SGL_OMNI_GEN_TIMEOUT = 330
 # Max words per text chunk, applied to the source text in "STT flow"
 MAX_WORDS_PER_SEGMENT_STT = 40
 
+# When "merge short sentences" segmentation is enabled, text segments with this
+# many words or fewer get merged into a neighboring segment, across paragraphs
+SHORT_GROUP_MERGE_MAX_WORDS = 5
+
 # Enhance-flow source-text segmentation policy. The enhance flow is the
 # "opposite" of the TTS flow: segments feed forced alignment, not TTS prompts,
 # so it uses its own settings instead of the current project's. Language code
