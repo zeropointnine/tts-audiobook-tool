@@ -840,6 +840,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
+**2026-10-13**
+
+- Added **Room reverb** under `Create > Post-processing`. Places the narration in a subtle room (Light, Moderate) or a larger, more audible space (Large room). Off by default.
+
 **2026-10-12**
 
 - Added **Room tone** under `Create > Post-processing`. Adds low-level background noise, prevents awkward digital (zero amplitude) silences. Off by default.

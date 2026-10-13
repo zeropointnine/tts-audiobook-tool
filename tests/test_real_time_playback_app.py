@@ -10,7 +10,7 @@ from textual.geometry import Size
 from textual.widgets import Input, Rule, Static
 
 from tts_audiobook_tool import real_time_playback
-from tts_audiobook_tool.app_types import RoomTone, SttVariant
+from tts_audiobook_tool.app_types import RoomReverb, RoomTone, SttVariant
 from tts_audiobook_tool.app_types.validation_result import SkippedResult
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut, ModelUnhealthy
@@ -877,6 +877,7 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
                 get_high_shelf=lambda: 0,
                 realtime_save=False,
                 room_tone=RoomTone.OFF,
+                room_reverb=RoomReverb.OFF,
             ),
         ),
     )
@@ -1069,6 +1070,7 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
                 get_high_shelf=lambda: 0,
                 realtime_save=False,
                 room_tone=RoomTone.OFF,
+                room_reverb=RoomReverb.OFF,
             ),
         ),
     )
@@ -1296,10 +1298,11 @@ def test_interface_failure_cleanup_reports_worker_restart_failure(
     assert "replacement worker failed to start" in result.message
 
 
-def test_realtime_save_writes_exactly_what_was_played(monkeypatch) -> None:
+@pytest.mark.parametrize("room_reverb", [RoomReverb.OFF, RoomReverb.MEDIUM_DRR21])
+def test_realtime_save_writes_exactly_what_was_played(monkeypatch, room_reverb: RoomReverb) -> None:
     # Saved realtime segments are free-standing artifacts of the playback: the
-    # file must hold the post-processed audio (room tone bed, pause) sent to the
-    # output stream, not the raw generation
+    # file must hold the post-processed audio (reverb, room tone bed, pause)
+    # sent to the output stream, not the raw generation
     from tts_audiobook_tool.app_types import Sound
 
     class FakeStream:
@@ -1328,7 +1331,10 @@ def test_realtime_save_writes_exactly_what_was_played(monkeypatch) -> None:
         streams.append(FakeStream())
         return streams[0]
 
-    raw = Sound(np.zeros(48000, dtype=np.float32), 48000)
+    # Content in the last 0.1 s only, so a reverb tail would be loud in the pause
+    raw_data = np.zeros(48000, dtype=np.float32)
+    raw_data[-4800:] = 0.2 * np.sin(np.arange(4800, dtype=np.float32) * 0.1)
+    raw = Sound(raw_data, 48000)
     saved: list[np.ndarray] = []
 
     monkeypatch.setattr(real_time_playback, "SoundDeviceStream", fake_stream_factory)
@@ -1372,6 +1378,7 @@ def test_realtime_save_writes_exactly_what_was_played(monkeypatch) -> None:
                 get_high_shelf=lambda: 0,
                 realtime_save=True,
                 room_tone=RoomTone.HIGH,
+                room_reverb=room_reverb,
             ),
         ),
     )
@@ -1388,6 +1395,14 @@ def test_realtime_save_writes_exactly_what_was_played(monkeypatch) -> None:
     assert len(played) == 3 and len(saved) == 2
     np.testing.assert_array_equal(saved[0], np.concatenate(played[:2]))
     np.testing.assert_array_equal(saved[1], played[2])
-    # Post-processed: the room tone bed was added to the silent raw generation
-    assert np.any(saved[0] != 0)
+    # Post-processed: the room tone bed was added to the silent start of the
+    # raw generation
+    assert np.any(saved[0][:4800] != 0)
     assert len(saved[0]) == 48000 + 24000
+    # With reverb, the segment's tail carries into its pause, far above the bed
+    pause_start = played[1][:2400].astype(np.float64)
+    pause_rms_db = 10 * np.log10(np.mean(pause_start ** 2))
+    if room_reverb is RoomReverb.OFF:
+        assert pause_rms_db < -55
+    else:
+        assert pause_rms_db > -45

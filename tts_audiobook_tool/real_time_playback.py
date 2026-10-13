@@ -43,6 +43,7 @@ from tts_audiobook_tool.real_time_playback_events import (
 )
 from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPhase, ModelUnhealthy
 from tts_audiobook_tool.sound.noise_bed import NoiseBed
+from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -185,6 +186,9 @@ def _start_impl(
     # stream is seamless across segments.
     room_tone_db = state.project.room_tone.level_db
     noise_bed: NoiseBed | None = None
+    # Room reverb (same setting as concat), likewise one per run
+    room_reverb = state.project.room_reverb
+    reverb: RoomReverbProcessor | None = None
 
     for index in range(start_index, end_index + 1):
 
@@ -257,7 +261,7 @@ def _start_impl(
 
         # Post-processing, in the same order as concat: sentence gaps extended,
         # then playback shaping (gap limiting, resample, high shelf), then the
-        # trailing pause/effect and the room tone noise bed
+        # trailing pause/effect, room reverb and the room tone noise bed
         sound = extend_sentence_gaps(state, phrase_group, validation_result)
         original_duration = sound.duration
         sound = SoundPipeline.prepare_generated_sound_for_playback(
@@ -298,6 +302,17 @@ def _start_impl(
             else:
                 silence_duration = state.project.reason_pauses.get_pause_for(phrase.reason)
                 appended_sound = np.zeros(int(sound.sr * silence_duration), dtype=sound.data.dtype)
+
+        # Reverb first, on the narration only: the segment, then its pause or
+        # break effect (dry, with the tail decaying under it), in turn
+        if (room_reverb.design is not None and room_reverb.drr_db is not None
+                and sound.data.size > 0):
+            if reverb is None:
+                reverb = RoomReverbProcessor(sound.sr, room_reverb.design, room_reverb.drr_db)
+            sound = reverb.apply(sound, is_last=appended_sound is None)
+            if appended_sound is not None and appended_sound.size > 0:
+                appended_sound = reverb.apply(
+                    Sound(appended_sound.astype(sound.data.dtype), sound.sr), send_end=0).data
 
         # The bed's stream continues across calls, so the segment and its pause
         # are fed in turn. No appended sound means the run ends here, so the bed

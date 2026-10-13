@@ -65,6 +65,9 @@ impulse-response energy (not per block, which would modulate the level).
 
 ## Application
 
+Room reverb ([room-reverb.md](room-reverb.md)), when on, runs just before the bed, so the bed
+isn't reverberated.
+
 `NoiseBed(sr, level_db)`, one per export or realtime run, created at the first segment's sample
 rate. `apply(sound, is_last=False)` adds the bed at a constant gain and returns a sound of the
 same length:

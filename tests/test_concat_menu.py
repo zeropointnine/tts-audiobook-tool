@@ -10,6 +10,7 @@ from tts_audiobook_tool.app_types import (
     HighShelfEq,
     MinSegmentSentenceSilence,
     NormalizationType,
+    RoomReverb,
     RoomTone,
     SectionMarkerMode,
 )
@@ -110,32 +111,36 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     state = cast(State, SimpleNamespace(project=project))
 
     assert plain_option_lines(state) == [
+        "  - Section break sound effects: True",
         "  - Loudness normalization: Stronger",
         "  - Generative upsampling: True",
-        "  - Section break sound effects: True",
         "  - Treble EQ: Moderate",
     ]
 
     project.room_tone = RoomTone.MEDIUM
+    project.room_reverb = RoomReverb.MEDIUM_DRR21
     project.limit_silence_gaps = True
     project.limit_silence_gaps_duration = 1.0
     project.min_segment_sentence_silence = MinSegmentSentenceSilence.ENABLED
     project.high_shelf = HighShelfEq.DISABLED.id
     project.normalization_type = NormalizationType.DEFAULT
+    # Same order as the menu: options, then post-processing
     assert plain_option_lines(state) == [
-        "  - Loudness normalization: ACX standard",
-        "  - Generative upsampling: True",
-        "  - Room tone: Medium",
-        "  - Section break sound effects: True",
         "  - Maximum silence inside segments: True 1.00s",
         "  - Minimum sentence silence inside segments: True",
+        "  - Section break sound effects: True",
+        "  - Loudness normalization: ACX standard",
+        "  - Generative upsampling: True",
+        "  - Room reverb: Large room",
+        "  - Room tone: Medium",
     ]
     project.room_tone = RoomTone.OFF
+    project.room_reverb = RoomReverb.OFF
     project.min_segment_sentence_silence = MinSegmentSentenceSilence.DISABLED
     project.limit_silence_gaps = False
     project.high_shelf = HighShelfEq.MODERATE.id
 
-    assert plain_option_lines(state)[0] == (
+    assert plain_option_lines(state)[1] == (
         "  - Loudness normalization: ACX standard"
     )
 
@@ -146,7 +151,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
 
     project.limit_silence_gaps = True
     project.limit_silence_gaps_duration = 0.35
-    assert plain_option_lines(state)[-1] == (
+    assert plain_option_lines(state)[0] == (
         "  - Maximum silence inside segments: True 0.35s"
     )
 
@@ -416,7 +421,7 @@ def test_min_segment_sentence_silence_menu_cycles_and_saves() -> None:
         assert project.min_segment_sentence_silence is MinSegmentSentenceSilence.DISABLED
 
 
-def test_concat_menu_offers_room_tone_after_prosody_modulation() -> None:
+def test_concat_menu_offers_room_tone_after_room_reverb() -> None:
     project = Project()
     state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
 
@@ -429,7 +434,7 @@ def test_concat_menu_offers_room_tone_after_prosody_modulation() -> None:
 
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
     index = labels.index("Room tone (currently: Off)")
-    assert labels[index - 1].startswith("Pause timing rules")
+    assert labels[index - 1].startswith("Room reverb")
 
 
 def test_room_tone_menu_writes_project_setting() -> None:
@@ -452,4 +457,42 @@ def test_room_tone_menu_writes_project_setting() -> None:
         kwargs["on_select"](RoomTone.MEDIUM)
 
     assert project.room_tone is RoomTone.MEDIUM
+    save.assert_called_once()
+
+
+def test_concat_menu_offers_room_reverb_after_generative_upsampling() -> None:
+    project = Project()
+    state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
+
+    with patch("tts_audiobook_tool.menus.concat_menu.MenuUtil.menu") as menu, patch(
+        "tts_audiobook_tool.menus.concat_menu.ProjectUtil.get_latest_concat_files",
+        return_value=[],
+    ), patch.object(LavaSrUtil, "has_lava_sr", return_value=False):
+        ConcatMenu.menu(state)
+        items = menu.call_args.args[2](state)
+
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+    index = labels.index("Room reverb (currently: Off)")
+    assert labels[index - 1].startswith("Generative upsampling")
+
+
+def test_room_reverb_menu_writes_project_setting() -> None:
+    project = Project()
+    state = cast(State, SimpleNamespace(project=project))
+
+    with patch.object(concat_menu.MenuUtil, "options_menu") as options_menu, patch.object(
+        Project, "save"
+    ) as save, patch.object(concat_menu, "print_feedback"):
+        ConcatMenu.room_reverb_menu(state)
+        kwargs = options_menu.call_args.kwargs
+        assert kwargs["heading_text"] == "Room reverb"
+        assert kwargs["labels"] == ["Off", "Light", "Moderate", "Large room"]
+        assert kwargs["values"] == list(RoomReverb)
+        assert kwargs["current_value"] is RoomReverb.OFF
+        assert kwargs["default_value"] is RoomReverb.OFF
+        assert kwargs["subheading"]
+
+        kwargs["on_select"](RoomReverb.SMALL_DRR17)
+
+    assert project.room_reverb is RoomReverb.SMALL_DRR17
     save.assert_called_once()

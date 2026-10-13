@@ -15,7 +15,7 @@ from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool.app_support import dev_hooks_loader
 from tts_audiobook_tool.system_support.browser import get_chromium_info, launch_player_with_chromium
-from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, Sound
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, RoomReverb, Sound
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
@@ -28,6 +28,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.reason_pauses import ReasonPauses
 from tts_audiobook_tool.sound.noise_bed import NoiseBed
+from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor
 from tts_audiobook_tool.sound.sentence_gap_util import SentenceGapInsertion
 from tts_audiobook_tool.sound.silence_util import GapTrimMap, SilenceUtil
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
@@ -365,6 +366,7 @@ class ConcatUtil:
                 limit_silence_gaps_duration=state.project.limit_silence_gaps_duration,
                 min_sentence_silence=state.project.min_segment_sentence_silence.duration,
                 room_tone_db=state.project.room_tone.level_db,
+                room_reverb=state.project.room_reverb,
             )
         finally:
             # LavaSR lives in the model worker. Always explicitly unload it at
@@ -535,6 +537,7 @@ class ConcatUtil:
         limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
         min_sentence_silence: float = 0.0,
         room_tone_db: float | None = None,
+        room_reverb: RoomReverb = RoomReverb.OFF,
     ) -> ConcatRenderResult | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
@@ -565,6 +568,10 @@ class ConcatUtil:
             Level (dBFS RMS) of the constant noise bed run under the whole
             output, including pauses and break effects (see NoiseBed). None
             disables it.
+        :param room_reverb:
+            Room reverb preset, streamed over the whole output before the noise
+            bed (see RoomReverbProcessor). Only the narration feeds it; pauses
+            and break effects stay dry, with the tail decaying under them.
 
         Returns a ConcatRenderResult: the duration of each added segment (for app
         metadata) plus the gap-cut maps needed to remap STT word timings.
@@ -601,6 +608,8 @@ class ConcatUtil:
         # Room tone setting: a constant noise bed under the whole output.
         # Created on first use, at the rendered audio's sample rate.
         noise_bed: NoiseBed | None = None
+        # Room reverb setting: likewise one continuous reverb over the output
+        reverb: RoomReverbProcessor | None = None
 
         def flush_pending(next_sound: Sound | None) -> None:
             """
@@ -609,9 +618,10 @@ class ConcatUtil:
             segment's rendered sound (without pause), or None for the final
             segment (no compensation applied).
             """
-            nonlocal duration_sum, noise_bed
+            nonlocal duration_sum, noise_bed, reverb
             assert pending is not None
             sound, phrase, idx, path = pending
+            narration_end = len(sound.data)
             is_final_segment = next_sound is None
 
             break_effect = tracker.next_break_effect(
@@ -651,6 +661,13 @@ class ConcatUtil:
                 break_effect=break_effect,
                 pause_duration_override=override,
             )
+
+            # Reverb on the narration only; its tail carries on under the pause
+            # or break effect and into the next segment. Same duration.
+            if room_reverb.design is not None and room_reverb.drr_db is not None:
+                if reverb is None:
+                    reverb = RoomReverbProcessor(sound.sr, room_reverb.design, room_reverb.drr_db)
+                sound = reverb.apply(sound, send_end=narration_end, is_last=is_final_segment)
 
             # Constant noise bed under the segment and its pause or break
             # effect alike. Same duration.

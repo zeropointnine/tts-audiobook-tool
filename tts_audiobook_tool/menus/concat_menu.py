@@ -1,5 +1,5 @@
 from tts_audiobook_tool.app_support import app_paths
-from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomTone
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomReverb, RoomTone
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
@@ -91,8 +91,8 @@ class ConcatMenu:
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Reader uses phrase subdivisions", state.project.subdivide_phrases),
-                    lambda _, __: ConcatMenu.subdivide_menu(state)
+                    "Pause timing rules",
+                    lambda _, __: ConcatMenu.prosody_modulation_menu(state)
                 )
             )
 
@@ -100,6 +100,13 @@ class ConcatMenu:
                 MenuItem(
                     lambda _: make_menu_label("Section break sound effect", state.project.use_break_sound_effect),
                     lambda _, __: ConcatMenu.section_break_menu(state)
+                )
+            )
+
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label("Reader uses phrase subdivisions", state.project.subdivide_phrases),
+                    lambda _, __: ConcatMenu.subdivide_menu(state)
                 )
             )
 
@@ -114,20 +121,6 @@ class ConcatMenu:
                 )
             )
 
-            items.append(
-                MenuItem(
-                    "Pause timing rules",
-                    lambda _, __: ConcatMenu.prosody_modulation_menu(state)
-                )
-            )
-
-            items.append(
-                MenuItem(
-                    lambda _: make_menu_label(ROOM_TONE_TITLE, state.project.room_tone.label),
-                    lambda _, __: ConcatMenu.room_tone_menu(state)
-                )
-            )
-
             label = make_menu_label(label="Generative upsampling", value=state.project.use_upsampler)
             if Tts.get_model_support(state.project).get_output_sample_rate(state.project) >= 44_100 and state.project.use_upsampler:
                 label += f"{COL_ERROR}*"
@@ -135,6 +128,20 @@ class ConcatMenu:
                 MenuItem(
                     label,
                     lambda _, __: ConcatMenu.upsample_menu(state)
+                )
+            )
+
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label(ROOM_REVERB_TITLE, state.project.room_reverb.label),
+                    lambda _, __: ConcatMenu.room_reverb_menu(state)
+                )
+            )
+
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label(ROOM_TONE_TITLE, state.project.room_tone.label),
+                    lambda _, __: ConcatMenu.room_tone_menu(state)
                 )
             )
 
@@ -426,6 +433,25 @@ class ConcatMenu:
         )
 
     @staticmethod
+    def room_reverb_menu(state: State) -> None:
+
+        def on_select(value: RoomReverb) -> None:
+            state.project.room_reverb = value
+            state.project.save()
+            print_feedback(f"{ROOM_REVERB_TITLE} set to: {value.label}")
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text=ROOM_REVERB_TITLE,
+            labels=[item.label for item in RoomReverb],
+            values=list(RoomReverb),
+            current_value=state.project.room_reverb,
+            default_value=RoomReverb.get_default(),
+            on_select=on_select,
+            subheading=ROOM_REVERB_SUBHEADING,
+        )
+
+    @staticmethod
     def section_break_menu(state: State) -> None:
 
         def on_select(value: bool) -> None:
@@ -495,17 +521,7 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
     def add(prefix: str, value: object) -> None:
         lines.append(f"  {COL_DIM}- {prefix}: {COL_DEFAULT}{value}")
 
-    if state.project.normalization_type != NormalizationType.DISABLED:
-        add("Loudness normalization", state.project.normalization_type.value.label)
-    if state.project.use_upsampler:
-        add("Generative upsampling", True)
-    if state.project.room_tone != RoomTone.OFF:
-        add(ROOM_TONE_TITLE, state.project.room_tone.label)
-    if state.project.use_break_sound_effect:
-        add("Section break sound effects", True)
-    high_shelf = state.project.get_high_shelf()
-    if high_shelf != HighShelfEq.DISABLED:
-        add("Treble EQ", high_shelf.id.capitalize())
+    # Same order as the menu
     if state.project.limit_silence_gaps:
         add(
             "Maximum silence inside segments",
@@ -513,6 +529,19 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
         )
     if state.project.min_segment_sentence_silence != MinSegmentSentenceSilence.DISABLED:
         add(MIN_SEGMENT_SENTENCE_SILENCE_TITLE, True)
+    if state.project.use_break_sound_effect:
+        add("Section break sound effects", True)
+    if state.project.normalization_type != NormalizationType.DISABLED:
+        add("Loudness normalization", state.project.normalization_type.value.label)
+    if state.project.use_upsampler:
+        add("Generative upsampling", True)
+    if state.project.room_reverb != RoomReverb.OFF:
+        add(ROOM_REVERB_TITLE, state.project.room_reverb.label)
+    if state.project.room_tone != RoomTone.OFF:
+        add(ROOM_TONE_TITLE, state.project.room_tone.label)
+    high_shelf = state.project.get_high_shelf()
+    if high_shelf != HighShelfEq.DISABLED:
+        add("Treble EQ", high_shelf.id.capitalize())
     return lines
 
 
@@ -690,6 +719,14 @@ ROOM_TONE_TITLE = "Room tone"
 
 ROOM_TONE_SUBHEADING = \
 """Adds subtle room tone under the audio, preventing unnatural digital silence. ACX-recommended practice.
+Is also applied to realtime playback."""
+
+ROOM_REVERB_TITLE = "Room reverb"
+
+ROOM_REVERB_SUBHEADING = \
+"""Places the narration in a room. Light and Moderate add a subtle small-room ambience.
+Large room adds a more noticeable sense of space, but sounds more colored and distant,
+and can soften clarity.
 Is also applied to realtime playback."""
 
 REASON_PAUSES_SUBHEADING = \

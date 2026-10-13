@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, 
 
 from tts_audiobook_tool.app_support import path_norm
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
-from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomTone, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomReverb, RoomTone, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -185,6 +185,7 @@ class Project(BaseModel):
     limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
     min_segment_sentence_silence: MinSegmentSentenceSilence = MinSegmentSentenceSilence.get_default()
     room_tone: RoomTone = RoomTone.get_default()
+    room_reverb: RoomReverb = RoomReverb.get_default()
     gen_auto_concat: bool = PROJECT_DEFAULT_GEN_AUTO_CONCAT
     streaming_chat: bool = PROJECT_DEFAULT_STREAMING_CHAT
 

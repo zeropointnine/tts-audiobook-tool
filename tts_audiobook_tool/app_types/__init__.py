@@ -255,6 +255,50 @@ class RoomTone(tuple[str, float | None, str], Enum):
 
 # ---
 
+class RoomReverb(tuple[str, str | None, float | None, str], Enum):
+    """
+    Room reverb presets (concat and realtime playback; see sound/room_reverb.py).
+    Value shape: (id, room design key or None when off, DRR dB, label).
+    `id` is the JSON serialization value. It names the room design and the
+    direct-to-reverberant ratio (higher = drier), so labels can change freely.
+    A saved id must always sound the same: retuning a preset means a new
+    member (mapping the old id to it on load), not an edited one.
+    """
+
+    OFF = ("off", None, None, "Off")
+    SMALL_DRR22 = ("small_drr22", "small", 22.0, "Light")
+    SMALL_DRR17 = ("small_drr17", "small", 17.0, "Moderate")
+    MEDIUM_DRR21 = ("medium_drr21", "medium", 21.0, "Large room")
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def design(self) -> str | None:
+        return self.value[1]
+
+    @property
+    def drr_db(self) -> float | None:
+        return self.value[2]
+
+    @property
+    def label(self) -> str:
+        return self.value[3]
+
+    @staticmethod
+    def get_default() -> RoomReverb:
+        return RoomReverb.OFF
+
+    @staticmethod
+    def get_by_id(id: str) -> RoomReverb | None:
+        for item in list(RoomReverb):
+            if id == item.id:
+                return item
+        return None
+
+# ---
+
 class SttVariant(tuple[str, str], Enum):
     """ Applies to both whisper implementations (faster-whisper and mlx-whisper) """
 
