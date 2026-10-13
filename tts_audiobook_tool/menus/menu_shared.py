@@ -30,7 +30,7 @@ def make_output_range_info_strings(infos: list[OutputRangeInfo], indices: list[i
     lst = []
     for index in indices:
         info = infos[index]
-        s = f"{COL_DEFAULT}File {index+1}:{COL_DIM} lines {info.segment_index_start + 1} to {info.segment_index_end + 1} "
+        s = f"{COL_ACCENT}{BULLET_CHAR} {COL_DIM}File {index+1}: {COL_DEFAULT}lines {info.segment_index_start + 1} to {info.segment_index_end + 1} "
         s += f"({info.num_files_exist}/{info.num_segments} generated)"
         lst.append(s)
     return lst

@@ -8,6 +8,7 @@ from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types import (
     ExportType,
     HighShelfEq,
+    MinSegmentSentenceSilence,
     NormalizationType,
     RoomTone,
     SectionMarkerMode,
@@ -47,6 +48,59 @@ def test_ask_output_indices_empty_input_cancels() -> None:
     print_feedback.assert_not_called()
 
 
+def test_start_shows_split_file_list_before_file_number_prompt() -> None:
+    # Start renders the same range/progress description as Create, before input.
+    state = cast(State, SimpleNamespace(
+        project=SimpleNamespace(
+            export_type=ExportType.AAC,
+            chapter_mode=SectionMarkerMode.FILES,
+            markers=[9],
+            sound_segments=SimpleNamespace(num_generated=lambda: 1021),
+        ),
+        prefs=SimpleNamespace(project_dir="/tmp"),
+    ))
+    infos = [
+        concat_menu.OutputRangeInfo(0, 0, 8, {}),
+        concat_menu.OutputRangeInfo(1, 9, 6946, dict.fromkeys(range(9, 1030), "audio.wav")),
+    ]
+    events: list[str] = []
+
+    def record_print(value: str = "") -> None:
+        events.append(strip_ansi_codes(value))
+
+    with patch.object(
+        concat_menu.OutputRangeInfo, "make_output_range_infos", return_value=infos
+    ), patch.object(
+        concat_menu.MenuUtil, "print_heading",
+        side_effect=lambda *_args, **_kwargs: events.append("Start"),
+    ), patch(
+        "tts_audiobook_tool.menus.menu_util.printt", side_effect=record_print
+    ), patch.object(
+        concat_menu, "printt", side_effect=record_print
+    ), patch.object(
+        concat_menu.ask, "ask_input", return_value=""
+    ), patch.object(concat_menu.ConcatUtil, "make_files") as make_files:
+        expected_description = strip_ansi_codes(concat_menu.make_output_files_subheading(state))
+        concat_menu.ask_output_indices_and_make(state)
+
+    assert expected_description == (
+        "▸ File 1: lines 1 to 9 (0/9 generated)\n"
+        "▸ File 2: lines 10 to 6947 (1021/6938 generated)"
+    )
+    assert events == [
+        "Start",
+        expected_description,
+        "",
+        "Enter file numbers to create:",
+        '(For example: "1, 2, 4" or  "2-5", or "all")',
+    ]
+    make_files.assert_not_called()
+
+
+def plain_option_lines(state: State) -> list[str]:
+    return [strip_ansi_codes(line) for line in concat_menu.make_enabled_option_confirmation_lines(state)]
+
+
 def test_enabled_option_confirmation_lines_only_include_enabled_options() -> None:
     project = Project.model_validate({})
     project.normalization_type = NormalizationType.STRONGER
@@ -55,27 +109,45 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     project.high_shelf = HighShelfEq.MODERATE.id
     state = cast(State, SimpleNamespace(project=project))
 
-    assert concat_menu.make_enabled_option_confirmation_lines(state) == [
-        "- Loudness normalization: Stronger",
-        "- Generative upsampling: True",
-        "- Section break sound effects: True",
-        "- Treble uplift: Moderate",
+    assert plain_option_lines(state) == [
+        "  - Loudness normalization: Stronger",
+        "  - Generative upsampling: True",
+        "  - Section break sound effects: True",
+        "  - Treble EQ: Moderate",
     ]
 
+    project.room_tone = RoomTone.MEDIUM
+    project.limit_silence_gaps = True
+    project.limit_silence_gaps_duration = 1.0
+    project.min_segment_sentence_silence = MinSegmentSentenceSilence.ENABLED
+    project.high_shelf = HighShelfEq.DISABLED.id
     project.normalization_type = NormalizationType.DEFAULT
-    assert concat_menu.make_enabled_option_confirmation_lines(state)[0] == (
-        "- Loudness normalization: ACX standard"
+    assert plain_option_lines(state) == [
+        "  - Loudness normalization: ACX standard",
+        "  - Generative upsampling: True",
+        "  - Room tone: Medium",
+        "  - Section break sound effects: True",
+        "  - Maximum silence inside segments: True 1.00s",
+        "  - Minimum sentence silence inside segments: True",
+    ]
+    project.room_tone = RoomTone.OFF
+    project.min_segment_sentence_silence = MinSegmentSentenceSilence.DISABLED
+    project.limit_silence_gaps = False
+    project.high_shelf = HighShelfEq.MODERATE.id
+
+    assert plain_option_lines(state)[0] == (
+        "  - Loudness normalization: ACX standard"
     )
 
     project.high_shelf = HighShelfEq.STRONGER.id
-    assert concat_menu.make_enabled_option_confirmation_lines(state)[-1] == (
-        "- Treble uplift: Stronger"
+    assert plain_option_lines(state)[-1] == (
+        "  - Treble EQ: Stronger"
     )
 
     project.limit_silence_gaps = True
     project.limit_silence_gaps_duration = 0.35
-    assert concat_menu.make_enabled_option_confirmation_lines(state)[-1] == (
-        "- Maximum silence inside segments: True 0.35s"
+    assert plain_option_lines(state)[-1] == (
+        "  - Maximum silence inside segments: True 0.35s"
     )
 
     project.normalization_type = NormalizationType.DISABLED
@@ -84,7 +156,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     project.high_shelf = HighShelfEq.DISABLED.id
     project.limit_silence_gaps = False
 
-    assert concat_menu.make_enabled_option_confirmation_lines(state) == []
+    assert plain_option_lines(state) == []
 
 
 def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_single_book_section() -> None:
@@ -122,7 +194,7 @@ def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_s
     ), patch.object(
         concat_menu.MenuUtil,
         "print_screen_heading",
-        side_effect=lambda *_: events.append("heading"),
+        side_effect=lambda *_args, **_kwargs: events.append("heading"),
     ) as print_screen_heading, patch.object(
         concat_menu.ConcatUtil,
         "make_files",
@@ -130,12 +202,18 @@ def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_s
         concat_menu,
         "printt",
         side_effect=lambda value="": events.append(value),
+    ), patch.object(
+        concat_menu,
+        "print_accent_separator",
+        side_effect=lambda message, **_kwargs: events.append(message),
     ):
         concat_menu.ask_output_indices_and_make(cast(State, state))
 
-    print_screen_heading.assert_called_once_with(state, "Start")
-    assert events.index("heading") < events.index("Will create a single AAC/M4B file")
-    assert events.index("Will create a single AAC/M4B file") < events.index("confirm")
+    print_screen_heading.assert_called_once_with(
+        state, "Start", subheading=concat_menu.make_output_files_subheading
+    )
+    assert events.index("heading") < events.index("Will create a single AAC/M4B file:")
+    assert events.index("Will create a single AAC/M4B file:") < events.index("confirm")
     make_files_mock.assert_called_once_with(
         state=state,
         file_cut_indices=[],
@@ -172,7 +250,9 @@ def test_ask_output_indices_and_make_single_file_ignores_markers_as_bookmarks_fo
             patch.object(concat_menu, "printt"):
         concat_menu.ask_output_indices_and_make(cast(State, state))
 
-    print_screen_heading.assert_called_once_with(state, "Start")
+    print_screen_heading.assert_called_once_with(
+        state, "Start", subheading=concat_menu.make_output_files_subheading
+    )
     make_files_mock.assert_called_once_with(
         state=state,
         file_cut_indices=[],
@@ -206,16 +286,14 @@ def test_concat_menu_always_shows_generative_upsampling() -> None:
     assert any(label.startswith("Generative upsampling") for label in labels)
 
 
-def test_concat_menu_offers_limit_silence_gaps() -> None:
+def test_pause_timing_rules_menu_offers_limit_silence_gaps() -> None:
+    # The setting lives in the "Pause timing rules" submenu; its label reflects the current value
     project = Project.model_validate({"limit_silence_gaps": True, "limit_silence_gaps_duration": 0.4})
-    state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
+    state = cast(State, SimpleNamespace(project=project))
 
-    with patch("tts_audiobook_tool.menus.concat_menu.MenuUtil.menu") as menu, patch(
-        "tts_audiobook_tool.menus.concat_menu.ProjectUtil.get_latest_concat_files",
-        return_value=[],
-    ), patch.object(LavaSrUtil, "has_lava_sr", return_value=False):
-        ConcatMenu.menu(state)
-        items = menu.call_args.args[2](state)
+    with patch("tts_audiobook_tool.menus.concat_menu.MenuUtil.menu") as menu:
+        ConcatMenu.prosody_modulation_menu(state)
+        items = menu.call_args.kwargs["items"](state)
 
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
     assert "Maximum silence inside segments (currently: enabled 0.40s)" in labels
@@ -351,7 +429,7 @@ def test_concat_menu_offers_room_tone_after_prosody_modulation() -> None:
 
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
     index = labels.index("Room tone (currently: Off)")
-    assert labels[index - 1].startswith("Prosody modulation")
+    assert labels[index - 1].startswith("Pause timing rules")
 
 
 def test_room_tone_menu_writes_project_setting() -> None:

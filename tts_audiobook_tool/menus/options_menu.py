@@ -348,7 +348,7 @@ class OptionsMenu:
 
     @staticmethod
     def ask_remote_tts_url(state: State) -> None:
-        printt(f"Enter Remote TTS server URL:\n{COL_DIM}(Eg, http://localhost:8000)")
+        printt(f"Enter Remote TTS server URL:\n{COL_DIM}(Eg, http://localhost:8080)")
         value = AskAdvanced.ask(prefill=state.prefs.remote_tts_url).strip()
         printt()
         if not value:

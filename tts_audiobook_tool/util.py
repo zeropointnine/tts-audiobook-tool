@@ -72,7 +72,7 @@ def print_feedback(
 def make_noun(singular: str, plural: str, quantity: int) -> str:
     return singular if quantity == 1 else plural
 
-def print_accent_separator(message: str) -> None:
+def print_accent_separator(message: str, and_blank_line: bool=True) -> None:
     """
     Prints a COL_ACCENT dash rule the width of `message`'s real content, then
     prints `message` itself in COL_ACCENT, then a blank line.
@@ -88,7 +88,8 @@ def print_accent_separator(message: str) -> None:
     width = len(text_util.strip_ansi_codes(message))
     printt(f"{COL_ACCENT}{'-' * width}")
     printt(f"{COL_ACCENT}{message}")
-    printt()
+    if and_blank_line:
+        printt()
 
 def print_init(s: str) -> None:
     """ App style for initializing a thing which may take some time """

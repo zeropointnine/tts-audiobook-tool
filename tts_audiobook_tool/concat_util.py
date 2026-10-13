@@ -752,25 +752,39 @@ class ConcatUtil:
             printt()
         printt()
 
-        insertion_count = sum(len(gap_map.insertions) for gap_map in gap_trim_maps if gap_map)
-        if insertion_count and print_progress:
-            added = sum(gap_map.inserted_duration for gap_map in gap_trim_maps if gap_map)
-            printt(f"Extended sentence gaps: {insertion_count} gaps, {added:.2f}s added")
-            printt()
-
-        gap_trim_count = sum(len(gap_map.trims) for gap_map in gap_trim_maps if gap_map)
-        if gap_trim_count and print_progress:
-            removed = sum(
-                sum(trim.removed_duration for trim in gap_map.trims)
-                for gap_map in gap_trim_maps
-                if gap_map
-            )
-            printt(f"Limited silence gaps: {gap_trim_count} gaps, {removed:.2f}s removed")
-            printt()
+        if print_progress:
+            ConcatUtil.print_render_metrics(gap_trim_maps)
 
         Interrupts().clear()
         ConcatUtil.close_ffmpeg_stream(process)
         return ConcatRenderResult(durations=durations, gap_trim_maps=gap_trim_maps)
+
+    @staticmethod
+    def print_render_metrics(gap_trim_maps: list[GapTrimMap | None]) -> None:
+        """
+        Prints post-render metrics as a single contiguous block, followed by
+        one blank line (nothing at all if there's nothing to report).
+        """
+        lines: list[str] = []
+        gap_maps = [gap_map for gap_map in gap_trim_maps if gap_map]
+
+        insertion_count = sum(len(gap_map.insertions) for gap_map in gap_maps)
+        if insertion_count:
+            added = sum(gap_map.inserted_duration for gap_map in gap_maps)
+            lines.append(f"Extended sentence gaps: {insertion_count} gaps, {added:.2f}s added")
+
+        gap_trim_count = sum(len(gap_map.trims) for gap_map in gap_maps)
+        if gap_trim_count:
+            removed = sum(
+                trim.removed_duration for gap_map in gap_maps for trim in gap_map.trims
+            )
+            lines.append(f"Limited silence gaps: {gap_trim_count} gaps, {removed:.2f}s removed")
+
+        if not lines:
+            return
+        for line in lines:
+            printt(line)
+        printt()
 
     @staticmethod
     def extend_sentence_gaps_for_segment(

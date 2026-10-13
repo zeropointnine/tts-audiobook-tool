@@ -843,7 +843,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 **2026-10-12**
 
 - Added **Room tone** under `Create > Post-processing`. Adds low-level background noise, prevents awkward digital (zero amplitude) silences. Off by default.
-- Added **Minimum sentence silence inside segments** under `Create > Prosody modulation`. Extends overly short sentence pauses in the audio. Off by default.
+- Added **Minimum sentence silence inside segments** under `Create > Pause timing rules`. Extends overly short sentence pauses in the audio. Off by default.
 
 **2026-10-10**
 

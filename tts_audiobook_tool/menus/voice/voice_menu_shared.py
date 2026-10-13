@@ -611,7 +611,7 @@ class VoiceMenuShared:
                     has_long_sample = True
             elif crop_range is not None:
                 label += f"{COL_DIM} (trimmed){COL_DEFAULT}"
-            lines.append(f"{COL_DIM}- Voice sample {i}: {COL_DEFAULT}{label}")
+            lines.append(f"{COL_ACCENT}{BULLET_CHAR} {COL_DIM}Voice sample {i}: {COL_DEFAULT}{label}")
         if has_long_sample:
             lines.append(
                 f"  {COL_ERROR}* {COL_DEFAULT}{COL_DIM_ITALICS}Sample exceeds recommended duration for the current model "

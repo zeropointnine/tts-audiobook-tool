@@ -110,13 +110,13 @@ class ConcatMenu:
                         value=state.project.normalization_type.value.label,
                     ),
                     lambda _, __: ConcatMenu.normalization_menu(state),
-                    superlabel="Post-processing options"
+                    superlabel="Post-processing"
                 )
             )
 
             items.append(
                 MenuItem(
-                    "Prosody modulation",
+                    "Pause timing rules",
                     lambda _, __: ConcatMenu.prosody_modulation_menu(state)
                 )
             )
@@ -207,7 +207,7 @@ class ConcatMenu:
 
         MenuUtil.menu(
             state=state,
-            heading="Prosody modulation",
+            heading="Pause timing rules",
             items=make_items,
         )
 
@@ -487,27 +487,44 @@ class ConcatMenu:
         )
 
 def make_enabled_option_confirmation_lines(state: State) -> list[str]:
+    """
+    Lists only the post-processing options that are enabled (disabled ones are omitted).
+    """
     lines = []
+
+    def add(prefix: str, value: object) -> None:
+        lines.append(f"  {COL_DIM}- {prefix}: {COL_DEFAULT}{value}")
+
     if state.project.normalization_type != NormalizationType.DISABLED:
-        lines.append(
-            f"- Loudness normalization: {state.project.normalization_type.value.label}"
-        )
+        add("Loudness normalization", state.project.normalization_type.value.label)
     if state.project.use_upsampler:
-        lines.append("- Generative upsampling: True")
+        add("Generative upsampling", True)
+    if state.project.room_tone != RoomTone.OFF:
+        add(ROOM_TONE_TITLE, state.project.room_tone.label)
     if state.project.use_break_sound_effect:
-        lines.append("- Section break sound effects: True")
+        add("Section break sound effects", True)
     high_shelf = state.project.get_high_shelf()
     if high_shelf != HighShelfEq.DISABLED:
-        lines.append(f"- Treble uplift: {high_shelf.id.capitalize()}")
+        add("Treble EQ", high_shelf.id.capitalize())
     if state.project.limit_silence_gaps:
-        lines.append(
-            f"- Maximum silence inside segments: True {state.project.limit_silence_gaps_duration:.2f}s"
+        add(
+            "Maximum silence inside segments",
+            f"True {state.project.limit_silence_gaps_duration:.2f}s",
         )
+    if state.project.min_segment_sentence_silence != MinSegmentSentenceSilence.DISABLED:
+        add(MIN_SEGMENT_SENTENCE_SILENCE_TITLE, True)
     return lines
 
 
 def print_enabled_option_confirmation_lines(state: State) -> None:
-    for line in make_enabled_option_confirmation_lines(state):
+    """
+    Prints the enabled-option lines preceded by a blank line (nothing if none are enabled).
+    """
+    lines = make_enabled_option_confirmation_lines(state)
+    if not lines:
+        return
+    printt()
+    for line in lines:
         printt(line)
 
 
@@ -520,7 +537,7 @@ def ask_output_indices_and_make(state: State) -> None:
 
     type_string = "AAC/M4B" if state.project.export_type == ExportType.AAC else "FLAC"
 
-    MenuUtil.print_screen_heading(state, "Start")
+    MenuUtil.print_screen_heading(state, "Start", subheading=make_output_files_subheading)
 
     should_ask_file_numbers = (state.project.chapter_mode == SectionMarkerMode.FILES) and len(state.project.markers) > 0
     if should_ask_file_numbers:
@@ -536,7 +553,7 @@ def ask_output_indices_and_make(state: State) -> None:
 
         noun = make_noun('file', 'files', len(output_indices))
         s = f"- Will create the following {type_string} {noun}:"
-        printt(s)
+        print_accent_separator(s, and_blank_line=False)
 
         strings = make_output_range_info_strings(infos, output_indices)
         s = "\n".join( ("    " + item) for item in strings)
@@ -557,8 +574,8 @@ def ask_output_indices_and_make(state: State) -> None:
             bookmark_indices = []
 
         info = OutputRangeInfo.make_single_info(state.project)
-        s = f"Will create a single {type_string} file"
-        printt(s)
+        s = f"Will create a single {type_string} file:"
+        print_accent_separator(s, and_blank_line=False)
         s = f"    All lines "
         s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
         printt(s)
@@ -656,6 +673,7 @@ LIMIT_SILENCE_GAPS_TITLE = "Maximum silence inside segments"
 LIMIT_SILENCE_GAPS_SUBHEADING = \
 """Limits instances of silence within sound segment from extending beyond
 a certain duration.
+Also applies to realtime playback.
 
 Large values can be used to prevent long pauses (eg, 1s-2s);
 small values can be used to influence pacing and prosody (eg, 0s-0.3s).

@@ -12,7 +12,9 @@ from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.state import State
 
 
-def test_concat_menu_places_reason_pauses_under_post_processing_options() -> None:
+def test_concat_menu_places_reason_pauses_in_pause_timing_rules_submenu() -> None:
+    # Post-processing starts with Loudness normalization, followed by the
+    # "Pause timing rules" submenu, which holds the pause-related settings
     project = Project.model_validate({})
     prefs = SimpleNamespace(aac_bitrate="128k")
     state = cast(State, SimpleNamespace(project=project, prefs=prefs))
@@ -31,22 +33,21 @@ def test_concat_menu_places_reason_pauses_under_post_processing_options() -> Non
     superlabels = [
         get_string_from(state, item.superlabel).strip() for item in items
     ]
-    post_processing_index = superlabels.index("Post-processing options")
+    post_processing_index = superlabels.index("Post-processing")
 
-    assert labels[post_processing_index].startswith("Pauses between segments")
-    assert "currently:" in labels[post_processing_index]
-    assert ReasonPauseTypes.NORMAL.value.menu_label in labels[post_processing_index]
+    assert labels[post_processing_index].startswith("Loudness normalization")
+    assert labels[post_processing_index + 1] == "Pause timing rules"
 
-    assert labels[post_processing_index + 1].startswith("Maximum silence inside segments")
+    with patch("tts_audiobook_tool.menus.concat_menu.MenuUtil.menu") as menu:
+        ConcatMenu.prosody_modulation_menu(state)
+        sub_items = menu.call_args.kwargs["items"](state)
 
-    loudness_index = next(
-        index
-        for index, label in enumerate(labels)
-        if label.startswith("Loudness normalization")
-    )
-    assert loudness_index == post_processing_index + 2
-    assert superlabels[loudness_index] == ""
-    assert items[loudness_index].superlabel_no_blank_line is True
+    sub_labels = [get_string_from(state, item.label) for item in sub_items]
+    assert sub_labels[0].startswith("Pauses between segments")
+    assert "currently:" in sub_labels[0]
+    assert ReasonPauseTypes.NORMAL.value.menu_label in sub_labels[0]
+    assert sub_labels[1].startswith("Maximum silence inside segments")
+    assert sub_labels[2].startswith("Minimum sentence silence inside segments")
 
 
 def test_reason_pauses_menu_uses_options_and_saves_selection() -> None:
