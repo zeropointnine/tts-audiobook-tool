@@ -9,14 +9,15 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from tts_audiobook_tool.app_types import HighShelfEq, RoomReverb, Sound
+from tts_audiobook_tool.app_types import HighShelfEq, RoomReverb, RoomReverbStereo, Sound
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
+from tts_audiobook_tool.sound.noise_bed import NoiseBed
 from tts_audiobook_tool.sound.room_reverb import (
-    ROOM_DESIGNS, RoomReverbProcessor, StreamingReverb, make_room_ir,
+    ROOM_DESIGNS, RoomReverbProcessor, StreamingReverb, make_room_ir, make_stereo_irs, split_ir,
 )
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 
@@ -119,7 +120,8 @@ EFFECT_S = 0.2
 
 
 def run_concat(
-        phrases: list[Phrase], sounds: list[np.ndarray], room_reverb: RoomReverb, effect_level: float = EFFECT_LEVEL
+        phrases: list[Phrase], sounds: list[np.ndarray], room_reverb: RoomReverb, effect_level: float = EFFECT_LEVEL,
+        room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO, init_stream: MagicMock | None = None,
 ) -> list[np.ndarray]:
     """
     Runs the concat flow with real pauses (0.4 s, or a constant 0.2 s "effect"
@@ -134,7 +136,8 @@ def run_concat(
         return Sound(np.concatenate([sound_in.data, np.zeros(round(PAUSE_S * SR), dtype=np.float32)]), SR)
 
     renders = iter(Sound(s, SR) for s in sounds)
-    with patch.object(ConcatUtil, "init_ffmpeg_stream", return_value=MagicMock()), \
+    init_stream = init_stream or MagicMock()
+    with patch.object(ConcatUtil, "init_ffmpeg_stream", init_stream), \
          patch.object(ConcatUtil, "close_ffmpeg_stream"), \
          patch.object(ConcatUtil, "add_audio_to_ffmpeg_stream",
                       side_effect=lambda process, data: streamed.append(data.copy())), \
@@ -150,6 +153,7 @@ def run_concat(
             reason_pauses=ReasonPauseTypes.NORMAL.value,
             print_progress=False,
             room_reverb=room_reverb,
+            room_reverb_stereo=room_reverb_stereo,
         )
     return streamed
 
@@ -188,6 +192,78 @@ class TestConcatFlow:
             assert energy(out[len(sound):]) == 0.0
 
 
+class TestStereo:
+
+    def test_split_parts_sum_to_the_ir(self) -> None:
+        p = ROOM_DESIGNS["small"]
+        ir = make_room_ir(p, SR)
+        early, late = split_ir(ir, p, SR)
+        np.testing.assert_allclose(early + late, ir, atol=1e-15)
+
+    @pytest.mark.parametrize("spread_early", [False, True])
+    def test_mono_fold_down_is_the_mono_reverb_never_wetter(self, spread_early: bool) -> None:
+        # (L + R) / 2 cancels the decorrelated part: what's left is the mono
+        # IR with only the spread part(s) lowered, by 3 dB at full width
+        p = ROOM_DESIGNS["medium"]
+        mono = make_room_ir(p, SR)
+        ir_l, ir_r = make_stereo_irs(p, SR, 1.0, spread_early)
+        early, late = split_ir(mono, p, SR)
+        c = np.cos(np.pi / 4)
+        expected = (c * early if spread_early else early) + c * late
+        np.testing.assert_allclose((ir_l + ir_r) / 2, expected, atol=1e-12)
+
+    def test_full_width_decorrelates_the_spread_parts(self) -> None:
+        p = ROOM_DESIGNS["medium"]
+        ir_l, ir_r = make_stereo_irs(p, SR, 1.0, spread_early=True)
+        corr = np.sum(ir_l * ir_r) / np.sqrt(energy(ir_l) * energy(ir_r))
+        # Two random renderings of the room: uncorrelated only statistically
+        assert abs(corr) < 0.05
+        # Each ear keeps about the mono reverb's energy (unit), so the
+        # stereo version isn't simply wetter
+        for ir in (ir_l, ir_r):
+            assert 10 * np.log10(energy(ir)) == pytest.approx(0.0, abs=0.5)
+
+    def test_wide_keeps_early_reflections_identical(self) -> None:
+        p = ROOM_DESIGNS["small"]
+        ir_l, ir_r = make_stereo_irs(p, SR, 1.0, spread_early=False)
+        early_end = round((p.predelay_ms + p.er_window_ms - 5) / 1000 * SR)
+        np.testing.assert_allclose(ir_l[:early_end], ir_r[:early_end], atol=1e-12)
+        assert not np.allclose(ir_l[early_end + SR // 20:], ir_r[early_end + SR // 20:])
+
+    def test_processor_outputs_stereo_with_a_centered_voice(self) -> None:
+        reverb = RoomReverbProcessor(SR, "medium", 10.0, width=1.0, spread_early=True)
+        dry = noise(0.5)
+        out = reverb.apply(Sound(dry, SR), is_last=True).data
+        assert out.shape == (len(dry), 2) and reverb.channels == 2
+        # Dry voice in both channels; the reverb differs between them
+        assert not np.allclose(out[:, 0], out[:, 1])
+        np.testing.assert_allclose(out[-1], [dry[-1], dry[-1]], atol=1e-6)
+
+    def test_noise_bed_adds_the_same_bed_to_both_channels(self) -> None:
+        stereo = np.zeros((SR // 2, 2), dtype=np.float32)
+        out = NoiseBed(SR, -40.0).apply(Sound(stereo, SR)).data
+        assert out.shape == stereo.shape
+        np.testing.assert_array_equal(out[:, 0], out[:, 1])
+        assert energy(out[:, 0]) > 0
+
+    def test_concat_streams_stereo_only_with_reverb_on(self) -> None:
+        sounds = [noise(0.5, i) for i in range(2)]
+        phrases = [Phrase(t, Reason.SENTENCE) for t in ("One.", "Two.")]
+
+        init = MagicMock()
+        streamed = run_concat(phrases, sounds, RoomReverb.SMALL_DRR22,
+                              room_reverb_stereo=RoomReverbStereo.LATE_W100, init_stream=init)
+        assert init.call_args.kwargs["channels"] == 2
+        assert all(x.ndim == 2 and x.shape[1] == 2 for x in streamed)
+
+        # The stereo setting does nothing while reverb is off
+        init = MagicMock()
+        streamed = run_concat(phrases, sounds, RoomReverb.OFF,
+                              room_reverb_stereo=RoomReverbStereo.ALL_W100, init_stream=init)
+        assert init.call_args.kwargs["channels"] == 1
+        assert all(x.ndim == 1 for x in streamed)
+
+
 # ---
 
 def normalized(d: dict[str, Any], warnings: list[str] | None = None) -> dict[str, Any]:
@@ -218,6 +294,17 @@ class TestSetting:
     def test_round_trips_through_json_dict(self) -> None:
         project = Project()
         project.room_reverb = RoomReverb.MEDIUM_DRR21
+        project.room_reverb_stereo = RoomReverbStereo.ALL_W100
         saved = ProjectSerializationUtil.to_project_json_dict(project)
         assert saved["room_reverb"] == "medium_drr21"
-        assert Project.model_validate(saved).room_reverb is RoomReverb.MEDIUM_DRR21
+        assert saved["room_reverb_stereo"] == "all_w100"
+        loaded = Project.model_validate(saved)
+        assert loaded.room_reverb is RoomReverb.MEDIUM_DRR21
+        assert loaded.room_reverb_stereo is RoomReverbStereo.ALL_W100
+
+    def test_stereo_defaults_to_mono_silently(self) -> None:
+        warnings: list[str] = []
+        assert Project().room_reverb_stereo is RoomReverbStereo.MONO
+        assert normalized({}, warnings)["room_reverb_stereo"] is RoomReverbStereo.MONO
+        assert normalized({"room_reverb_stereo": "bogus"})["room_reverb_stereo"] is RoomReverbStereo.MONO
+        assert not [w for w in warnings if "room_reverb_stereo" in w]

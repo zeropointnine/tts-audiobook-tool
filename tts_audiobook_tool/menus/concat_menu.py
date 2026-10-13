@@ -1,5 +1,5 @@
 from tts_audiobook_tool.app_support import app_paths
-from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomReverb, RoomTone
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomReverb, RoomReverbStereo, RoomTone
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
@@ -137,6 +137,15 @@ class ConcatMenu:
                     lambda _, __: ConcatMenu.room_reverb_menu(state)
                 )
             )
+
+            # Only meaningful with reverb on
+            if state.project.room_reverb != RoomReverb.OFF:
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label(ROOM_REVERB_STEREO_TITLE, state.project.room_reverb_stereo.label),
+                        lambda _, __: ConcatMenu.room_reverb_stereo_menu(state)
+                    )
+                )
 
             items.append(
                 MenuItem(
@@ -452,6 +461,25 @@ class ConcatMenu:
         )
 
     @staticmethod
+    def room_reverb_stereo_menu(state: State) -> None:
+
+        def on_select(value: RoomReverbStereo) -> None:
+            state.project.room_reverb_stereo = value
+            state.project.save()
+            print_feedback(f"{ROOM_REVERB_STEREO_TITLE} set to: {value.label}")
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text=ROOM_REVERB_STEREO_TITLE,
+            labels=[item.label for item in RoomReverbStereo],
+            values=list(RoomReverbStereo),
+            current_value=state.project.room_reverb_stereo,
+            default_value=RoomReverbStereo.get_default(),
+            on_select=on_select,
+            subheading=ROOM_REVERB_STEREO_SUBHEADING,
+        )
+
+    @staticmethod
     def section_break_menu(state: State) -> None:
 
         def on_select(value: bool) -> None:
@@ -537,6 +565,8 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
         add("Generative upsampling", True)
     if state.project.room_reverb != RoomReverb.OFF:
         add(ROOM_REVERB_TITLE, state.project.room_reverb.label)
+        if state.project.room_reverb_stereo != RoomReverbStereo.MONO:
+            add(ROOM_REVERB_STEREO_TITLE, state.project.room_reverb_stereo.label)
     if state.project.room_tone != RoomTone.OFF:
         add(ROOM_TONE_TITLE, state.project.room_tone.label)
     high_shelf = state.project.get_high_shelf()
@@ -581,7 +611,7 @@ def ask_output_indices_and_make(state: State) -> None:
             bookmark_indices = []
 
         noun = make_noun('file', 'files', len(output_indices))
-        s = f"- Will create the following {type_string} {noun}:"
+        s = f"Will create the following {type_string} {noun}:"
         print_accent_separator(s, and_blank_line=False)
 
         strings = make_output_range_info_strings(infos, output_indices)
@@ -728,6 +758,14 @@ ROOM_REVERB_SUBHEADING = \
 Large room adds a more noticeable sense of space, but sounds more colored and distant,
 and can soften clarity.
 Is also applied to realtime playback."""
+
+ROOM_REVERB_STEREO_TITLE = "Room reverb stereo effect"
+
+ROOM_REVERB_STEREO_SUBHEADING = \
+"""Spreads the room reverb across left and right while the voice stays centered.
+Most noticeable on headphones. Wider also spreads the room's early reflections.
+Creates stereo files (FLAC files are about 50% larger).
+Realtime playback stays mono."""
 
 REASON_PAUSES_SUBHEADING = \
 """Controls the silence inserted between generated segments."""

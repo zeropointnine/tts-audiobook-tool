@@ -299,6 +299,55 @@ class RoomReverb(tuple[str, str | None, float | None, str], Enum):
 
 # ---
 
+class RoomReverbStereo(tuple[str, float, bool, str], Enum):
+    """
+    Stereo spread of the room reverb (concat only; realtime playback stays
+    mono). The voice stays mono and centered; only the reverb differs between
+    the channels. No effect while `RoomReverb` is off; otherwise anything but
+    MONO makes the export stereo.
+    Value shape: (id, width, spread_early, label). `id` is the JSON
+    serialization value and, like `RoomReverb`'s, names the processing:
+    width 0..1 (1 = the spread part fully decorrelated), and whether the early
+    reflections are spread as well as the late tail.
+    """
+
+    MONO = ("mono", 0.0, False, "Disabled (mono)")
+    LATE_W100 = ("late_w100", 1.0, False, "Wide")
+    ALL_W100 = ("all_w100", 1.0, True, "Wider")
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def width(self) -> float:
+        return self.value[1]
+
+    @property
+    def spread_early(self) -> bool:
+        return self.value[2]
+
+    @property
+    def label(self) -> str:
+        return self.value[3]
+
+    @property
+    def is_stereo(self) -> bool:
+        return self.width > 0
+
+    @staticmethod
+    def get_default() -> RoomReverbStereo:
+        return RoomReverbStereo.MONO
+
+    @staticmethod
+    def get_by_id(id: str) -> RoomReverbStereo | None:
+        for item in list(RoomReverbStereo):
+            if id == item.id:
+                return item
+        return None
+
+# ---
+
 class SttVariant(tuple[str, str], Enum):
     """ Applies to both whisper implementations (faster-whisper and mlx-whisper) """
 

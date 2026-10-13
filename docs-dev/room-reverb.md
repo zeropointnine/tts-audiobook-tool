@@ -27,6 +27,41 @@ offer). A saved id must always sound the same: retuning a preset means a new mem
 mapped to it on load (as `fill_room_tone` was mapped to `room_tone`); changing a room design means a
 new design key. An unknown id loads as `OFF`.
 
+## Stereo effect
+
+The project setting `room_reverb_stereo` ("Room reverb stereo effect", shown in the menu only while
+Room reverb is on) spreads the reverb across left and right; the voice stays mono, identical in both
+channels. Concat only: realtime playback ignores it and stays mono.
+
+| `RoomReverbStereo` | id | Spread | Label |
+|---|---|---|---|
+| `MONO` (default) | `mono` | none | Disabled (mono) |
+| `LATE_W100` | `late_w100` | late tail, full width | Wide |
+| `ALL_W100` | `all_w100` | early reflections and late tail, full width | Wider |
+
+Ids name the processing, like `RoomReverb`'s. With reverb on and anything but `MONO`, the export is
+stereo: the reverb processor outputs `(n, 2)`, the noise bed adds the same bed to both channels
+(so room tone stays centered), and the ffmpeg stream is opened with `-ac 2`. With reverb off the
+setting does nothing and exports stay mono. Loudness normalization measures stereo per BS.1770
+(channels summed), so the target is met as before; chapters (M4B) and app metadata were checked on
+real stereo FLAC and M4B exports, and the app's own loader downmixes to mono.
+
+`make_stereo_irs` (mid/side per spread part, early/late split by a 6 ms crossfade at the end of the
+early reflection window):
+
+    L = c*A + s*B        R = c*A - s*B        c = cos(t), s = sin(t), t = width * pi/4
+
+A is the mono IR's part, B the same part of a second rendering of the room with a different seed
+(uncorrelated, energy-matched). Each channel gets about the mono preset's reverb energy, and the
+spread part's interchannel correlation is ~0 at full width. Summed to mono, B cancels: the
+fold-down is the mono preset with the spread parts 3 dB lower, never wetter or more colored. Wider
+also reduces coloration on headphones, since the ears get different comb patterns from the early
+reflections, which hearing partly averages out ("binaural decoloration"); Wide leaves the early
+reflections (the source of the "phasey" quality) identical in both channels.
+
+FLAC files are ~40-55% larger (the decorrelated reverb compresses poorly); AAC keeps its size at a
+fixed bitrate, with fewer bits per channel.
+
 ## Signal chain
 
 Per held segment in concat (`ConcatUtil.concatenate_sound_segments`, `flush_pending`):
@@ -84,13 +119,15 @@ cancelling on), level-matched by loudness normalization, using
   a phrase is ~9 dB above the small room's at DRR 17.
 - **Tried and not adopted:** medium at DRR 25; a hall (RT60 1.6 s) and a cathedral (2.8 s) at two
   levels each. Kept in the testx script for comparison.
-- **Not tried:** recorded IRs (`--ir` in the testx script supports them); stereo, which would
-  decorrelate the reflections and reduce the mono comb problem, but the pipeline is mono end to end.
+- **Stereo** (`--stereo` in the testx script): mono / late tail at half and full width / everything
+  at full width, per preset; all four sounded good. Full width, late only (Wide) and everything
+  (Wider) were adopted; half width was close to full.
+- **Not tried:** recorded IRs (`--ir` in the testx script supports them).
 
 ## Tests
 
 [`tests/test_room_reverb.py`](../tests/test_room_reverb.py) (IR, streaming continuity, DRR,
-dry break effects, concat wiring, setting load/save); menu in
+dry break effects, stereo IRs and mono fold-down, stereo concat wiring, setting load/save); menu in
 [`tests/test_concat_menu.py`](../tests/test_concat_menu.py); realtime in
 [`tests/test_real_time_playback_app.py`](../tests/test_real_time_playback_app.py)
 (`test_realtime_save_writes_exactly_what_was_played`).
@@ -99,3 +136,5 @@ dry break effects, concat wiring, setting load/save); menu in
 
 - **Other voices and models:** levels were chosen on one passage with two voices of one model.
 - **Interaction with room tone levels:** listened to with room tone Low only.
+- **Stereo room tone:** a decorrelated bed would sound more like a space than centered hiss; the
+  bed is currently identical in both channels.

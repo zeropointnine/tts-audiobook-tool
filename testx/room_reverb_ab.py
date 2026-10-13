@@ -28,6 +28,13 @@ The reverb is streamed in segment-sized chunks with its tail carried across
 calls, the same way the app would apply it, so tails decay naturally across
 segment boundaries and pauses.
 
+`--stereo` renders the app's RoomReverb presets with stereo reverb instead:
+the voice stays mono and centered, only the reverb differs between the ears
+(see "Stereo" below), as mono / late tail spread at two widths / early and late
+spread. Every file is written as stereo, mono variants with identical
+channels: loudness measurement counts a stereo file's channels together, so a
+mono file normalized to the same target would play 3 dB louder in each ear.
+
 Limitation: the dry render already contains any break sound effects, so here
 they'd be reverberated too (the app keeps them dry). Pick a range without
 breaks.
@@ -36,6 +43,8 @@ Usage:
     ./venv-base/bin/python -m testx.room_reverb_ab
     ./venv-base/bin/python -m testx.room_reverb_ab --only hall,cathedral --drr-offset 3
     ./venv-base/bin/python -m testx.room_reverb_ab --ir /path/to/room_ir.wav --ir-drrs 22,17
+    ./venv-base/bin/python -m testx.room_reverb_ab --stereo
+    ./venv-base/bin/python -m testx.room_reverb_ab --stereo --only "large room"
 """
 
 from __future__ import annotations
@@ -50,7 +59,7 @@ import numpy as np
 import soundfile
 import soxr
 
-from tts_audiobook_tool.app_types import NormalizationType, RoomTone, Sound
+from tts_audiobook_tool.app_types import NormalizationType, RoomReverb, RoomTone, Sound
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import APP_SAMPLE_RATE
 from tts_audiobook_tool.l import L
@@ -59,7 +68,7 @@ from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.sound.noise_bed import NoiseBed
 from tts_audiobook_tool.sound.room_reverb import (
-    ROOM_DESIGNS, RoomIrParams, StreamingReverb, finish_ir, make_room_ir,
+    ROOM_DESIGNS, RoomIrParams, StreamingReverb, finish_ir, make_room_ir, make_stereo_irs,
 )
 
 
@@ -209,8 +218,12 @@ def save_variant(
 ) -> str:
     peak = float(np.max(np.abs(data)))
     if peak > 1.0:
-        print(f"  {label}: peak {peak:.3f} > 1.0, clipping")
-        data = np.clip(data, -1.0, 1.0)
+        if normalization == NormalizationType.DISABLED:
+            print(f"  {label}: peak {peak:.3f} > 1.0, clipping")
+            data = np.clip(data, -1.0, 1.0)
+        else:
+            # Normalization sets the final level anyway, so scale rather than clip
+            data = data / peak
     if normalization == NormalizationType.DISABLED:
         soundfile.write(str(path), data, APP_SAMPLE_RATE, subtype="PCM_24")
         return ""
@@ -221,13 +234,8 @@ def save_variant(
     return err
 
 
-def early_ripple_db(ir_unit: np.ndarray, drr_db: float, sr: int) -> float:
-    """
-    Coloration estimate: spectral ripple (std dev, dB) of direct sound + the
-    first 50 ms of reverb, 1/12-octave smoothed, 250 Hz - 6 kHz. That window
-    fuses with the direct sound and is heard as timbre; the small room at the
-    level that sounded phasey (DRR 12) measures about 0.9 dB.
-    """
+def _early_bands_db(ir_unit: np.ndarray, drr_db: float, sr: int) -> np.ndarray:
+    """ 1/12-octave band levels (dB), 250 Hz - 6 kHz, of direct sound + first 50 ms of reverb """
     n50 = round(0.05 * sr)
     h = ir_unit[:n50] * 10 ** (-drr_db / 20)
     h[0] += 1.0
@@ -239,7 +247,136 @@ def early_ripple_db(ir_unit: np.ndarray, drr_db: float, sr: int) -> float:
         np.sqrt(np.mean(mag[(freqs > c * 2 ** (-1 / 24)) & (freqs < c * 2 ** (1 / 24))] ** 2))
         for c in centers
     ]
-    return float(np.std(20 * np.log10(bands)))
+    return 20 * np.log10(np.asarray(bands))
+
+
+def early_ripple_db(ir_unit: np.ndarray, drr_db: float, sr: int) -> float:
+    """
+    Coloration estimate: spectral ripple (std dev, dB) of direct sound + the
+    first 50 ms of reverb, 1/12-octave smoothed, 250 Hz - 6 kHz. That window
+    fuses with the direct sound and is heard as timbre; the small room at the
+    level that sounded phasey (DRR 12) measures about 0.9 dB.
+    """
+    return float(np.std(_early_bands_db(ir_unit, drr_db, sr)))
+
+
+def two_ear_ripple_db(ir_l: np.ndarray, ir_r: np.ndarray, drr_db: float, sr: int) -> float:
+    """
+    Crude binaural coloration estimate: ripple of the two ears' band powers,
+    averaged. When the ears get different comb patterns, hearing partly
+    averages them out ("binaural decoloration"); per-ear ripple doesn't show that.
+    """
+    bl, br = _early_bands_db(ir_l, drr_db, sr), _early_bands_db(ir_r, drr_db, sr)
+    return float(np.std(10 * np.log10((10 ** (bl / 10) + 10 ** (br / 10)) / 2)))
+
+
+# ---------------------------------------------------------------------------
+# Stereo (--stereo)
+# ---------------------------------------------------------------------------
+#
+# The voice stays mono (identical in both channels, dead center); only the
+# reverb differs between the ears. See room_reverb.make_stereo_irs (mid/side
+# spread of the late tail, and optionally the early reflections). Keeping the
+# mid part at full level instead would make the mono fold-down exact, but each
+# ear wetter than the mono preset, confounding the comparison.
+#
+# Round 3 of listening tests: all four sounded good; late-w100 and all-w100
+# were adopted as the app's RoomReverbStereo Wide and Wider.
+
+@dataclass(frozen=True)
+class StereoSpec:
+    name: str
+    spread_early: bool
+    width: float  # 0 = mono, 1 = fully decorrelated
+
+
+STEREO_SPECS: list[StereoSpec] = [
+    StereoSpec("a mono", False, 0.0),
+    StereoSpec("b late-w50", False, 0.5),
+    StereoSpec("c late-w100", False, 1.0),
+    StereoSpec("d all-w100", True, 1.0),
+]
+
+def render_stereo_variant(
+        dry: np.ndarray,
+        chunks: list[int],
+        irs: tuple[np.ndarray, np.ndarray] | None,
+        drr_db: float,
+        room_tone_db: float | None,
+) -> np.ndarray:
+    """
+    Stereo (n, 2): mono voice + per-channel reverb, then room tone (identical
+    in both channels), streamed chunk by chunk as in concat
+    """
+    sr = APP_SAMPLE_RATE
+    reverbs = (StreamingReverb(irs[0], drr_db), StreamingReverb(irs[1], drr_db)) if irs else None
+    bed = NoiseBed(sr, room_tone_db) if room_tone_db is not None else None
+    out: list[np.ndarray] = []
+    pos = 0
+    for i, n in enumerate(chunks):
+        chunk = dry[pos:pos + n]
+        pos += n
+        if reverbs:
+            stereo = np.stack([reverbs[0].process(chunk), reverbs[1].process(chunk)], axis=1)
+        else:
+            stereo = np.stack([chunk, chunk], axis=1).astype(np.float64)
+        if bed:
+            noise = bed.apply(Sound(np.zeros(n, dtype=np.float32), sr), is_last=(i == len(chunks) - 1)).data
+            stereo += noise[:, None]
+        out.append(stereo)
+    return np.concatenate(out)
+
+
+def run_stereo(
+        args: argparse.Namespace,
+        dry: np.ndarray,
+        chunks: list[int],
+        room_tone: RoomTone,
+        normalization: NormalizationType,
+) -> int:
+    sr = APP_SAMPLE_RATE
+    out_dir = Path(args.out_dir or os.path.join(args.project, "reverb_ab", "stereo"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    presets = [p for p in RoomReverb if p.design is not None and p.drr_db is not None]
+    if args.only:
+        keys = [k.strip().lower() for k in args.only.split(",") if k.strip()]
+        presets = [p for p in presets if any(k in f"{p.label} {p.id}".lower() for k in keys)]
+
+    tag = f"{args.start}-{args.end}"
+    variants: list[tuple[str, tuple[np.ndarray, np.ndarray] | None, float]] = [("0 dry", None, 0.0)]
+    print(f"{'variant':44s} {'corr':>5s} {'ear L':>6s} {'ear R':>6s} {'ripple':>7s} {'2-ear':>6s} {'mono sum':>8s}")
+    for i, preset in enumerate(presets):
+        assert preset.design is not None and preset.drr_db is not None
+        drr = preset.drr_db + args.drr_offset
+        room = ROOM_DESIGNS[preset.design]
+        mono_ir = make_room_ir(room, sr)
+        for spec in STEREO_SPECS:
+            ir_l, ir_r = make_stereo_irs(room, sr, spec.width, spec.spread_early)
+            label = f"{i + 1}{spec.name} {preset.label.lower().replace(' ', '-')} drr{drr:g}"
+            variants.append((label, (ir_l, ir_r), drr))
+            # Per-ear reverb energy and the mono fold-down, both relative to the mono preset
+            corr = np.sum(ir_l * ir_r) / np.sqrt(np.sum(ir_l ** 2) * np.sum(ir_r ** 2))
+            ear_l = 10 * np.log10(np.sum(ir_l ** 2) / np.sum(mono_ir ** 2))
+            ear_r = 10 * np.log10(np.sum(ir_r ** 2) / np.sum(mono_ir ** 2))
+            fold = 10 * np.log10(np.sum(((ir_l + ir_r) / 2) ** 2) / np.sum(mono_ir ** 2))
+            print(f"{label:44s} {corr:5.2f} {ear_l:+6.2f} {ear_r:+6.2f} "
+                  f"{early_ripple_db(ir_l, drr, sr):7.2f} {two_ear_ripple_db(ir_l, ir_r, drr, sr):6.2f} {fold:+8.2f}")
+    print("(corr: reverb interchannel correlation; ear L/R and mono sum: reverb level vs the mono preset, dB;")
+    print(" ripple: left ear early coloration, dB; 2-ear: crude binaural estimate, dB)")
+    print()
+
+    for label, irs, drr in variants:
+        path = out_dir / f"{tag} {label}.flac"
+        print(f"--- {path.name}")
+        data = render_stereo_variant(dry, chunks, irs, drr, room_tone.level_db)
+        err = save_variant(data, path, normalization, label)
+        if err:
+            print(f"Error: {err}")
+            return 1
+
+    print(f"Saved to: {out_dir}")
+    return 0
 
 
 def parse_drrs(s: str) -> list[float]:
@@ -260,12 +397,30 @@ def main() -> int:
     parser.add_argument("--ir-drrs", default="22,17", help="DRRs (dB) for --ir")
     parser.add_argument("--room-tone", choices=["project"] + [t.id for t in RoomTone], default="project")
     parser.add_argument("--no-normalize", action="store_true")
+    parser.add_argument("--stereo", action="store_true",
+                        help="render the app's presets with stereo reverb (mono voice); --only matches "
+                             "preset labels/ids, --ir is ignored")
     args = parser.parse_args()
 
     L.init("room_reverb_ab")
     sr = APP_SAMPLE_RATE
     out_dir = Path(args.out_dir or os.path.join(args.project, "reverb_ab"))
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.stereo:
+        result = render_dry(args.project, args.start, args.end, out_dir)
+        if isinstance(result, str):
+            print(f"Error: {result}")
+            return 1
+        dry, chunks, project_room_tone, normalization = result
+        if args.no_normalize:
+            normalization = NormalizationType.DISABLED
+        room_tone = project_room_tone if args.room_tone == "project" else RoomTone.get_by_id(args.room_tone)
+        assert room_tone is not None
+        print(f"Rendered {len(chunks)} segments, {len(dry) / sr:.1f}s")
+        print(f"Room tone: {room_tone.label}  Normalization: {normalization.value.label}")
+        print()
+        return run_stereo(args, dry, chunks, room_tone, normalization)
 
     presets = PRESETS
     if args.only:

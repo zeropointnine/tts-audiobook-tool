@@ -15,6 +15,7 @@ from tts_audiobook_tool.app_types import (
     MinSegmentSentenceSilence,
     NormalizationType,
     RoomReverb,
+    RoomReverbStereo,
     RoomTone,
     SectionMarkerMode,
     SegmentationStrategy,
@@ -463,6 +464,7 @@ class ProjectSerializationUtil:
         normalize_by_id('room_tone', RoomTone.get_by_id, RoomTone.get_default())
         # Optional key: absent in projects saved before it existed, so no warning
         normalize_by_id('room_reverb', RoomReverb.get_by_id, RoomReverb.get_default())
+        normalize_by_id('room_reverb_stereo', RoomReverbStereo.get_by_id, RoomReverbStereo.get_default())
 
         value = d.get('limit_silence_gaps_duration', None)
         if not isinstance(value, (int, float)) or value <= 0:
@@ -966,6 +968,7 @@ class ProjectSerializationUtil:
             "min_segment_sentence_silence": project.min_segment_sentence_silence.id,
             "room_tone": project.room_tone.id,
             "room_reverb": project.room_reverb.id,
+            "room_reverb_stereo": project.room_reverb_stereo.id,
             "gen_auto_concat": project.gen_auto_concat,
             "streaming_chat": project.streaming_chat,
             "strictness": project.strictness.id,

@@ -15,7 +15,7 @@ from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool.app_support import dev_hooks_loader
 from tts_audiobook_tool.system_support.browser import get_chromium_info, launch_player_with_chromium
-from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, RoomReverb, Sound
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, RoomReverb, RoomReverbStereo, Sound
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
@@ -367,6 +367,7 @@ class ConcatUtil:
                 min_sentence_silence=state.project.min_segment_sentence_silence.duration,
                 room_tone_db=state.project.room_tone.level_db,
                 room_reverb=state.project.room_reverb,
+                room_reverb_stereo=state.project.room_reverb_stereo,
             )
         finally:
             # LavaSR lives in the model worker. Always explicitly unload it at
@@ -538,6 +539,7 @@ class ConcatUtil:
         min_sentence_silence: float = 0.0,
         room_tone_db: float | None = None,
         room_reverb: RoomReverb = RoomReverb.OFF,
+        room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO,
     ) -> ConcatRenderResult | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
@@ -572,6 +574,9 @@ class ConcatUtil:
             Room reverb preset, streamed over the whole output before the noise
             bed (see RoomReverbProcessor). Only the narration feeds it; pauses
             and break effects stay dry, with the tail decaying under them.
+        :param room_reverb_stereo:
+            Stereo spread of the room reverb. When reverb is on and this isn't
+            MONO, the output is stereo (the voice identical in both channels).
 
         Returns a ConcatRenderResult: the duration of each added segment (for app
         metadata) plus the gap-cut maps needed to remap STT word timings.
@@ -586,8 +591,11 @@ class ConcatUtil:
         durations: list[float] = [0.0] * len(phrases_and_paths)
         gap_trim_maps: list[GapTrimMap | None] = [None] * len(phrases_and_paths)
 
+        has_reverb = room_reverb.design is not None and room_reverb.drr_db is not None
+        channels = 2 if has_reverb and room_reverb_stereo.is_stereo else 1
+
         to_aac_not_flac = dest_path.lower().endswith(tuple(AAC_SUFFIXES))
-        process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac, aac_bitrate)
+        process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac, aac_bitrate, channels=channels)
 
         Interrupts().set("concat")
 
@@ -666,8 +674,16 @@ class ConcatUtil:
             # or break effect and into the next segment. Same duration.
             if room_reverb.design is not None and room_reverb.drr_db is not None:
                 if reverb is None:
-                    reverb = RoomReverbProcessor(sound.sr, room_reverb.design, room_reverb.drr_db)
+                    reverb = RoomReverbProcessor(
+                        sound.sr, room_reverb.design, room_reverb.drr_db,
+                        width=room_reverb_stereo.width if channels == 2 else 0.0,
+                        spread_early=room_reverb_stereo.spread_early,
+                    )
                 sound = reverb.apply(sound, send_end=narration_end, is_last=is_final_segment)
+            if channels == 2 and sound.data.ndim == 1:
+                # Safety net (reverb skips audio it can't process): a stereo
+                # stream must only ever get stereo frames
+                sound = Sound(np.stack([sound.data, sound.data], axis=1), sound.sr)
 
             # Constant noise bed under the segment and its pause or break
             # effect alike. Same duration.
@@ -843,10 +859,12 @@ class ConcatUtil:
     def init_ffmpeg_stream(
             dest_path: str,
             is_aac_not_flac: bool,
-            aac_bitrate: str=AAC_BITRATE_DEFAULT
+            aac_bitrate: str=AAC_BITRATE_DEFAULT,
+            channels: int = 1,
     ) -> subprocess.Popen:
         """
         Initializes and returns an ffmpeg process for streaming FLAC encoding.
+        Stereo input is interleaved (n, 2) data, see add_audio_to_ffmpeg_stream.
         """
         args = [
             "ffmpeg",
@@ -856,7 +874,7 @@ class ConcatUtil:
         args.extend([
             "-f", "s16le",
             "-ar", f"{APP_SAMPLE_RATE}",
-            "-ac", "1",
+            "-ac", str(channels),
             "-i", "-"
         ])
 
@@ -875,7 +893,8 @@ class ConcatUtil:
     def add_audio_to_ffmpeg_stream(process: subprocess.Popen, audio_data: ndarray):
         """
         Writes a chunk of audio data to the ffmpeg process's stdin.
-        Converts float audio data to 16-bit PCM format.
+        Converts float audio data to 16-bit PCM format. Stereo is (n, 2), which
+        `tobytes` writes interleaved, as s16le expects.
         """
         # Assuming audio_data is float, convert to 16-bit PCM
         # This is a standard conversion for float arrays in range [-1.0, 1.0]

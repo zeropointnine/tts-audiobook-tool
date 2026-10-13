@@ -11,6 +11,7 @@ from tts_audiobook_tool.app_types import (
     MinSegmentSentenceSilence,
     NormalizationType,
     RoomReverb,
+    RoomReverbStereo,
     RoomTone,
     SectionMarkerMode,
 )
@@ -119,6 +120,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
 
     project.room_tone = RoomTone.MEDIUM
     project.room_reverb = RoomReverb.MEDIUM_DRR21
+    project.room_reverb_stereo = RoomReverbStereo.LATE_W100
     project.limit_silence_gaps = True
     project.limit_silence_gaps_duration = 1.0
     project.min_segment_sentence_silence = MinSegmentSentenceSilence.ENABLED
@@ -132,6 +134,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Loudness normalization: ACX standard",
         "  - Generative upsampling: True",
         "  - Room reverb: Large room",
+        "  - Room reverb stereo effect: Wide",
         "  - Room tone: Medium",
     ]
     project.room_tone = RoomTone.OFF
@@ -495,4 +498,44 @@ def test_room_reverb_menu_writes_project_setting() -> None:
         kwargs["on_select"](RoomReverb.SMALL_DRR17)
 
     assert project.room_reverb is RoomReverb.SMALL_DRR17
+    save.assert_called_once()
+
+
+def test_room_reverb_stereo_item_only_shows_with_reverb_on() -> None:
+    project = Project()
+    state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
+
+    def labels() -> list[str]:
+        with patch("tts_audiobook_tool.menus.concat_menu.MenuUtil.menu") as menu, patch(
+            "tts_audiobook_tool.menus.concat_menu.ProjectUtil.get_latest_concat_files",
+            return_value=[],
+        ), patch.object(LavaSrUtil, "has_lava_sr", return_value=False):
+            ConcatMenu.menu(state)
+            items = menu.call_args.args[2](state)
+        return [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+
+    assert not [label for label in labels() if label.startswith("Room reverb stereo effect")]
+
+    project.room_reverb = RoomReverb.SMALL_DRR22
+    result = labels()
+    index = result.index("Room reverb stereo effect (currently: Disabled (mono))")
+    assert result[index - 1].startswith("Room reverb (currently: Light)")
+
+
+def test_room_reverb_stereo_menu_writes_project_setting() -> None:
+    project = Project()
+    state = cast(State, SimpleNamespace(project=project))
+
+    with patch.object(concat_menu.MenuUtil, "options_menu") as options_menu, patch.object(
+        Project, "save"
+    ) as save, patch.object(concat_menu, "print_feedback"):
+        ConcatMenu.room_reverb_stereo_menu(state)
+        kwargs = options_menu.call_args.kwargs
+        assert kwargs["heading_text"] == "Room reverb stereo effect"
+        assert kwargs["labels"] == ["Disabled (mono)", "Wide", "Wider"]
+        assert kwargs["default_value"] is RoomReverbStereo.MONO
+
+        kwargs["on_select"](RoomReverbStereo.ALL_W100)
+
+    assert project.room_reverb_stereo is RoomReverbStereo.ALL_W100
     save.assert_called_once()

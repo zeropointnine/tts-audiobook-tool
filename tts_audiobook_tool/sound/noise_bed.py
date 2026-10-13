@@ -102,10 +102,13 @@ class NoiseBed:
         self._position = 0
 
     def apply(self, sound: Sound, is_last: bool = False) -> Sound:
-        """ Returns `sound` with the bed added (same length) """
+        """
+        Returns `sound` with the bed added (same length). Multichannel (n, ch)
+        sound gets the same bed in every channel, so it stays centered.
+        """
         data = sound.data
         n = len(data)
-        if data.ndim != 1 or n == 0 or sound.sr != self.sr:
+        if data.ndim not in (1, 2) or n == 0 or sound.sr != self.sr:
             return sound
 
         gain = np.full(n, self._gain, dtype=np.float64)
@@ -117,7 +120,8 @@ class NoiseBed:
             gain[n - k:] *= np.linspace(1.0, 0.0, k)
         self._position += n
 
-        out = data + (self._noise.next(n) * gain).astype(data.dtype)
+        bed = (self._noise.next(n) * gain).astype(data.dtype)
+        out = data + (bed if data.ndim == 1 else bed[:, None])
         # Safety net: ffmpeg streaming casts to int16 without clipping
         if np.max(np.abs(out)) > 1.0:
             out = np.clip(out, -1.0, 1.0)
