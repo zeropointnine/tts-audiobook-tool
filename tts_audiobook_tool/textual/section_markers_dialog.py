@@ -347,14 +347,15 @@ class SectionMarkersDialog(
         self.update_dialog_content()
 
     def action_confirm_step(self) -> None:
-        if self.step is not SectionMarkersStep.CLEAR:
-            return
-        self.dismiss(ClearSectionMarkers(self.marker_count))
+        if self.step is SectionMarkersStep.BLANK_LINES:
+            if self.blank_line_markers:
+                self.dismiss(self.blank_line_markers)
+        elif self.step is SectionMarkersStep.CLEAR:
+            self.dismiss(ClearSectionMarkers(self.marker_count))
 
     def action_decline_step(self) -> None:
-        if self.step is not SectionMarkersStep.CLEAR:
-            return
-        self.dismiss(None)
+        if self.step in (SectionMarkersStep.BLANK_LINES, SectionMarkersStep.CLEAR):
+            self.dismiss(None)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "yes":
