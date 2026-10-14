@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-from tts_audiobook_tool.app_types import Book, BookSection
+import pytest
+
+from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings
 from tts_audiobook_tool.app_types.book_serialization import (
     load_book_from_project_text_file,
 )
@@ -237,6 +239,70 @@ def test_commit_reports_marker_save_failure(tmp_path: Path, monkeypatch) -> None
             "be saved: markers disk full"
         )
         assert project.markers == {1}
+    finally:
+        stop_project(project)
+
+
+@pytest.mark.parametrize(
+    ("original_text", "original_reason", "new_text", "expected_reason"),
+    [
+        ("Arrival\n\n", Reason.HEADING_END, "Ordinary prose.", Reason.PARAGRAPH),
+        ("Ordinary prose.\n\n", Reason.PARAGRAPH, "Arrival", Reason.HEADING_END),
+    ],
+)
+def test_confirmed_edit_recomputes_and_persists_heading_boundaries(
+    tmp_path: Path, original_text, original_reason, new_text, expected_reason,
+) -> None:
+    # Confirmed edits can both lose and gain a heading; disk and memory must agree.
+    project = make_project(tmp_path)
+    try:
+        project.book.sections[0].title = "Chapter 1: Arrival"
+        project.book.segmentation_settings = BookSegmentationSettings(language_code="en")
+        original = project.phrase_groups[0].phrases[0]
+        original.text = original_text
+        original.reason = original_reason
+        generated_files = make_generated_files(project)
+        session = TextEditSession(project.book)
+        session.update_phrase_group_text(
+            session.phrase_groups[0].item_id, new_text, max_words=40, pysbd_lang="en",
+        )
+        staged_book = session.to_book()
+        error = ProjectTextEditUtil.commit(
+            project, staged_book, session.original_snapshot,
+            edited_segment_indices=session.edited_original_indices,
+        )
+
+        assert error == ""
+        assert project.phrase_groups[0].last_reason == expected_reason
+        loaded = load_book_from_project_text_file(project.project_text_path)
+        assert isinstance(loaded, Book)
+        assert loaded.phrase_groups[0].last_reason == expected_reason
+        # The classifier acts on a detached copy, not the editor's staged objects.
+        assert staged_book.phrase_groups[0].last_reason == Reason.PARAGRAPH
+        assert all(not path.exists() for path in generated_files[0])
+        assert all(path.exists() for pair in generated_files[1:] for path in pair)
+    finally:
+        stop_project(project)
+
+
+def test_confirmed_edit_recomputes_untouched_sections_globally(tmp_path: Path) -> None:
+    # A save elsewhere must also remove obsolete imported heading classifications.
+    project = make_project(tmp_path)
+    try:
+        project.book.sections[0].phrase_groups[0].phrases[0].reason = Reason.HEADING_END
+        session = TextEditSession(project.book)
+        session.update_phrase_group_text(
+            session.phrase_groups[1].item_id, "Edited prose.", max_words=40, pysbd_lang="en",
+        )
+        error = ProjectTextEditUtil.commit(
+            project, session.to_book(), session.original_snapshot,
+            edited_segment_indices=session.edited_original_indices,
+        )
+        assert error == ""
+        assert project.phrase_groups[0].last_reason == Reason.SENTENCE
+        loaded = load_book_from_project_text_file(project.project_text_path)
+        assert isinstance(loaded, Book)
+        assert loaded.phrase_groups[0].last_reason == Reason.SENTENCE
     finally:
         stop_project(project)
 

@@ -135,10 +135,8 @@ class TestEpubExtractor(unittest.TestCase):
             [-1, 1, -1],
         )
 
-    def test_import_epub_preserves_leading_space_breaks_after_boundary(self):
-        # Leading SPACE_BREAK reasons at a logical section start are preserved
-        # at import time; suppressing redundant break sound effects there is
-        # handled at render time by BreakEffectTracker.
+    def test_import_epub_heading_replaces_only_matching_opening_space_break(self):
+        # Title matching replaces the opening whitespace break, not later breaks.
         source_chapters = [
             EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter one prose."),
             EpubSourceChapter(
@@ -161,7 +159,7 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(result.section_start_indices, [1])
         self.assertEqual(result.phrase_groups[0].last_reason, Reason.SECTION_BREAK)
         self.assertEqual(result.phrase_groups[1].text, "Chapter 2\n\n\n")
-        self.assertEqual(result.phrase_groups[1].last_reason, Reason.SPACE_BREAK)
+        self.assertEqual(result.phrase_groups[1].last_reason, Reason.HEADING_END)
         self.assertEqual(result.phrase_groups[2].last_reason, Reason.SPACE_BREAK)
         self.assertEqual(result.phrase_groups[3].last_reason, Reason.SECTION_BREAK)
 
@@ -336,7 +334,7 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual([chapter.href for chapter in result.chapters], ["chapter1.xhtml", "chapter2.xhtml"])
         self.assertEqual(result.section_start_indices, [2])
         self.assertEqual(result.phrase_groups[0].phrases[0].text, "Chapter 1\n\n")
-        self.assertEqual(result.phrase_groups[0].last_reason, Reason.PARAGRAPH)
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.HEADING_END)
 
     def test_import_epub_uses_navigation_sections_across_text_and_image_spine_documents(self):
         chapter_one_target = make_navigation_target("Chapter 1", "Text/chapter005.xhtml", 0)
@@ -1369,43 +1367,42 @@ class TestEpubExtractor(unittest.TestCase):
             with open(dest_path, "rb") as f:
                 self.assertEqual(f.read(), b"saved epub bytes")
 
-    def test_extract_text_finds_heading_element_texts(self):
-        chapter = EpubSourceChapter(
-            title="Contents entry",
-            href="Text/chapter001.xhtml",
+    def test_import_heading_detection_uses_logical_navigation_sections(self):
+        # Two starts in one XHTML use their own navigation titles, not the file title.
+        href = "Text/chapters.xhtml"
+        source = EpubSourceChapter(
+            title="Document title",
+            href=href,
             media_type="application/xhtml+xml",
             html="""
             <html><body>
-                <h1>Chapter 1</h1>
-                <h2>What Can We Do?</h2>
-                <p>The entire area was one massive graveyard.</p>
+                <p id="one">PRIYA</p><p>First section body.</p>
+                <p>PRIYA</p><p>Still ordinary text.</p>
+                <p id="two">Acknowledgments</p><p>Second section body.</p>
+                <h2>Unrelated internal heading</h2><p>More body text.</p>
             </body></html>
             """,
+            navigation_targets=[
+                make_navigation_target("Chapter 1: Priya", href + "#one", 0),
+                make_navigation_target("Acknowledgments", href + "#two", 1),
+            ],
         )
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=([source], "", [], [])):
+            result = EpubExtractor.import_epub(
+                "book.epub", max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE,
+                language_code="en",
+            )
 
-        result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
-
-        self.assertEqual(result.heading_texts, ["Chapter 1", "What Can We Do?"])
-
-    def test_extract_text_treats_first_paragraph_matching_title_as_heading(self):
-        chapter = EpubSourceChapter(
-            title="Chapter 14",
-            href="Text/chapter014.xhtml",
-            media_type="application/xhtml+xml",
-            html="""
-            <html><body>
-                <p class="chapter">Chapter 14</p>
-                <p class="title">What Can We Do?</p>
-                <p>Chapter 14</p>
-            </body></html>
-            """,
-        )
-
-        result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
-
-        self.assertEqual(result.heading_texts, ["Chapter 14"])
+        self.assertEqual([chapter.title for chapter in result.chapters], [
+            "Chapter 1: Priya", "Acknowledgments",
+        ])
+        headings = [group.text.strip() for group in result.phrase_groups
+                    if group.last_reason == Reason.HEADING_END]
+        self.assertEqual(headings, ["PRIYA", "Acknowledgments"])
 
     def test_import_epub_ends_heading_paragraphs_with_heading_reason(self):
+        # Global classification follows segmentation and preserves the section ending.
         source_chapters = [
             EpubSourceChapter(
                 title="Chapter 1",
@@ -1432,7 +1429,7 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(
             [(group.text.strip(), group.last_reason) for group in result.phrase_groups],
             [
-                ("Chapter 1", Reason.HEADING),
+                ("Chapter 1", Reason.HEADING_END),
                 ("The entire area was one massive graveyard.", Reason.PARAGRAPH),
                 ("Nobody had survived.", Reason.SECTION_BREAK),
             ],

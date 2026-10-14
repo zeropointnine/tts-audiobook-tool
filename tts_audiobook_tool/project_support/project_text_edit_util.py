@@ -7,6 +7,7 @@ from tts_audiobook_tool.app_types.book_serialization import (
     book_to_project_text_json_dict,
 )
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.text_ops.heading_end_detector import recompute_heading_ends
 from tts_audiobook_tool.text_ops.text_edit_session import TextEditSession
 from tts_audiobook_tool.util import make_error_string
 
@@ -49,6 +50,11 @@ class ProjectTextEditUtil:
             prune_markers_cutoff = None
 
         new_book = deepcopy(staged_book)
+        # Reclassify all section openings on confirmed editor saves, including
+        # headings exposed by deletions or changed by edits in other segments.
+        recompute_heading_ends(
+            new_book.sections, new_book.segmentation_settings.language_code
+        )
         error = ProjectTextEditUtil.atomic_save_book(project.project_text_path, new_book)
         if error:
             return error

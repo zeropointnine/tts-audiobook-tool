@@ -310,9 +310,9 @@ class Reason(tuple[int, str], Enum):
     SENTENCE = 4, "s"
     # The string has been split at a paragraph break (line feed)
     PARAGRAPH = 5, "p"
-    # The string is a heading paragraph (eg, an EPUB <h1>-<h6> element, or a chapter's
-    # table-of-contents title at the start of the chapter)
-    HEADING = 6, "h"
+    # The string ends the section's opening paragraph, dynamically recognized
+    # as a heading by comparison with that section's title.
+    HEADING_END = 6, "h"
     # The string has been split at a paragraph break *plus* one or more blank lines.
     # Related publishing/typography terms for what this represents: "space break"; "scene break"; "dinkus"
     SPACE_BREAK = 7, "x"
