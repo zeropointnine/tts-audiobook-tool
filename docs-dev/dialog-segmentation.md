@@ -60,8 +60,9 @@ The recognized trigger characters are double quote marks:
 - straight double quote: `"`
 - curly opening double quote: `“`
 - curly closing double quote: `”`
+- German low-9 opening double quote: `„`, paired with `“`
 
-Straight and curly glyphs may form a pair, including mixed pairs in imperfectly normalized source text.
+Straight and curly glyphs may form a pair, including mixed pairs in imperfectly normalized source text. The glyph `“` can open an English quote or close a German quote, depending on context.
 
 The following are outside the current scope:
 

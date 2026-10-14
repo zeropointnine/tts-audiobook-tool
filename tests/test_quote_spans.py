@@ -1,3 +1,5 @@
+import pytest
+
 from tts_audiobook_tool.text_ops.quote_spans import (
     DOUBLE_QUOTE_STYLES,
     QuoteSpan,
@@ -33,6 +35,53 @@ def test_supports_mixed_straight_and_curly_double_quotes() -> None:
         '“Hello."',
         '"Goodbye.”',
     ]
+
+
+def test_supports_german_and_english_double_quotes_together() -> None:
+    # The same curly glyph closes German quotes but opens English quotes.
+    text = 'Er sagte: „Hallo.“ Then “Hello.” Finally „Tschüss.“'
+
+    assert [text[span.start:span.end] for span in find_quote_spans(text)] == [
+        '„Hallo.“',
+        '“Hello.”',
+        '„Tschüss.“',
+    ]
+
+
+@pytest.mark.parametrize("text", ['He wrote“Hello.”', 'He said: “...Hello.”'])
+def test_english_curly_openers_remain_directional(text: str) -> None:
+    # English openers do not require the surrounding context of straight quotes.
+    assert [text[span.start:span.end] for span in find_quote_spans(text)] == [
+        text[text.index("“"):],
+    ]
+
+
+def test_english_curly_opener_does_not_close_an_english_quote() -> None:
+    # An opener before punctuation must still open a nested English quote.
+    text = '“Outer “...inner” end”'
+    assert [text[span.start:span.end] for span in find_quote_spans(text)] == [
+        text,
+        '“...inner”',
+    ]
+
+
+@pytest.mark.parametrize("opening", ["“...", "“‘Well’", "“—"])
+def test_english_punctuation_led_trailing_opener_chains(opening: str) -> None:
+    # The trailing-opener pass must not discard an English opener as a closer.
+    text = f'He said: {opening}opens\n“closes here.” After.'
+    assert [
+        text[span.start:span.end]
+        for span in find_paragraph_chained_quote_spans(text, styles=DOUBLE_QUOTE_STYLES)
+    ] == [f'{opening}opens\n“closes here.”']
+
+
+def test_german_double_quotes_still_chain_across_paragraphs() -> None:
+    # Restricting the ambiguous closer must preserve the PR's existing pair.
+    text = '„Opens here\n„closes here.“ After.'
+    assert [
+        text[span.start:span.end]
+        for span in find_paragraph_chained_quote_spans(text, styles=DOUBLE_QUOTE_STYLES)
+    ] == ['„Opens here\n„closes here.“']
 
 
 def test_unmatched_opening_does_not_hide_later_pair() -> None:

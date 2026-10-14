@@ -34,7 +34,7 @@ class _QuoteStyle:
 _QUOTE_STYLES = {
     # Straight and curly glyphs are deliberately compatible within each family.
     # Imperfectly normalized ebooks commonly mix them within one quote pair.
-    "double": _QuoteStyle(frozenset({'"', "“", "„"}), frozenset({'"', "”", "“"}), frozenset({'"', "“"})),
+    "double": _QuoteStyle(frozenset({'"', "“", "„"}), frozenset({'"', "”", "“"}), frozenset({'"'})),
     "single": _QuoteStyle(frozenset({"'", "‘"}), frozenset({"'", "’"}), frozenset({"'"})),
     "guillemet": _QuoteStyle(frozenset({"«"}), frozenset({"»"})),
     "single_guillemet": _QuoteStyle(frozenset({"‹"}), frozenset({"›"})),
@@ -91,11 +91,10 @@ def find_quote_spans(
 
         name, style = candidates[0]
         is_symmetric = char in style.symmetric
-        can_close = char in style.closing and (
-            not is_symmetric or _looks_like_closing_quote(text, index)
-        )
-
         matching_stack_index = _last_opening_for_style(stack, name)
+        can_close = matching_stack_index is not None and _can_close_quote(
+            text, index, style, stack[matching_stack_index][1],
+        )
         if can_close and matching_stack_index is not None:
             _, opening_index, depth = stack.pop(matching_stack_index)
             spans.append(QuoteSpan(opening_index, index + 1, depth))
@@ -164,7 +163,7 @@ def find_paragraph_chained_quote_spans(
         if leading_quote is not None:
             closing_index = _closing_quote_index(
                 text,
-                leading_quote + 1,
+                leading_quote,
                 paragraph_end,
                 enabled,
             )
@@ -234,14 +233,20 @@ def _first_unmatched_opening(
             if char not in style.opening and char not in style.closing:
                 continue
             is_symmetric = char in style.symmetric
-            can_close = char in style.closing and (
-                not is_symmetric or _looks_like_closing_quote(text, index)
+            matching_stack_index = next(
+                (i for i in range(len(stack) - 1, -1, -1) if stack[i][0] == name),
+                None,
             )
-            if can_close:
-                for stack_index in range(len(stack) - 1, -1, -1):
-                    if stack[stack_index][0] == name:
-                        stack.pop(stack_index)
-                        break
+            if matching_stack_index is not None and _can_close_quote(
+                text, index, style, stack[matching_stack_index][1],
+            ):
+                stack.pop(matching_stack_index)
+                break
+            # Unmatched directional closers cannot open a quote. Symmetric
+            # closers keep their existing close-before-open precedence.
+            if char in style.closing and char != "“" and (
+                not is_symmetric or _looks_like_closing_quote(text, index)
+            ):
                 break
             can_open = char in style.opening and (
                 not is_symmetric or _looks_like_opening_quote(text, index)
@@ -278,23 +283,37 @@ def _leading_opening_quote_index(
 
 def _closing_quote_index(
         text: str,
-        search_start: int,
+        opening_index: int,
         paragraph_end: int,
         enabled: tuple[tuple[str, _QuoteStyle], ...],
 ) -> int | None:
     """Index of the first closable quote mark in the paragraph, if any."""
 
-    for index in range(search_start, paragraph_end):
+    for index in range(opening_index + 1, paragraph_end):
         if _is_escaped(text, index):
             continue
-        char = text[index]
         for _, style in enabled:
-            if char in style.closing and (
-                char not in style.symmetric
-                or _looks_like_closing_quote(text, index)
-            ):
+            if _can_close_quote(text, index, style, opening_index):
                 return index
     return None
+
+
+def _can_close_quote(
+    text: str,
+    index: int,
+    style: _QuoteStyle,
+    opening_index: int,
+) -> bool:
+    char = text[index]
+    if char not in style.closing:
+        return False
+    if char == "“":
+        # Preserve its directional English opening role. Only a German low-9
+        # opener allows this glyph to act as a closing delimiter.
+        return text[opening_index] == "„" and _looks_like_closing_quote(text, index)
+    return char in style.closing and (
+        char not in style.symmetric or _looks_like_closing_quote(text, index)
+    )
 
 
 def _last_opening_for_style(
