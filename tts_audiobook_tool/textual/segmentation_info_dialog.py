@@ -60,6 +60,10 @@ class SegmentationInfoDialog(ModalScreen[None]):
                 f"{settings.dialog_segmentation}"
             ),
             (
+                f"{COL_DIM}Merge short sentences across paragraphs:{COL_DEFAULT} "
+                f"{settings.merge_short_sentences}"
+            ),
+            (
                 f"{COL_DIM}Language code:{COL_DEFAULT} "
                 f"{settings.language_code or '(none)'}"
             ),

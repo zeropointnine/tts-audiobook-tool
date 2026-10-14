@@ -125,6 +125,7 @@ def segmentation_settings_to_json_dict(settings: BookSegmentationSettings) -> di
         "max_words_per_segment": settings.max_words_per_segment,
         "strategy": settings.strategy.id,
         "dialog_segmentation": settings.dialog_segmentation,
+        "merge_short_sentences": settings.merge_short_sentences,
     }
 
 
@@ -151,11 +152,16 @@ def segmentation_settings_from_json_dict(value: Any) -> BookSegmentationSettings
     if not isinstance(dialog_segmentation, bool):
         dialog_segmentation = False
 
+    merge_short_sentences = value.get("merge_short_sentences", False)
+    if not isinstance(merge_short_sentences, bool):
+        merge_short_sentences = False
+
     return BookSegmentationSettings(
         language_code=language_code,
         max_words_per_segment=max_words,
         strategy=strategy,
         dialog_segmentation=dialog_segmentation,
+        merge_short_sentences=merge_short_sentences,
     )
 
 

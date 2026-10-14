@@ -57,6 +57,7 @@ class EpubMenuUtil:
             segmentation_strategy: SegmentationStrategy,
             language_code: str,
             dialog_segmentation: bool = False,
+            merge_short_sentences: bool = False,
     ) -> EpubImportResult | None:
         """
         Returns successful import result
@@ -71,6 +72,7 @@ class EpubMenuUtil:
                 segmentation_strategy=segmentation_strategy,
                 language_code=language_code,
                 dialog_segmentation=dialog_segmentation,
+                merge_short_sentences=merge_short_sentences,
             )
             print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
         except ImportError as e:

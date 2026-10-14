@@ -86,6 +86,7 @@ def test_text_import_shows_tolerance_hint_for_first_class_language(
         max_words_per_segment=40,
         strategy=SegmentationStrategy.SENTENCE,
         dialog_segmentation=False,
+        merge_short_sentences=False,
     )
     project = SimpleNamespace(
         sound_segments=SimpleNamespace(num_generated=lambda: 0, delete_all=lambda: None),
@@ -93,6 +94,7 @@ def test_text_import_shows_tolerance_hint_for_first_class_language(
         segmentation_strategy=SegmentationStrategy.SENTENCE,
         language_code="en",
         dialog_segmentation=False,
+        merge_short_sentences=False,
         dir_path="/tmp/project",
         markers=set(),
         word_substitutions={},
@@ -178,6 +180,7 @@ def test_text_import_does_not_show_tolerance_hint_for_other_language(monkeypatch
         segmentation_strategy=SegmentationStrategy.SENTENCE,
         language_code="fr",
         dialog_segmentation=False,
+        merge_short_sentences=False,
         markers=set(),
         word_substitutions={},
         has_multiple_book_sections=lambda: False,
@@ -187,6 +190,7 @@ def test_text_import_does_not_show_tolerance_hint_for_other_language(monkeypatch
                 max_words_per_segment=40,
                 strategy=SegmentationStrategy.SENTENCE,
                 dialog_segmentation=False,
+                merge_short_sentences=False,
             )
         ),
     )
@@ -234,6 +238,7 @@ def test_text_import_shows_dialog_voice_hint_when_dialog_segmentation_enabled(
         segmentation_strategy=SegmentationStrategy.SENTENCE,
         language_code="fr",
         dialog_segmentation=dialog_segmentation,
+        merge_short_sentences=False,
         markers=set(),
         word_substitutions={},
         has_multiple_book_sections=lambda: False,
@@ -243,6 +248,7 @@ def test_text_import_shows_dialog_voice_hint_when_dialog_segmentation_enabled(
                 max_words_per_segment=40,
                 strategy=SegmentationStrategy.SENTENCE,
                 dialog_segmentation=dialog_segmentation,
+                merge_short_sentences=False,
             )
         ),
     )
@@ -317,6 +323,7 @@ def test_import_summary_reports_dialog_preassignments_without_changing_mode(
         max_words_per_segment=80,
         strategy=SegmentationStrategy.MULTI_SENTENCE,
         dialog_segmentation=dialog_segmentation,
+        merge_short_sentences=False,
     )
     project = SimpleNamespace(
         sound_segments=SimpleNamespace(num_generated=lambda: 0, delete_all=lambda: None),
@@ -324,6 +331,7 @@ def test_import_summary_reports_dialog_preassignments_without_changing_mode(
         segmentation_strategy=SegmentationStrategy.MULTI_SENTENCE,
         language_code="en",
         dialog_segmentation=dialog_segmentation,
+        merge_short_sentences=False,
         voice_select_mode=voice_select_mode,
         dir_path="/tmp/project",
         markers=set(),
@@ -402,6 +410,7 @@ def make_import_project(
         segmentation_strategy=SegmentationStrategy.SENTENCE,
         language_code="en",
         dialog_segmentation=False,
+        merge_short_sentences=False,
         markers=markers if markers is not None else set(),
         word_substitutions=substitutions if substitutions is not None else {},
         has_multiple_book_sections=lambda: multi_section,
@@ -412,6 +421,7 @@ def make_import_project(
                 max_words_per_segment=40,
                 strategy=SegmentationStrategy.SENTENCE,
                 dialog_segmentation=False,
+                merge_short_sentences=False,
             )
         ),
     )

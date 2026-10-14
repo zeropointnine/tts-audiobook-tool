@@ -16,6 +16,7 @@ def get_from_text_file(
         pysbd_language: str,
         prefs: Prefs,
         dialog_segmentation: bool = False,
+        merge_short_sentences: bool = False,
 ) -> tuple[list[PhraseGroup], str, str]:
     """
     Ask the user for a text file path and return phrase groups plus raw text.
@@ -55,6 +56,7 @@ def get_from_text_file(
         max_words=max_words,
         strategy=segmentation_strategy,
         dialog_segmentation=dialog_segmentation,
+        merge_short_sentences=merge_short_sentences,
     )
     print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
 
@@ -71,6 +73,7 @@ def get_from_std_in(
         segmentation_strategy: SegmentationStrategy,
         pysbd_language: str,
         dialog_segmentation: bool = False,
+        merge_short_sentences: bool = False,
 ) -> tuple[list[PhraseGroup], str]:
     """
     Ask the user to input or paste text and return phrase groups plus raw text.
@@ -85,6 +88,7 @@ def get_from_std_in(
         max_words=max_words,
         strategy=segmentation_strategy,
         dialog_segmentation=dialog_segmentation,
+        merge_short_sentences=merge_short_sentences,
     )
 
     if not phrase_groups:

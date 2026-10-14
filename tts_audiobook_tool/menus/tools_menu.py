@@ -63,6 +63,7 @@ class ToolsMenu:
             segmentation_strategy=state.project.segmentation_strategy,
             language_code=state.project.language_code,
             dialog_segmentation=state.project.dialog_segmentation,
+            merge_short_sentences=state.project.merge_short_sentences,
         )
         if epub_import_result is None:
             return
