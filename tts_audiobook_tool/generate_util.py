@@ -997,7 +997,11 @@ class GenerateUtil:
 
     @staticmethod
     def save_debug_sound(project: Project, index: int, label: str, sound: Sound, is_realtime: bool):
-
+        """
+        Save a sound as a labeled FLAC file for debugging purposes.
+        Written to the project's realtime directory if `is_realtime`, otherwise to the
+        sound segments directory.
+        """
         dir_path = project.realtime_path if is_realtime else project.sound_segments_path
         os.makedirs(dir_path, exist_ok=True)
         index_string = str(index + 1).zfill(5)

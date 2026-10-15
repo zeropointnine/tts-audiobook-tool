@@ -804,7 +804,7 @@ class ConcatUtil:
         insertion_count = sum(len(gap_map.insertions) for gap_map in gap_maps)
         if insertion_count:
             added = sum(gap_map.inserted_duration for gap_map in gap_maps)
-            lines.append(f"Extended sentence gaps: {insertion_count} gaps, {added:.2f}s added")
+            lines.append(f"Extended inner sentence gaps: {insertion_count} gaps, {added:.2f}s added")
 
         gap_trim_count = sum(len(gap_map.trims) for gap_map in gap_maps)
         if gap_trim_count:

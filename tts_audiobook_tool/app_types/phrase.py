@@ -292,8 +292,7 @@ class Reason(tuple[int, str], Enum):
     Value comparisons can be made between members directly or using the level property
     (eg, "reason1 < reason2" or "reason1.level < reason2.level")
 
-    Configurable side effects associated with reasons, such as pause durations,
-    are defined separately.
+    Values associated with reasons such as pause durations are defined separately.
     """
 
     # For back-compat and as fallback
