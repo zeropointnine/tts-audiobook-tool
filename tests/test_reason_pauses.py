@@ -10,7 +10,7 @@ EXPECTED_PAUSES = {
     ReasonPauseTypes.NORMAL: {
         Reason.UNDEFINED: 1.0,
         Reason.WORD: 0.1,
-        Reason.PHRASE_QUOTE_END: 0.1,
+        Reason.PHRASE_QUOTE_END: 0.2,
         Reason.PHRASE: 0.5,
         Reason.SENTENCE: 0.9,
         Reason.PARAGRAPH: 1.2,
@@ -21,7 +21,7 @@ EXPECTED_PAUSES = {
     ReasonPauseTypes.SHORTER: {
         Reason.UNDEFINED: 1.0,
         Reason.WORD: 0.1,
-        Reason.PHRASE_QUOTE_END: 0.1,
+        Reason.PHRASE_QUOTE_END: 0.2,
         Reason.PHRASE: 0.3,
         Reason.SENTENCE: 0.6,
         Reason.PARAGRAPH: 0.9,
@@ -50,11 +50,13 @@ def test_reason_pause_types_have_distinct_ids() -> None:
     assert ReasonPauseTypes.SHORTER.value.id == "shorter"
     assert ReasonPauseTypes.NORMAL.value.label == "Normal"
     assert ReasonPauseTypes.NORMAL.value.menu_label == "normal"
-    assert ReasonPauseTypes.NORMAL.value.description == ""
+    assert ReasonPauseTypes.NORMAL.value.description == (
+        "phrase 0.5s, sentence 0.9s, paragraph 1.2s, etc."
+    )
     assert ReasonPauseTypes.SHORTER.value.label == "Shorter"
     assert ReasonPauseTypes.SHORTER.value.menu_label == "shorter"
     assert ReasonPauseTypes.SHORTER.value.description == (
-        'Enabling "Generate > Limit silence gaps" works well with this setting'
+        "phrase 0.3s, sentence 0.6s, paragraph 0.9s, etc."
     )
 
 

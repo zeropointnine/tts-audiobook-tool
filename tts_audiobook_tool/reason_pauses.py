@@ -69,6 +69,14 @@ SHORTER_REASON_PAUSES = MappingProxyType(
     }
 )
 
+def make_pauses_description(pauses: Mapping[Reason, float]) -> str:
+    """User-facing summary of the most common pause durations in ``pauses``."""
+    return (
+        f"phrase {pauses[Reason.PHRASE]:.1f}s, "
+        f"sentence {pauses[Reason.SENTENCE]:.1f}s, "
+        f"paragraph {pauses[Reason.PARAGRAPH]:.1f}s, etc."
+    )
+
 class ReasonPauseTypes(Enum):
     """Enumerates the available pause-duration policies."""
 
@@ -76,14 +84,14 @@ class ReasonPauseTypes(Enum):
         id="normal",
         label="Normal",
         menu_label="normal",
-        description="",
+        description=make_pauses_description(NORMAL_REASON_PAUSES),
         pauses=NORMAL_REASON_PAUSES,
     )
     SHORTER = ReasonPauses(
         id="shorter",
         label="Shorter",
         menu_label="shorter",
-        description="",
+        description=make_pauses_description(SHORTER_REASON_PAUSES),
         pauses=SHORTER_REASON_PAUSES,
     )
 
