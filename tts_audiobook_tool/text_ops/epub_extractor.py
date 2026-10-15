@@ -12,7 +12,8 @@ from typing import Any, Protocol
 
 from tts_audiobook_tool.app_types import BookSection, SegmentationStrategy
 from tts_audiobook_tool.app_support import app_text
-from tts_audiobook_tool.constants import PROJECT_TEXT_EPUB_FILE_NAME
+from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM, PROJECT_TEXT_EPUB_FILE_NAME
+from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.text_ops.epub_section_skip_detector import EpubSectionSkipDetector
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
@@ -214,7 +215,7 @@ class BeautifulSoupEpubChapterTextExtractor:
             significant_warnings.append(warning)
 
         if not text:
-            warning = f"No readable body text found in {chapter.href}"
+            warning = EpubExtractor.format_warning("No readable body text found in", chapter.href)
             warnings.append(warning)
             if not self.is_likely_non_reading_chapter(chapter):
                 significant_warnings.append(warning)
@@ -346,7 +347,10 @@ class BeautifulSoupEpubChapterTextExtractor:
                 piece_index = anchor_piece_indices.get(target.fragment)
                 if piece_index is None:
                     warnings.append(
-                        f"EPUB navigation target not found in {chapter.href}: {target.href}"
+                        EpubExtractor.format_warning(
+                            "EPUB navigation target not found in",
+                            f"{chapter.href}: {target.href}",
+                        )
                     )
                     has_unresolved_navigation_target = True
                     continue
@@ -370,7 +374,10 @@ class BeautifulSoupEpubChapterTextExtractor:
         for piece_index, target in targets_in_nav_order:
             if piece_index < last_piece_index:
                 warnings.append(
-                    f"EPUB navigation target is out of reading order in {chapter.href}: {target.href}"
+                    EpubExtractor.format_warning(
+                        "EPUB navigation target is out of reading order in",
+                        f"{chapter.href}: {target.href}",
+                    )
                 )
                 continue
             accepted_boundaries.append((piece_index, target))
@@ -551,9 +558,9 @@ class EpubExtractor:
                 # Ornament-only pages (a lone dinkus, divider, etc) contain no
                 # speakable text. Keeping them would force a section whose
                 # groups are all non-vocalizable, so skip them outright.
-                warning = (
-                    "EPUB section has no vocalizable text and was skipped: "
-                    f"{chapter.title or chapter.href}"
+                warning = EpubExtractor.format_warning(
+                    "EPUB section has no vocalizable text and was skipped:",
+                    chapter.title or chapter.href,
                 )
                 warnings.append(warning)
                 significant_warnings.append(warning)
@@ -683,9 +690,9 @@ class EpubExtractor:
                     if text_parts:
                         flush_text_chapter()
                     elif current_target is not None:
-                        warning = (
-                            f"Omitted empty EPUB navigation section before {text_slice.navigation_target.href}: "
-                            f"{current_target.title}"
+                        warning = EpubExtractor.format_warning(
+                            "Omitted empty EPUB navigation section before",
+                            f"{text_slice.navigation_target.href}: {current_target.title}",
                         )
                         warnings.append(warning)
                         significant_warnings.append(warning)
@@ -792,7 +799,7 @@ class EpubExtractor:
             item_id = spine_item[0] if isinstance(spine_item, tuple) else spine_item
             item = book.get_item_with_id(item_id)
             if item is None:
-                warning = f"EPUB spine item not found: {item_id}"
+                warning = EpubExtractor.format_warning("EPUB spine item not found:", str(item_id))
                 warnings.append(warning)
                 significant_warnings.append(warning)
                 continue
@@ -801,7 +808,7 @@ class EpubExtractor:
             media_type = getattr(item, "media_type", "")
             html = EpubExtractor.decode_item_content(item)
             if not html:
-                warning = f"EPUB spine item has no decodable content: {item_id}"
+                warning = EpubExtractor.format_warning("EPUB spine item has no decodable content:", str(item_id))
                 warnings.append(warning)
                 continue
 
@@ -832,7 +839,7 @@ class EpubExtractor:
                         toc_skip_decision.reason,
                     )
                 else:
-                    warning = f"Skipped EPUB navigation document: {href}"
+                    warning = EpubExtractor.format_warning("Skipped EPUB navigation document:", href)
                     warnings.append(warning)
                 continue
 
@@ -853,7 +860,10 @@ class EpubExtractor:
         for navigation_target in navigation_targets:
             if navigation_target.path in candidate_paths:
                 continue
-            warning = f"EPUB navigation target does not map to a spine document: {navigation_target.href}"
+            warning = EpubExtractor.format_warning(
+                "EPUB navigation target does not map to a spine document:",
+                navigation_target.href,
+            )
             warnings.append(warning)
             significant_warnings.append(warning)
 
@@ -1141,7 +1151,7 @@ class EpubExtractor:
             if spine_index is None:
                 continue
             if spine_index < last_spine_index:
-                warning = f"EPUB navigation target is out of spine order: {target.href}"
+                warning = EpubExtractor.format_warning("EPUB navigation target is out of spine order:", target.href)
                 warnings.append(warning)
                 significant_warnings.append(warning)
                 rejected_orders.add(target.order)
@@ -1190,7 +1200,15 @@ class EpubExtractor:
             EpubSectionSkipDetector.html_to_text_preview(source_chapter.html),
             100,
         )
-        return f"Skipped EPUB section: {source_chapter.href} ({reason}): {preview}"
+        return EpubExtractor.format_warning(
+            "Skipped EPUB section:",
+            f"{source_chapter.href} ({reason}): {preview}",
+        )
+
+    @staticmethod
+    def format_warning(label: str, detail: str) -> str:
+        """Warning text with the variable detail dimmed; label stays in the default color."""
+        return f"{label} {COL_DIM}{detail}{COL_DEFAULT}"
 
     @staticmethod
     def ellipsize_text(text: str, max_chars: int) -> str:
@@ -1206,7 +1224,7 @@ class EpubExtractor:
         try:
             content = item.get_content()
         except Exception as e:
-            EpubExtractor.log_warnings([f"Unable to read EPUB item content: {e}"])
+            EpubExtractor.log_warnings([EpubExtractor.format_warning("Unable to read EPUB item content:", str(e))])
             return ""
         if isinstance(content, bytes):
             return content.decode("utf-8", errors="replace")
@@ -1254,6 +1272,6 @@ class EpubExtractor:
     def log_warnings(warnings: list[str]) -> None:
         for warning in warnings:
             try:
-                L.w(warning)
+                L.w(strip_ansi_codes(warning))
             except Exception:
                 pass

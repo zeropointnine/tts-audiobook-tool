@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM
+from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.text_ops.epub_extractor import BeautifulSoupEpubChapterTextExtractor, EpubExtractor, EpubNavigationTarget, EpubSourceChapter, EpubTextExtractionResult, EpubTextSlice
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 
@@ -246,7 +248,7 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(result.section_start_indices, [1])
         self.assertEqual([chapter.title for chapter in result.chapters], ["Chapter 1", "Chapter 2"])
         self.assertIn(
-            "EPUB section has no vocalizable text and was skipped: Divider",
+            f"EPUB section has no vocalizable text and was skipped: {COL_DIM}Divider{COL_DEFAULT}",
             result.warnings,
         )
 
@@ -1062,7 +1064,7 @@ class TestEpubExtractor(unittest.TestCase):
         result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
 
         self.assertEqual(result.text, "")
-        self.assertEqual(result.warnings, ["No readable body text found in Text/insert001.xhtml"])
+        self.assertEqual(result.warnings, [f"No readable body text found in {COL_DIM}Text/insert001.xhtml{COL_DEFAULT}"])
         self.assertEqual(result.significant_warnings, [])
 
     def test_extract_text_ignores_html_comments(self):
@@ -1271,6 +1273,11 @@ class TestEpubExtractor(unittest.TestCase):
 
         self.assertEqual(
             warning,
+            f"Skipped EPUB section: {COL_DIM}Text/copyright.xhtml (publication metadata text signals (3)): "
+            f"Copyright Copyright © 2024 Example Press. All rights reserved. ISBN 978-1-2345-6789-0.{COL_DEFAULT}",
+        )
+        self.assertEqual(
+            strip_ansi_codes(warning),
             "Skipped EPUB section: Text/copyright.xhtml (publication metadata text signals (3)): "
             "Copyright Copyright © 2024 Example Press. All rights reserved. ISBN 978-1-2345-6789-0.",
         )
@@ -1284,7 +1291,7 @@ class TestEpubExtractor(unittest.TestCase):
         )
 
         warning = EpubExtractor.format_skipped_section_warning(chapter, "table of contents heading signal plus link structure")
-        preview = warning.rsplit(": ", 1)[1]
+        preview = strip_ansi_codes(warning).rsplit(": ", 1)[1]
 
         self.assertEqual(len(preview), 100)
         self.assertTrue(preview.endswith("…"))
@@ -1438,3 +1445,11 @@ class TestEpubExtractor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestEpubLogWarnings(unittest.TestCase):
+
+    def test_log_warnings_strips_ansi(self):
+        warning = EpubExtractor.format_warning("Label:", "detail")
+        with patch("tts_audiobook_tool.text_ops.epub_extractor.L.w") as log_w:
+            EpubExtractor.log_warnings([warning])
+        log_w.assert_called_once_with("Label: detail")
