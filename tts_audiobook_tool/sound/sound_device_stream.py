@@ -44,6 +44,7 @@ class SoundDeviceStream:
         blocksize: int = 8192,
         latency: str = "high",
         pause_requested: Callable[[], bool] | None = None,
+        channels: int = 1,
     ):
         """
         Initializes the AudioStreamer.
@@ -54,17 +55,24 @@ class SoundDeviceStream:
             latency (str): The requested output device latency.
             pause_requested: Optional predicate checked each callback; while true,
                 output silence without consuming buffered audio.
+            channels: 1 (mono) or 2 (stereo). Sample counts and positions
+                are always in frames (one sample per channel).
         """
+        if channels not in (1, 2):
+            raise ValueError(f"Unsupported channel count: {channels}")
+
         # Output device settings and optional externally controlled pause state.
         self.sample_rate = sample_rate
         self.blocksize = blocksize
         self.latency = latency
         self.pause_requested = pause_requested
+        self.channels = channels
 
         # This is the data buffer from which the audio stream callback function draws from to
         # stream the audio in realtime.
         # A numpy array of float32 is highly appropriate for audio processing.
-        self.buffer = np.array([], dtype=np.float32)
+        # Mono: shape (frames,); stereo: (frames, 2).
+        self.buffer = self._empty_buffer()
 
         # Cumulative count of samples ever appended via add_data().
         # Together with len(buffer), gives frames already consumed by the callback.
@@ -98,6 +106,10 @@ class SoundDeviceStream:
         self.first_audio_output_callback: Callable[[], None] | None = None
         self.first_audio_output_sample_index: int | None = None
 
+    def _empty_buffer(self) -> ndarray:
+        shape = (0,) if self.channels == 1 else (0, self.channels)
+        return np.zeros(shape, dtype=np.float32)
+
     def _callback(self, outdata: ndarray, frames: int, time, status: sd.CallbackFlags) -> None:
         """
         The heart of the audio streamer, called by sounddevice in a separate thread.
@@ -123,8 +135,9 @@ class SoundDeviceStream:
             chunk_size = min(len(self.buffer), frames)
 
             # Copy data from our buffer to the output buffer
-            # Reshape is necessary as the output expects a 2D array (frames, channels)
-            outdata[:chunk_size] = self.buffer[:chunk_size].reshape(-1, 1)
+            # The output expects a 2D array (frames, channels), so mono needs a reshape
+            chunk = self.buffer[:chunk_size]
+            outdata[:chunk_size] = chunk.reshape(-1, 1) if chunk.ndim == 1 else chunk
 
             # Remove the copied data from our buffer
             self.buffer = self.buffer[chunk_size:]
@@ -162,21 +175,27 @@ class SoundDeviceStream:
         Adds audio data to the buffer for streaming.
 
         This method handles converting the data to the required float32 format
-        and converting stereo to mono if necessary.
+        and to the stream's channel count: a mono stream averages multichannel
+        data down to mono; a stereo stream plays mono data in both channels.
 
         Args:
             data (ndarray): A numpy array of audio data. Can be int16, float64, etc.
-                            and can be mono or stereo.
+                            and can be mono (n,) or (n, channels).
 
         Returns:
             (start_sample, end_sample): the half-open range, in cumulative-stream
-            sample indices, that this chunk occupies. Useful for callers that
+            sample indices (frames), that this chunk occupies. Useful for callers that
             want to correlate later playback positions with what was added.
         """
-        # --- Handle data shape (convert stereo to mono) ---
-        if data.ndim > 1 and data.shape[1] > 1:
-            # Average the channels to create a mono signal
-            data = data.mean(axis=1)
+        # --- Handle data shape (match the stream's channel count) ---
+        if data.ndim > 1:
+            if data.shape[1] != self.channels:
+                # Average the channels to create a mono signal
+                data = data.mean(axis=1)
+            elif self.channels == 1:
+                data = data[:, 0]
+        if data.ndim == 1 and self.channels == 2:
+            data = np.stack([data, data], axis=1)
 
         # --- Handle data type conversion ---
         # If data is integer (like int16), normalize it to float32 in the range [-1.0, 1.0]
@@ -212,7 +231,7 @@ class SoundDeviceStream:
             print("Stream is already running.")
             return True
 
-        # Create and start the output stream. We assume a mono output (channels=1).
+        # Create and start the output stream, mono unless configured otherwise.
         # Default settings favor a large block size and high latency.
         try:
             # On POSIX, block SIGINT before creating the stream so PortAudio's
@@ -221,7 +240,7 @@ class SoundDeviceStream:
             with SoundDeviceStream.block_sigint_during_stream_start():
                 self.stream = sd.OutputStream(
                     samplerate=self.sample_rate,
-                    channels=1,
+                    channels=self.channels,
                     callback=self._callback,
                     dtype=np.float32,  # We work with float32 internally
                     blocksize=self.blocksize,
@@ -251,7 +270,7 @@ class SoundDeviceStream:
             self.cleared_audio_dac_end = max(
                 self.cleared_audio_dac_end, self.last_audio_dac_end
             )
-            self.buffer = np.array([], dtype=np.float32)
+            self.buffer = self._empty_buffer()
             self.total_samples_added = 0
             self.last_dac_time = float('inf')
             self.last_dac_consumed = 0

@@ -20,6 +20,7 @@ from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.app_types.phrase import Reason
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
@@ -47,9 +48,14 @@ class ConversationStreamingTts:
         sound_stream: SoundDeviceStream,
         interrupt_requested: threading.Event,
         on_segment_range: Callable[[int, int], None] | None = None,
+        room_reverb: RoomReverbProcessor | None = None,
     ) -> tuple[tuple[int, int] | None, Sound | None, str | None]:
         """
         Stream one TTS chunk directly into the conversation output stream.
+
+        `room_reverb`, if given, is applied to each audio chunk as it arrives,
+        then to the trailing pause, which only carries the tail. Its output
+        (stereo if the processor is) is what's played and saved.
 
         Returns:
             ((start_sample, end_sample), saved_sound, None) on success, where the range covers
@@ -73,10 +79,22 @@ class ConversationStreamingTts:
         speech_end: int | None = None
         saved_chunks: list[np.ndarray] = []
 
+        def post_process(data: np.ndarray, send_end: int | None = None) -> np.ndarray:
+            if room_reverb is not None:
+                data = room_reverb.apply(
+                    Sound(data, sound_stream.sample_rate), send_end=send_end
+                ).data
+            if sound_stream.channels == 2:
+                # Safety net (reverb skips audio it can't process): keep
+                # every chunk in the same shape, so they concatenate for saving
+                data = SoundUtil.as_stereo(data)
+            return data
+
         def append_chunk(data: np.ndarray) -> None:
             nonlocal stream_start, stream_end, speech_end
             if interrupt_requested.is_set():
                 return
+            data = post_process(data)
             saved_chunks.append(np.copy(data))
             start, end = sound_stream.add_data(data)
             if stream_start is None:
@@ -107,8 +125,10 @@ class ConversationStreamingTts:
                 sr=sound_stream.sample_rate,
                 dtype=np.dtype(np.float32),
             )
-            saved_chunks.append(np.copy(silence_sound.data))
-            start, end = sound_stream.add_data(silence_sound.data)
+            # The pause doesn't feed the reverb; the tail decays into it
+            silence = post_process(silence_sound.data, send_end=0)
+            saved_chunks.append(np.copy(silence))
+            start, end = sound_stream.add_data(silence)
             if stream_start is None:
                 stream_start = start
             stream_end = end
@@ -189,6 +209,32 @@ class _ResponseEngine:
         self.output_turn_tts_started_at: float | None = None
         self.output_turn_tts_mode: str | None = None
         self.output_turn_tts_preview_text: str = ""
+        # Room reverb (project setting, as in concat and realtime playback),
+        # created lazily on the TTS worker thread. One per turn: an
+        # interrupted turn clears the buffered audio, so a tail carried over
+        # from it would be stale.
+        self._room_reverb: RoomReverbProcessor | None = None
+        self._room_reverb_made = False
+
+    def get_room_reverb(self) -> RoomReverbProcessor | None:
+        """
+        The turn's reverb processor, or None while room reverb is off. Stereo
+        if the output stream is (the stream is stereo only for the stereo
+        effect; see ConversationRuntime.initialize).
+        """
+        if not self._room_reverb_made:
+            self._room_reverb_made = True
+            room_reverb = self.project.room_reverb
+            if room_reverb.design is not None and room_reverb.drr_db is not None:
+                stereo = self.project.room_reverb_stereo
+                self._room_reverb = RoomReverbProcessor(
+                    self.sound_stream.sample_rate,
+                    room_reverb.design,
+                    room_reverb.drr_db,
+                    width=stereo.width if self.sound_stream.channels == 2 else 0.0,
+                    spread_early=stereo.spread_early,
+                )
+        return self._room_reverb
 
     def snapshot(self) -> ResponseSnapshot:
         """Read immutable turn state before, during, or after run().
@@ -435,6 +481,7 @@ class _ResponseEngine:
                             sound_stream=self.sound_stream,
                             interrupt_requested=self.interrupt_requested,
                             on_segment_range=on_segment_range,
+                            room_reverb=self.get_room_reverb(),
                         )
                     )
 
@@ -520,12 +567,24 @@ class _ResponseEngine:
                     limit_silence_gaps=self.project.limit_silence_gaps,
                     limit_silence_gaps_duration=self.project.limit_silence_gaps_duration,
                 )
+                speech_len = len(sound.data)
                 sound = SoundPipeline.append_pause_or_section_effect(
                     sound,
                     reason=reason,
                     reason_pauses=self.project.reason_pauses,
                     break_effect=None,
                 )
+                # Phrase alignment (STT) gets the dry mono sound: same length,
+                # cleaner to transcribe
+                dry_sound = sound
+                # Room reverb on the speech only; the tail decays into the pause
+                room_reverb = self.get_room_reverb()
+                if room_reverb is not None:
+                    sound = room_reverb.apply(sound, send_end=speech_len)
+                if self.sound_stream.channels == 2:
+                    # Safety net (reverb skips audio it can't process): keep
+                    # the turn's sounds in the same shape, so they concatenate
+                    sound = Sound(SoundUtil.as_stereo(sound.data), sound.sr)
                 self.saved_turn_sounds.append(sound)
 
                 if not self.interrupt_requested.is_set():
@@ -540,7 +599,7 @@ class _ResponseEngine:
                         )
                     is_first_tts_chunk = not self.spoken_segments
                     spoken_segments = self.make_spoken_segments(
-                        text, sound, start, end, is_first_tts_chunk
+                        text, dry_sound, start, end, is_first_tts_chunk
                     )
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:

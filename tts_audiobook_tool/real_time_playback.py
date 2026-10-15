@@ -45,11 +45,11 @@ from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPha
 from tts_audiobook_tool.sound.noise_bed import NoiseBed
 from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
+from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
-from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
+from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
@@ -186,9 +186,14 @@ def _start_impl(
     # stream is seamless across segments.
     room_tone_db = state.project.room_tone.level_db
     noise_bed: NoiseBed | None = None
-    # Room reverb (same setting as concat), likewise one per run
+    # Room reverb (same settings as concat), likewise one per run. The stereo
+    # effect makes the output stream stereo (falling back to mono if the
+    # device can't), as it makes concat's export stereo.
     room_reverb = state.project.room_reverb
+    room_reverb_stereo = state.project.room_reverb_stereo
     reverb: RoomReverbProcessor | None = None
+    has_reverb = room_reverb.design is not None and room_reverb.drr_db is not None
+    stereo_channels = 2 if has_reverb and room_reverb_stereo.is_stereo else 1
 
     for index in range(start_index, end_index + 1):
 
@@ -288,31 +293,59 @@ def _start_impl(
                 effects_enabled=state.project.use_break_sound_effect,
                 is_final=False,
             )
-            if break_effect is not None:
-                if break_effect == Reason.SECTION_BREAK:
-                    path = SECTION_BREAK_SOUND_EFFECT_PATH
-                else:
-                    path = SPACE_BREAK_SOUND_EFFECT_PATH
-                result = SoundFileUtil.load(path, sound.sr)
-                if isinstance(result, str):
-                    printt(f"{COL_ERROR}Error loading sound effect: {path}")
-                    appended_sound = None
-                else:
-                    appended_sound = result.data
+            effect_result = (
+                SoundPipeline.make_break_effect_sound(
+                    break_effect, state.project.reason_pauses, sound.sr)
+                if break_effect is not None
+                else None
+            )
+            if isinstance(effect_result, Sound):
+                appended_sound = effect_result.data.astype(sound.data.dtype)
             else:
+                if isinstance(effect_result, str):
+                    # Fall back to the plain pause
+                    printt(f"{COL_ERROR}Error loading sound effect: {effect_result}")
                 silence_duration = state.project.reason_pauses.get_pause_for(phrase.reason)
                 appended_sound = np.zeros(int(sound.sr * silence_duration), dtype=sound.data.dtype)
 
+        # Start stream lazy, before the reverb, whose channel count follows the
+        # stream's: stereo when the stereo effect is on and the device allows it
+        if not stream:
+            stream, started = open_output_stream(stereo_channels, pause_requested)
+            stream_holder.append(stream)
+            if not started:
+                # Abort. Stream is in a not-started state, so no shut_down() is needed;
+                # skip the buffer-drain prompt.
+                Tts.clear_continuation()
+                Interrupts().clear()
+                s = "Aborting real-time playback: sound output stream failed to start"
+                ask.ask_error(s)
+                return RealTimePlaybackRunResult(
+                    RealTimePlaybackRunStatus.FAILED,
+                    s,
+                )
+
         # Reverb first, on the narration only: the segment, then its pause or
-        # break effect (dry, with the tail decaying under it), in turn
+        # break effect (dry, with the tail decaying under it), in turn. Stereo
+        # out if the stream is (the voice stays mono, centered).
         if (room_reverb.design is not None and room_reverb.drr_db is not None
                 and sound.data.size > 0):
             if reverb is None:
-                reverb = RoomReverbProcessor(sound.sr, room_reverb.design, room_reverb.drr_db)
+                reverb = RoomReverbProcessor(
+                    sound.sr, room_reverb.design, room_reverb.drr_db,
+                    width=room_reverb_stereo.width if stream.channels == 2 else 0.0,
+                    spread_early=room_reverb_stereo.spread_early,
+                )
             sound = reverb.apply(sound, is_last=appended_sound is None)
             if appended_sound is not None and appended_sound.size > 0:
                 appended_sound = reverb.apply(
                     Sound(appended_sound.astype(sound.data.dtype), sound.sr), send_end=0).data
+        if stream.channels == 2:
+            # Safety net (reverb skips audio it can't process): keep the segment
+            # and its pause in the same shape, so they concatenate for saving
+            sound = Sound(SoundUtil.as_stereo(sound.data), sound.sr)
+            if appended_sound is not None:
+                appended_sound = SoundUtil.as_stereo(appended_sound)
 
         # The bed's stream continues across calls, so the segment and its pause
         # are fed in turn. No appended sound means the run ends here, so the bed
@@ -324,26 +357,6 @@ def _start_impl(
             if appended_sound is not None and appended_sound.size > 0:
                 appended_sound = noise_bed.apply(
                     Sound(appended_sound.astype(sound.data.dtype), sound.sr)).data
-
-        # Start stream lazy
-        if not stream:
-            # Keep other audio users' larger/high-latency stream defaults;
-            # realtime's pause hotkey needs a more responsive callback cadence.
-            stream = SoundDeviceStream(
-                blocksize=4096, latency="low", pause_requested=pause_requested
-            )
-            stream_holder.append(stream)
-            if not stream.start():
-                # Abort. Stream is in a not-started state, so no shut_down() is needed;
-                # skip the buffer-drain prompt.
-                Tts.clear_continuation()
-                Interrupts().clear()
-                s = "Aborting real-time playback: sound output stream failed to start"
-                ask.ask_error(s)
-                return RealTimePlaybackRunResult(
-                    RealTimePlaybackRunStatus.FAILED,
-                    s,
-                )
 
         # Add sound to the stream, capturing the half-open sample range it
         # occupies so the app can show which source text is being played.
@@ -546,6 +559,37 @@ def generate_full_flow(
     else:
         Tts.clear_continuation_if_reason(phrase_group.last_reason)
         return gen_result, did_interrupt, consecutive_model_errors
+
+
+def open_output_stream(
+        channels: int,
+        pause_requested: Callable[[], bool] | None,
+) -> tuple[SoundDeviceStream, bool]:
+    """
+    Creates and starts the realtime output stream. Returns the stream and
+    whether it started. A stereo stream that fails to start falls back to
+    mono (with a warning), so the stereo reverb effect never blocks playback.
+    """
+    def make(channels: int) -> SoundDeviceStream:
+        # Keep other audio users' larger/high-latency stream defaults;
+        # realtime's pause hotkey needs a more responsive callback cadence.
+        return SoundDeviceStream(
+            blocksize=4096, latency="low", pause_requested=pause_requested, channels=channels
+        )
+
+    stream = make(channels)
+    started = stream.start()
+    if started or channels == 1:
+        return stream, started
+    # Release whatever PortAudio left behind before retrying
+    stream.shut_down()
+    printt(
+        f"{COL_ERROR}Warning: Couldn't open the sound output in stereo{COL_DIM}, "
+        "playing in mono (room reverb stereo effect off)"
+    )
+    printt()
+    stream = make(1)
+    return stream, stream.start()
 
 
 def save_played_sound(

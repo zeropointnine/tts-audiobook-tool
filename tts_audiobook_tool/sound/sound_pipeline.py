@@ -4,6 +4,8 @@ import bisect
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 from tts_audiobook_tool.app_types import HighShelfEq, Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -241,6 +243,33 @@ class SoundPipeline:
         return SoundPipeline.apply_high_shelf(sound, high_shelf)
 
     @staticmethod
+    def make_break_effect_sound(
+        break_effect: Reason,
+        reason_pauses: ReasonPauses,
+        sr: int,
+    ) -> Sound | str:
+        """
+        Builds the inserted audio for a break sound effect (SPACE_BREAK or
+        SECTION_BREAK): the effect asset, resampled to `sr`, centered in equal
+        leading and trailing silence so the whole thing lasts the configured
+        pause for that reason (or the effect's own length, if longer).
+
+        Shared by concat and realtime playback. Returns an error string if the
+        reason has no effect or the asset can't be loaded.
+        """
+        if break_effect == Reason.SPACE_BREAK:
+            path = SPACE_BREAK_SOUND_EFFECT_PATH
+        elif break_effect == Reason.SECTION_BREAK:
+            path = SECTION_BREAK_SOUND_EFFECT_PATH
+        else:
+            return f"No break sound effect for reason: {break_effect}"
+
+        result = SoundFileUtil.load(path, sr)
+        if isinstance(result, str):
+            return f"{path}: {result}"
+        return SoundUtil.center_in_silence(result, reason_pauses.get_pause_for(break_effect))
+
+    @staticmethod
     def append_pause_or_section_effect(
         sound: Sound,
         reason: Reason,
@@ -254,7 +283,10 @@ class SoundPipeline:
         :param break_effect:
             Precomputed decision from `BreakEffectTracker.next_break_effect`:
             which break sound effect to append (SPACE_BREAK or SECTION_BREAK),
-            or None to append the pause for ``reason`` instead.
+            or None to append the pause for ``reason`` instead. The effect is
+            built by `make_break_effect_sound` (centered in silence, totalling
+            the configured pause). If the effect can't be loaded, the plain
+            pause for ``reason`` is appended instead.
         :param pause_duration_override:
             When not None, uses this duration (in seconds) instead of
             the configured pause for ``reason``. Only affects the pure-silence
@@ -262,10 +294,14 @@ class SoundPipeline:
             compensate for pseudo-silence already present at segment boundaries.
         """
 
-        if break_effect == Reason.SPACE_BREAK:
-            return SoundUtil.append_sound_using_path(sound, SPACE_BREAK_SOUND_EFFECT_PATH)
-        if break_effect == Reason.SECTION_BREAK:
-            return SoundUtil.append_sound_using_path(sound, SECTION_BREAK_SOUND_EFFECT_PATH)
+        if break_effect is not None:
+            result = SoundPipeline.make_break_effect_sound(break_effect, reason_pauses, sound.sr)
+            if isinstance(result, str):
+                printt(f"{COL_ERROR}Couldn't load break sound effect: {result}")
+            else:
+                new_data = np.concatenate([sound.data, result.data.astype(sound.data.dtype)])
+                return Sound(new_data, sound.sr)
+            pause_duration_override = None
 
         pause_duration = (
             pause_duration_override

@@ -20,8 +20,9 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 class FakeSoundStream:
-    def __init__(self, sample_rate: int) -> None:
+    def __init__(self, sample_rate: int, channels: int = 1) -> None:
         self.sample_rate = sample_rate
+        self.channels = channels
         self._offset = 0
         self.added: list[np.ndarray] = []
 
@@ -400,3 +401,100 @@ def test_streaming_tts_reports_when_no_audio_was_streamed(monkeypatch) -> None:
     assert (stream_range, saved_sound) == (None, None)
     assert error == "No streamed audio output"
     assert spies.synthesis_calls == 1
+
+
+def test_streaming_tts_applies_room_reverb_in_stereo(monkeypatch) -> None:
+    from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor
+
+    rng = np.random.default_rng(0)
+    first = (rng.standard_normal(2400) * 0.1).astype(np.float32)
+    second = (rng.standard_normal(1200) * 0.1).astype(np.float32)
+    _patch_tts_for_streaming(
+        monkeypatch,
+        24000,
+        lambda on_chunk, on_end: (on_chunk(first), on_chunk(second), ("streamed",))[-1],
+    )
+    project = Project.model_validate({})
+    stream = FakeSoundStream(24000, channels=2)
+    reverb = RoomReverbProcessor(24000, "small", 17.0, width=1.0)
+
+    stream_range, saved_sound, error = ConversationStreamingTts.generate_to_sound_stream(
+        state=SimpleNamespace(project=project),
+        text="hello",
+        reason=Reason.SENTENCE,
+        sound_stream=stream,  # type: ignore[arg-type]
+        interrupt_requested=threading.Event(),
+        room_reverb=reverb,
+    )
+
+    assert error is None
+    # Ranges stay in frames: the speech, then the pause
+    assert stream_range == (0, 3600)
+    assert [chunk.shape[1] for chunk in stream.added] == [2, 2, 2]
+    # Voice centered, reverb differs between the ears; the pause carries the tail
+    speech = np.concatenate(stream.added[:2])
+    assert not np.allclose(speech[:, 0], speech[:, 1])
+    pause = stream.added[2]
+    assert np.any(pause != 0) and not np.allclose(pause[:, 0], pause[:, 1])
+    assert saved_sound is not None and saved_sound.data.shape == (3600 + len(pause), 2)
+
+
+def test_streaming_tts_without_reverb_is_unchanged(monkeypatch) -> None:
+    data = np.full(100, 0.5, dtype=np.float32)
+    _patch_tts_for_streaming(
+        monkeypatch, 24000, lambda on_chunk, on_end: (on_chunk(data), ("streamed",))[-1]
+    )
+    stream = FakeSoundStream(24000)
+
+    ConversationStreamingTts.generate_to_sound_stream(
+        state=SimpleNamespace(project=Project.model_validate({})),
+        text="hello",
+        reason=Reason.SENTENCE,
+        sound_stream=stream,  # type: ignore[arg-type]
+        interrupt_requested=threading.Event(),
+    )
+
+    np.testing.assert_array_equal(stream.added[0], data)
+    assert not np.any(stream.added[1])
+
+
+@pytest.mark.parametrize(
+    ("channels", "stereo_ok", "mono_ok", "expected"),
+    [
+        (2, True, True, [2]),
+        (1, True, True, [1]),
+        (2, False, True, [2, 1]),
+        (2, False, False, [2, 1]),
+        (1, True, False, [1]),
+    ],
+)
+def test_open_chat_output_stream_falls_back_to_mono(
+    monkeypatch, channels: int, stereo_ok: bool, mono_ok: bool, expected: list[int]
+) -> None:
+    from tts_audiobook_tool.conversation import conversation
+
+    made = []
+
+    class FakeStream:
+        def __init__(self, sample_rate: int, channels: int = 1) -> None:
+            self.sample_rate = sample_rate
+            self.channels = channels
+            self.shut_downs = 0
+            made.append(self)
+
+        def start(self) -> bool:
+            return stereo_ok if self.channels == 2 else mono_ok
+
+        def shut_down(self) -> None:
+            self.shut_downs += 1
+
+    monkeypatch.setattr(conversation, "SoundDeviceStream", FakeStream)
+
+    stream, warning = conversation.open_chat_output_stream(48000, channels)
+
+    assert [s.channels for s in made] == expected
+    started = made[-1].start()
+    assert (stream is made[-1]) == started and (stream is None) == (not started)
+    # Streams that didn't start are released
+    assert all(s.shut_downs == (0 if s is stream else 1) for s in made)
+    assert (warning == conversation.STEREO_FALLBACK_WARNING) == (expected == [2, 1])

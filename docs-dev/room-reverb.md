@@ -31,7 +31,7 @@ new design key. An unknown id loads as `OFF`.
 
 The project setting `room_reverb_stereo` ("Room reverb stereo effect", shown in the menu only while
 Room reverb is on) spreads the reverb across left and right; the voice stays mono, identical in both
-channels. Concat only: realtime playback ignores it and stays mono.
+channels. Applies to concat and realtime playback.
 
 | `RoomReverbStereo` | id | Spread | Label |
 |---|---|---|---|
@@ -80,9 +80,25 @@ Per held segment in concat (`ConcatUtil.concatenate_sound_segments`, `flush_pend
   dry signal) fades over the last 50 ms. The output always ends in the final segment's pause, so
   this rarely matters.
 
-**Realtime playback** applies the same setting in the same order: the segment, then its pause or
-break effect (`send_end=0`), are fed in turn; `realtime_save` files include the reverb. Not applied
-in the server or voice chat.
+**Realtime playback** applies the same settings in the same order: the segment, then its pause or
+break effect (`send_end=0`), are fed in turn; `realtime_save` files include the reverb. With the
+stereo effect on, the output stream (`SoundDeviceStream(channels=2)`, whose buffer then holds
+`(n, 2)` frames; sample counts and positions stay in frames) and saved files are stereo. The stream
+is opened before the reverb processor is created (`open_output_stream`): if the device can't open in
+stereo, playback falls back to mono with a warning in the content area, and the reverb is the plain
+mono preset.
+
+**Voice chat** (`conversation/`) applies the same settings; no room tone. The output stream is
+opened once per session (`ConversationRuntime.initialize`, `open_chat_output_stream`): stereo with
+the stereo effect on, falling back to mono with a warning in the transcript. The reverb processor
+is made per turn (`_ResponseEngine.get_room_reverb`, lazily on the TTS worker thread), not per
+session: an interrupted turn clears the buffered audio, so a carried-over tail would be stale.
+Non-streaming TTS: each chunk with its pause appended is fed with `send_end` at the speech end, as
+in concat; phrase alignment (STT) gets the dry mono sound. Streaming TTS
+(`ConversationStreamingTts.generate_to_sound_stream`): each audio chunk is fed as it arrives, then
+the trailing pause with `send_end=0`. Saved chat files include the reverb.
+
+Not applied in the server.
 
 ## Implementation (`sound/room_reverb.py`)
 

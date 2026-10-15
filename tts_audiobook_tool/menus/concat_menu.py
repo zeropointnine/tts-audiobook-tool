@@ -725,7 +725,8 @@ to enable opening local audio files without user input:
 
 HIGH_SHELF_SUBHEADING = \
 """Applies a high-shelf equalizer pass to compensate for dull or muffled-sounding TTS output.
-May be useful for lower-fidelity TTS models."""
+May be useful for lower-fidelity TTS models.
+Is also applied to realtime playback."""
 
 LIMIT_SILENCE_GAPS_TITLE = "Maximum silence inside segments"
 
@@ -757,7 +758,7 @@ ROOM_REVERB_SUBHEADING = \
 """Places the narration in a room. Light and Moderate add a subtle small-room ambience.
 Large room adds a more noticeable sense of space, but sounds more colored and distant,
 and can soften clarity.
-Is also applied to realtime playback."""
+Is also applied to realtime playback and voice chat."""
 
 ROOM_REVERB_STEREO_TITLE = "Room reverb stereo effect"
 
@@ -765,7 +766,7 @@ ROOM_REVERB_STEREO_SUBHEADING = \
 """Spreads the room reverb across left and right while the voice stays centered.
 Most noticeable on headphones. Wider also spreads the room's early reflections.
 Creates stereo files (FLAC files are about 50% larger).
-Realtime playback stays mono."""
+Is also applied to realtime playback and voice chat."""
 
 REASON_PAUSES_SUBHEADING = \
 """Controls the silence inserted between generated segments."""

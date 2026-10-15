@@ -3,7 +3,8 @@ Room reverb: convolution with a synthetic room impulse response (IR), streamed
 over the whole output so tails decay naturally across segment boundaries and
 pauses instead of resetting with each segment.
 
-Used by concat and realtime playback per the `room_reverb` project setting.
+Used by concat, realtime playback and voice chat per the `room_reverb`
+project setting.
 Only narration feeds the reverb; appended break sound effects pass through dry
 (though the tail decays underneath them). Applied before the room tone noise
 bed, so the bed isn't reverberated. See docs-dev/room-reverb.md.
@@ -11,7 +12,7 @@ bed, so the bed isn't reverberated. See docs-dev/room-reverb.md.
 The output is always the same length as the input (the tail past the end of
 the output is dropped), so durations and timing maps are unchanged.
 
-Optionally stereo (concat only, per `room_reverb_stereo`): the voice stays mono
+Optionally stereo (per `room_reverb_stereo`): the voice stays mono
 and centered, and the reverb is spread across the channels (see
 `make_stereo_irs`).
 """

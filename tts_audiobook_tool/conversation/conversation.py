@@ -54,6 +54,35 @@ OUTPUT_TAIL_POLL_INTERVAL_S = 0.02
 OUTPUT_TAIL_WAIT_TIMEOUT_S = 1.0
 OUTPUT_TAIL_SETTLE_MARGIN_S = 0.15
 
+STEREO_FALLBACK_WARNING = (
+    "Couldn't open the sound output in stereo, playing in mono "
+    "(room reverb stereo effect off)"
+)
+
+
+def open_chat_output_stream(
+    sample_rate: int, channels: int
+) -> tuple[SoundDeviceStream | None, str]:
+    """
+    Creates and starts the chat output stream. Returns the started stream (or
+    None if it couldn't start) and a warning (or ""). A stereo stream that
+    fails to start falls back to mono, so the room reverb stereo effect never
+    blocks chat.
+    """
+    stream = SoundDeviceStream(sample_rate, channels=channels)
+    if stream.start():
+        return stream, ""
+    # Release whatever PortAudio left behind
+    stream.shut_down()
+    if channels == 1:
+        return None, ""
+    L.w("[chat] couldn't open the sound output in stereo, falling back to mono")
+    stream = SoundDeviceStream(sample_rate, channels=1)
+    if stream.start():
+        return stream, STEREO_FALLBACK_WARNING
+    stream.shut_down()
+    return None, STEREO_FALLBACK_WARNING
+
 
 class ConversationRuntime:
     """Own long-lived LLM, microphone, and playback resources without a UI."""
@@ -90,6 +119,9 @@ class ConversationRuntime:
         self.transcriber: RealtimeTranscriber | None = None
         self.active_response: ResponseSession | None = None
         self.inspection = None
+        # Output stream notices (eg, the stereo fallback), shown with the
+        # inspection's warnings
+        self._output_warnings: tuple[str, ...] = ()
         self._worker_touched = False
 
     @property
@@ -125,7 +157,10 @@ class ConversationRuntime:
     ) -> ConversationInitialization:
         with self._lock:
             if self.initialized:
-                warnings = tuple(getattr(self.inspection, "warnings", ()))
+                warnings = (
+                    tuple(getattr(self.inspection, "warnings", ()))
+                    + self._output_warnings
+                )
                 device = (
                     SoundInputDeviceInfo.get_input_device_description()
                     if self.is_microphone_input
@@ -175,10 +210,16 @@ class ConversationRuntime:
             if use_streaming
             else APP_SAMPLE_RATE
         )
-        sound_stream = SoundDeviceStream(sample_rate)
-        if not sound_stream.start():
-            sound_stream.shut_down()
+        # Stereo only for the room reverb stereo effect (the response engine
+        # applies the reverb; its channel count follows the stream's)
+        room_reverb = self.project.room_reverb
+        has_reverb = room_reverb.design is not None and room_reverb.drr_db is not None
+        channels = 2 if has_reverb and self.project.room_reverb_stereo.is_stereo else 1
+        opened_stream, output_warning = open_chat_output_stream(sample_rate, channels)
+        if opened_stream is None:
             raise RuntimeError("Could not start the sound output device")
+        sound_stream = opened_stream
+        output_warnings = (output_warning,) if output_warning else ()
 
         transcriber = None
         device = ""
@@ -226,6 +267,7 @@ class ConversationRuntime:
                     llm.clear()
                 raise RuntimeError("Conversation closed during initialization")
             self.inspection = inspection
+            self._output_warnings = output_warnings
             self.llm = llm
             self.sound_stream = sound_stream
             self.transcriber = transcriber
@@ -239,7 +281,9 @@ class ConversationRuntime:
             f"[chat] initialize: complete in {time.monotonic() - t0:.1f}s"
             f" (llm={llm_description}, mic={'on' if transcriber is not None else 'off'})"
         )
-        return ConversationInitialization(tuple(inspection.warnings), device)
+        return ConversationInitialization(
+            tuple(inspection.warnings) + output_warnings, device
+        )
 
     def create_response(
         self, on_error: Callable[[str], None] | None = None

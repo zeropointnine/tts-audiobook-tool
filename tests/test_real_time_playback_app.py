@@ -10,7 +10,7 @@ from textual.geometry import Size
 from textual.widgets import Input, Rule, Static
 
 from tts_audiobook_tool import real_time_playback
-from tts_audiobook_tool.app_types import RoomReverb, RoomTone, SttVariant
+from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo, RoomTone, SttVariant
 from tts_audiobook_tool.app_types.validation_result import SkippedResult
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut, ModelUnhealthy
@@ -755,6 +755,8 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
             self.shut_downs = 0
             self.remaining_buffer = buffer_seconds
 
+        channels = 1
+
         def start(self) -> bool:
             return True
 
@@ -780,7 +782,8 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
     pause_event = threading.Event()
     pause_event.set()
 
-    def fake_stream_factory(*, blocksize, latency, pause_requested) -> FakeStream:
+    def fake_stream_factory(*, blocksize, latency, pause_requested, channels) -> FakeStream:
+        assert channels == 1
         assert blocksize == 4096
         assert latency == "low"
         assert pause_requested is not None and pause_requested()
@@ -878,6 +881,7 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
                 realtime_save=False,
                 room_tone=RoomTone.OFF,
                 room_reverb=RoomReverb.OFF,
+                room_reverb_stereo=RoomReverbStereo.MONO,
             ),
         ),
     )
@@ -944,6 +948,8 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
             self.total = 0
             self.shut_downs = 0
 
+        channels = 1
+
         def start(self) -> bool:
             return True
 
@@ -965,7 +971,8 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
 
     streams: list[FakeStream] = []
 
-    def fake_stream_factory(*, blocksize, latency, pause_requested) -> FakeStream:
+    def fake_stream_factory(*, blocksize, latency, pause_requested, channels) -> FakeStream:
+        assert channels == 1
         assert blocksize == 4096
         assert latency == "low"
         stream = FakeStream()
@@ -1071,6 +1078,7 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
                 realtime_save=False,
                 room_tone=RoomTone.OFF,
                 room_reverb=RoomReverb.OFF,
+                room_reverb_stereo=RoomReverbStereo.MONO,
             ),
         ),
     )
@@ -1298,20 +1306,40 @@ def test_interface_failure_cleanup_reports_worker_restart_failure(
     assert "replacement worker failed to start" in result.message
 
 
-@pytest.mark.parametrize("room_reverb", [RoomReverb.OFF, RoomReverb.MEDIUM_DRR21])
-def test_realtime_save_writes_exactly_what_was_played(monkeypatch, room_reverb: RoomReverb) -> None:
+@pytest.mark.parametrize(
+    ("room_reverb", "room_reverb_stereo", "device_stereo_ok", "expected_channels"),
+    [
+        (RoomReverb.OFF, RoomReverbStereo.MONO, True, 1),
+        (RoomReverb.MEDIUM_DRR21, RoomReverbStereo.MONO, True, 1),
+        # The stereo effect does nothing while reverb is off
+        (RoomReverb.OFF, RoomReverbStereo.ALL_W100, True, 1),
+        (RoomReverb.MEDIUM_DRR21, RoomReverbStereo.LATE_W100, True, 2),
+        (RoomReverb.MEDIUM_DRR21, RoomReverbStereo.ALL_W100, True, 2),
+        # Device can't do stereo: falls back to mono, with a warning
+        (RoomReverb.MEDIUM_DRR21, RoomReverbStereo.ALL_W100, False, 1),
+    ],
+)
+def test_realtime_save_writes_exactly_what_was_played(
+    monkeypatch,
+    room_reverb: RoomReverb,
+    room_reverb_stereo: RoomReverbStereo,
+    device_stereo_ok: bool,
+    expected_channels: int,
+) -> None:
     # Saved realtime segments are free-standing artifacts of the playback: the
     # file must hold the post-processed audio (reverb, room tone bed, pause)
     # sent to the output stream, not the raw generation
     from tts_audiobook_tool.app_types import Sound
 
     class FakeStream:
-        def __init__(self) -> None:
+        def __init__(self, channels: int) -> None:
             self.chunks: list[np.ndarray] = []
             self.total = 0
+            self.channels = channels
+            self.shut_downs = 0
 
         def start(self) -> bool:
-            return True
+            return self.channels == 1 or device_stereo_ok
 
         def add_data(self, data: np.ndarray) -> tuple[int, int]:
             self.chunks.append(np.copy(data))
@@ -1323,13 +1351,16 @@ def test_realtime_save_writes_exactly_what_was_played(monkeypatch, room_reverb: 
         played_samples = 0
 
         def shut_down(self) -> None:
-            pass
+            self.shut_downs += 1
 
     streams: list[FakeStream] = []
 
-    def fake_stream_factory(**_) -> FakeStream:
-        streams.append(FakeStream())
-        return streams[0]
+    def fake_stream_factory(*, channels: int, **_) -> FakeStream:
+        streams.append(FakeStream(channels))
+        return streams[-1]
+
+    printed: list[str] = []
+    monkeypatch.setattr(real_time_playback, "printt", lambda s="", *args, **kwargs: printed.append(s))
 
     # Content in the last 0.1 s only, so a reverb tail would be loud in the pause
     raw_data = np.zeros(48000, dtype=np.float32)
@@ -1379,6 +1410,7 @@ def test_realtime_save_writes_exactly_what_was_played(monkeypatch, room_reverb: 
                 realtime_save=True,
                 room_tone=RoomTone.HIGH,
                 room_reverb=room_reverb,
+                room_reverb_stereo=room_reverb_stereo,
             ),
         ),
     )
@@ -1390,11 +1422,26 @@ def test_realtime_save_writes_exactly_what_was_played(monkeypatch, room_reverb: 
     continue_event.set()
     real_time_playback.start(state, phrase_groups, (1, 2), continue_event=continue_event)
 
-    played = streams[0].chunks
+    stream = streams[-1]
+    assert stream.channels == expected_channels
+    warnings = [i for i, line in enumerate(printed) if "Couldn't open the sound output in stereo" in line]
+    if device_stereo_ok:
+        assert len(streams) == 1 and not warnings
+    else:
+        # The failed stereo stream was released, then a mono one opened; the
+        # warning is followed by a blank line
+        assert [s.channels for s in streams] == [2, 1] and streams[0].shut_downs >= 1
+        assert len(warnings) == 1 and printed[warnings[0] + 1] == ""
+
+    played = stream.chunks
     # First segment: content + pause; last segment: content only
     assert len(played) == 3 and len(saved) == 2
     np.testing.assert_array_equal(saved[0], np.concatenate(played[:2]))
     np.testing.assert_array_equal(saved[1], played[2])
+    for chunk in played:
+        assert chunk.ndim == (1 if expected_channels == 1 else 2)
+        if expected_channels == 2:
+            assert chunk.shape[1] == 2
     # Post-processed: the room tone bed was added to the silent start of the
     # raw generation
     assert np.any(saved[0][:4800] != 0)
@@ -1406,3 +1453,7 @@ def test_realtime_save_writes_exactly_what_was_played(monkeypatch, room_reverb: 
         assert pause_rms_db < -55
     else:
         assert pause_rms_db > -45
+    if expected_channels == 2:
+        # Stereo reverb: the channels differ in the pause (reverb only),
+        # while the room tone bed is identical in both
+        assert not np.allclose(pause_start[:, 0], pause_start[:, 1])

@@ -122,6 +122,31 @@ class SoundUtil:
         return Sound(data, sr)
 
     @staticmethod
+    def as_stereo(data: np.ndarray) -> np.ndarray:
+        """ Mono (n,) -> (n, 2), the same signal in both channels; stereo as is """
+        return np.stack([data, data], axis=1) if data.ndim == 1 else data
+
+    @staticmethod
+    def center_in_silence(sound: Sound, total_duration: float) -> Sound:
+        """
+        Pads mono `sound` with equal leading and trailing silence so that its
+        total length is `int(sr * total_duration)` samples (an odd remainder
+        sample goes to the end). A sound already that long or longer is
+        returned unchanged (never truncated).
+        """
+        total = int(sound.sr * total_duration)
+        pad = total - len(sound.data)
+        if pad <= 0:
+            return sound
+        lead = pad // 2
+        new_data = np.concatenate([
+            np.zeros(lead, dtype=sound.data.dtype),
+            sound.data,
+            np.zeros(pad - lead, dtype=sound.data.dtype),
+        ])
+        return Sound(new_data, sound.sr)
+
+    @staticmethod
     def append_sound_using_path(base_sound: Sound, appended_sound_path: str) -> Sound:
         """
         Concatenates a Sound using the specified file path to `base_sound`.

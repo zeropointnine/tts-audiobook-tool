@@ -585,3 +585,65 @@ def test_save_chat_output_saves_concatenated_sounds(tmp_path, monkeypatch) -> No
     assert "[chat]" in path
     assert "[testmodel]" in path
     assert "[voice1]" in path
+
+
+@pytest.mark.parametrize(
+    ("room_reverb", "room_reverb_stereo", "channels"),
+    [("off", "mono", 1), ("medium_drr21", "mono", 1), ("medium_drr21", "all_w100", 2)],
+)
+def test_non_streaming_tts_applies_room_reverb(
+    monkeypatch, room_reverb: str, room_reverb_stereo: str, channels: int
+) -> None:
+    from tts_audiobook_tool.constants import APP_SAMPLE_RATE
+
+    monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(can_stream=False))
+    session = make_session(project_payload={
+        "room_reverb": room_reverb,
+        "room_reverb_stereo": room_reverb_stereo,
+    })
+    session.sound_stream.sample_rate = APP_SAMPLE_RATE
+    session.sound_stream.channels = channels
+    added: list[np.ndarray] = []
+
+    def add_data(data):
+        added.append(np.copy(data))
+        return 0, len(data)
+
+    session.sound_stream.add_data.side_effect = add_data
+    speech = (np.random.default_rng(0).standard_normal(APP_SAMPLE_RATE // 2) * 0.1).astype(np.float32)
+    monkeypatch.setattr(
+        ModelWorker,
+        "synthesize_chat_blocking",
+        lambda *_args, **_kwargs: ((Sound(speech, APP_SAMPLE_RATE),), ""),
+    )
+    aligned: list[Sound] = []
+
+    def make_spoken_segments(text, sound, start, end, is_first):
+        aligned.append(sound)
+        return [(text, start, end)]
+
+    monkeypatch.setattr(session, "make_spoken_segments", make_spoken_segments)
+    text = "A sentence."
+    session.pending_sentences = [text]
+    session.tts_q.put((text, Reason.SENTENCE))
+    session.tts_q.put(None)
+
+    session.tts_worker()
+
+    assert len(added) == 1 and len(session.saved_turn_sounds) == 1
+    played = added[0]
+    np.testing.assert_array_equal(played, session.saved_turn_sounds[0].data)
+    # Alignment always gets the dry mono sound, the same length as what's played
+    assert aligned[0].data.ndim == 1 and len(aligned[0].data) == len(played)
+    np.testing.assert_array_equal(aligned[0].data[: len(speech)], speech)
+    pause = played[len(speech):]
+    assert len(pause) > 0
+    if room_reverb == "off":
+        np.testing.assert_array_equal(played, aligned[0].data)
+    else:
+        # The reverb tail decays into the (otherwise silent) pause
+        assert np.any(pause != 0)
+        assert played.ndim == (1 if channels == 1 else 2)
+        if channels == 2:
+            assert not np.allclose(pause[:, 0], pause[:, 1])
+    assert session.snapshot().spoken_segments == ((text, 0, len(played)),)

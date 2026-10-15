@@ -17,7 +17,7 @@ def _callback(
     underflow: bool = False,
 ) -> np.ndarray:
     """Drives the stream callback directly, bypassing the audio device."""
-    out = np.full((frames, 1), np.nan, dtype=np.float32)
+    out = np.full((frames, stream.channels), np.nan, dtype=np.float32)
     stream._callback(
         out,
         frames,
@@ -84,10 +84,43 @@ def test_local_pause_preserves_samples_even_when_predicate_is_false(with_predica
     assert stream.played_samples == len(samples)
 
 
+def test_stereo_stream_buffers_and_plays_frames() -> None:
+    stream = SoundDeviceStream(sample_rate=48000, channels=2)
+    stereo = np.array([[0.1, -0.1], [0.2, -0.2], [0.3, -0.3]], dtype=np.float32)
+    mono = np.array([0.5, 0.6], dtype=np.float32)
+
+    # Stereo as is; mono data plays in both channels. Ranges count frames.
+    assert stream.add_data(stereo) == (0, 3)
+    assert stream.add_data(mono) == (3, 5)
+    assert stream.buffer.shape == (5, 2)
+    assert stream.buffer_duration == 5 / 48000
+
+    out = _callback(stream, frames=4)
+    np.testing.assert_array_equal(out[:3], stereo)
+    np.testing.assert_array_equal(out[3], np.array([0.5, 0.5], dtype=np.float32))
+    assert stream.played_samples == 4
+
+    out = _callback(stream, frames=3, dac_time=2.0)
+    np.testing.assert_array_equal(out, np.array([[0.6, 0.6], [0, 0], [0, 0]], dtype=np.float32))
+    assert stream.played_samples == 5
+
+    stream.clear_buffer()
+    assert stream.buffer.shape == (0, 2)
+
+
+def test_mono_stream_averages_stereo_data() -> None:
+    stream = SoundDeviceStream(sample_rate=48000)
+    stream.add_data(np.array([[0.2, 0.4], [-0.2, 0.0]], dtype=np.float32))
+    np.testing.assert_allclose(stream.buffer, [0.3, -0.1])
+    # A single-channel 2D array is just flattened
+    stream.add_data(np.array([[0.7]], dtype=np.float32))
+    np.testing.assert_allclose(stream.buffer, [0.3, -0.1, 0.7])
+
+
 @pytest.mark.parametrize("configured", [False, True])
 def test_start_uses_default_or_configured_output_settings(configured: bool) -> None:
     stream = (
-        SoundDeviceStream(48000, blocksize=4096, latency="low")
+        SoundDeviceStream(48000, blocksize=4096, latency="low", channels=2)
         if configured else SoundDeviceStream(48000)
     )
     expected_blocksize = 4096 if configured else 8192
@@ -103,7 +136,7 @@ def test_start_uses_default_or_configured_output_settings(configured: bool) -> N
 
     output_stream.assert_called_once_with(
         samplerate=48000,
-        channels=1,
+        channels=2 if configured else 1,
         callback=stream._callback,
         dtype=np.float32,
         blocksize=expected_blocksize,

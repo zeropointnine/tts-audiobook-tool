@@ -148,8 +148,8 @@ BULLET_CHAR = "\u25B8" # ▸
 
 PLAYER_URL = "https://zeropointnine.github.io/tts-audiobook-tool/browser_player/"
 
-SPACE_BREAK_SOUND_EFFECT_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, "card_flip_a.flac")
-SECTION_BREAK_SOUND_EFFECT_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, "page_turn_a.flac")
+SPACE_BREAK_SOUND_EFFECT_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, "card_flip.wav")
+SECTION_BREAK_SOUND_EFFECT_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, "page_turn.wav")
 
 # Tk filetypes globs are space-separated, not comma-separated
 FILE_REQUESTOR_SOUND_TYPES = [('Sound files', '*.wav *.flac *.mp3 *.aac *.m4a *.ogg'), ('All files', '*.*')]

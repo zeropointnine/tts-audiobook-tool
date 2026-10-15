@@ -257,7 +257,8 @@ class RoomTone(tuple[str, float | None, str], Enum):
 
 class RoomReverb(tuple[str, str | None, float | None, str], Enum):
     """
-    Room reverb presets (concat and realtime playback; see sound/room_reverb.py).
+    Room reverb presets (concat, realtime playback and voice chat; see
+    sound/room_reverb.py).
     Value shape: (id, room design key or None when off, DRR dB, label).
     `id` is the JSON serialization value. It names the room design and the
     direct-to-reverberant ratio (higher = drier), so labels can change freely.
@@ -301,10 +302,10 @@ class RoomReverb(tuple[str, str | None, float | None, str], Enum):
 
 class RoomReverbStereo(tuple[str, float, bool, str], Enum):
     """
-    Stereo spread of the room reverb (concat only; realtime playback stays
-    mono). The voice stays mono and centered; only the reverb differs between
+    Stereo spread of the room reverb (concat, realtime playback and voice
+    chat). The voice stays mono and centered; only the reverb differs between
     the channels. No effect while `RoomReverb` is off; otherwise anything but
-    MONO makes the export stereo.
+    MONO makes the export and the realtime and chat output streams stereo.
     Value shape: (id, width, spread_early, label). `id` is the JSON
     serialization value and, like `RoomReverb`'s, names the processing:
     width 0..1 (1 = the spread part fully decorrelated), and whether the early

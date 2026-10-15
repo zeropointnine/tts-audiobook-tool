@@ -53,6 +53,12 @@ Notes on the rules' semantics:
   output file or playback range never gets any break effect.
 - When a SPACE_BREAK effect is suppressed, the segment still gets its configured
   `Reason.SPACE_BREAK` pause; only the sound effect is dropped.
+- An emitted effect has equal silence before and after it, so the total is the
+  configured pause for its reason. If the effect is longer than that pause, it
+  keeps its own length with no padding. `SoundPipeline.make_break_effect_sound`
+  builds it, and concat and realtime playback both call it. Concat's pseudo-silence
+  compensation does not shorten effects. If the asset fails to load, the plain
+  pause is inserted.
 - Section starts come from `ProjectBookUtil.get_section_start_indices`: Book
   sections for structurally sectioned books (eg EPUB), user-configured section
   markers for single-section books (eg plain text).

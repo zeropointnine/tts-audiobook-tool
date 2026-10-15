@@ -139,29 +139,70 @@ class TestAppendPauseOrSectionEffect:
         assert shorter_result.duration == sound.duration + shorter_pause
         assert shorter_result.duration < normal_result.duration
 
-    def test_break_effect_appends_matching_asset(self) -> None:
+    def test_break_effect_is_matching_asset_centered_in_pause(self) -> None:
         from tts_audiobook_tool.constants import (
             SECTION_BREAK_SOUND_EFFECT_PATH,
             SPACE_BREAK_SOUND_EFFECT_PATH,
         )
+        from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+
+        sr = 48000
+        sound = Sound(np.full(sr, 0.5, dtype=np.float32), sr)
+        effect_len = sr // 2
+        effect = Sound(np.ones(effect_len, dtype=np.float32), sr)
+        reason_pauses = ReasonPauseTypes.NORMAL.value
+
+        with patch.object(SoundFileUtil, "load", return_value=effect) as mock:
+            for break_effect, path in (
+                (Reason.SPACE_BREAK, SPACE_BREAK_SOUND_EFFECT_PATH),
+                (Reason.SECTION_BREAK, SECTION_BREAK_SOUND_EFFECT_PATH),
+            ):
+                result = SoundPipeline.append_pause_or_section_effect(
+                    sound,
+                    reason=Reason.SPACE_BREAK,
+                    reason_pauses=reason_pauses,
+                    break_effect=break_effect,
+                    pause_duration_override=0.0,  # ignored for effects
+                )
+                assert mock.call_args.args[0] == path
+                assert mock.call_args.args[1] == sr
+
+                appended = result.data[len(sound.data):]
+                assert len(appended) == int(sr * reason_pauses.get_pause_for(break_effect))
+                nonzero = np.flatnonzero(appended)
+                lead = nonzero[0]
+                trail = len(appended) - 1 - nonzero[-1]
+                assert len(nonzero) == effect_len
+                assert abs(lead - trail) <= 1
+                assert lead > 0
+
+    def test_break_effect_load_failure_falls_back_to_pause(self) -> None:
+        from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 
         sr = 48000
         sound = Sound(np.zeros(sr, dtype=np.float32), sr)
-        appended = Sound(np.zeros(sr, dtype=np.float32), sr)
+        reason_pauses = ReasonPauseTypes.NORMAL.value
 
-        with patch.object(SoundUtil, "append_sound_using_path", return_value=appended) as mock:
-            SoundPipeline.append_pause_or_section_effect(
+        with patch.object(SoundFileUtil, "load", return_value="boom"):
+            result = SoundPipeline.append_pause_or_section_effect(
                 sound,
-                reason=Reason.SPACE_BREAK,
-                reason_pauses=ReasonPauseTypes.NORMAL.value,
-                break_effect=Reason.SPACE_BREAK,
-            )
-            SoundPipeline.append_pause_or_section_effect(
-                sound,
-                reason=Reason.SPACE_BREAK,
-                reason_pauses=ReasonPauseTypes.NORMAL.value,
+                reason=Reason.SECTION_BREAK,
+                reason_pauses=reason_pauses,
                 break_effect=Reason.SECTION_BREAK,
+                pause_duration_override=0.1,
             )
 
-        assert mock.call_args_list[0].args[1] == SPACE_BREAK_SOUND_EFFECT_PATH
-        assert mock.call_args_list[1].args[1] == SECTION_BREAK_SOUND_EFFECT_PATH
+        expected = int(sr * reason_pauses.get_pause_for(Reason.SECTION_BREAK))
+        assert len(result.data) == len(sound.data) + expected
+
+
+class TestCenterInSilence:
+    def test_odd_pad_puts_extra_sample_at_end(self) -> None:
+        sound = Sound(np.ones(4, dtype=np.float32), 10)
+        result = SoundUtil.center_in_silence(sound, 0.9)  # 9 samples, pad 5
+        assert result.data.tolist() == [0, 0, 1, 1, 1, 1, 0, 0, 0]
+        assert result.data.dtype == np.float32
+
+    def test_longer_sound_is_unchanged(self) -> None:
+        sound = Sound(np.ones(20, dtype=np.float32), 10)
+        assert SoundUtil.center_in_silence(sound, 1.0) is sound
