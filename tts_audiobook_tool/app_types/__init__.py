@@ -267,9 +267,9 @@ class RoomReverb(tuple[str, str | None, float | None, str], Enum):
     """
 
     OFF = ("off", None, None, "Off")
-    SMALL_DRR22 = ("small_drr22", "small", 22.0, "Light")
-    SMALL_DRR17 = ("small_drr17", "small", 17.0, "Moderate")
-    MEDIUM_DRR21 = ("medium_drr21", "medium", 21.0, "Large room")
+    SMALL_DRR22 = ("small_drr22", "small", 22.0, "Small room, light")
+    SMALL_DRR17 = ("small_drr17", "small", 17.0, "Small room, moderate")
+    MEDIUM_DRR21 = ("medium_drr21", "medium", 21.0, "Larger room")
 
     @property
     def id(self) -> str:

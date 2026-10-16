@@ -13,17 +13,18 @@ unchanged.
 | `RoomReverb` | id | Room design | DRR (dB) | Label |
 |---|---|---|---|---|
 | `OFF` (default) | `off` | - | - | Off |
-| `SMALL_DRR22` | `small_drr22` | small | 22 | Light |
-| `SMALL_DRR17` | `small_drr17` | small | 17 | Moderate |
-| `MEDIUM_DRR21` | `medium_drr21` | medium | 21 | Large room |
+| `SMALL_DRR22` | `small_drr22` | small | 22 | Small room, light |
+| `SMALL_DRR17` | `small_drr17` | small | 17 | Small room, moderate |
+| `MEDIUM_DRR21` | `medium_drr21` | medium | 21 | Larger room |
 
 DRR is the direct-to-reverberant ratio: dry energy over reverb energy (the IR has unit energy, so
 this is just the reverb gain), higher = drier. It isn't comparable across room designs: a bigger
 room's later, longer tail is far more audible in pauses at the same DRR.
 
 **Ids encode the sound, labels don't.** The id names the room design and DRR, so labels can change
-freely ("Large room" is the `medium` design: mid-sized among the rooms tried, but the largest on
-offer). A saved id must always sound the same: retuning a preset means a new member, with the old id
+freely ("Larger room" is the `medium` design: mid-sized among the rooms tried, but the largest on
+offer; labels name the room first, then the level, since the larger room has less total reverb
+energy than "Small room, moderate" yet sounds bigger). A saved id must always sound the same: retuning a preset means a new member, with the old id
 mapped to it on load (as `fill_room_tone` was mapped to `room_tone`); changing a room design means a
 new design key. An unknown id loads as `OFF`.
 

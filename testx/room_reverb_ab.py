@@ -107,7 +107,7 @@ CATHEDRAL = replace(
 )
 
 # Round 2 of listening tests: subtle, light and moderate-a were adopted as the
-# app's RoomReverb presets Light, Moderate and Large room.
+# app's RoomReverb presets "Small room, light", "Small room, moderate" and "Larger room".
 PRESETS: list[ReverbPreset] = [
     ReverbPreset("subtle", SMALL_ROOM, 22.0),
     ReverbPreset("light", SMALL_ROOM, 17.0),

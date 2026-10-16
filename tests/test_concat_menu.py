@@ -133,7 +133,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Section break sound effects: True",
         "  - Loudness normalization: ACX standard",
         "  - Generative upsampling: True",
-        "  - Room reverb: Large room",
+        "  - Room reverb: Larger room",
         "  - Room reverb stereo effect: Wide",
         "  - Room tone: Medium",
     ]
@@ -489,7 +489,7 @@ def test_room_reverb_menu_writes_project_setting() -> None:
         ConcatMenu.room_reverb_menu(state)
         kwargs = options_menu.call_args.kwargs
         assert kwargs["heading_text"] == "Room reverb"
-        assert kwargs["labels"] == ["Off", "Light", "Moderate", "Large room"]
+        assert kwargs["labels"] == ["Off", "Small room, light", "Small room, moderate", "Larger room"]
         assert kwargs["values"] == list(RoomReverb)
         assert kwargs["current_value"] is RoomReverb.OFF
         assert kwargs["default_value"] is RoomReverb.OFF
@@ -519,7 +519,7 @@ def test_room_reverb_stereo_item_only_shows_with_reverb_on() -> None:
     project.room_reverb = RoomReverb.SMALL_DRR22
     result = labels()
     index = result.index("Room reverb stereo effect (currently: Disabled (mono))")
-    assert result[index - 1].startswith("Room reverb (currently: Light)")
+    assert result[index - 1].startswith("Room reverb (currently: Small room, light)")
 
 
 def test_room_reverb_stereo_menu_writes_project_setting() -> None:

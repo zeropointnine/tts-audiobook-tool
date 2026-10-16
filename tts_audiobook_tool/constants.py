@@ -76,7 +76,8 @@ CTRANSLATE_REQUIRED_CUDNN_VERSION = 91002
 CHAT_SYSTEM_PROMPTS = [
     ("chat_system_prompt_default.txt", "Default system prompt"),
     ("chat_system_prompt_higgs_v3.txt", "System prompt showcasing Higgs V3 \"control tokens\" feature"),
-    ("chat_system_prompt_fish_s2.txt", "System prompt showcasing Fish S2 \"tags\" feature")
+    ("chat_system_prompt_fish_s2.txt", "System prompt showcasing Fish S2 \"tags\" feature"),
+    ("chat_system_prompt_fish_drama3.txt", "System prompt showcasing Fish Drama 3 point tags, paired tags"),
 ]
 
 # Value used for normalization after any sound transform post-processing steps (eg, after high-shelf EQ)

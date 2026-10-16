@@ -755,9 +755,8 @@ Is also applied to realtime playback."""
 ROOM_REVERB_TITLE = "Room reverb"
 
 ROOM_REVERB_SUBHEADING = \
-"""Places the narration in a room. Light and Moderate add a subtle small-room ambience.
-Large room adds a more noticeable sense of space, but sounds more colored and distant,
-and can soften clarity.
+"""Places the narration in a room. Small room adds a subtle ambience, at a light or moderate level.
+Larger room adds a more noticeable sense of space, but sounds more distant and can soften clarity.
 Is also applied to realtime playback and voice chat."""
 
 ROOM_REVERB_STEREO_TITLE = "Room reverb stereo effect"

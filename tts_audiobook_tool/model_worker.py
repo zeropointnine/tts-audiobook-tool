@@ -929,11 +929,12 @@ def _model_worker_main(
                             ChatAudioChunk(command.operation_id, data)
                         ),
                         on_stream_end=lambda: None,
+                        log_prompts=True,
                     )
                     sound = None
                 else:
                     result = SoundPipeline.generate_processed_using_project(
-                        state.project, [command.text]
+                        state.project, [command.text], log_prompts=True
                     )
                     sound = None if isinstance(result, str) else result
                 if isinstance(result, str):

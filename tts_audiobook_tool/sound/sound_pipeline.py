@@ -145,6 +145,7 @@ class SoundPipeline:
         force_random_seed: bool = False,
         *,
         apply_word_substitutions: bool = True,
+        log_prompts: bool = False,
     ) -> list[Sound] | str:
         """
         Non-streaming TTS generation paired with app-standard generated-sound
@@ -162,6 +163,7 @@ class SoundPipeline:
             prompts,
             force_random_seed,
             apply_word_substitutions=apply_word_substitutions,
+            log_prompts=log_prompts,
         )
         if isinstance(result, str):
             return result

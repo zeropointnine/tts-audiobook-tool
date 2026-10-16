@@ -533,6 +533,8 @@ class Tts:
             voice_selection_index: int | None = None,
             apply_word_substitutions: bool = True,
             max_random_seed: int = -1,
+            *,
+            log_prompts: bool = False,
     ):
         """
         All app-level TTS generation goes through this function.
@@ -548,7 +550,9 @@ class Tts:
         the preparation pipeline. An optional inclusive max_random_seed can
         tighten the catalog's random-seed cap, but cannot widen it. With -1,
         only the catalog policy applies; unconfigured models keep their native
-        ranges. Fixed seeds are never limited by this cap.
+        ranges. Fixed seeds are never limited by this cap. With log_prompts,
+        each fully prepared prompt (the exact text handed to the model) is
+        written to the debug log.
         """
         if project.get_tts_model_type().id == "none" or Tts.get_active_type() != project.get_tts_model_type():
             return Tts._binding_issue.verbose if Tts._binding_issue else "Project TTS model is not bound"
@@ -585,6 +589,9 @@ class Tts:
             )
             for prompt in prompts
         ]
+        if log_prompts:
+            for prepared_prompt in prepared_prompts:
+                L.d(f"TTS prompt: chars={len(prepared_prompt)} | {prepared_prompt!r}")
         kwargs = {
             "on_stream_chunk": on_stream_chunk,
             "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,
