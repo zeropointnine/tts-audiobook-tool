@@ -58,8 +58,22 @@ class SentenceGapParams:
     hop_ms: float = 2.0
 
     # How far beyond the Whisper bracket (previous word's end -> next word's
-    # start) on each side to look for the real gap.
-    search_margin_s: float = 0.2
+    # start) to look for the real gap, before and after it.
+    #
+    # The margins are asymmetric because Whisper's word-timing error is
+    # skewed, so these values are specific to Whisper's behavior. Measured
+    # against isolated sentence gaps, the real gap almost never starts before
+    # the previous word's reported end (typically it starts ~0.1 s after it,
+    # and rarely more than ~0.14 s before it), but it routinely runs well past
+    # the next word's reported start (typically by ~0.2 s, and up to ~0.5 s).
+    # A wide early margin buys little, while letting in quiet runs inside the
+    # previous word (e.g. a stop consonant's closure) that can out-measure a
+    # brief real pause and get picked as the gap. The late margin must stay wide,
+    # or long real gaps would have their insertion point fall outside the window
+    # and be skipped. Revisit both if word timings come from a different
+    # aligner or Whisper variant.
+    search_margin_before_s: float = 0.1
+    search_margin_after_s: float = 0.2
 
     # A frame is "quiet" when it is at least this many dB below the clip's
     # speech level, or within floor_tolerance_db of the window's quietest frame,
@@ -387,9 +401,10 @@ class SentenceGapUtil:
         if boundary.skip_reason:
             return skip(boundary.skip_reason)
 
-        # 1. Search window: Whisper's bracket, widened because it is often misplaced
-        w0 = max(0.0, boundary.lo - p.search_margin_s)
-        w1 = min(env.duration, boundary.hi + p.search_margin_s)
+        # 1. Search window: Whisper's bracket, widened because it is often
+        # misplaced (asymmetrically; see SentenceGapParams)
+        w0 = max(0.0, boundary.lo - p.search_margin_before_s)
+        w1 = min(env.duration, boundary.hi + p.search_margin_after_s)
         result.window = (w0, w1)
         f0 = env.frame_at(w0)
         f1 = env.frame_at(w1) + 1

@@ -216,6 +216,26 @@ class TestExtend:
             sound.data[round(start * SR):round(end * SR)],
         )
 
+    def test_closure_inside_previous_word_does_not_beat_a_brief_real_pause(self) -> None:
+        # A stop consonant's closure inside the word before the boundary, ~0.15 s
+        # before Whisper's reported word end, is wider than the brief real pause
+        # just after that end. The narrow early search margin must keep it out
+        # of the window, so the real pause is extended rather than the word split.
+        closure = (0.55, 0.605)
+        pause = (0.805, 0.84)
+        data = np.concatenate([
+            make_speech(closure[0], seed=1), make_floor(closure[1] - closure[0]),
+            make_speech(pause[0] - closure[1], seed=2), make_floor(pause[1] - pause[0]),
+            make_speech(0.5, seed=3),
+        ])
+        boundary = SentenceBoundary(phrase_index=0, lo=0.76, hi=0.9, prev_word="a", next_word="b")
+
+        r = SentenceGapUtil.analyze(Sound(data, SR), [boundary], PARAMS)[0]
+
+        assert r.status is GapStatus.EXTEND, r.summary()
+        assert r.insert_at is not None
+        assert pause[0] < r.insert_at < pause[1]
+
     def test_timings_off_by_more_than_the_window_are_skipped_not_misplaced(self) -> None:
         # When Whisper is badly wrong the search window misses the gap entirely.
         # Whatever happens, silence must never be inserted outside the true gap.
