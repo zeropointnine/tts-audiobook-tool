@@ -46,6 +46,8 @@ For example, a two-model config using OmniVoice and Echo-TTS might look like thi
 }
 ```
 
+**Each model entry must use `"mode": "offline"`.** `tts-audiobook-tool` sends offline requests and expects each one to return a complete WAV file. It does not detect entries configured with `"mode": "streaming"`; such entries will not appear among the available models.
+
 Adapt the example as needed. See audio.cpp's [server configuration guide](https://github.com/0xShug0/audio.cpp/blob/main/app/server/README.md#config) for the config format and available options.
 
 Launch the server with:

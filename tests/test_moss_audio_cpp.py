@@ -425,7 +425,7 @@ def test_existing_families_keep_default_language_policy_and_postprocessing():
     for model_id, item in load_audio_cpp_definitions().models.items():
         if model_id in IDS:
             continue
-        expected_policy = {"fish_s2_audiocpp": "omit", "glm_tts_audiocpp": "omit",
+        expected_policy = {"fish_s2_audiocpp": "omit", "fish_drama3_audiocpp": "omit", "glm_tts_audiocpp": "omit",
                            "cosyvoice3_audiocpp": "omit",
                            "dots_audiocpp": "normalized",
                            "indextts2_audiocpp": "normalized",

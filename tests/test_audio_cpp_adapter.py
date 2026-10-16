@@ -29,6 +29,7 @@ BREEZE_ID = "breeze_tts_2_audiocpp"
 ECHO_ID = "echo_tts_audiocpp"
 OMNIVOICE_ID = "omnivoice_audiocpp"
 FISH_S2_ID = "fish_s2_audiocpp"
+FISH_DRAMA3_ID = "fish_drama3_audiocpp"
 DOTS_ID = "dots_audiocpp"
 GLM_ID = "glm_tts_audiocpp"
 INDEXTTS2_ID = "indextts2_audiocpp"
@@ -892,6 +893,35 @@ def test_fish_s2_payload_omits_language_and_pins_token_and_chunk_options(monkeyp
         "seed": 7, "temperature": 0.8, "top_p": 0.8, "top_k": 100,
         "reference_text": "the exact words spoken",
         "options": {"max_tokens": 2048, "text_chunk_size": 100000},
+    }
+
+
+def test_fish_drama3_payload_omits_language_and_pins_frame_cap_and_chunk_options(monkeypatch, tmp_path: Path):
+    item = definition(FISH_DRAMA3_ID)
+    assert item.family == "fish_drama3" and item.tasks == ("tts", "clon") and item.mode == "offline"
+    assert item.reference_transcript and not item.voice_required and item.language_policy == "omit"
+    path = tmp_path / "sample.flac"
+    sf.write(path, np.full(100, .2), 24000, format="FLAC")
+    adapter = AudioCppBackendAdapter(item, AudioCppModelSupport(item), "fish-drama3")
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice_reference_pair",
+                        lambda *args: ("sample.flac", "the exact words spoken"))
+    monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda *args: str(path))
+    captured = []
+
+    def fake_generate(url, payload, print_request=False):
+        captured.append(payload)
+        return SimpleNamespace(data=np.asarray([0], dtype=np.float32), sr=44100)
+
+    monkeypatch.setattr(AudioCppUtil, "generate", fake_generate)
+    project = FakeProject(model_id=FISH_DRAMA3_ID, values={"seed": 7, "temperature": 0.0})
+    assert not isinstance(adapter.generate_using_project(project, ["hello"]), str)
+    payload = captured[0]
+    assert payload["voice_ref"]["data"].startswith("data:audio/wav;base64,")
+    assert {key: value for key, value in payload.items() if key != "voice_ref"} == {
+        "model": "fish-drama3", "input": "hello", "response_format": "wav",
+        "seed": 7, "temperature": 0.0, "top_p": 0.9, "top_k": 30,
+        "reference_text": "the exact words spoken",
+        "options": {"max_tokens": 1024, "text_chunk_size": 100000},
     }
 
 

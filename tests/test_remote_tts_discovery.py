@@ -425,6 +425,18 @@ def test_audio_detector_matches_fish_s2_tts_route_only():
     assert audio_cpp_detection.detect_audio_cpp_models([{**fish, "mode": "streaming"}]) == []
 
 
+def test_audio_detector_matches_fish_drama3_offline_tts_or_clon():
+    # The streaming route also serves full WAVs, but only offline is claimed.
+    drama = {"id": "fish-drama3", "family": "fish_drama3", "task": "tts", "mode": "offline",
+             "session_options": {"fish_drama3.cpu_expert_layers": "4"}}
+    expected = [(TtsModelType.require_by_id("fish_drama3_audiocpp"), "fish-drama3")]
+    assert audio_cpp_detection.detect_audio_cpp_models([drama]) == expected
+    assert audio_cpp_detection.detect_audio_cpp_models([{**drama, "task": "clon"}]) == expected
+    assert audio_cpp_detection.detect_audio_cpp_models([{**drama, "mode": "streaming"}]) == []
+    # Fish S2's family does not cross-match.
+    assert audio_cpp_detection.detect_audio_cpp_models([{**drama, "family": "fish_audio"}]) != expected
+
+
 def test_audio_detector_matches_glm_under_either_advertised_task():
     # audio.cpp advertises the task token its operator configured, and this
     # family's two advertised routes are the same reference-conditioned path,
