@@ -5,6 +5,7 @@ from typing import cast
 
 import pytest
 
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import ModelSettingsRegistry, REGISTRY
@@ -57,7 +58,7 @@ def test_invalid_shared_sgl_parameter_resets_for_both_members(value, caplog):
     assert project.get_model_setting("qwen3tts_local", "top_k") == parameter.default_sentinel
     assert ConfiguredSettings.get(project, parameter) == parameter.default
     assert project.model_settings.shared["qwen3"]["parameters"] == {"temperature": 0.7}
-    assert project.voice_references == [{"file_name": "voice.flac", "transcript": "Hello."}]
+    assert project.voice_references == [Voice(file_name="voice.flac", transcript="Hello.")]
     assert "voice_references" not in project.model_settings.shared["qwen3"]
     assert "shared.qwen3.parameters.top_k" in caplog.text
 

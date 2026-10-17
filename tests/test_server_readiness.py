@@ -1,9 +1,11 @@
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.app_types.voice import VoiceCrop
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.server.server import get_blocking_issues_error
@@ -109,12 +111,11 @@ def test_server_startup_requires_first_voice_transcript(
         ],
     })
     if crop is not None and project.voice_references:
-        entry = project.voice_references[0]
-        entry.update({
-            "crop_file_name": "a.flac",
-            "crop_start": "0.0", "crop_end": "4.0",
-            "crop_transcript": crop["crop_transcript"],
-        })
+        entry = replace(project.voice_references[0], crop=VoiceCrop(
+            file_name="a.flac", start=0.0, end=4.0,
+            transcript=crop["crop_transcript"],
+        ))
+        project.voice_references[0] = entry
         if crop["crop_file"]:
             crop_path = Path(ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry))
             crop_path.parent.mkdir(parents=True, exist_ok=True)

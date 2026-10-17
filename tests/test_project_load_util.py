@@ -69,8 +69,8 @@ def test_load_reduces_paths_saved_by_another_os_and_persists_the_upgrade(
     assert get_setting(project, "chatterbox_voice_file_name") == ["narrator.flac", "second.flac"]
     saved = read_saved(dir_path)
     assert saved["voice_references"] == [
-        {"file_name": "narrator.flac", "transcript": ""},
-        {"file_name": "second.flac", "transcript": ""},
+        {"file_name": "narrator.flac", "transcript": "", "room_reverb": "off"},
+        {"file_name": "second.flac", "transcript": "", "room_reverb": "off"},
     ]
     project.kill()
 
@@ -89,7 +89,7 @@ def test_load_keeps_a_reference_whose_file_has_not_arrived_yet(
 
     assert get_setting(project, "chatterbox_voice_file_name") == ["gone.flac"]
     saved = read_saved(dir_path)
-    assert saved["voice_references"] == [{"file_name": "gone.flac", "transcript": ""}]
+    assert saved["voice_references"] == [{"file_name": "gone.flac", "transcript": "", "room_reverb": "off"}]
     project.kill()
 
 
@@ -147,7 +147,8 @@ def test_load_ignores_a_dir_path_written_by_another_os(tmp_path: Path) -> None:
     assert not os.path.exists("C:\\Users\\lee\\mybook")
     assert sorted(item.name for item in Path(dir_path).iterdir()) == [
         PROJECT_JSON_FILE_NAME,
-        PROJECT_JSON_FILE_NAME + '.pre-v4.bak',
+        # Settings without a version are v1.
+        PROJECT_JSON_FILE_NAME + '.pre-v5.bak',
         PROJECT_SOUND_SEGMENTS_SUBDIR,
     ]
     project.kill()

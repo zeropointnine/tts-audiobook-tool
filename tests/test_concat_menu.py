@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tts_audiobook_tool.app_types import Book, BookSection
+from tts_audiobook_tool.app_types import Book, BookSection, VoiceSelectMode
 from tts_audiobook_tool.app_types import (
     ExportType,
     HighShelfEq,
@@ -14,8 +14,10 @@ from tts_audiobook_tool.app_types import (
     RoomReverbStereo,
     RoomTone,
     SectionMarkerMode,
+    VoiceSelectMode,
 )
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus import concat_menu
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.menus.menu_util import get_string_from
@@ -116,11 +118,12 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Loudness normalization: Stronger",
         "  - Generative upsampling: True",
         "  - Treble EQ: Moderate",
-        "  - Output: Mono",
+        "  - Channel output: Mono",
     ]
 
     project.room_tone = RoomTone.MEDIUM
-    project.room_reverb = RoomReverb.MEDIUM_DRR21
+    # Room reverb is per voice; voice 0's is the one applied
+    project.voice_references = [Voice("v.flac", room_reverb=RoomReverb.MEDIUM_DRR21)]
     project.room_reverb_stereo = RoomReverbStereo.LATE_W100
     project.limit_silence_gaps = True
     project.limit_silence_gaps_duration = 1.0
@@ -137,10 +140,10 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Room reverb: Larger room",
         "  - Room reverb stereo effect: Wide",
         "  - Room tone: Medium",
-        "  - Output: Stereo",
+        "  - Channel output: Stereo",
     ]
     project.room_tone = RoomTone.OFF
-    project.room_reverb = RoomReverb.OFF
+    project.voice_references = []
     project.min_segment_sentence_silence = MinSegmentSentenceSilence.DISABLED
     project.limit_silence_gaps = False
     project.high_shelf = HighShelfEq.MODERATE.id
@@ -151,7 +154,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
 
     project.high_shelf = HighShelfEq.STRONGER.id
     assert plain_option_lines(state)[-2:] == [
-        "  - Treble EQ: Stronger", "  - Output: Mono",
+        "  - Treble EQ: Stronger", "  - Channel output: Mono",
     ]
 
     project.limit_silence_gaps = True
@@ -166,11 +169,39 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     project.high_shelf = HighShelfEq.DISABLED.id
     project.limit_silence_gaps = False
 
-    assert plain_option_lines(state) == ["  - Output: Mono"]
+    assert plain_option_lines(state) == ["  - Channel output: Mono"]
 
     # The confirmation reflects the shared channel policy, not voice counts.
-    with patch.object(concat_menu.VoiceSpatialPolicy, "from_project", return_value=SimpleNamespace(requested_channels=2)):
-        assert plain_option_lines(state) == ["  - Output: Stereo"]
+    with patch.object(concat_menu.VoiceSpatialPolicy, "from_project", return_value=SimpleNamespace(
+        requested_channels=2, room_reverb_summary=RoomReverb.OFF, stereo_position_summary=0.0,
+    )):
+        assert plain_option_lines(state) == ["  - Channel output: Stereo"]
+
+    # Stereo position, listed before room reverb (same order as the voice sample submenu)
+    project.voice_references = [Voice("a.flac", pan=-0.3, room_reverb=RoomReverb.SMALL_DRR22)]
+    assert plain_option_lines(state) == [
+        "  - Stereo position: Left 30",
+        "  - Room reverb: Small room, light",
+        "  - Room reverb stereo effect: Wide",
+        "  - Channel output: Stereo",
+    ]
+    project.voice_references = [Voice("a.flac", pan=-0.3), Voice("b.flac")]
+    project.voice_select_mode = VoiceSelectMode.USER_DEFINED
+    assert plain_option_lines(state) == [
+        "  - Stereo position: Varies by voice", "  - Channel output: Stereo",
+    ]
+
+    # Each voice's own room is applied; differing voices are summarized
+    project.voice_select_mode = VoiceSelectMode.USER_DEFINED
+    project.voice_references = [Voice("a.flac", room_reverb=RoomReverb.SMALL_DRR22), Voice("b.flac")]
+    assert plain_option_lines(state) == [
+        "  - Room reverb: Varies by voice", "  - Room reverb stereo effect: Wide", "  - Channel output: Stereo",
+    ]
+    # ... but only voice 0 is heard outside user-defined voice selection
+    project.voice_select_mode = VoiceSelectMode.AUTO_ADVANCE
+    assert plain_option_lines(state)[0] == "  - Room reverb: Small room, light"
+    project.voice_references = [Voice("a.flac"), Voice("b.flac", room_reverb=RoomReverb.SMALL_DRR22)]
+    assert plain_option_lines(state) == ["  - Channel output: Mono"]
 
 
 def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_single_book_section() -> None:
@@ -430,7 +461,7 @@ def test_min_segment_sentence_silence_menu_cycles_and_saves() -> None:
         assert project.min_segment_sentence_silence is MinSegmentSentenceSilence.DISABLED
 
 
-def test_concat_menu_offers_room_tone_after_room_reverb() -> None:
+def test_concat_menu_offers_room_tone_after_room_reverb_stereo_effect() -> None:
     project = Project()
     state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
 
@@ -443,7 +474,7 @@ def test_concat_menu_offers_room_tone_after_room_reverb() -> None:
 
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
     index = labels.index("Room tone (currently: Off)")
-    assert labels[index - 1].startswith("Room reverb")
+    assert labels[index - 1].startswith("Room reverb stereo effect")
 
 
 def test_room_tone_menu_writes_project_setting() -> None:
@@ -469,7 +500,7 @@ def test_room_tone_menu_writes_project_setting() -> None:
     save.assert_called_once()
 
 
-def test_concat_menu_offers_room_reverb_after_generative_upsampling() -> None:
+def test_concat_menu_offers_room_reverb_stereo_after_generative_upsampling() -> None:
     project = Project()
     state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
 
@@ -481,33 +512,13 @@ def test_concat_menu_offers_room_reverb_after_generative_upsampling() -> None:
         items = menu.call_args.args[2](state)
 
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
-    index = labels.index("Room reverb (currently: Off)")
+    index = labels.index("Room reverb stereo effect (currently: Centered (no spread))")
     assert labels[index - 1].startswith("Generative upsampling")
+    # Room reverb itself moved to the per-voice settings
+    assert not [label for label in labels if label.startswith("Room reverb (")]
 
 
-def test_room_reverb_menu_writes_project_setting() -> None:
-    project = Project()
-    state = cast(State, SimpleNamespace(project=project))
-
-    with patch.object(concat_menu.MenuUtil, "options_menu") as options_menu, patch.object(
-        Project, "save"
-    ) as save, patch.object(concat_menu, "print_feedback"):
-        ConcatMenu.room_reverb_menu(state)
-        kwargs = options_menu.call_args.kwargs
-        assert kwargs["heading_text"] == "Room reverb"
-        assert kwargs["labels"] == ["Off", "Small room, light", "Small room, moderate", "Larger room"]
-        assert kwargs["values"] == list(RoomReverb)
-        assert kwargs["current_value"] is RoomReverb.OFF
-        assert kwargs["default_value"] is RoomReverb.OFF
-        assert kwargs["subheading"]
-
-        kwargs["on_select"](RoomReverb.SMALL_DRR17)
-
-    assert project.room_reverb is RoomReverb.SMALL_DRR17
-    save.assert_called_once()
-
-
-def test_room_reverb_stereo_item_only_shows_with_reverb_on() -> None:
+def test_room_reverb_stereo_item_always_shows() -> None:
     project = Project()
     state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
 
@@ -520,12 +531,10 @@ def test_room_reverb_stereo_item_only_shows_with_reverb_on() -> None:
             items = menu.call_args.args[2](state)
         return [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
 
-    assert not [label for label in labels() if label.startswith("Room reverb stereo effect")]
-
-    project.room_reverb = RoomReverb.SMALL_DRR22
-    result = labels()
-    index = result.index("Room reverb stereo effect (currently: Centered (no spread))")
-    assert result[index - 1].startswith("Room reverb (currently: Small room, light)")
+    # Shown whether or not the voice in use has reverb on
+    assert "Room reverb stereo effect (currently: Centered (no spread))" in labels()
+    project.voice_references = [Voice("v.flac", room_reverb=RoomReverb.SMALL_DRR22)]
+    assert "Room reverb stereo effect (currently: Centered (no spread))" in labels()
 
 
 def test_room_reverb_stereo_menu_writes_project_setting() -> None:

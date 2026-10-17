@@ -98,7 +98,7 @@ def test_dots_project_fields_normalize_and_serialize():
     assert parameters["target"] == DotsBaseModel.MF_REPO_ID
     # V4: one project-wide list, no scoped clone storage.
     assert payload["voice_references"] == [
-        {"file_name": "voice.flac", "transcript": "reference words"}
+        {"file_name": "voice.flac", "transcript": "reference words", "room_reverb": "off"}
     ]
     assert "voice_references" not in dots_object
     assert parameters["seed"] == 12

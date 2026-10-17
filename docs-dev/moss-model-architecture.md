@@ -89,7 +89,7 @@ Language hints reuse `MossBaseModel.get_language_name()` to map the project code
 
 ## Project settings
 
-MOSS generation settings are private under `model_settings.models.<catalog ID>`; there is no current `shared.moss` group. Primary voice references instead use top-level `Project.voice_references`, shared across all models within the project. Historically, the audio.cpp additions left project version 3 unchanged; the project-wide voice-list migration now uses project version 4. Existing IDs, catalog schema 1, and non-voice AuK/Qwen3 sharing are unchanged. Fish S2 later retired its local/server group through the same generic fork (see [project spec v4](<project-spec-v4.md>)).
+MOSS generation settings are private under `model_settings.models.<catalog ID>`; there is no current `shared.moss` group. Primary voice references instead use top-level `Project.voice_references`, shared across all models within the project. Historically, the audio.cpp additions left project version 3 unchanged; the project-wide voice-list migration now uses project version 4. Existing IDs, catalog schema 1, and non-voice AuK/Qwen3 sharing are unchanged. Fish S2 later retired its local/server group through the same generic fork (see [project spec v5](<project-spec-v5.md>)).
 
 | Owner | Private sampling settings |
 |---|---|
@@ -125,7 +125,7 @@ Historically, v3 also copied voices/transcripts to the original three private ty
 
 Only missing private non-voice keys are filled: current raw keys win even when their value is `null`, a default or a sentinel. Conversion consumes `shared.moss` only after success; malformed groups remain non-destructively through existing load-error handling. Unknown whole objects for other models/groups remain preserved.
 
-Successful on-disk migration now backs up the original settings before rewriting v4 immediately, without deleting audio; settings-snapshot imports require the same choice before destination writes. This supersedes historical v3 deferred-save timing without changing MOSS defaults/request behavior. See [Project Spec v4](<project-spec-v4.md>) for persistence logistics.
+Successful on-disk migration now backs up the original settings before rewriting v4 immediately, without deleting audio; settings-snapshot imports require the same choice before destination writes. This supersedes historical v3 deferred-save timing without changing MOSS defaults/request behavior. See [Project Spec v5](<project-spec-v5.md>) for persistence logistics.
 
 ## Architecture-dependent behavior
 

@@ -129,7 +129,7 @@ APP_META_MP4_TAG = "audiobook-data"
 # favor of the display-only 'source_dir_display' — are not version bumps:
 # no reader is required to treat those snapshots any differently.
 ABR_VERSION = 4
-PROJECT_SPEC_VERSION = 4
+PROJECT_SPEC_VERSION = 5
 
 AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]
 

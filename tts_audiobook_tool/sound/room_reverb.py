@@ -3,8 +3,8 @@ Room reverb: convolution with a synthetic room impulse response (IR), streamed
 over the whole output so tails decay naturally across segment boundaries and
 pauses instead of resetting with each segment.
 
-Used by concat, realtime playback and voice chat per the `room_reverb`
-project setting.
+Used by concat, realtime playback and voice chat per each voice's
+`room_reverb` setting (see VoiceSpatialProcessor for several rooms at once).
 Only narration feeds the reverb; appended break sound effects pass through dry
 (though the tail decays underneath them). Applied before the room tone noise
 bed, so the bed isn't reverberated. See docs-dev/room-reverb.md.
@@ -217,6 +217,10 @@ class StreamingReverb:
         n = len(data)
         if n == 0:
             return np.zeros(0, dtype=np.float64)
+        if send_end is not None and send_end <= 0:
+            # Nothing feeds the room: just play out the stored tail. Common
+            # with several rooms, where all but one idle on each call.
+            return self._advance_tail(n)
         send = np.asarray(data, dtype=np.float64)
         if send_end is not None and send_end < n:
             send = send.copy()
@@ -225,6 +229,14 @@ class StreamingReverb:
         wet[:len(self._tail)] += self._tail
         self._tail = wet[n:].copy()
         return wet[:n]
+
+    def _advance_tail(self, n: int) -> np.ndarray:
+        """`process_wet` for n samples of zero input, without convolving."""
+        wet = np.zeros(n, dtype=np.float64)
+        m = min(n, len(self._tail))
+        wet[:m] = self._tail[:m]
+        self._tail = np.concatenate([self._tail[m:], np.zeros(m)])
+        return wet
 
 
 class RoomReverbProcessor:

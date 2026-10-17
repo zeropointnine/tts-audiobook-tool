@@ -127,10 +127,10 @@ The embedded value is a JSON object.
   ],
   "project_snapshot": {
     "source_dir_display": "/abs/path/to/original/project",
-    "version": 4,
+    "version": 5,
     "language_code": "en",
     "voice_references": [
-      {"file_name": "sample.flac", "transcript": "Reference text."}
+      {"file_name": "sample.flac", "transcript": "Reference text.", "room_reverb": "off"}
     ]
   }
 }
@@ -224,10 +224,11 @@ book and its sections/phrase groups are not part of this object; synchronized te
 section ranges are carried separately by `text_segments` and `sections`; subdivision
 nesting does not represent project section structure.
 
-Current snapshots use [project settings v4](<project-spec-v4.md>): one ordered
-`voice_references` list of `{file_name, transcript}` pairs shared by all models
-within the project, plus non-voice model settings. This does **not** change the ABR
-format. Imports still accept v1/v2/v3 snapshots. An explicit top-level list,
+Current snapshots use [project settings v5](<project-spec-v5.md>): one ordered
+`voice_references` list of voices (`file_name`, `transcript`, optional crop, and
+per-voice `room_reverb`) shared by all models within the project, plus non-voice
+model settings. This does **not** change the ABR format. Imports still accept
+v1–v4 snapshots; a v4 snapshot's project-wide `room_reverb` moves onto its voices. An explicit top-level list,
 including `[]`, wins over stale clone lists; otherwise zero populated legacy
 sources become empty, one is adopted silently, and multiple independent sources
 require the same numbered model-name/all-filenames choice as project loading.

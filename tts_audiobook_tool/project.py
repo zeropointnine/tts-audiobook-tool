@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace
 import os
 from typing import Any
 
@@ -10,6 +11,7 @@ from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, E
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.model_settings import ModelSettings, REGISTRY
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -31,6 +33,8 @@ class Project(BaseModel):
     - version 3: model-specific settings stored in model-keyed `model_settings`
       objects; version-2 flat fields are converted on load
     - version 4: one project-wide ordered voice_references list
+    - version 5: voice_references entries are `Voice` objects; `room_reverb`
+      moved from the project onto each voice; crop times stored as numbers
 
     On save, `version` is always normalized to `PROJECT_SPEC_VERSION`.
     """
@@ -102,13 +106,27 @@ class Project(BaseModel):
     # Persist the opaque catalog ID, including IDs unknown to this installation.
     tts_model_type: str = "none"
     model_settings: ModelSettings = Field(default_factory=ModelSettings)
-    voice_references: list[dict[str, str]] = Field(default_factory=list)
+    voice_references: list[Voice] = Field(default_factory=list)
 
     @field_validator("voice_references", mode="before")
     @classmethod
-    def _validate_voice_references(cls, value: Any) -> list[dict[str, str]]:
+    def _validate_voice_references(cls, value: Any) -> list[Voice]:
         from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
         return normalize_voice_references(value)
+
+    def get_voice_chat_room_reverb(self) -> RoomReverb:
+        """The room reverb applied to voice chat output: voice 0's setting.
+
+        Chat lines have no assigned voice (and auto-advance rotates per
+        chunk), so chat uses one room. Off with no voices, or while a Pocket
+        predefined voice is in use. Concat and realtime playback instead use
+        each segment's voice (`VoiceSpatialPolicy.room_reverb_for_voice_index`).
+        """
+        if not self.voice_references:
+            return RoomReverb.OFF
+        if self.tts_model_type == "pocket_local" and self.get_model_setting("pocket_local", "predefined_voice"):
+            return RoomReverb.OFF
+        return self.voice_references[0].room_reverb
 
     def get_tts_model_type(self) -> TtsModelType:
         """Resolve the saved selection without changing it or auto-detecting."""
@@ -126,7 +144,7 @@ class Project(BaseModel):
         """Read a declared setting; legacy voice access reads the project list."""
         binding = REGISTRY.get(model_id, name)
         if binding.section == "voice_references":
-            return [ref.get(name, "") for ref in self.voice_references]
+            return [getattr(ref, name) for ref in self.voice_references]
         return REGISTRY.resolve(self.model_settings, binding)
 
     def set_model_setting(self, model_id: str, name: str, value: Any, *, reset: bool = False) -> None:
@@ -137,19 +155,18 @@ class Project(BaseModel):
             if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
                 raise ValueError(f"{model_id}.{name}: expected a list of strings")
             if name == "transcript":
-                from tts_audiobook_tool.project_support.voice_reference_migration import copy_crop_fields
                 self.voice_references = [
-                    {**copy_crop_fields(ref), "file_name": ref["file_name"],
-                     "transcript": value[i] if i < len(value) else ""}
+                    replace(ref, transcript=value[i] if i < len(value) else "")
                     for i, ref in enumerate(self.voice_references)
                 ]
             else:
                 from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
                 # Replacing the file-name list points entries at different
-                # samples, so any crop fields are intentionally not carried
-                # over: a crop range belongs to the file it was cut from.
+                # samples, so they are new voices: crop fields and room reverb
+                # are not carried over (a crop range belongs to the file it was
+                # cut from; new voices default to reverb off).
                 self.voice_references = normalize_voice_references([
-                    {"file_name": item, "transcript": self.voice_references[i].get("transcript", "") if i < len(self.voice_references) else ""}
+                    {"file_name": item, "transcript": self.voice_references[i].transcript if i < len(self.voice_references) else ""}
                     for i, item in enumerate(value)
                 ])
             return
@@ -185,7 +202,7 @@ class Project(BaseModel):
     limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
     min_segment_sentence_silence: MinSegmentSentenceSilence = MinSegmentSentenceSilence.get_default()
     room_tone: RoomTone = RoomTone.get_default()
-    room_reverb: RoomReverb = RoomReverb.get_default()
+    # Project-wide; room reverb itself is per voice (`Voice.room_reverb`).
     room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.get_default()
     gen_auto_concat: bool = PROJECT_DEFAULT_GEN_AUTO_CONCAT
     streaming_chat: bool = PROJECT_DEFAULT_STREAMING_CHAT

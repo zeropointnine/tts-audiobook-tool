@@ -11,9 +11,15 @@ Users with no stored code (brand-new users, or users updating to the first
 version that has this feature) are not shown any messages.
 """
 
-STARTUP_VERSION_CODE = 1
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT
+
+STARTUP_VERSION_CODE = 2
 
 # (version code, message), ascending by version code
 STARTUP_VERSION_MESSAGES: list[tuple[int, str]] = [
-
+    (
+        2,
+        f"Room reverb has been moved to the {COL_ACCENT}Voice{COL_DEFAULT} menu, "
+        "and can now be controlled on a per-voice basis."
+    ),
 ]

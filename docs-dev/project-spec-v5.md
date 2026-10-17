@@ -1,15 +1,15 @@
-# Project Spec v4
+# Project Spec v5
 
 ## Scope and version boundaries
 
-Project spec v4 is the **on-disk project settings format**. Its defining change is one top-level, ordered `voice_references` list shared by all models **within a project**, not an application-global voice library. Each entry is a `{file_name, transcript}` pair. Model-specific generation settings remain in backend-neutral objects under `model_settings`, and the split between settings and book text remains in place. This applies to local inference, SGL-Omni, and audio.cpp alike.
+Project spec v5 is the **on-disk project settings format**. It keeps v4's one top-level, ordered `voice_references` list shared by all models **within a project** (not an application-global voice library). V5's defining change is that each entry is a formal **voice** (`Voice` in [`app_types/voice.py`](../tts_audiobook_tool/app_types/voice.py)) carrying per-voice settings: the project-wide `room_reverb` setting moved onto each voice, and crop times are stored as numbers. Model-specific generation settings remain in backend-neutral objects under `model_settings`, and the split between settings and book text remains in place. This applies to local inference, SGL-Omni, and audio.cpp alike.
 
-Historically, v3 moved flat model fields into private/shared model-setting objects, including model-scoped clone lists. V4 retains that organization for non-voice settings but replaces those clone lists with the project-wide list. V1, v2, and v3 remain accepted migration inputs.
+Historically, v3 moved flat model fields into private/shared model-setting objects, including model-scoped clone lists. V4 retained that organization for non-voice settings but replaced those clone lists with the project-wide list of `{file_name, transcript}` pairs. V1, v2, v3, and v4 remain accepted migration inputs.
 
 Independent version numbers should not be conflated:
 
-- `project.json` has `"version": 4` (`PROJECT_SPEC_VERSION` in [`constants.py`](../tts_audiobook_tool/constants.py)).
-- `project_text.json` still uses `"format": "book.v2"` ([`book_serialization.py`](../tts_audiobook_tool/app_types/book_serialization.py)). Project spec v4 does **not** introduce a new book format.
+- `project.json` has `"version": 5` (`PROJECT_SPEC_VERSION` in [`constants.py`](../tts_audiobook_tool/constants.py)).
+- `project_text.json` still uses `"format": "book.v2"` ([`book_serialization.py`](../tts_audiobook_tool/app_types/book_serialization.py)). Neither project spec v4 nor v5 introduces a new book format.
 - The [ABR metadata format](<abr-metadata-spec.md>) is unchanged; its version is independent of the project settings version.
 - The application-shipped [`model_catalog.toml`](../tts_audiobook_tool/tts_models/model_catalog.toml) uses `schema_version = 1`. This is the model-catalog schema, not a project-file version. The loader rejects other catalog schema versions; it does not migrate them. This one TOML file declares the built-in local, SGL-Omni and audio.cpp server, and `"none"` placeholder specs, plus server-specific definitions and optional additional configured server entries. Every shipped entry receives a canonical Python handle in TOML order, looked up by its catalog ID; no model-named attributes or Python declaration inventory is needed. `TtsModelType.require_by_id("fish_s2_local")` is strict for hardcoded IDs and raises `ValueError` for an unknown ID. `TtsModelType.get_by_id(saved_id)` is tolerant for persisted/external IDs and falls back to the registered `"none"` handle without changing the saved string.
 
@@ -17,7 +17,7 @@ The canonical project directory has:
 
 | Artifact | Responsibility |
 | --- | --- |
-| `project.json` | Project-wide settings and ordered `voice_references`, selected model ID, and non-voice `model_settings` overrides. |
+| `project.json` | Project-wide settings and ordered `voice_references` (voices), selected model ID, and non-voice `model_settings` overrides. |
 | `project_text.json` | Structured `book.v2` text, sections, phrase groups, and their `voice_index` values. |
 | Optional `project_text_raw.txt`, `project_text.epub`, `voice/`, generated audio | Source material, voice clips, and outputs; these are not inline model-setting objects. |
 
@@ -31,12 +31,17 @@ The following is illustrative: absent override keys are normal, and these object
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "language_code": "en",
   "voice_select_mode": "custom",
+  "room_reverb_stereo": "late_w100",
   "voice_references": [
-    {"file_name": "sample.flac", "transcript": "Reference text."},
-    {"file_name": "second.flac", "transcript": ""}
+    {"file_name": "sample.flac", "transcript": "Reference text.", "room_reverb": "small_drr22", "pan": -0.3},
+    {"file_name": "second.flac", "transcript": "",
+     "crop_file_name": "0f3c…e1.flac", "crop_start": 1.5, "crop_end": 9.0, "crop_transcript": "Trimmed text.",
+     "room_reverb": "off"},
+    {"file_name": "third.flac", "transcript": "", "room_reverb": "off",
+     "preset": "alba", "instructions": "Speak warmly, with a slight rasp."}
   ],
   "model_settings": {
     "models": {
@@ -59,9 +64,27 @@ The following is illustrative: absent override keys are normal, and these object
 }
 ```
 
-Top-level `voice_references` is the sole authoritative clone list and is always serialized, including `[]`. It pairs each project-local voice filename with its transcript in order; an unused/absent transcript is represented by `""`. V4 output does not store authoritative clone lists under private models or shared groups.
+Top-level `voice_references` is the sole authoritative clone list and is always serialized, including `[]`. Each entry is one voice: a project-local voice filename with its transcript, in order; an unused/absent transcript is represented by `""`. Output does not store authoritative clone lists under private models or shared groups.
 
-Entries may additionally carry `crop_file_name`, `crop_start`, `crop_end`, and `crop_transcript`. Crop times persist as decimal strings; a finite range must satisfy `end > start >= 0`. The explicitly owned `crop_file_name` stores only a basename (`<uuid>.flac`); validation rejects paths, absolute names, and traversal components. Its disk path remains `voice/crops/<basename>`. `ProjectVoiceUtil.get_cropped_voice_relative_path(entry)` derives `crops/<basename>` for the generation interface and transfer supporting-file manifest; `resolve_cropped_voice_file_path(project, entry)` centralizes full-path resolution. A new crop reserves a unique file, and re-editing normally retains that filename. Without a valid explicit basename, all crop metadata is dropped with a warning, including old development entries storing paths such as `crops/<uuid>.flac`. The feature has not shipped, so there is no migration or `_crop` sibling-name fallback. Original filenames/transcripts and old files remain untouched. Project transfers copy both originals and active crop files, preserve nested paths, and report missing crops. See [voice sample crop architecture](<voice-sample-crop.md>).
+### Voice entries
+
+In memory the list is `list[Voice]`. `Voice` and its optional `VoiceCrop` are frozen dataclasses (edit with `dataclasses.replace`); `Voice.to_dict()` writes the flat on-disk form and `Voice.from_dict()` parses it. Direct assignment to `Project.voice_references` is not validated, so callers assign `Voice` objects.
+
+| Key | In memory | Notes |
+| --- | --- | --- |
+| `file_name` | `Voice.file_name` | Project-local sample path. An unusable path drops the entry with a warning. |
+| `transcript` | `Voice.transcript` | `""` when absent. |
+| `crop_file_name`, `crop_start`, `crop_end`, `crop_transcript` | `Voice.crop: VoiceCrop \| None` | All or none; see below. |
+| `room_reverb` | `Voice.room_reverb: RoomReverb` | `RoomReverb` id. **Always written**, including `"off"`. Missing loads as off (or, in v4 input, the migrated project value); an unknown id loads as off. New voices default to off. |
+| `pan` | `Voice.pan: float` | Stereo position, -1 (full left) to 1 (full right). **Written only when nonzero**. Missing or malformed (non-numeric, non-finite) loads as 0 (centered); out-of-range values are clamped. Optional, so no version bump. |
+| `preset` | `Voice.preset: str` | Model preset voice id, for models with built-in voices (e.g. Pocket TTS). **Written only when non-empty**. Missing or non-string loads as `""`. Optional, so no version bump. |
+| `instructions` | `Voice.instructions: str` | Free-text voice instructions for "instruct" models (e.g. Qwen3-TTS Instruct). **Written only when non-empty**. Missing or non-string loads as `""`. Optional, so no version bump. |
+
+**Room reverb** is per voice; `room_reverb_stereo` (the stereo effect) remains a project-wide setting. Concat and realtime playback put each segment in its voice's room: the phrase group's `voice_index` in user-defined voice selection, otherwise voice 0. Voice chat uses voice 0's. There is no reverb with no voices, or while a Pocket predefined voice is in use. Both are set in the voice sample submenu (Effects > Stereo position, Room reverb).
+
+**Stereo position** (`pan`) is per voice and applies to concat and realtime playback only (not voice chat): user-defined voice selection uses the phrase group's voice, Disabled uses voice 0's, Auto-advance stays centered. Any heard off-center voice makes the output stereo. See [room reverb](<room-reverb.md>).
+
+**Crops.** A finite crop range must satisfy `end > start >= 0`; v5 stores the times as JSON numbers (v4 stored decimal strings, which still load). The explicitly owned `crop_file_name` stores only a basename (`<uuid>.flac`); validation rejects paths, absolute names, and traversal components. Its disk path remains `voice/crops/<basename>`. `VoiceCrop.relative_path` (also `ProjectVoiceUtil.get_cropped_voice_relative_path(voice)`) derives `crops/<basename>` for the generation interface and transfer supporting-file manifest; `resolve_cropped_voice_file_path(project, voice)` and `resolve_crop_file_path(project, basename)` centralize full-path resolution. A new crop reserves a unique file, and re-editing normally retains that filename. Without a valid explicit basename or range, all crop metadata is dropped with a warning (the voice is kept), including old development entries storing paths such as `crops/<uuid>.flac`. The feature has not shipped, so there is no migration or `_crop` sibling-name fallback. Original filenames/transcripts and old files remain untouched. Project transfers copy both originals and active crop files, preserve nested paths, and report missing crops. See [voice sample crop architecture](<voice-sample-crop.md>).
 
 `model_settings.models` is keyed by stable **model ID**; `model_settings.shared` is keyed by a declared **storage group**, not a selectable model. Inside a recognized object, `parameters` holds named overrides, `files` holds declared additional project-local file strings, and `orchestration` holds batch/concurrency values. Sections appear only when needed. The same model may read some non-voice settings from a shared object and others from a private object; there is no duplicate authoritative copy.
 
@@ -99,7 +122,7 @@ The catalog controls model metadata, persisted storage, server numeric parameter
 
 Migration is **load-driven and one-way**. [`ProjectUtil.load_using_dir_path`](../tts_audiobook_tool/project_support/project_util.py) delegates to [`ProjectLoadUtil`](../tts_audiobook_tool/project_support/project_load_util.py), which reads the settings, obtains the book from the inline legacy representation or external text file as appropriate, and validates through `Project.model_validate`. Its normalization first remaps recognized old names and legacy text/settings representations, remembers which flat model values were actually supplied, then reconciles them with any supplied `model_settings`. This works for older project files and settings snapshots; callers should not manually rename individual model fields.
 
-### Selecting the v4 voice list
+### Selecting the project voice list (v1–v3 → v4)
 
 An **explicit top-level `voice_references`, including `[]`, wins** over all stale legacy clone lists. It is not merged with or repopulated from them. Otherwise, migration collects populated legacy sources from v1/v2 flat filename/transcript fields and v3 private/shared clone lists, retaining each list's order and paired transcripts. Empty lists do not count as populated sources.
 
@@ -119,22 +142,26 @@ f'🔔 {COL_ACCENT}Action required:\n{COL_DEFAULT}{subject} contains voice clone
 
 Insert a blank line before the choices. Format each as `[{n}] {model_name} {model id}: {COL_DIM} {filename1}, {filename2}`, showing **all filenames** and the relevant model names/IDs for a shared source. End with `[0] Abort` followed by a blank line. Empty input is invalid, not Abort: print `Please choose a number from 1 to {n}, or 0 to abort.` followed by a blank line and ask again. The choice keeps the selected ordered pairs only; no referenced audio files are deleted, including files from unselected lists. Cancellation must leave the original project untouched. Noninteractive callers must fail with an actionable ambiguity error (identify the sources and direct the user to open/choose interactively or provide an explicit top-level list), not choose arbitrarily.
 
+### v4 → v5: per-voice room reverb
+
+[`prepare_project_voice_references`](../tts_audiobook_tool/project_support/voice_reference_migration.py) removes a top-level `room_reverb` and applies its value to every voice; a voice entry's own `room_reverb` wins. An unknown id becomes off. With no voices, the value is dropped. `room_reverb_stereo` is unchanged. Crop time strings are parsed and rewritten as numbers. The same step runs for project loads, settings imports, and ABR snapshots.
+
 ### Historical non-voice and text compatibility
 
 - Except for the explicit MOSS conversion below, existing v3 **private or shared objects win as whole objects** over corresponding flat non-voice fields. Missing settings inside such an object are not backfilled from the old representation. This prevents a stale flat value from unexpectedly reappearing after a reset.
 - Where there is no new owner object, declared old non-voice values move to the correct private/shared section. Shared values move **once** to their group. Legacy default/sentinel values generally become absent overrides, but seed/random values retain their distinct meaning. Recognized input aliases and pre-rename spellings are accepted in the load path.
-- Flat model keys are removed from the normalized settings and are **never emitted** by the v4 serializer. Historical mappings remain input-only to keep v1/v2/v3 projects readable. Unknown whole model/shared objects survive reconciliation, as described above, without becoming authoritative clone storage.
-- Earlier text migrations remain supported: inline book text and accepted legacy external payloads are normalized to the split layout and `book.v2` when rewritten. This is independent of settings migration; v4 does not duplicate book text inside `project.json`.
+- Flat model keys are removed from the normalized settings and are **never emitted** by the serializer. Historical mappings remain input-only to keep v1/v2/v3 projects readable. Unknown whole model/shared objects survive reconciliation, as described above, without becoming authoritative clone storage.
+- Earlier text migrations remain supported: inline book text and accepted legacy external payloads are normalized to the split layout and `book.v2` when rewritten. This is independent of settings migration; v4/v5 do not duplicate book text inside `project.json`.
 
-Retired-group compatibility (`fork_retired_group`) consumes each old `model_settings.shared.<group>` and converts the group's pre-v3 flat fields using frozen historical ownership/defaults, not current bindings. Every historical value is copied to each original member that still owns a same-named setting; members that no longer own it do not receive it (e.g. the old Fish S2 `seed` goes only to `fish_s2_local`). The same precedence, non-destructive and voice-source rules described for MOSS below apply to every retired group. A retired group in an already-v4 project is forked in memory on each load and persisted at the next ordinary save; it does not force a rewrite or backup. MOSS compatibility explicitly consumes old `model_settings.shared.moss` and converts pre-v3 flat MOSS fields the same way. Seed and batch size seed the original three private types; both sampling sets go to local MOSS, and only the matching set goes to each remote type. Target and rolling continuation stay local. Conversion only fills missing private keys; **current raw keys win**, including `null`, default values and sentinels, before ordinary reconciliation. Historically, v3 also copied voices/transcripts to those private types and treated each existing clone list atomically. V4 instead selects one project-wide voice source under the rules above, counting the original shared MOSS list once rather than its historical fan-out. The old group is consumed only after successful conversion; malformed groups are retained non-destructively by existing load-error handling. Unknown whole objects for other groups remain preserved. Successfully migrated settings omit `shared.moss` when saved.
+Retired-group compatibility (`fork_retired_group`) consumes each old `model_settings.shared.<group>` and converts the group's pre-v3 flat fields using frozen historical ownership/defaults, not current bindings. Every historical value is copied to each original member that still owns a same-named setting; members that no longer own it do not receive it (e.g. the old Fish S2 `seed` goes only to `fish_s2_local`). The same precedence, non-destructive and voice-source rules described for MOSS below apply to every retired group. A retired group in an already-current project is forked in memory on each load and persisted at the next ordinary save; it does not force a rewrite or backup. MOSS compatibility explicitly consumes old `model_settings.shared.moss` and converts pre-v3 flat MOSS fields the same way. Seed and batch size seed the original three private types; both sampling sets go to local MOSS, and only the matching set goes to each remote type. Target and rolling continuation stay local. Conversion only fills missing private keys; **current raw keys win**, including `null`, default values and sentinels, before ordinary reconciliation. Historically, v3 also copied voices/transcripts to those private types and treated each existing clone list atomically. V4 instead selects one project-wide voice source under the rules above, counting the original shared MOSS list once rather than its historical fan-out. The old group is consumed only after successful conversion; malformed groups are retained non-destructively by existing load-error handling. Unknown whole objects for other groups remain preserved. Successfully migrated settings omit `shared.moss` when saved.
 
 ### Saving and importing
 
-**Successful on-disk migration saves v4 immediately**, after any required choice. Before rewriting the original settings, preserve the original `project.json` as `project.json.pre-v4.bak`; if that backup already exists, use an unused numbered suffix rather than overwriting it. Backup failure must prevent the rewrite. This is a settings-file backup, not a complete project/audio backup, and migration never deletes reference or generated audio. Historical v3 loading could defer a settings rewrite until a later save; that timing is superseded for v4 migration.
+**Successful on-disk migration saves the current version immediately**, after any required choice. Any project whose `version` is not current (or that still has a top-level `room_reverb`) is migrated. Before rewriting the original settings, preserve the original `project.json` as `project.json.pre-v{N}.bak`, where N is the version being migrated **to** (`PROJECT_SPEC_VERSION`, currently `pre-v5`), whatever the original version; if that backup already exists, use an unused numbered suffix (`.pre-v5.bak.2`, …) rather than overwriting it. Backup failure must prevent the rewrite. This is a settings-file backup, not a complete project/audio backup, and migration never deletes reference or generated audio. Historical v3 loading could defer a settings rewrite until a later save; that timing is superseded since the v4 migration.
 
-`ProjectTextIOUtil.save_book` writes the separate book payload when text itself needs persisting. Ordinary settings changes otherwise require a save. JSON artifacts are serialized before writing and saved through [`JsonSaveUtil`](../tts_audiobook_tool/app_support/JsonSaveUtil.py) with artifact-specific locking and atomic replacement; the settings and book files are not a single cross-file transaction. V4 writes do not retain parallel legacy clone fields for old app versions.
+`ProjectTextIOUtil.save_book` writes the separate book payload when text itself needs persisting. Ordinary settings changes otherwise require a save. JSON artifacts are serialized before writing and saved through [`JsonSaveUtil`](../tts_audiobook_tool/app_support/JsonSaveUtil.py) with artifact-specific locking and atomic replacement; the settings and book files are not a single cross-file transaction. Writes do not retain parallel legacy fields (clone lists, project-wide `room_reverb`) for old app versions; an older app refuses a newer `version`.
 
-Clone/transfer, worker project transfer, and settings snapshots use the same v4 representation: one project voice list plus non-voice model settings. ABR metadata snapshots omit executable `dir_path` and carry `source_dir_display` for display. Import validates and normalizes snapshots, including v1/v2/v3 settings, and applies **the same blocking voice-list choice before any destination writes or supporting-file copies**. A cancelled or ambiguous noninteractive import must not partially create/modify the destination. Project-local supporting text/voice files are copied separately where available; filenames are resolved in the importing project's context, not an untrusted snapshot source path. The ABR format itself does not change. See [`project_transfer_util.py`](../tts_audiobook_tool/project_support/project_transfer_util.py) and [`abr-metadata-spec.md`](abr-metadata-spec.md).
+Clone/transfer, worker project transfer, and settings snapshots use the same current representation: one project voice list plus non-voice model settings. ABR metadata snapshots omit executable `dir_path` and carry `source_dir_display` for display. Import validates and normalizes snapshots, including v1–v4 settings (v4 snapshots get the room reverb migration below), and applies **the same blocking voice-list choice before any destination writes or supporting-file copies**. A cancelled or ambiguous noninteractive import must not partially create/modify the destination. Project-local supporting text/voice files are copied separately where available; filenames are resolved in the importing project's context, not an untrusted snapshot source path. The ABR format itself does not change. See [`project_transfer_util.py`](../tts_audiobook_tool/project_support/project_transfer_util.py) and [`abr-metadata-spec.md`](abr-metadata-spec.md).
 
 ## Maintenance rules and executable references
 

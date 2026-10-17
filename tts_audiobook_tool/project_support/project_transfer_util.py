@@ -274,13 +274,13 @@ class ProjectTransferUtil:
         # collect catalog-declared secondary files such as IndexTTS emo_voice.
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
-        raw_voice_file_names: list[object] = [entry.get("file_name") for entry in project.voice_references]
+        raw_voice_file_names: list[object] = [voice.file_name for voice in project.voice_references]
         # A crop is additional persisted audio, not a replacement for the
         # original. Keep missing active crops in the list so transfer reports
         # them rather than silently changing the effective voice/transcript.
         raw_voice_file_names.extend(
-            ProjectVoiceUtil.get_cropped_voice_relative_path(entry) for entry in project.voice_references
-            if ProjectVoiceUtil.get_crop_range(entry) is not None
+            ProjectVoiceUtil.get_cropped_voice_relative_path(voice) for voice in project.voice_references
+            if voice.crop is not None
         )
         seen_owners: set[tuple[str, str]] = set()
         for model_type in TtsModelType.all():

@@ -5,6 +5,7 @@ from typing import cast
 
 import pytest
 
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.menu_status import MenuStatus
 from tts_audiobook_tool.prefs import Prefs
@@ -127,7 +128,7 @@ def test_deferred_tts_hint_follows_menu_and_on_shown_without_pausing(
     ))
     if with_long_sample:
         from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
-        state.project.voice_references = [{"file_name": "voice.flac", "transcript": ""}]
+        state.project.voice_references = [Voice("voice.flac")]
         monkeypatch.setattr(AudioMetaUtil, "get_audio_duration", lambda _: 16.0)
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [model])

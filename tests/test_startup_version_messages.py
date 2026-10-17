@@ -49,7 +49,7 @@ def test_upgrade_shows_hint_then_saves_code(monkeypatch, tmp_path: Path) -> None
     app_hint_util.show_startup_version_messages(prefs)
 
     assert len(shown) == 1
-    assert shown[0].heading == "New features since the last time you ran tts-audiobook-tool:"
+    assert shown[0].heading == "New features/changes:"
     assert shown[0].text == "- added ModelX\n- migrated x to y"
     assert prefs.startup_version_code == 4
     assert json.loads((tmp_path / PREFS_FILE_NAME).read_text(encoding="utf-8"))["startup_version_code"] == 4

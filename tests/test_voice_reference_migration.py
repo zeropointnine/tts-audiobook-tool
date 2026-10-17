@@ -1,4 +1,4 @@
-"""Project v4 migration and blocking choice at persistence boundaries."""
+"""Project v4/v5 migration and blocking choice at persistence boundaries."""
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_types import RoomReverb
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, PROJECT_SPEC_VERSION
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
@@ -17,6 +19,10 @@ from tts_audiobook_tool.project_support.voice_reference_migration import (
 
 def ref(name='a.flac', transcript='spoken text'):
     return {'file_name': name, 'transcript': transcript}
+
+
+def voice(name='a.flac', transcript='spoken text'):
+    return Voice(name, transcript)
 
 
 def private_sources():
@@ -42,8 +48,8 @@ def test_one_source_preserves_order_pairing_duplicates_and_input(source):
     original = deepcopy(source)
     migrated = prepare_project_voice_references(source)
     assert source == original
-    assert migrated['version'] == PROJECT_SPEC_VERSION == 4
-    assert migrated['voice_references'] == [ref('a.flac', 'A'), ref('b.flac', 'B'), ref('a.flac', '')]
+    assert migrated['version'] == PROJECT_SPEC_VERSION == 5
+    assert migrated['voice_references'] == [voice('a.flac', 'A'), voice('b.flac', 'B'), voice('a.flac', '')]
     assert 'glm_voice_file_name' not in migrated
     for obj in migrated.get('model_settings', {}).get('models', {}).values():
         assert 'voice_references' not in obj
@@ -58,7 +64,7 @@ def test_one_source_preserves_order_pairing_duplicates_and_input(source):
 def test_shared_historical_owner_counts_once(source, monkeypatch):
     monkeypatch.setattr(ask, 'ask_input', lambda *_args, **_kwargs: pytest.fail('should be silent'))
     project = Project.model_validate(source)
-    assert project.voice_references == [ref('a.flac', '')]
+    assert project.voice_references == [voice('a.flac', '')]
     assert all('voice_references' not in obj for obj in project.model_settings.models.values())
 
 
@@ -99,7 +105,7 @@ def test_exact_prompt_all_filenames_and_no_default(monkeypatch):
         'Please choose a number from 1 to 2, or 0 to abort.',
         '',
     ]
-    assert migrated['voice_references'] == [ref('other.flac')]
+    assert migrated['voice_references'] == [voice('other.flac')]
 
 
 @pytest.mark.parametrize('explicit', [[], [ref('new.flac')]])
@@ -108,7 +114,7 @@ def test_explicit_top_level_list_wins_even_empty(explicit):
     source['voice_references'] = explicit
     source['glm_voice_file_name'] = 'stale.flac'
     migrated = prepare_project_voice_references(source)
-    assert migrated['voice_references'] == explicit
+    assert migrated['voice_references'] == [Voice(**r) for r in explicit]
     assert 'glm_voice_file_name' not in migrated
     assert all('voice_references' not in obj for obj in migrated['model_settings']['models'].values())
 
@@ -146,7 +152,7 @@ def test_malformed_voice_data_fails_before_permissive_cleanup(source):
 
 @pytest.mark.parametrize('source, expected', [
     ({'glm_voice_file_name': 42}, []),
-    ({'glm_voice_file_name': 'a.flac', 'glm_voice_transcript': [None]}, [ref('a.flac', '')]),
+    ({'glm_voice_file_name': 'a.flac', 'glm_voice_transcript': [None]}, [voice('a.flac', '')]),
 ])
 def test_legacy_flat_voice_junk_is_tolerated(source, expected):
     # Old flat fields were permissively flattened on load, so non-string
@@ -158,12 +164,12 @@ def test_unusable_file_name_drops_entry_instead_of_failing():
     # A name that cannot be a project-local path drops just that entry,
     # matching the old flat-field handling of unusable paths.
     project = Project.model_validate({'voice_references': [{'file_name': ''}, ref('a.flac')]})
-    assert project.voice_references == [ref('a.flac')]
+    assert project.voice_references == [voice('a.flac')]
 
 
 def test_canonical_paths_and_missing_transcripts():
     project = Project.model_validate({'voice_references': [{'file_name': r'C:\book\voice\a.flac'}]})
-    assert project.voice_references == [ref('a.flac', '')]
+    assert project.voice_references == [voice('a.flac', '')]
 
 
 def write_project(tmp_path, source):
@@ -178,17 +184,17 @@ def test_load_saves_immediately_backs_up_original_and_never_reprompts(tmp_path, 
     monkeypatch.setattr(ask, 'ask_input', lambda *_args: '1')
     result = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False, prompt_on_migration=True)
     assert isinstance(result, Project)
-    assert result.voice_references == [ref('first.flac'), ref('second.flac', 'second')]
-    assert (tmp_path / 'project.json.pre-v4.bak').read_bytes() == original
+    assert result.voice_references == [voice('first.flac'), voice('second.flac', 'second')]
+    assert (tmp_path / 'project.json.pre-v5.bak').read_bytes() == original
     saved = json.loads(path.read_bytes())
-    assert saved['version'] == 4
-    assert saved['voice_references'] == result.voice_references
+    assert saved['version'] == PROJECT_SPEC_VERSION
+    assert saved['voice_references'] == [v.to_dict() for v in result.voice_references]
     assert 'voice_references' not in saved['model_settings']['models']['glm_local']
     monkeypatch.setattr(ask, 'ask_input', lambda *_args: pytest.fail('should not prompt twice'))
     result2 = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(result2, Project)
     assert result2.voice_references == result.voice_references
-    assert not (tmp_path / 'project.json.pre-v4.bak.2').exists()
+    assert sorted(p.name for p in tmp_path.glob('project.json.pre-*')) == ['project.json.pre-v5.bak']
 
 
 @pytest.mark.parametrize('interactive', [False, True])
@@ -215,17 +221,17 @@ def test_save_failure_aborts_load_with_original_backup(tmp_path, monkeypatch):
     result = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert result == 'save failed'
     assert path.read_bytes() == original
-    assert (tmp_path / 'project.json.pre-v4.bak').read_bytes() == original
+    assert (tmp_path / 'project.json.pre-v5.bak').read_bytes() == original
 
 
 def test_existing_backup_not_overwritten(tmp_path):
     _path, original = write_project(tmp_path, {'version': 3})
-    backup = tmp_path / 'project.json.pre-v4.bak'
+    backup = tmp_path / 'project.json.pre-v5.bak'
     backup.write_bytes(b'older backup')
     result = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(result, Project)
     assert backup.read_bytes() == b'older backup'
-    assert (tmp_path / 'project.json.pre-v4.bak.2').read_bytes() == original
+    assert (tmp_path / 'project.json.pre-v5.bak.2').read_bytes() == original
 
 
 def test_retained_retired_group_does_not_back_up_on_every_open(tmp_path, monkeypatch):
@@ -241,7 +247,7 @@ def test_retained_retired_group_does_not_back_up_on_every_open(tmp_path, monkeyp
     result = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(result, Project)
     assert result.voice_references == []
-    assert (tmp_path / 'project.json.pre-v4.bak').read_bytes() == original
+    assert (tmp_path / 'project.json.pre-v5.bak').read_bytes() == original
     saved = json.loads(path.read_bytes())
     assert saved['version'] == PROJECT_SPEC_VERSION
     # The unusable retired group is retained verbatim on disk.
@@ -249,7 +255,7 @@ def test_retained_retired_group_does_not_back_up_on_every_open(tmp_path, monkeyp
     result2 = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(result2, Project)
     assert result2.voice_references == []
-    assert not (tmp_path / 'project.json.pre-v4.bak.2').exists()
+    assert sorted(p.name for p in tmp_path.glob('project.json.pre-*')) == ['project.json.pre-v5.bak']
 
 
 def test_backup_failure_aborts_before_save(tmp_path, monkeypatch):
@@ -273,8 +279,8 @@ def test_legacy_accessors_share_one_list_and_worker_snapshot_roundtrip():
     assert project.get_model_setting('mira_local', 'file_name') == ['a.flac']
     assert project.get_model_setting('fish_s2_sglomni', 'transcript') == ['A']
     snapshot = ProjectSerializationUtil.to_snapshot_dict(project)
-    assert snapshot['version'] == 4
-    assert Project.model_validate(snapshot).voice_references == [ref('a.flac', 'A')]
+    assert snapshot['version'] == PROJECT_SPEC_VERSION
+    assert Project.model_validate(snapshot).voice_references == [voice('a.flac', 'A')]
     assert not project.model_settings.models and not project.model_settings.shared
 
 
@@ -286,7 +292,7 @@ def test_historical_moss_fallback_only_counts_when_still_used():
     }}
     assert prepare_project_voice_references(source)['voice_references'] == []
     del source['model_settings']['models']['moss_local_sglomni']
-    assert prepare_project_voice_references(source)['voice_references'] == [ref('old.flac')]
+    assert prepare_project_voice_references(source)['voice_references'] == [voice('old.flac')]
     source['model_settings']['models']['moss_local']['voice_references'] = [ref('private.flac')]
     with pytest.raises(VoiceReferenceMigrationRequired) as exc:
         prepare_project_voice_references(source)
@@ -297,7 +303,7 @@ def test_historical_moss_flat_fallback_survives_partial_private_override():
     source = {'moss_voice_file_name': 'old.flac', 'model_settings': {
         'models': {'moss_local': {'voice_references': []}},
     }}
-    assert prepare_project_voice_references(source)['voice_references'] == [ref('old.flac', '')]
+    assert prepare_project_voice_references(source)['voice_references'] == [voice('old.flac', '')]
 
 
 def test_invalid_shared_voice_membership_fails_without_source_mutation():
@@ -311,8 +317,61 @@ def test_invalid_shared_voice_membership_fails_without_source_mutation():
 
 
 def test_future_format_load_refuses_to_rewrite(tmp_path):
-    path, original = write_project(tmp_path, {'version': 5, 'voice_references': []})
+    path, original = write_project(tmp_path, {'version': PROJECT_SPEC_VERSION + 1, 'voice_references': []})
     result = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(result, str) and 'update the app' in result
     assert path.read_bytes() == original
     assert list(tmp_path.iterdir()) == [path]
+
+
+def v4_reverb_source(**overrides):
+    source = {'version': 4, 'room_reverb': 'small_drr17',
+              'voice_references': [ref('a.flac', 'A'), ref('b.flac', 'B')]}
+    source.update(overrides)
+    return source
+
+
+def test_v4_project_room_reverb_moves_onto_every_voice():
+    source = v4_reverb_source()
+    original = deepcopy(source)
+    migrated = prepare_project_voice_references(source)
+    assert source == original
+    assert migrated['version'] == PROJECT_SPEC_VERSION == 5
+    assert 'room_reverb' not in migrated
+    assert [v.room_reverb for v in migrated['voice_references']] == [RoomReverb.SMALL_DRR17] * 2
+    assert [v.file_name for v in migrated['voice_references']] == ['a.flac', 'b.flac']
+
+
+def test_v4_voice_own_room_reverb_wins_over_project_value():
+    source = v4_reverb_source(voice_references=[
+        {**ref('a.flac', 'A'), 'room_reverb': 'medium_drr21'}, ref('b.flac', 'B'),
+    ])
+    migrated = prepare_project_voice_references(source)
+    assert 'room_reverb' not in migrated
+    assert [v.room_reverb for v in migrated['voice_references']] == [RoomReverb.MEDIUM_DRR21, RoomReverb.SMALL_DRR17]
+
+
+def test_v4_unknown_project_room_reverb_loads_as_off():
+    migrated = prepare_project_voice_references(v4_reverb_source(room_reverb='no_such_room'))
+    assert 'room_reverb' not in migrated
+    assert [v.room_reverb for v in migrated['voice_references']] == [RoomReverb.OFF] * 2
+
+
+def test_v4_load_backs_up_saves_per_voice_reverb_and_migrates_once(tmp_path):
+    path, original = write_project(tmp_path, v4_reverb_source())
+    result = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
+    assert isinstance(result, Project)
+    assert [v.room_reverb for v in result.voice_references] == [RoomReverb.SMALL_DRR17] * 2
+    backup = tmp_path / 'project.json.pre-v5.bak'
+    assert backup.read_bytes() == original
+    saved = json.loads(path.read_bytes())
+    assert saved['version'] == PROJECT_SPEC_VERSION
+    assert 'room_reverb' not in saved
+    assert saved['voice_references'] == [
+        {**ref('a.flac', 'A'), 'room_reverb': 'small_drr17'},
+        {**ref('b.flac', 'B'), 'room_reverb': 'small_drr17'},
+    ]
+    result2 = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
+    assert isinstance(result2, Project)
+    assert result2.voice_references == result.voice_references
+    assert sorted(p.name for p in tmp_path.glob('project.json.pre-*')) == ['project.json.pre-v5.bak']

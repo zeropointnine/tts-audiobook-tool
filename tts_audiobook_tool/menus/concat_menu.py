@@ -13,6 +13,7 @@ from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.project_support.voice_spatial_policy import VoiceSpatialPolicy
+from tts_audiobook_tool.app_types.voice import stereo_position_label
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
@@ -132,21 +133,14 @@ class ConcatMenu:
                 )
             )
 
+            # Room reverb itself is a per-voice setting. The stereo effect is
+            # project-wide and applies whenever the voice in use has reverb on.
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label(ROOM_REVERB_TITLE, state.project.room_reverb.label),
-                    lambda _, __: ConcatMenu.room_reverb_menu(state)
+                    lambda _: make_menu_label(ROOM_REVERB_STEREO_TITLE, state.project.room_reverb_stereo.label),
+                    lambda _, __: ConcatMenu.room_reverb_stereo_menu(state)
                 )
             )
-
-            # Only meaningful with reverb on
-            if state.project.room_reverb != RoomReverb.OFF:
-                items.append(
-                    MenuItem(
-                        lambda _: make_menu_label(ROOM_REVERB_STEREO_TITLE, state.project.room_reverb_stereo.label),
-                        lambda _, __: ConcatMenu.room_reverb_stereo_menu(state)
-                    )
-                )
 
             items.append(
                 MenuItem(
@@ -443,25 +437,6 @@ class ConcatMenu:
         )
 
     @staticmethod
-    def room_reverb_menu(state: State) -> None:
-
-        def on_select(value: RoomReverb) -> None:
-            state.project.room_reverb = value
-            state.project.save()
-            print_feedback(f"{ROOM_REVERB_TITLE} set to: {value.label}")
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text=ROOM_REVERB_TITLE,
-            labels=[item.label for item in RoomReverb],
-            values=list(RoomReverb),
-            current_value=state.project.room_reverb,
-            default_value=RoomReverb.get_default(),
-            on_select=on_select,
-            subheading=ROOM_REVERB_SUBHEADING,
-        )
-
-    @staticmethod
     def room_reverb_stereo_menu(state: State) -> None:
 
         def on_select(value: RoomReverbStereo) -> None:
@@ -564,8 +539,16 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
         add("Loudness normalization", state.project.normalization_type.value.label)
     if state.project.use_upsampler:
         add("Generative upsampling", True)
-    if state.project.room_reverb != RoomReverb.OFF:
-        add(ROOM_REVERB_TITLE, state.project.room_reverb.label)
+    spatial_policy = VoiceSpatialPolicy.from_project(state.project)
+    stereo_position = spatial_policy.stereo_position_summary  # None: differs between voices
+    if stereo_position != 0:
+        add(
+            STEREO_POSITION_TITLE,
+            stereo_position_label(stereo_position) if stereo_position is not None else "Varies by voice",
+        )
+    room_reverb = spatial_policy.room_reverb_summary  # None: differs between voices
+    if room_reverb != RoomReverb.OFF:
+        add(ROOM_REVERB_TITLE, room_reverb.label if room_reverb is not None else "Varies by voice")
         if state.project.room_reverb_stereo != RoomReverbStereo.MONO:
             add(ROOM_REVERB_STEREO_TITLE, state.project.room_reverb_stereo.label)
     if state.project.room_tone != RoomTone.OFF:
@@ -573,8 +556,8 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
     high_shelf = state.project.get_high_shelf()
     if high_shelf != HighShelfEq.DISABLED:
         add("Treble EQ", high_shelf.id.capitalize())
-    channels = VoiceSpatialPolicy.from_project(state.project).requested_channels
-    add("Output", "Stereo" if channels == 2 else "Mono")
+    channels = spatial_policy.requested_channels
+    add("Channel output", "Stereo" if channels == 2 else "Mono")
     return lines
 
 
@@ -755,21 +738,15 @@ ROOM_TONE_SUBHEADING = \
 """Adds subtle room tone under the audio, preventing unnatural digital silence. ACX-recommended practice.
 Is also applied to realtime playback."""
 
-ROOM_REVERB_TITLE = "Room reverb"
+STEREO_POSITION_TITLE = "Stereo position"
 
-ROOM_REVERB_SUBHEADING = \
-"""Places the narration in a room. Small room adds a subtle ambience, at a light or moderate level.
-Larger room adds a more noticeable sense of space, but sounds more distant and can soften clarity.
-Is also applied to realtime playback and voice chat."""
+ROOM_REVERB_TITLE = "Room reverb"
 
 ROOM_REVERB_STEREO_TITLE = "Room reverb stereo effect"
 
 ROOM_REVERB_STEREO_SUBHEADING = \
-"""Controls the spread of room reflections while narration stays centered.
-Centered (no spread) keeps output mono.
-Wide and Wider spread reflections across left and right, most noticeable on headphones.
-Wider also spreads the room's early reflections. Both require stereo output (FLAC files are about 50% larger).
-Is also applied to realtime playback and voice chat."""
+"""Spreads room reverb across left and right channels, for a wider sense of space.
+Applies only voices that have room reverb see (see voice sample submenu)."""
 
 REASON_PAUSES_SUBHEADING = \
 """Controls the silence inserted between generated segments."""

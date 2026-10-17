@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import os
 from pathlib import Path
 import tempfile
@@ -10,12 +11,13 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_DEFAULT, PROJECT_BATCH_SIZE_MAX
 from tts_audiobook_tool.constants import PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.app_support import app_text, path_norm
+from tts_audiobook_tool.app_types.voice import VOICE_CROP_SUBDIR, Voice, VoiceCrop, normalize_crop_file_name
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
 
 if TYPE_CHECKING:
-    from tts_audiobook_tool.app_types import Sound
+    from tts_audiobook_tool.app_types import RoomReverb, Sound
     from tts_audiobook_tool.project import Project
 
 
@@ -58,15 +60,12 @@ class ProjectVoiceUtil:
         been copied in.
         """
         voice_dir = ProjectVoiceUtil.get_voice_dir_path(project)
-        from tts_audiobook_tool.project_support.voice_reference_migration import (
-            VOICE_CROP_SUBDIR, normalize_crop_file_name,
-        )
         crop_parts = file_name.replace("\\", "/").split("/")
         if (len(crop_parts) == 2 and crop_parts[0] == VOICE_CROP_SUBDIR
                 and normalize_crop_file_name(crop_parts[1]) is not None):
             # Generation passes a derived voice-relative path, not the stored
             # basename. Managed crops never use legacy/root/basename guesses.
-            return ProjectVoiceUtil.resolve_cropped_voice_file_path(project, {"crop_file_name": crop_parts[1]})
+            return ProjectVoiceUtil.resolve_crop_file_path(project, crop_parts[1])
 
         name_parts = path_norm.split_relative(file_name)
         if not name_parts:
@@ -99,14 +98,14 @@ class ProjectVoiceUtil:
         """Return the shared clone list for a model that supports voice samples."""
         if _settings_registry().voice_binding(tts_model_type.id) is None:
             return []
-        return [entry["file_name"] for entry in project.voice_references]
+        return [voice.file_name for voice in project.voice_references]
 
     @staticmethod
     def get_voice_transcript_values(project: Project, tts_model_type: TtsModelType) -> list[str]:
         """Return paired transcripts, even if this model does not require them."""
         if _settings_registry().voice_binding(tts_model_type.id) is None:
             return []
-        return [entry.get("transcript", "") for entry in project.voice_references]
+        return [voice.transcript for voice in project.voice_references]
 
     @staticmethod
     def get_primary_voice_value(project: Project, tts_model_type: TtsModelType) -> str:
@@ -119,38 +118,43 @@ class ProjectVoiceUtil:
         return values[0] if values else ""
 
     @staticmethod
-    def get_crop_range(entry: dict) -> tuple[float, float] | None:
-        """Return the entry's validated crop range in seconds, or None."""
-        from tts_audiobook_tool.project_support.voice_reference_migration import parse_crop_range
-        return parse_crop_range(entry)
+    def get_crop_range(voice: Voice) -> tuple[float, float] | None:
+        """Return the voice's crop range in seconds, or None."""
+        return voice.crop_range
 
     @staticmethod
-    def get_cropped_voice_relative_path(entry: dict) -> str:
+    def get_cropped_voice_relative_path(voice: Voice) -> str:
         """Derive the voice-relative crop path from its stored basename."""
-        from tts_audiobook_tool.project_support.voice_reference_migration import (
-            VOICE_CROP_SUBDIR, normalize_crop_file_name,
-        )
-        crop_file_name = normalize_crop_file_name(entry.get("crop_file_name"))
-        if crop_file_name is None:
+        if voice.crop is None:
             raise ValueError("Voice reference has no valid explicit trim file")
-        return f"{VOICE_CROP_SUBDIR}/{crop_file_name}"
+        return voice.crop.relative_path
 
     @staticmethod
-    def resolve_cropped_voice_file_path(project: Project, entry: dict) -> str:
-        """Resolve the crop basename under voice/crops, without legacy guesses."""
+    def resolve_crop_file_path(project: Project, crop_file_name: str) -> str:
+        """Resolve a crop basename under voice/crops, without legacy guesses."""
+        if normalize_crop_file_name(crop_file_name) is None:
+            raise ValueError("Voice reference has no valid explicit trim file")
         return path_norm.join_project_relative(
             ProjectVoiceUtil.get_voice_dir_path(project),
-            ProjectVoiceUtil.get_cropped_voice_relative_path(entry),
+            f"{VOICE_CROP_SUBDIR}/{crop_file_name}",
         )
 
     @staticmethod
-    def effective_voice_file_path(project: Project, entry: dict) -> str:
+    def resolve_cropped_voice_file_path(project: Project, voice: Voice) -> str:
+        """Resolve the voice's crop file under voice/crops, without legacy guesses."""
+        return path_norm.join_project_relative(
+            ProjectVoiceUtil.get_voice_dir_path(project),
+            ProjectVoiceUtil.get_cropped_voice_relative_path(voice),
+        )
+
+    @staticmethod
+    def effective_voice_file_path(project: Project, voice: Voice) -> str:
         """Resolve the active crop when present, otherwise the original sample."""
-        if ProjectVoiceUtil.get_crop_range(entry) is not None:
-            cropped_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry)
+        if voice.crop is not None:
+            cropped_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice)
             if os.path.isfile(cropped_path):
                 return cropped_path
-        return ProjectVoiceUtil.resolve_voice_file_path(project, entry["file_name"])
+        return ProjectVoiceUtil.resolve_voice_file_path(project, voice.file_name)
 
     @staticmethod
     def effective_voice_reference(
@@ -170,11 +174,11 @@ class ProjectVoiceUtil:
         if not voices:
             return "", ""
         index = voice_selection_index % len(voices)
-        entry = project.voice_references[index]
-        if ProjectVoiceUtil.get_crop_range(entry) is not None:
-            cropped_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry)
+        voice = project.voice_references[index]
+        if voice.crop is not None:
+            cropped_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice)
             if os.path.isfile(cropped_path):
-                return ProjectVoiceUtil.get_cropped_voice_relative_path(entry), entry.get("crop_transcript", "")
+                return voice.crop.relative_path, voice.crop.transcript
             # Cropped file missing (manually deleted, partial copy): fall back
             # to the original rather than blocking generation. Pre-flight
             # validation surfaces this as a problem to fix.
@@ -240,11 +244,10 @@ class ProjectVoiceUtil:
         owner excludes that whole list. Secondary edits exclude only emo_voice.
         """
         used: set[str] = {
-            ProjectVoiceUtil.get_cropped_voice_relative_path(entry) for entry in project.voice_references
-            if ProjectVoiceUtil.get_crop_range(entry) is not None
+            voice.crop.relative_path for voice in project.voice_references if voice.crop is not None
         }
         if exclude_owner is None:
-            used.update(entry["file_name"] for entry in project.voice_references)
+            used.update(voice.file_name for voice in project.voice_references)
         emo_voice = project.get_model_setting("indextts2_local", "emo_voice")
         if not exclude_secondary and emo_voice:
             used.add(emo_voice)
@@ -261,7 +264,6 @@ class ProjectVoiceUtil:
             append: bool=False,
     ) -> str:
         # Imports never enter the application's managed crop namespace.
-        from tts_audiobook_tool.project_support.voice_reference_migration import VOICE_CROP_SUBDIR
         stem_parts = path_norm.split_relative(voice_file_stem)
         if len(stem_parts) > 1 and stem_parts[0].casefold() == VOICE_CROP_SUBDIR:
             return "Voice samples cannot be imported into the managed trim directory"
@@ -299,8 +301,9 @@ class ProjectVoiceUtil:
         else:
             if binding is None:
                 raise ValueError(f"Unsupported tts type {tts_type}")
-            entry = {"file_name": dest_file_name, "transcript": transcript}
-            project.voice_references = project.voice_references + [entry] if append else [entry]
+            # A new voice: room reverb defaults to off.
+            voice = Voice(file_name=dest_file_name, transcript=transcript)
+            project.voice_references = project.voice_references + [voice] if append else [voice]
 
         if tts_type.id == "pocket_local":
             project.set_model_setting('pocket_local', 'predefined_voice', "")
@@ -355,7 +358,27 @@ class ProjectVoiceUtil:
         if index < 0 or index >= len(project.voice_references):
             raise IndexError(f"Voice sample index out of range: {index}")
         entries = list(project.voice_references)
-        entries[index] = {**entries[index], "transcript": transcript}
+        entries[index] = replace(entries[index], transcript=transcript)
+        project.voice_references = entries
+        return project.save()
+
+    @staticmethod
+    def set_voice_room_reverb_at_index_and_save(project: Project, index: int, room_reverb: RoomReverb) -> str:
+        """Set one entry's room reverb preset."""
+        if index < 0 or index >= len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        entries = list(project.voice_references)
+        entries[index] = replace(entries[index], room_reverb=room_reverb)
+        project.voice_references = entries
+        return project.save()
+
+    @staticmethod
+    def set_voice_pan_at_index_and_save(project: Project, index: int, pan: float) -> str:
+        """Set one entry's stereo position (-1 full left to 1 full right)."""
+        if index < 0 or index >= len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        entries = list(project.voice_references)
+        entries[index] = replace(entries[index], pan=pan)
         project.voice_references = entries
         return project.save()
 
@@ -364,8 +387,12 @@ class ProjectVoiceUtil:
         """Edit one entry's crop transcript (the cropped span's transcript)."""
         if index < 0 or index >= len(project.voice_references):
             raise IndexError(f"Voice sample index out of range: {index}")
+        voice = project.voice_references[index]
+        if voice.crop is None:
+            # Nothing to annotate: a crop transcript belongs to an active crop.
+            return ""
         entries = list(project.voice_references)
-        entries[index] = {**entries[index], "crop_transcript": transcript}
+        entries[index] = replace(voice, crop=replace(voice.crop, transcript=transcript))
         project.voice_references = entries
         return project.save()
 
@@ -378,28 +405,27 @@ class ProjectVoiceUtil:
         target = normalized(crop_path)
         # Include this entry's original too: corrupt crop metadata must not
         # grant permission to overwrite its own source file.
-        original_names = {entry["file_name"] for entry in project.voice_references}
+        original_names = {voice.file_name for voice in project.voice_references}
         secondary = project.get_model_setting("indextts2_local", "emo_voice")
         if secondary:
             original_names.add(secondary)
         for name in original_names:
             if normalized(ProjectVoiceUtil.resolve_voice_file_path(project, name)) == target:
                 return True
-        for other_index, entry in enumerate(project.voice_references):
-            if other_index != index and ProjectVoiceUtil.get_crop_range(entry) is not None:
-                if normalized(ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry)) == target:
+        for other_index, voice in enumerate(project.voice_references):
+            if other_index != index and voice.crop is not None:
+                if normalized(ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice)) == target:
                     return True
         return False
 
     @staticmethod
     def _allocate_crop_file(project: Project, index: int) -> tuple[str, str]:
         """Reserve a fresh unique path; unrelated existing files are never reused."""
-        from tts_audiobook_tool.project_support.voice_reference_migration import VOICE_CROP_SUBDIR
         crop_dir = Path(ProjectVoiceUtil.get_voice_dir_path(project)) / VOICE_CROP_SUBDIR
         crop_dir.mkdir(parents=True, exist_ok=True)
         while True:
             crop_file_name = f"{uuid.uuid4().hex}.flac"
-            crop_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, {"crop_file_name": crop_file_name})
+            crop_path = ProjectVoiceUtil.resolve_crop_file_path(project, crop_file_name)
             if ProjectVoiceUtil._crop_path_is_shared(project, index, crop_path):
                 continue
             try:
@@ -435,11 +461,8 @@ class ProjectVoiceUtil:
             )
 
         from tts_audiobook_tool.sound.sound_util import SoundUtil
-        from tts_audiobook_tool.project_support.voice_reference_migration import (
-            format_crop_seconds,
-        )
 
-        file_name = project.voice_references[index]["file_name"]
+        file_name = project.voice_references[index].file_name
         source_path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
         sound_result = SoundFileUtil.load(source_path)
         if isinstance(sound_result, str):
@@ -467,9 +490,9 @@ class ProjectVoiceUtil:
                 "adjust the range to include more audio"
             )
 
-        entry = project.voice_references[index]
-        crop_file_name = entry.get("crop_file_name") if ProjectVoiceUtil.get_crop_range(entry) is not None else None
-        cropped_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry) if crop_file_name else ""
+        voice = project.voice_references[index]
+        crop_file_name = voice.crop.file_name if voice.crop is not None else None
+        cropped_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice) if crop_file_name else ""
         if cropped_path and ProjectVoiceUtil._crop_path_is_shared(project, index, cropped_path):
             # A malformed/shared entry gets its own new crop rather than
             # overwriting an original, emotion clip, or another entry's crop.
@@ -509,13 +532,9 @@ class ProjectVoiceUtil:
                         pass
 
         entries = list(project.voice_references)
-        entries[index] = {
-            **entries[index],
-            "crop_file_name": crop_file_name,
-            "crop_start": format_crop_seconds(start_s),
-            "crop_end": format_crop_seconds(end_s),
-            "crop_transcript": crop_transcript,
-        }
+        entries[index] = replace(entries[index], crop=VoiceCrop(
+            file_name=crop_file_name, start=start_s, end=end_s, transcript=crop_transcript,
+        ))
         project.voice_references = entries
         return project.save()
 
@@ -529,18 +548,16 @@ class ProjectVoiceUtil:
         if index < 0 or index >= len(project.voice_references):
             raise IndexError(f"Voice sample index out of range: {index}")
 
-        from tts_audiobook_tool.project_support.voice_reference_migration import CROP_FIELDS
-
-        entry = project.voice_references[index]
+        voice = project.voice_references[index]
         cropped_path = ""
-        if ProjectVoiceUtil.get_crop_range(entry) is not None:
-            candidate = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry)
+        if voice.crop is not None:
+            candidate = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice)
             if not ProjectVoiceUtil._crop_path_is_shared(project, index, candidate):
                 cropped_path = candidate
 
         previous_entries = project.voice_references
         entries = list(previous_entries)
-        entries[index] = {k: v for k, v in entry.items() if k not in CROP_FIELDS}
+        entries[index] = replace(voice, crop=None)
         project.voice_references = entries
         save_error = project.save()
         if save_error:

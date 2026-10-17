@@ -212,7 +212,7 @@ class ConversationRuntime:
         )
         # Stereo only for the room reverb stereo effect (the response engine
         # applies the reverb; its channel count follows the stream's)
-        room_reverb = self.project.room_reverb
+        room_reverb = self.project.get_voice_chat_room_reverb()
         has_reverb = room_reverb.design is not None and room_reverb.drr_db is not None
         channels = 2 if has_reverb and self.project.room_reverb_stereo.is_stereo else 1
         opened_stream, output_warning = open_chat_output_stream(sample_rate, channels)

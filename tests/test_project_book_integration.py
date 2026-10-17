@@ -7,7 +7,8 @@ from unittest.mock import patch
 from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SectionMarkerMode, SegmentationStrategy, SttVariant, VoiceSelectMode
 from tts_audiobook_tool.app_types.book_serialization import book_to_project_text_json_dict
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
+from tts_audiobook_tool.app_types.voice import Voice
+from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_SPEC_VERSION, PROJECT_TEXT_FILE_NAME
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
@@ -178,7 +179,7 @@ class TestProjectBookIntegration(unittest.TestCase):
                 })
                 self.assertEqual(get_setting(project, "fish_s1_voice_file_name"), [name])
                 self.assertEqual(get_setting(project, "glm_voice_file_name"), [name])
-                self.assertEqual(project.voice_references, [{"file_name": name, "transcript": transcript}])
+                self.assertEqual(project.voice_references, [Voice(name, transcript)])
 
     def test_project_model_validate_tolerates_malformed_legacy_voice_lists(self):
         # Legacy flat fields were permissively flattened on load: non-string
@@ -188,8 +189,8 @@ class TestProjectBookIntegration(unittest.TestCase):
             "moss_voice_transcript": ["one", None, "two"],
         })
         self.assertEqual(project.voice_references, [
-            {"file_name": "one.flac", "transcript": "one"},
-            {"file_name": "two.flac", "transcript": "two"},
+            Voice("one.flac", "one"),
+            Voice("two.flac", "two"),
         ])
 
     def test_project_model_validate_collects_warnings_only_with_explicit_context(self):
@@ -242,8 +243,10 @@ class TestProjectBookIntegration(unittest.TestCase):
             with self.subTest(count=count):
                 project = Project(voice_references=references[:count])
                 payload = ProjectSerializationUtil.to_project_json_dict(project)
-                self.assertEqual(payload["version"], 4)
-                self.assertEqual(payload["voice_references"], references[:count])
+                self.assertEqual(payload["version"], PROJECT_SPEC_VERSION)
+                self.assertEqual(payload["voice_references"], [
+                    {**reference, "room_reverb": "off"} for reference in references[:count]
+                ])
                 for obj in payload["model_settings"]["shared"].values():
                     self.assertNotIn("voice_references", obj)
 

@@ -1,6 +1,6 @@
 """
-Room reverb: the streaming processor, the `room_reverb` project setting, and
-its concat wiring.
+Room reverb: the streaming processor, the per-voice `room_reverb` setting (and
+project-wide `room_reverb_stereo`), and its concat wiring.
 """
 
 from typing import Any
@@ -11,6 +11,7 @@ import pytest
 
 from tts_audiobook_tool.app_types import HighShelfEq, RoomReverb, RoomReverbStereo, Sound
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -123,7 +124,7 @@ def run_concat(
         phrases: list[Phrase], sounds: list[np.ndarray], room_reverb: RoomReverb, effect_level: float = EFFECT_LEVEL,
         room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO, init_stream: MagicMock | None = None,
         voice_pans: list[float] | None = None, stereo_required: bool = False,
-        paths: list[str] | None = None,
+        paths: list[str] | None = None, voice_reverbs: list[RoomReverb] | None = None,
 ) -> list[np.ndarray]:
     """
     Runs the concat flow with real pauses (0.4 s, or a constant 0.2 s "effect"
@@ -160,6 +161,7 @@ def run_concat(
             room_reverb=room_reverb,
             room_reverb_stereo=room_reverb_stereo,
             voice_pans=voice_pans,
+            voice_reverbs=voice_reverbs,
             stereo_required=stereo_required,
         )
     return streamed
@@ -197,6 +199,74 @@ class TestConcatFlow:
         for sound, out in zip(sounds, streamed):
             assert np.array_equal(out[:len(sound)], sound)
             assert energy(out[len(sound):]) == 0.0
+
+
+class TestConcatPerVoiceRooms:
+    """Each segment's narration feeds its own voice's room; all rooms keep decaying."""
+
+    PHRASES = [Phrase("One.", Reason.SENTENCE), Phrase("Two.", Reason.SENTENCE)]
+
+    @staticmethod
+    def segment(sound: np.ndarray) -> np.ndarray:
+        return np.concatenate([sound, np.zeros(round(PAUSE_S * SR), dtype=np.float32)])
+
+    def test_output_is_dry_plus_each_room_fed_only_its_voices_narration(self) -> None:
+        sounds = [noise(0.5, i) for i in range(2)]
+        streamed = run_concat(self.PHRASES, sounds, RoomReverb.OFF,
+                              voice_reverbs=[RoomReverb.SMALL_DRR22, RoomReverb.MEDIUM_DRR21])
+        # Reverb is linear: build the expected mix from two independent rooms
+        room_a = RoomReverbProcessor(SR, "small", 22.0)
+        room_b = RoomReverbProcessor(SR, "medium", 21.0)
+        seg0, seg1 = (Sound(self.segment(x), SR) for x in sounds)
+        expected0 = seg0.data + room_a.process_wet(seg0, send_end=len(sounds[0]))
+        expected1 = (seg1.data
+                     + room_a.process_wet(seg1, send_end=0, is_last=True)
+                     + room_b.process_wet(seg1, send_end=len(sounds[1]), is_last=True))
+        np.testing.assert_allclose(streamed[0], expected0, atol=1e-6)
+        np.testing.assert_allclose(streamed[1], expected1, atol=1e-6)
+
+    def test_previous_voices_tail_continues_under_a_dry_voice(self) -> None:
+        sounds = [noise(0.5, i) for i in range(2)]
+        streamed = run_concat(self.PHRASES, sounds, RoomReverb.OFF,
+                              voice_reverbs=[RoomReverb.MEDIUM_DRR21, RoomReverb.OFF])
+        tail_under_voice_two = streamed[1][:SR // 20] - sounds[1][:SR // 20]
+        assert energy(tail_under_voice_two) > 0
+
+    def test_dry_voices_narration_feeds_no_room(self) -> None:
+        # Changing the dry voice's audio changes the output by exactly that audio
+        first = noise(0.5, 0)
+        outs = [run_concat(self.PHRASES, [first, noise(0.5, seed)], RoomReverb.OFF,
+                           voice_reverbs=[RoomReverb.MEDIUM_DRR21, RoomReverb.OFF])
+                for seed in (1, 2)]
+        wet = [out[1] - self.segment(noise(0.5, seed)) for out, seed in zip(outs, (1, 2))]
+        np.testing.assert_allclose(wet[0], wet[1], atol=1e-6)
+        # ...and before any voice with reverb speaks, nothing is added at all
+        streamed = run_concat(self.PHRASES, [first, noise(0.5, 1)], RoomReverb.OFF,
+                              voice_reverbs=[RoomReverb.OFF, RoomReverb.MEDIUM_DRR21])
+        np.testing.assert_array_equal(streamed[0], self.segment(first))
+
+    def test_voices_with_the_same_preset_share_one_room(self) -> None:
+        sounds = [noise(0.5, i) for i in range(2)]
+        shared = run_concat(self.PHRASES, sounds, RoomReverb.OFF,
+                            voice_reverbs=[RoomReverb.SMALL_DRR17, RoomReverb.SMALL_DRR17])
+        single = run_concat(self.PHRASES, sounds, RoomReverb.SMALL_DRR17)
+        for a, b in zip(shared, single):
+            np.testing.assert_array_equal(a, b)
+
+    def test_any_voice_with_reverb_makes_the_output_stereo(self) -> None:
+        sounds = [noise(0.5, i) for i in range(2)]
+        init = MagicMock()
+        streamed = run_concat(self.PHRASES, sounds, RoomReverb.OFF, init_stream=init,
+                              room_reverb_stereo=RoomReverbStereo.LATE_W100,
+                              voice_reverbs=[RoomReverb.OFF, RoomReverb.SMALL_DRR22])
+        assert init.call_args.kwargs["channels"] == 2
+        # The dry first voice is centered, the same in both channels
+        np.testing.assert_array_equal(streamed[0][:, 0], streamed[0][:, 1])
+        assert not np.allclose(streamed[1][len(sounds[1]):, 0], streamed[1][len(sounds[1]):, 1])
+
+    def test_misaligned_voice_reverbs_rejected(self) -> None:
+        with pytest.raises(ValueError, match="voice_reverbs"):
+            run_concat(self.PHRASES, [noise(0.5)], RoomReverb.OFF, voice_reverbs=[RoomReverb.OFF])
 
 
 class TestConcatVoicePositioning:
@@ -336,20 +406,21 @@ def normalized(d: dict[str, Any], warnings: list[str] | None = None) -> dict[str
 
 
 class TestSetting:
+    """`room_reverb` is per voice (project spec v5); `room_reverb_stereo` is project-wide."""
 
-    def test_new_project_defaults_to_off(self) -> None:
+    def test_new_voice_defaults_to_off(self) -> None:
         assert RoomReverb.get_default() is RoomReverb.OFF
-        assert Project().room_reverb is RoomReverb.OFF
+        assert Voice("a.flac").room_reverb is RoomReverb.OFF
+        assert Project().get_voice_chat_room_reverb() is RoomReverb.OFF
 
-    def test_missing_key_normalizes_to_default_without_warning(self) -> None:
-        # Projects saved before the attribute existed must load silently
-        warnings: list[str] = []
-        d = normalized({}, warnings)
-        assert d["room_reverb"] is RoomReverb.OFF
-        assert not [w for w in warnings if "room_reverb" in w]
+    def test_missing_voice_key_loads_as_off(self) -> None:
+        d = normalized({"version": 5, "voice_references": [{"file_name": "a.flac"}]})
+        assert d["voice_references"][0].room_reverb is RoomReverb.OFF
+        assert "room_reverb" not in d
 
-    def test_unknown_id_falls_back_to_default(self) -> None:
-        assert normalized({"room_reverb": "cathedral"})["room_reverb"] is RoomReverb.OFF
+    def test_unknown_voice_id_falls_back_to_off(self) -> None:
+        d = normalized({"voice_references": [{"file_name": "a.flac", "room_reverb": "cathedral"}]})
+        assert d["voice_references"][0].room_reverb is RoomReverb.OFF
 
     def test_ids_are_unique(self) -> None:
         ids = [item.id for item in RoomReverb]
@@ -357,14 +428,40 @@ class TestSetting:
 
     def test_round_trips_through_json_dict(self) -> None:
         project = Project()
-        project.room_reverb = RoomReverb.MEDIUM_DRR21
+        project.voice_references = [Voice("a.flac", room_reverb=RoomReverb.MEDIUM_DRR21), Voice("b.flac")]
         project.room_reverb_stereo = RoomReverbStereo.ALL_W100
         saved = ProjectSerializationUtil.to_project_json_dict(project)
-        assert saved["room_reverb"] == "medium_drr21"
+        assert "room_reverb" not in saved
+        # Always written, including "off"
+        assert [ref["room_reverb"] for ref in saved["voice_references"]] == ["medium_drr21", "off"]
         assert saved["room_reverb_stereo"] == "all_w100"
         loaded = Project.model_validate(saved)
-        assert loaded.room_reverb is RoomReverb.MEDIUM_DRR21
+        assert [voice.room_reverb for voice in loaded.voice_references] == [RoomReverb.MEDIUM_DRR21, RoomReverb.OFF]
         assert loaded.room_reverb_stereo is RoomReverbStereo.ALL_W100
+
+    def test_v4_project_setting_moves_onto_every_voice(self) -> None:
+        d = normalized({
+            "version": 4, "room_reverb": "small_drr17", "room_reverb_stereo": "late_w100",
+            "voice_references": [{"file_name": "a.flac"}, {"file_name": "b.flac"}],
+        })
+        assert [voice.room_reverb for voice in d["voice_references"]] == [RoomReverb.SMALL_DRR17] * 2
+        assert "room_reverb" not in d
+        assert d["room_reverb_stereo"] is RoomReverbStereo.LATE_W100
+
+    def test_effective_reverb_is_voice_zeros(self) -> None:
+        project = Project(tts_model_type="chatterbox_local")
+        project.voice_references = [Voice("a.flac", room_reverb=RoomReverb.SMALL_DRR22),
+                                    Voice("b.flac", room_reverb=RoomReverb.MEDIUM_DRR21)]
+        assert project.get_voice_chat_room_reverb() is RoomReverb.SMALL_DRR22
+        project.voice_references = []
+        assert project.get_voice_chat_room_reverb() is RoomReverb.OFF
+
+    def test_no_reverb_while_pocket_preset_is_used(self) -> None:
+        project = Project(tts_model_type="pocket_local")
+        project.voice_references = [Voice("a.flac", room_reverb=RoomReverb.SMALL_DRR22)]
+        assert project.get_voice_chat_room_reverb() is RoomReverb.SMALL_DRR22
+        project.set_model_setting("pocket_local", "predefined_voice", "alba")
+        assert project.get_voice_chat_room_reverb() is RoomReverb.OFF
 
     def test_stereo_defaults_to_mono_silently(self) -> None:
         warnings: list[str] = []

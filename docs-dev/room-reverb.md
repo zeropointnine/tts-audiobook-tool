@@ -1,11 +1,11 @@
 # Room Reverb
 
-Last updated: 2026-10-16
+Last updated: 2026-10-17 (per-voice rooms, stereo position)
 
 ## Overview
 
-The project setting `room_reverb` ("Room reverb" in the Create menu, under Post-processing, after
-"Room tone") places the narration in a room: convolution with a synthetic room impulse response
+The per-voice setting `room_reverb` (`Voice.room_reverb`, project spec v5; it was a project setting
+in the Create menu before v5) places the narration in a room: convolution with a synthetic room impulse response
 (IR), run as one continuous pass over the whole output, so tails decay naturally across segment
 boundaries and pauses instead of resetting with each TTS segment. Concat durations and timing maps
 are unchanged. Realtime playback additionally emits the remaining room decay at run end.
@@ -28,12 +28,39 @@ energy than "Small room, moderate" yet sounds bigger). A saved id must always so
 mapped to it on load (as `fill_room_tone` was mapped to `room_tone`); changing a room design means a
 new design key. An unknown id loads as `OFF`.
 
+**Which voice's setting applies.** Each voice in `voice_references` stores its own `room_reverb`
+(always written; new voices default to `OFF`; v4 projects' project-wide value was copied onto every
+voice). In concat and realtime playback, each segment's narration goes into the room of the voice
+that spoke it (`VoiceSpatialPolicy.room_reverb_for_voice_index`):
+
+| Voice-select mode | Room used for a segment |
+|---|---|
+| User-defined | Its phrase group's `voice_index`, clamped like generation (`-1` = voice 0) |
+| Disabled | Voice 0's |
+| Auto-advance | Voice 0's (stored audio doesn't record which voice generated it) |
+
+There is no reverb with no voices, or while a Pocket predefined voice is in use. The lookup is
+independent of the selected model's voice-clone support, so existing audio keeps its rooms. If a
+line's `voice_index` changes after its audio was generated, the new voice's room is used (as for
+pan). Voice chat uses voice 0's room (`Project.get_voice_chat_room_reverb()`): chat lines have no
+assigned voice, and auto-advance rotates voices per chunk. Each voice's preset is set in its
+Voice clone submenu (select the voice sample, then Effects > Room reverb).
+
+**Several rooms in one run** (`VoiceSpatialProcessor`): one room per preset, made the first time a
+voice with that preset speaks, so voices with the same preset share one room and its tail carries
+across them. A segment's narration feeds only its voice's room; every room advances on every call,
+so a previous voice's tail keeps decaying under the next speaker (whatever their room) instead of
+cutting off. Idle rooms skip the convolution (`StreamingReverb` just plays out the stored tail). At
+the end of a realtime run every room's remaining tail is drained and mixed. Reverb is linear, so
+the output is exactly the dry signal plus each room fed only its voices' narration.
+
 ## Stereo effect
 
-The project setting `room_reverb_stereo` ("Room reverb stereo effect", shown in the menu only while
-Room reverb is on) spreads the reverb across left and right. Direct narration stays centered in
-concat, realtime playback, and voice chat. Concat and realtime retain dormant voice-positioning
-infrastructure (see below), but no app voice currently has a nonzero pan.
+The project-wide setting `room_reverb_stereo` ("Room reverb stereo effect" in the Create menu,
+under Post-processing; always shown, applies to every room, no effect on voices whose reverb is
+off) spreads the reverb across left and right. It doesn't move the direct narration: that is the
+per-voice stereo position (see below), which applies to concat and realtime playback only; voice
+chat stays centered.
 
 | `RoomReverbStereo` | id | Spread | Label |
 |---|---|---|---|
@@ -41,11 +68,12 @@ infrastructure (see below), but no app voice currently has a nonzero pan.
 | `LATE_W100` | `late_w100` | late tail, full width | Wide |
 | `ALL_W100` | `all_w100` | early reflections and late tail, full width | Wider |
 
-Ids name the processing, like `RoomReverb`'s. With reverb on and anything but `MONO`, the export is
-stereo: the reverb processor outputs `(n, 2)`, the noise bed adds the same bed to both channels
+Ids name the processing, like `RoomReverb`'s. With anything but `MONO` and reverb on for any voice
+that can be heard (any voice in user-defined mode, otherwise voice 0), the whole export is stereo,
+including dry voices' segments (centered): the reverb processor outputs `(n, 2)`, the noise bed adds the same bed to both channels
 (so room tone stays centered), and the ffmpeg stream is opened with `-ac 2`. With reverb off the
-spread setting does nothing. Stereo output is currently requested only by active stereo reverb,
-regardless of the project's voice count. Loudness normalization measures stereo per BS.1770
+spread setting does nothing. Stereo output is requested by active stereo reverb or by an
+off-center voice (see below), decided once per run for the whole project (not the selected range). Loudness normalization measures stereo per BS.1770
 (channels summed), so the target is met as before; chapters (M4B) and app metadata were checked on
 real stereo FLAC and M4B exports, and the app's own loader downmixes to mono.
 
@@ -65,18 +93,26 @@ reflections (the source of the "phasey" quality) identical in both channels.
 FLAC files are ~40-55% larger (the decorrelated reverb compresses poorly); AAC keeps its size at a
 fixed bitrate, with fewer bits per channel.
 
-## Dormant voice-positioning infrastructure (audiobook concat and realtime only)
+## Stereo position (audiobook concat and realtime only)
+
+Each voice stores a stereo position, `Voice.pan` (-1 full left to 1 full right, 0 centered;
+written to disk only when nonzero, clamped on load, a malformed value loads as centered). The UI
+("Stereo position", the first Effects item of the voice sample submenu, before Room reverb)
+prompts for -100 to 100, stored as hundredths, and displays `Center`, `Left 30`, `Right 30`.
 
 Direct narration uses center-unity equal-power panning: `theta = (pan + 1) * pi/4`,
 `L = sqrt(2)*cos(theta)`, `R = sqrt(2)*sin(theta)`. Center therefore preserves the existing
-unit gain in both channels and the existing dry/reverb balance. The shared lookup currently returns
-zero for every voice index: the app cannot activate positioning, and the former index-1 `+0.25`
-mapping has been removed. DSP and both rendering integrations remain available for future use.
-User-defined voice selections are clamped to available voices using the same rule as generation;
-default `-1` selects voice zero.
-Disabled voice selection stays centered. Auto-advance also stays centered: saved phrase metadata
-does not identify the voice actually used in that mode, and guessing from render order would make
-export and realtime disagree. Per-voice configuration/UI and persisted auto-advance identity are deferred.
+unit gain in both channels and the existing dry/reverb balance.
+`VoiceSpatialPolicy.pan_for_voice_index` picks the speaking voice like the room lookup:
+
+| Voice-select mode | Stereo position used for a segment |
+|---|---|
+| User-defined | Its phrase group's `voice_index`'s, clamped like generation (`-1` = voice 0) |
+| Disabled | Voice 0's |
+| Auto-advance | Centered: saved phrase metadata does not identify the voice actually used, and guessing from render order would make export and realtime disagree (the menu item notes "No effect") |
+
+Like rooms, positions are independent of the selected model's voice-clone support, and all centered
+while a Pocket predefined voice is in use.
 
 Pan is applied on a parallel direct path, not to the reverb input or the completed room output.
 Reverb always receives the same mono narration regardless of pan. Its wet-only signal is added to
@@ -85,16 +121,18 @@ Appended break effects remain dry and centered; room tone remains centered. At e
 reflections can still be heard in the ear receiving no direct speech. Position-dependent room
 responses/early reflections are deliberately not modeled.
 
-The shared policy can request stereo if any available project voice has nonzero pan, or if stereo
-reverb is active. Since all voice pans are currently zero, only active stereo reverb requests stereo.
-This is independent of the selected output range; channels never switch per segment. Stereo output
+The shared policy requests stereo if any voice that can be heard (by the table above) is off-center,
+or if stereo reverb is active. This is independent of the selected output range; channels never switch per segment. Stereo output
 does not itself turn on reverb spread. Actual mono
 playback after device fallback retains original mono speech/reverb, rather than folding down pan
 gains. Voice chat is excluded from the voice-pan policy.
 
-The boosted-side gain can exceed unity (`+0.25`: approximately 0.786 left, 1.176 right). DSP sums
-floating-point dry and wet signals before clipping safety checks; downstream export normalization
-preserves channel balance. No per-channel normalization is applied.
+The boosted-side gain can exceed unity (`+0.25`: approximately 0.786 left, 1.176 right; `+0.3`:
+about +1.6 dB; full pan: +3 dB). DSP sums floating-point dry and wet signals and then hard-clips at
+±1 before the 16-bit stream, so loud peaks of a strongly panned voice can clip; this is accepted
+(a balance law that only attenuates the far side was considered, but would make panned voices
+quieter than centered ones). Downstream export normalization preserves channel balance. No
+per-channel normalization is applied.
 
 ## Signal chain
 
@@ -106,21 +144,21 @@ Per held segment in concat (`ConcatUtil.concatenate_sound_segments`, `flush_pend
       -> room tone noise bed
       -> ffmpeg stream -> loudness normalization (whole file) -> metadata
 
-- **Narration only:** `apply(sound, send_end=narration_end)` feeds only the segment into the
-  reverb; the appended pause or break effect passes through dry, with the earlier tail still
-  decaying underneath. So break sound effects aren't reverberated.
+- **Narration only:** `apply(sound, send_end=narration_end, room_reverb=...)` feeds only the
+  segment into its voice's room; the appended pause or break effect passes through dry, with every
+  room's tail still decaying underneath. So break sound effects aren't reverberated.
 - **Before room tone:** the noise bed isn't reverberated.
 - **End:** the tail beyond the output's last sample is dropped; with `is_last`, the reverb (not the
   dry signal) fades over the last 50 ms. The output always ends in the final segment's pause, so
   this rarely matters.
 
-**Realtime playback** applies the same settings in the same order: the segment, then its pause or
-break effect (`send_end=0`), are fed in turn; `realtime_save` files include the reverb. With the
+**Realtime playback** applies the same settings in the same order: the segment (into its voice's
+room), then its pause or break effect (`send_end=0`, feeding no room), are fed in turn; `realtime_save` files include the reverb. With the
 project requesting stereo from active reverb spread, the output stream (`SoundDeviceStream(channels=2)`, whose buffer then holds
 `(n, 2)` frames; sample counts and positions stay in frames) and saved files are stereo. The stream
 is opened before the reverb processor is created (`open_output_stream`): if the device can't open in
-stereo, playback falls back to mono with a warning in the content area, and the reverb is the plain
-mono preset.
+stereo, playback falls back to mono with a warning in the content area, and the rooms are the plain
+mono presets.
 
 At the end of a realtime run, `VoiceSpatialProcessor.drain_tail()` consumes the remaining finite
 convolution tail and emits it after the last submitted audio. Speech is no longer marked with the
@@ -133,7 +171,7 @@ existing endpoint behavior; realtime draining cannot recover ambience already cu
 TTS source audio. An output-buffer underrun while waiting for generation can still interrupt audio;
 this change finalizes completed runs rather than synthesizing audio in the device callback.
 
-**Voice chat** (`conversation/`) applies the same settings; no room tone. The output stream is
+**Voice chat** (`conversation/`) applies voice 0's room and the stereo effect; no room tone. The output stream is
 opened once per session (`ConversationRuntime.initialize`, `open_chat_output_stream`): stereo with
 the stereo effect on, falling back to mono with a warning in the transcript. The reverb processor
 is made per turn (`_ResponseEngine.get_room_reverb`, lazily on the TTS worker thread), not per
@@ -200,10 +238,13 @@ cancelling on), level-matched by loudness normalization, using
 ## Tests
 
 [`tests/test_room_reverb.py`](../tests/test_room_reverb.py) (IR, streaming continuity, DRR,
-dry break effects, stereo IRs and mono fold-down, stereo concat wiring, setting load/save); menu in
+dry break effects, stereo IRs and mono fold-down, stereo concat wiring, per-voice rooms in concat
+(`TestConcatPerVoiceRooms`), setting load/save); several rooms in
+[`tests/test_voice_spatial.py`](../tests/test_voice_spatial.py); which voice's room and stereo in
+[`tests/test_voice_spatial_policy.py`](../tests/test_voice_spatial_policy.py); menu in
 [`tests/test_concat_menu.py`](../tests/test_concat_menu.py); realtime in
 [`tests/test_real_time_playback_app.py`](../tests/test_real_time_playback_app.py)
-(`test_realtime_save_writes_exactly_what_was_played`).
+(`test_realtime_save_writes_exactly_what_was_played`, `test_realtime_uses_each_segments_voice_room`).
 
 ## Open questions
 

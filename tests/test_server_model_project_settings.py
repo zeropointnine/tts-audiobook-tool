@@ -30,7 +30,7 @@ def test_higgs_v3_server_spec_and_project_voice_fields():
     model = payload["model_settings"]["models"]["higgs_v3_sglomni"]
     # V4: one project-wide list, no scoped clone storage.
     assert payload["voice_references"] == [
-        {"file_name": "voice.flac", "transcript": "reference transcript"}
+        {"file_name": "voice.flac", "transcript": "reference transcript", "room_reverb": "off"}
     ]
     assert "voice_references" not in model
     assert "higgs_v3_voice_target" not in payload["model_settings"]
@@ -56,7 +56,7 @@ def test_fish_s2_server_spec_uses_project_voice_fields():
 
     payload = ProjectSerializationUtil.to_project_json_dict(project)
     assert payload["voice_references"] == [
-        {"file_name": "voice.flac", "transcript": "reference transcript"}
+        {"file_name": "voice.flac", "transcript": "reference transcript", "room_reverb": "off"}
     ]
     assert "fish_s2" not in payload["model_settings"]["shared"]
     for model_id in (local_info.id, server_info.id):
@@ -100,7 +100,7 @@ def test_zonos2_project_fields_normalize_and_serialize():
 
     payload = ProjectSerializationUtil.to_project_json_dict(project)
     model = payload["model_settings"]["models"]["zonos2_sglomni"]
-    assert payload["voice_references"] == [{"file_name": "voice.flac", "transcript": ""}]
+    assert payload["voice_references"] == [{"file_name": "voice.flac", "transcript": "", "room_reverb": "off"}]
     assert "voice_references" not in model
     # Zonos2 declares no transcript storage.
     assert "zonos2_voice_transcript" not in payload["model_settings"]

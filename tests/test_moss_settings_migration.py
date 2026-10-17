@@ -4,7 +4,9 @@ import json
 
 import pytest
 
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.constants import PROJECT_SPEC_VERSION
 from tts_audiobook_tool.project_support.model_settings import ModelSettingsRegistry, REGISTRY
 from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
@@ -22,6 +24,7 @@ SAMPLING = {
 }
 REFERENCES = [{"file_name": "one.flac", "transcript": "one"},
               {"file_name": "two.flac", "transcript": ""}]
+VOICES = [Voice(**ref) for ref in REFERENCES]
 
 
 def old_source():
@@ -106,7 +109,7 @@ def test_private_voice_list_seed_and_orchestration_win_without_merging():
     # settings still win over the shared group's.
     source["shared"]["moss"].pop("voice_references")
     project = Project.model_validate({"version": 3, "model_settings": source})
-    assert project.voice_references == new_references
+    assert project.voice_references == [Voice(**ref) for ref in new_references]
     assert project.get_model_setting("moss_delay_sglomni", "seed") == -1
     assert project.get_model_setting("moss_delay_sglomni", "batch_size") == 1
 
@@ -135,7 +138,7 @@ def test_flat_moss_fields_and_aliases_fork_with_private_target_and_continuation(
             if (model_id, name) in REGISTRY.bindings:
                 assert project.get_model_setting(model_id, name) == value
     # The flat list is one source even though three models historically read it.
-    assert project.voice_references == REFERENCES
+    assert project.voice_references == VOICES
     saved = ProjectSerializationUtil.to_project_json_dict(project)
     assert "moss" not in saved["model_settings"]["shared"]
     assert not any(key.startswith("moss_") for key in saved)
@@ -218,7 +221,7 @@ def test_stored_private_seed_forks_to_per_preset_seeds():
 
 def test_edits_and_resets_after_fork_are_independent_and_do_not_resurrect():
     project = Project.model_validate({"version": 3, "model_settings": old_source()})
-    assert project.voice_references == REFERENCES
+    assert project.voice_references == VOICES
     assert project.get_model_setting("moss_delay_sglomni", "transcript") == ["one", ""]
     project.set_model_setting("moss_local", "local_seed", 123)
     project.set_model_setting("moss_local", "batch_size", 1)
@@ -322,7 +325,7 @@ def test_snapshot_migration_round_trip_and_portable_voice_paths():
 
 def test_disk_worker_load_migrates_and_saves_v4_with_backup(tmp_path):
     # Workers and interactive loading use this same on-disk load funnel, which
-    # now migrates the retired MOSS group and the voice list and saves v4.
+    # now migrates the retired MOSS group and the voice list and saves the current version.
     payload = ProjectSerializationUtil.to_project_json_dict(Project(tts_model_type="moss_delay_sglomni"))
     for model_id in IDS:
         payload["model_settings"]["models"].pop(model_id)
@@ -336,12 +339,12 @@ def test_disk_worker_load_migrates_and_saves_v4_with_backup(tmp_path):
     assert isinstance(project, Project)
     assert project.tts_model_type == "moss_delay_sglomni"
     assert project.get_model_setting("moss_delay_sglomni", "delay_top_k") == 32
-    assert project.voice_references == REFERENCES
-    assert (tmp_path / "project.json.pre-v4.bak").read_text(encoding="utf-8") == before
+    assert project.voice_references == VOICES
+    assert (tmp_path / "project.json.pre-v5.bak").read_text(encoding="utf-8") == before
     saved = json.loads(path.read_text(encoding="utf-8"))
-    assert saved["version"] == 4
+    assert saved["version"] == PROJECT_SPEC_VERSION
     assert "moss" not in saved["model_settings"]["shared"]
-    assert saved["voice_references"] == REFERENCES
+    assert saved["voice_references"] == [voice.to_dict() for voice in VOICES]
     restored = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(restored, Project)
     assert restored.model_settings.to_dict() == project.model_settings.to_dict()

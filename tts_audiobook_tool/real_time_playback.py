@@ -43,7 +43,6 @@ from tts_audiobook_tool.real_time_playback_events import (
 )
 from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPhase, ModelUnhealthy
 from tts_audiobook_tool.sound.noise_bed import NoiseBed
-from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor
 from tts_audiobook_tool.sound.voice_spatial import VoiceSpatialProcessor
 from tts_audiobook_tool.project_support.voice_spatial_policy import VoiceSpatialPolicy
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
@@ -190,10 +189,7 @@ def _start_impl(
     # Snapshot the whole project's channel policy, independent of this range.
     # One spatial/room processor per run, created after device fallback.
     spatial_policy = VoiceSpatialPolicy.from_project(state.project)
-    room_reverb = state.project.room_reverb
-    room_reverb_stereo = state.project.room_reverb_stereo
     spatial: VoiceSpatialProcessor | None = None
-    has_reverb = room_reverb.design is not None and room_reverb.drr_db is not None
     # Keep only the latest successful save pending: a later failure/cancel can
     # make it the final segment, whose artifact must include the drained room.
     pending_save = None
@@ -333,19 +329,16 @@ def _start_impl(
                     s,
                 )
 
-        # Pan narration's direct path only. Effects stay centered/dry while
-        # advancing the same room tail. Stereo output never enables room spread.
+        # Pan narration's direct path only, and feed it to its voice's room.
+        # Effects stay centered/dry while advancing every room's tail. Stereo
+        # output never enables room spread; mono fallback gets mono rooms.
         if spatial is None:
-            reverb = (
-                RoomReverbProcessor(
-                    sound.sr, room_reverb.design, room_reverb.drr_db,
-                    width=room_reverb_stereo.width if stream.channels == 2 else 0.0,
-                    spread_early=room_reverb_stereo.spread_early,
-                ) if has_reverb else None
+            spatial = VoiceSpatialProcessor(
+                channels=stream.channels, room_reverb_stereo=spatial_policy.room_reverb_stereo,
             )
-            spatial = VoiceSpatialProcessor(channels=stream.channels, reverb=reverb)
         sound = spatial.apply(
             sound, pan=spatial_policy.pan_for_voice_index(phrase_group.voice_index),
+            room_reverb=spatial_policy.room_reverb_for_voice_index(phrase_group.voice_index),
         )
         if appended_sound is not None:
             appended_sound = spatial.apply(

@@ -11,6 +11,7 @@ import pytest
 from catalog_toml_support import read_catalog
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
 from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
@@ -391,7 +392,7 @@ def test_sampling_and_voices_remain_private_and_roundtrip_without_pinning_defaul
     for owner in (*IDS, "moss_local", "moss_delay_sglomni"):
         for binding in REGISTRY.for_model(owner):
             assert restored.get_model_setting(owner, binding.name) == project.get_model_setting(owner, binding.name)
-    assert restored.voice_references == [{"file_name": "shared.flac", "transcript": ""}]
+    assert restored.voice_references == [Voice(file_name="shared.flac")]
     for owner, prefix in zip(IDS, ("delay", "local")):
         parameter = definition(owner).parameters[f"{prefix}_top_p"]
         assert AudioCppSettings.get(restored, parameter) == parameter.default

@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from tts_audiobook_tool.app_types import Sound, SttVariant
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.constants import APP_SAMPLE_RATE
 from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
@@ -42,6 +43,10 @@ def references():
     ]
 
 
+def as_voices(refs):
+    return [Voice(**ref) for ref in refs]
+
+
 def model(model_id="mira_local"):
     return TtsModelType.require_by_id(model_id)
 
@@ -65,14 +70,14 @@ def test_models_read_identical_pairs_even_without_transcript_capability(model_id
     )
     detached = ProjectVoiceUtil.get_voice_values(project, model(model_id))
     detached.clear()
-    assert project.voice_references == references()
+    assert project.voice_references == as_voices(references())
 
 
 def test_append_non_transcript_model_stores_text_and_disambiguates_shared_sample(tmp_path, monkeypatch):
     project = Project(dir_path=str(tmp_path), voice_references=references())
     monkeypatch.setattr(SoundFileUtil, "save_flac", lambda *_: "")
     assert not ProjectVoiceUtil.set_voice_and_save(project, sound(), "a", "New text.", model(), append=True)
-    assert project.voice_references == references() + [{"file_name": "a_2.flac", "transcript": "New text."}]
+    assert project.voice_references == as_voices(references() + [{"file_name": "a_2.flac", "transcript": "New text."}])
     assert ProjectVoiceUtil.get_voice_transcript_values(project, model("dots_local"))[-1] == "New text."
 
 
@@ -80,7 +85,7 @@ def test_replacement_from_another_model_uses_same_list(tmp_path, monkeypatch):
     project = Project(dir_path=str(tmp_path), voice_references=references())
     monkeypatch.setattr(SoundFileUtil, "save_flac", lambda *_: "")
     assert not ProjectVoiceUtil.set_voice_and_save(project, sound(), "a", "Replacement", model())
-    assert project.voice_references == [{"file_name": "a.flac", "transcript": "Replacement"}]
+    assert project.voice_references == as_voices([{"file_name": "a.flac", "transcript": "Replacement"}])
     assert ProjectVoiceUtil.get_voice_values(project, model("dots_local")) == ["a.flac"]
 
 
@@ -90,7 +95,7 @@ def test_remove_atomically_preserves_remaining_pairs(index):
     assert ProjectVoiceUtil.remove_voice_at_index_and_save(project, model(), index) == references()[index]["file_name"]
     expected = references()
     expected.pop(index)
-    assert project.voice_references == expected
+    assert project.voice_references == as_voices(expected)
 
 
 @pytest.mark.parametrize("index", [-1, 3])
@@ -98,7 +103,7 @@ def test_bad_remove_index_does_not_modify_list(index):
     project = Project(voice_references=references())
     with pytest.raises(IndexError):
         ProjectVoiceUtil.remove_voice_at_index_and_save(project, model(), index)
-    assert project.voice_references == references()
+    assert project.voice_references == as_voices(references())
 
 
 def test_edit_transcript_is_capability_independent_and_pair_preserving():
@@ -106,7 +111,7 @@ def test_edit_transcript_is_capability_independent_and_pair_preserving():
     assert not ProjectVoiceUtil.set_voice_transcript_at_index_and_save(project, 1, "Updated text")
     expected = references()
     expected[1]["transcript"] = "Updated text"
-    assert project.voice_references == expected
+    assert project.voice_references == as_voices(expected)
 
 
 def test_secondary_set_and_clear_never_touch_shared_list(tmp_path, monkeypatch):
@@ -116,10 +121,10 @@ def test_secondary_set_and_clear_never_touch_shared_list(tmp_path, monkeypatch):
         project, sound(), "a", "Ignored secondary text", model("indextts2_local"), is_secondary=True
     )
     assert project.get_model_setting("indextts2_local", "emo_voice") == "a_2.flac"
-    assert project.voice_references == references()
+    assert project.voice_references == as_voices(references())
     ProjectVoiceUtil.clear_voice_and_save(project, model("indextts2_local"), is_secondary=True)
     assert project.get_model_setting("indextts2_local", "emo_voice") == ""
-    assert project.voice_references == references()
+    assert project.voice_references == as_voices(references())
 
 
 
@@ -138,7 +143,7 @@ def test_pocket_preset_selection_retains_shared_list(monkeypatch):
     monkeypatch.setattr(voice_pocket_menu.MenuUtil, "options_menu", lambda **kwargs: captured.update(kwargs))
     voice_pocket_menu.select_predefined_voice(state)
     captured["on_select"]("alba")
-    assert project.voice_references == references()
+    assert project.voice_references == as_voices(references())
     voice_pocket_menu.select_predefined_voice(state)
     assert captured["current_value"] == "alba"
     assert PocketBaseModel.get_primary_voice_value(project) == "alba"
@@ -159,7 +164,7 @@ def test_pocket_preset_selection_retains_shared_list(monkeypatch):
     assert display is not None
     assert "alba" in str(display) and "+2" not in str(display)
     voice_pocket_menu.clear_predefined_voice(state)
-    assert project.voice_references == references()
+    assert project.voice_references == as_voices(references())
     assert PocketBaseModel.get_primary_voice_value(project) == "a.flac"
     assert Tts.get_voice_value_count(project) == 3
     assert Tts.get_voice_tag_for_selection_index(project, 2) == "c"
@@ -176,17 +181,18 @@ def test_pocket_removing_shared_list_does_not_clear_preset():
 def test_transcript_menu_edits_selected_pair_for_model_without_requirement(monkeypatch):
     project = Project(tts_model_type="mira_local", voice_references=references())
     state = cast(State, SimpleNamespace(project=project))
-    answers = iter(["2", "Edited Reference."])
     inputs = []
     def ask_input(**kwargs):
         inputs.append(kwargs)
-        return next(answers)
+        return "Edited Reference."
     monkeypatch.setattr(voice_menu_shared.ask, "ask_input", ask_input)
     monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *_: None)
-    VoiceMenuShared.edit_voice_sample_transcript(state)
+    # The sample is chosen in the menu, so the index is passed in (no number prompt).
+    VoiceMenuShared.edit_voice_sample_transcript(state, 1)
+    assert len(inputs) == 1
     expected = references()
     expected[1]["transcript"] = "Edited Reference."
-    assert project.voice_references == expected
+    assert project.voice_references == as_voices(expected)
     # The transcript prompt prefilled with the current transcript.
     assert inputs[-1]["prefill"] == "Second reference."
 
@@ -208,7 +214,7 @@ def test_import_nonrequiring_model_retains_sidecar_but_secondary_ignores_it(tmp_
     monkeypatch.setattr(voice_menu_shared.Transcriber, "transcribe_to_words", lambda *_: pytest.fail("unexpected STT"))
     monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *_: None)
     VoiceMenuShared.ask_and_set_voice_file(state, model("indextts2_local" if secondary else "mira_local"), is_secondary=secondary)
-    assert project.voice_references == ([] if secondary else [{"file_name": "clip.flac", "transcript": "Sidecar text"}])
+    assert project.voice_references == as_voices([] if secondary else [{"file_name": "clip.flac", "transcript": "Sidecar text"}])
 
 
 def test_transcript_sidecar_prefers_stem_txt_and_skips_blank(tmp_path):
@@ -263,7 +269,7 @@ def test_abr_validation_migrates_single_source_without_mutating_snapshot():
     snapshot = {"version": 3, "mira_voice_file_name": ["a.flac"], "mira_voice_transcript": ["Legacy text"]}
     original = deepcopy(snapshot)
     result = ProjectTransferUtil.validate_abr_snapshot(snapshot)
-    assert result.voice_references == [{"file_name": "a.flac", "transcript": "Legacy text"}]
+    assert result.voice_references == as_voices([{"file_name": "a.flac", "transcript": "Legacy text"}])
     assert snapshot == original
 
 
@@ -273,9 +279,9 @@ def test_abr_validation_requires_explicit_choice_and_can_prompt(monkeypatch):
     with pytest.raises(VoiceReferenceMigrationRequired):
         ProjectTransferUtil.validate_abr_snapshot(snapshot)
     import tts_audiobook_tool.project_support.voice_reference_migration as migration
-    monkeypatch.setattr(migration, "choose_voice_reference_source", lambda sources, dir_name=None: next(s for s in sources if s.references[0]["file_name"] == "b.flac"))
+    monkeypatch.setattr(migration, "choose_voice_reference_source", lambda sources, dir_name=None: next(s for s in sources if s.references[0].file_name == "b.flac"))
     result = ProjectTransferUtil.validate_abr_snapshot(snapshot, prompt_on_migration=True)
-    assert result.voice_references == [{"file_name": "b.flac", "transcript": ""}]
+    assert result.voice_references == as_voices([{"file_name": "b.flac", "transcript": ""}])
     assert snapshot == original
 
 
@@ -348,11 +354,10 @@ def test_static_voice_menus_keep_entire_sample_group(monkeypatch, module_name, c
     getattr(module, f"Voice{class_name}Menu").menu(state)
 
     expected = [
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: a.flac",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: b.flac",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 3: c.flac",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
         voice_menu_shared.LABEL_VOICE_SELECTION_MODE,
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
     ]
@@ -385,7 +390,8 @@ def test_static_model_menus_never_append_shared_sample_group(monkeypatch, module
 
     assert labels
     assert any(label.startswith("Seed") for label in labels)
-    assert not any(label.startswith((voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
+    assert not any(label.startswith((voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM,
+                                     voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
                                      voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
                                      "Edit voice sample transcript",
                                      "Add/remove voice samples", "Select voice clone sample",

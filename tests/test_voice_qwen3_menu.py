@@ -12,6 +12,7 @@ from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.model_worker_protocol import TtsInspected
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_util import strip_ansi_codes
@@ -101,7 +102,7 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
     project = Project(tts_model_type="qwen3tts_local")
     project.set_model_setting("qwen3tts_local", "model_type", model_type)
     project.voice_references = [
-        {"file_name": f"voice_{i}.flac", "transcript": "Reference words."}
+        Voice(f"voice_{i}.flac", "Reference words.")
         for i in range(sample_count)
     ]
     state = cast(State, SimpleNamespace(project=project))
@@ -128,21 +129,17 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
         if unused_checkpoint:
             assert f"{voice_qwen3_menu.COL_DIM}(not used by {unused_checkpoint})" in raw_labels[0]
             assert voice_qwen3_menu.COL_ERROR not in raw_labels[0]
-    elif sample_count < 9:
-        assert rendered_labels[0] == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
+    else:
+        assert rendered_labels[0] == f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: voice_0.flac"
+    assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in rendered_labels) == (0 < sample_count < 9)
     assert not any(label.startswith(("Select Qwen3-TTS model", "Temperature", "Seed",
                                      "Add/remove voice samples")) for label in rendered_labels)
-    expected = [
-        voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
-    ]
+    expected = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(sample_count)]
+    if sample_count < 9:
+        expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE if sample_count else "Select voice clone sample")
     if sample_count > 1:
-        expected.insert(1, voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE)
         expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
-    if sample_count < 9:
-        expected.insert(0, voice_menu_shared.LABEL_ADD_VOICE_SAMPLE if sample_count else "Select voice clone sample")
     if model_type == "custom_voice":
         expected.extend(["Set speaker", "Instructions"])
     elif model_type == "voice_design":
@@ -265,7 +262,8 @@ def test_qwen_voice_instructions_keep_edit_clear_and_empty_label_semantics(monke
     edit.handler(state, edit)
     assert edits[0][0] is project
     assert edits[0][2] == SettingRef("qwen3tts_local", "instructions")
-    assert len(items) == (5 + (2 if model_type == "custom_voice" else 1) + bool(instructions))
+    # No samples: the no-samples Add item and Edit voice/line selections.
+    assert len(items) == (2 + (2 if model_type == "custom_voice" else 1) + bool(instructions))
     if instructions:
         clear = items[-1]
         assert clear.label == "Clear instructions"

@@ -597,8 +597,9 @@ def test_non_streaming_tts_applies_room_reverb(
     from tts_audiobook_tool.constants import APP_SAMPLE_RATE
 
     monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(can_stream=False))
+    # Voice chat uses voice 0's room reverb
     session = make_session(project_payload={
-        "room_reverb": room_reverb,
+        "voice_references": [{"file_name": "voice.flac", "room_reverb": room_reverb}],
         "room_reverb_stereo": room_reverb_stereo,
     })
     session.sound_stream.sample_rate = APP_SAMPLE_RATE

@@ -92,7 +92,7 @@ def show_startup_version_messages(prefs: Prefs) -> None:
     if messages:
         hint = Hint(
             "",
-            f"New features since the last time you ran {APP_NAME}:",
+            f"New features/changes:",
             "\n".join(f"- {message}" for message in messages),
         )
         hints.show_hint(hint)

@@ -635,7 +635,7 @@ For transcript-bearing results (`TranscriptResult` and subclasses), it also buil
 
 ### Sidecar format version (`SegmentTranscriptUtil.VERSION`)
 
-The sidecar has its own `version`, independent of the project settings version (`PROJECT_SPEC_VERSION`, see [Project Spec v4](<project-spec-v4.md>)) and the ABR metadata version. History: v2 -> v3 moved validation facts into `findings`; **v3 -> v4 added an optional `reason` to each `timed_phrases` entry**.
+The sidecar has its own `version`, independent of the project settings version (`PROJECT_SPEC_VERSION`, see [Project Spec v5](<project-spec-v5.md>)) and the ABR metadata version. History: v2 -> v3 moved validation facts into `findings`; **v3 -> v4 added an optional `reason` to each `timed_phrases` entry**.
 
 Rationale for v4: sentence-gap extension (`tts_audiobook_tool/sound/sentence_gap_util.py`) inserts silence at sentence boundaries inside a saved segment so that short gaps reach a minimum duration. It operates on the saved audio plus the sidecar and has no access to the project text, so it cannot tell a sentence boundary from a mere phrase boundary unless the sidecar says so. Guessing from the text (e.g. trailing punctuation) is unreliable; the segmenter already knows why it split (`Reason`), so that is recorded at generation time by `ForceAlignUtil` and written by `TimedPhrase.to_dict(..., include_reason=True)`. The ABR metadata, which shares `TimedPhrase`, does not include `reason` and is unchanged.
 

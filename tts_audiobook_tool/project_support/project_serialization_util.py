@@ -14,7 +14,6 @@ from tts_audiobook_tool.app_types import (
     HighShelfEq,
     MinSegmentSentenceSilence,
     NormalizationType,
-    RoomReverb,
     RoomReverbStereo,
     RoomTone,
     SectionMarkerMode,
@@ -462,8 +461,9 @@ class ProjectSerializationUtil:
         if 'room_tone' not in d and legacy_room_tone is True:
             d['room_tone'] = RoomTone.HIGH.id
         normalize_by_id('room_tone', RoomTone.get_by_id, RoomTone.get_default())
-        # Optional key: absent in projects saved before it existed, so no warning
-        normalize_by_id('room_reverb', RoomReverb.get_by_id, RoomReverb.get_default())
+        # Optional key: absent in projects saved before it existed, so no warning.
+        # (Pre-v5 project-wide `room_reverb` was already moved onto the voices
+        # by prepare_project_voice_references.)
         normalize_by_id('room_reverb_stereo', RoomReverbStereo.get_by_id, RoomReverbStereo.get_default())
 
         value = d.get('limit_silence_gaps_duration', None)
@@ -922,9 +922,13 @@ class ProjectSerializationUtil:
         Applied to the finished dict rather than at each emission site, so a
         newly added voice field is covered automatically.
         """
+        from tts_audiobook_tool.app_types.voice import Voice
         from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
         if "voice_references" in d:
-            d["voice_references"] = normalize_voice_references(d["voice_references"])
+            # Round-trip through the dict form so that Voice objects assigned
+            # in memory (bypassing load-time normalization) are canonicalized too.
+            raw = [ref.to_dict() if isinstance(ref, Voice) else ref for ref in d["voice_references"]]
+            d["voice_references"] = [voice.to_dict() for voice in normalize_voice_references(raw)]
         for key in ProjectSerializationUtil.get_project_local_path_field_names():
             value = d.get(key, None)
             if isinstance(value, list):
@@ -943,7 +947,7 @@ class ProjectSerializationUtil:
             "dir_path": project.dir_path,
             "version": PROJECT_SPEC_VERSION,
             "tts_model_type": project.tts_model_type,
-            "voice_references": deepcopy(project.voice_references),
+            "voice_references": [voice.to_dict() for voice in project.voice_references],
 
             "language_code": project.language_code,
 
@@ -967,7 +971,6 @@ class ProjectSerializationUtil:
             "limit_silence_gaps_duration": project.limit_silence_gaps_duration,
             "min_segment_sentence_silence": project.min_segment_sentence_silence.id,
             "room_tone": project.room_tone.id,
-            "room_reverb": project.room_reverb.id,
             "room_reverb_stereo": project.room_reverb_stereo.id,
             "gen_auto_concat": project.gen_auto_concat,
             "streaming_chat": project.streaming_chat,

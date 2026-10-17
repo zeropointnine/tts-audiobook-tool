@@ -134,7 +134,7 @@ Or, if you have multiple virtual environments installed, you can use `launch.py`
     python launch.py # searches the project root for venv subdirectories by default
     python launch.py path/to/venvs-parent-dir # searches for venv subdirectories from the given path
 
-For how the app chooses a project's TTS model and exposes model-specific settings, refer to [TTS model selection rules](<docs-dev/tts-model-selection.md>). Project storage and migration are documented in [Project Spec v4](<docs-dev/project-spec-v4.md>).
+For how the app chooses a project's TTS model and exposes model-specific settings, refer to [TTS model selection rules](<docs-dev/tts-model-selection.md>). Project storage and migration are documented in [Project Spec v5](<docs-dev/project-spec-v5.md>).
 
 <details>
 
@@ -620,7 +620,7 @@ Additionally, setting "chapter cut points" can be useful to generate and export 
 
 Voice samples and their transcripts belong to one shared list per project. Switching TTS models keeps the list and its order. Transcripts remain editable and are retained even for models that do not use them; each model still has its own clone support and transcript requirements. Pocket's selected predefined voice takes precedence without erasing the shared samples, and IndexTTS2's secondary emotion sample remains model-specific.
 
-Older v1/v2/v3 projects migrate to project format v4 on load. With no populated old clone lists, the new list is empty; a single source is adopted silently. Multiple independent sources require a numbered choice showing model names and all sample filenames, even when the lists are identical. An already-shared list counts once across backend variants. An explicit top-level `voice_references` list, including `[]`, wins over stale old lists. Successful migration saves immediately after backing up the original settings as `project.json.pre-v4.bak` (an unused numbered suffix is used if needed), without deleting voice or generated audio. Settings imports require the same choice before writing the destination; ambiguous noninteractive loads/imports fail with guidance rather than choosing automatically. See [Project Spec v4](<docs-dev/project-spec-v4.md>) for details.
+Older projects migrate to the current project format (v5) on load. For v1/v2/v3 projects, with no populated old clone lists the new list is empty; a single source is adopted silently. Multiple independent sources require a numbered choice showing model names and all sample filenames, even when the lists are identical. An already-shared list counts once across backend variants. An explicit top-level `voice_references` list, including `[]`, wins over stale old lists. For v4 projects, the project-wide room reverb setting is copied onto each voice (room reverb is now a per-voice setting; the room reverb stereo effect stays project-wide). Successful migration saves immediately after backing up the original settings as `project.json.pre-v5.bak` (an unused numbered suffix is used if needed), without deleting voice or generated audio. Settings imports require the same choice before writing the destination; ambiguous noninteractive loads/imports fail with guidance rather than choosing automatically. See [Project Spec v5](<docs-dev/project-spec-v5.md>) for details.
 
 When prepping reference audio for voice cloning, it's worthwhile to prepare a few different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality, characteristics, and word error rate resulting from each sample from the same source can vary quite a bit. Some TTS models are especially sensitive to this.
 
@@ -845,6 +845,11 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 
 # Update highlights
+
+**2026-10-17**
+
+- Added **stereo position** option to allow voices to be offset in the stereo field.
+- Added voice options menu. Reverb and stereo position options are now configurable on a per-voice basis.
 
 **2026-10-16**
 

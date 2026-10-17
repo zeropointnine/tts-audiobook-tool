@@ -4,6 +4,7 @@ from tts_audiobook_tool import app_support, ask, text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
 from tts_audiobook_tool.app_types import Hint
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
 from tts_audiobook_tool.model_worker import ModelWorker
@@ -73,7 +74,7 @@ class MenuStatus:
             for index, voice in enumerate(ProjectVoiceUtil.get_voice_values(state.project, model)):
                 # An active crop is what generation uses, so its (shorter)
                 # duration is what this hint should measure.
-                entry = entries[index] if index < len(entries) else {"file_name": voice}
+                entry = entries[index] if index < len(entries) else Voice(voice)
                 path = ProjectVoiceUtil.effective_voice_file_path(state.project, entry)
                 duration = AudioMetaUtil.get_audio_duration(path)
                 if duration is not None and duration > max_duration:

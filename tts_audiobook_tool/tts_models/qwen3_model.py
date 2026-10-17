@@ -473,7 +473,7 @@ class Qwen3Model(Qwen3BaseModel):
         instructs = [instruct for _ in prompts]
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
-        printt("{COL_DIM_ITALICS}Generating...", dont_reset=True)
+        printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True)
 
         try:
             wavs, sr = self._model.generate_voice_design(

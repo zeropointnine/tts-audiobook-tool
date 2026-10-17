@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING, Callable
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.app_types import SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types import RoomReverb, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types.voice import Voice, stereo_position_label, stereo_position_to_percent
 from tts_audiobook_tool import ask
 
 if TYPE_CHECKING:
@@ -31,13 +32,24 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.transcriber import Transcriber
 
 # Menu item labels shared by per-model voice menus; tests reference these.
-LABEL_ADD_VOICE_SAMPLE = "Add voice sample"
-LABEL_REMOVE_VOICE_SAMPLE = "Remove voice sample"
-LABEL_MOVE_VOICE_SAMPLE = "Move voice sample position"
-LABEL_CROP_VOICE_SAMPLE = "Trim or play voice sample"
-LABEL_EDIT_VOICE_TRANSCRIPTION = "Edit voice sample transcription"
+LABEL_VOICE_SAMPLE_ITEM = "Voice sample"  # "Voice sample N: <name> (<duration>)"
+LABEL_VOICE_SAMPLES_SUPERLABEL = "Select to move, remove, edit properties"
+LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed samples
+LABEL_ADD_FIRST_VOICE_SAMPLE = "Add voice sample"  # No samples yet
 LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
+
+# Per-sample submenu labels
+LABEL_REMOVE_VOICE_SAMPLE = "Remove"
+LABEL_MOVE_VOICE_SAMPLE = "Move voice sample position"
+LABEL_CROP_VOICE_SAMPLE = "Trim or play"
+LABEL_EDIT_VOICE_TRANSCRIPTION = "Edit transcription"
+LABEL_EFFECTS_SUPERLABEL = "Effects"
+LABEL_STEREO_POSITION = "Stereo position"
+LABEL_ROOM_REVERB = "Room reverb"
+
+# Max length of the transcript preview under the edit-transcription item
+TRANSCRIPT_PREVIEW_LENGTH = 40
 
 # Minimum duration of an imported voice sample, checked before and after silence trim
 VOICE_SAMPLE_MIN_DURATION_S = 2.0
@@ -133,18 +145,11 @@ class VoiceMenuShared:
             subheading: StringOrMaker | None = None,
     ) -> None:
         """Show sample management independently of model settings."""
-        def make_subheading(current: State) -> str:
-            samples = VoiceMenuShared.make_voice_samples_subheading(
-                current.project, current.project.get_tts_model_type()
-            )
-            existing = get_string_from(current, subheading).rstrip("\r\n") if subheading else ""
-            return "\n\n".join(part for part in (samples, existing) if part)
-
         MenuUtil.menu(
             state=state,
             heading="Voice clone",
             items=items,
-            subheading=make_subheading,
+            subheading=subheading,
             on_exit=lambda: PlaySoundUtil.stop_sound_async(),
             breadcrumb="Voice",
         )
@@ -157,7 +162,7 @@ class VoiceMenuShared:
             currently = make_currently_string("none", color_code=COL_ERROR)
         else:
             currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
-        return f"{LABEL_ADD_VOICE_SAMPLE} {currently}"
+        return f"{LABEL_ADD_FIRST_VOICE_SAMPLE} {currently}"
 
     @staticmethod
     def ask_and_set_voice_file(
@@ -369,12 +374,12 @@ class VoiceMenuShared:
     ) -> str:
         """Return an active-sample problem, optionally repairing its missing transcript."""
         project = state.project
-        entry = project.voice_references[index]
-        file_name = entry["file_name"]
-        cropped = ProjectVoiceUtil.get_crop_range(entry) is not None
+        voice = project.voice_references[index]
+        file_name = voice.file_name
+        cropped = voice.crop is not None
         if cropped:
             # Validate the active crop, never fall back to the original sample.
-            file_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry)
+            file_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice)
             label = f"Trimmed voice file for {file_name}"
         else:
             file_path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
@@ -387,8 +392,8 @@ class VoiceMenuShared:
         sound_result = SoundFileUtil.load(file_path)
         if isinstance(sound_result, str):
             return f"{label} is invalid"
-        transcript_key = "crop_transcript" if cropped else "transcript"
-        if not requires_transcript or entry.get(transcript_key, "").strip():
+        active_transcript = voice.crop.transcript if voice.crop is not None else voice.transcript
+        if not requires_transcript or active_transcript.strip():
             return ""
         if not auto_transcribe:
             return f"{label} has no transcript"
@@ -476,7 +481,10 @@ class VoiceMenuShared:
             on_set_callback: Callable | None = None,
             on_clear_callback: Callable | None = None,
     ) -> list[MenuItem]:
-        """Make direct sample-management and selection controls."""
+        """Make the sample list (each opening its own submenu), Add, and selection controls.
+
+        Built on every redraw, so labels and indices are those of the current list.
+        """
         def make_add_label(s: State) -> str:
             if ProjectVoiceUtil.get_voice_values(s.project, tts_type):
                 return LABEL_ADD_VOICE_SAMPLE
@@ -491,24 +499,22 @@ class VoiceMenuShared:
             if on_set_callback:
                 on_set_callback()
 
-        def remove_voice(s: State, _: MenuItem) -> None:
-            had_samples = bool(ProjectVoiceUtil.get_voice_values(s.project, tts_type))
-            is_empty = VoiceMenuShared.remove_voice_sample_from_menu(s, tts_type)
-            if had_samples and is_empty and on_clear_callback:
-                on_clear_callback()
-            # The helper's True means empty, not that Voice clone should exit.
+        def open_voice(s: State, item: MenuItem) -> None:
+            VoiceMenuShared.voice_sample_submenu(s, tts_type, item.data, on_clear_callback)
 
         voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
         items: list[MenuItem] = []
+        for index in range(len(voices)):
+            label, _ = VoiceMenuShared.make_voice_sample_item_label(state.project, tts_type, index)
+            items.append(MenuItem(
+                label,
+                open_voice,
+                data=index,
+                superlabel=LABEL_VOICE_SAMPLES_SUPERLABEL if index == 0 else "",
+                superlabel_no_blank_line=True,
+            ))
         if len(voices) < 9:
             items.append(MenuItem(make_add_label, add_voice))
-        items.append(MenuItem(LABEL_REMOVE_VOICE_SAMPLE, remove_voice))
-        if len(voices) > 1:
-            items.append(MenuItem(LABEL_MOVE_VOICE_SAMPLE, lambda s, _: VoiceMenuShared.move_voice_sample_from_menu(s)))
-        items.extend([
-            MenuItem(LABEL_CROP_VOICE_SAMPLE, lambda s, _: VoiceMenuShared.crop_voice_sample_from_menu(s)),
-            MenuItem(LABEL_EDIT_VOICE_TRANSCRIPTION, lambda s, _: VoiceMenuShared.edit_voice_sample_transcript(s)),
-        ])
         selection_items = []
         if len(voices) > 1:
             selection_items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
@@ -587,37 +593,170 @@ class VoiceMenuShared:
         )
 
     @staticmethod
-    def make_voice_samples_subheading(project: Project, tts_type: TtsModelType) -> str:
-        voices = ProjectVoiceUtil.get_voice_values(project, tts_type)
+    def get_voice_sample_duration(project: Project, voice: Voice) -> float | None:
+        """Duration of the sample generation actually uses: the saved crop when in effect."""
+        path = ProjectVoiceUtil.effective_voice_file_path(project, voice)
+        return AudioMetaUtil.get_audio_duration(str(path))
+
+    @staticmethod
+    def make_voice_sample_duration_text(voice: Voice, duration: float | None) -> str:
+        """Eg "(12.3s)", "(trimmed, 12.3s)", "(trimmed)", or "" when unknown and untrimmed."""
+        if duration is not None:
+            duration_text = duration_string(duration, include_tenth=True)
+            return f"(trimmed, {duration_text})" if voice.crop is not None else f"({duration_text})"
+        return "(trimmed)" if voice.crop is not None else ""
+
+    @staticmethod
+    def make_voice_sample_item_label(project: Project, tts_type: TtsModelType, index: int) -> tuple[str, bool]:
+        """Returns the list item label for one sample, and whether it exceeds the model's recommended duration."""
+        voice = project.voice_references[index]
+        label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice.file_name, tts_type.value)
+        label = f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1}: {label}"
+        duration = VoiceMenuShared.get_voice_sample_duration(project, voice)
+        duration_text = VoiceMenuShared.make_voice_sample_duration_text(voice, duration)
         max_duration = tts_type.value.ui.get("voice_sample_max_duration_s")
-        lines = []
-        has_long_sample = False
-        for i, voice in enumerate(voices, start=1):
-            label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, tts_type.value)
-            ref = project.voice_references[i - 1] if i - 1 < len(project.voice_references) else None
-            crop_range = ProjectVoiceUtil.get_crop_range(ref) if ref is not None else None
-            # The shown duration and the max-duration warning follow the sample
-            # generation actually uses: the saved crop when one is in effect.
-            path = ProjectVoiceUtil.effective_voice_file_path(project, ref or {"file_name": voice})
-            duration = AudioMetaUtil.get_audio_duration(str(path))
-            if duration is not None:
-                duration_text = duration_string(duration, include_tenth=True)
-                if crop_range is not None:
-                    label += f"{COL_DIM} (trimmed, {duration_text}){COL_DEFAULT}"
-                else:
-                    label += f"{COL_DIM} ({duration_text}){COL_DEFAULT}"
-                if max_duration is not None and duration > max_duration:
-                    label += f"{COL_ERROR}*{COL_DEFAULT}"
-                    has_long_sample = True
-            elif crop_range is not None:
-                label += f"{COL_DIM} (trimmed){COL_DEFAULT}"
-            lines.append(f"{COL_ACCENT}{BULLET_CHAR} {COL_DIM}Voice sample {i}: {COL_DEFAULT}{label}")
-        if has_long_sample:
-            lines.append(
-                f"  {COL_ERROR}* {COL_DEFAULT}{COL_DIM_ITALICS}Sample exceeds recommended duration for the current model "
-                f"({max_duration:g}s){COL_DEFAULT}"
-            )
-        return "\n".join(lines)
+        is_long = duration is not None and max_duration is not None and duration > max_duration
+        if is_long:
+            # Mark inside the closing paren, eg "(15.3s*)"
+            duration_text = f"{duration_text[:-1]}{COL_ERROR}*{COL_DIM})"
+        if duration_text:
+            label += f"{COL_DIM} {duration_text}{COL_DEFAULT}"
+        return label, is_long
+
+    @staticmethod
+    def make_transcript_preview(project: Project, tts_type: TtsModelType, index: int) -> str:
+        """The effective transcript (the crop's when in effect), flattened, ellipsized, and parenthesized."""
+        _, transcript = ProjectVoiceUtil.effective_voice_reference(project, tts_type, index)
+        transcript = " ".join(transcript.split())
+        if not transcript:
+            return "(none)"
+        return f"(\"{ellipsize(transcript, TRANSCRIPT_PREVIEW_LENGTH)}\")"
+
+    @staticmethod
+    def voice_sample_submenu(
+            state: State,
+            tts_type: TtsModelType,
+            index: int,
+            on_clear_callback: Callable | None = None,
+    ) -> None:
+        """Options for one voice sample. Follows the sample when it is moved; exits when it is removed."""
+        current = [index]  # Updated on move
+
+        def get_voice(s: State) -> Voice | None:
+            entries = s.project.voice_references
+            return entries[current[0]] if 0 <= current[0] < len(entries) else None
+
+        def make_heading(s: State) -> str:
+            voice = get_voice(s)
+            name = ellipsize(voice.file_name, 60) if voice else ""
+            return f"Options for {name} {COL_DIM}(voice index {current[0] + 1})"
+
+        def on_remove(s: State, _: MenuItem) -> bool:
+            removed = VoiceMenuShared.remove_voice_sample_from_menu(s, tts_type, current[0])
+            if not removed:
+                return False
+            if on_clear_callback and not ProjectVoiceUtil.get_voice_values(s.project, tts_type):
+                on_clear_callback()
+            return True
+
+        def on_move(s: State, _: MenuItem) -> None:
+            current[0] = VoiceMenuShared.move_voice_sample_from_menu(s, current[0])
+
+        def make_items(s: State) -> list[MenuItem]:
+            voice = get_voice(s)
+            if voice is None:
+                return []
+            i = current[0]
+            duration = VoiceMenuShared.get_voice_sample_duration(s.project, voice)
+            duration_text = VoiceMenuShared.make_voice_sample_duration_text(voice, duration)
+            crop_label = f"{LABEL_CROP_VOICE_SAMPLE} {COL_DIM}{duration_text}" if duration_text else LABEL_CROP_VOICE_SAMPLE
+            max_duration = tts_type.value.ui.get("voice_sample_max_duration_s")
+            if duration is not None and max_duration is not None and duration > max_duration:
+                crop_label += (
+                    f" {COL_ERROR}*{COL_DIM_ITALICS}exceeds current model's "
+                    f"recommended limit of {max_duration:g}s{COL_DEFAULT}"
+                )
+            items = [MenuItem(crop_label, lambda s2, _: VoiceMenuShared.crop_voice_sample_from_menu(s2, i))]
+            transcript_preview = VoiceMenuShared.make_transcript_preview(s.project, tts_type, i)
+            items.append(MenuItem(
+                f"{LABEL_EDIT_VOICE_TRANSCRIPTION} {COL_DIM}{transcript_preview}",
+                lambda s2, _: VoiceMenuShared.edit_voice_sample_transcript(s2, i),
+            ))
+            if len(s.project.voice_references) > 1:
+                items.append(MenuItem(LABEL_MOVE_VOICE_SAMPLE, on_move))
+            items.append(MenuItem(LABEL_REMOVE_VOICE_SAMPLE, on_remove))
+            items.append(MenuItem(
+                make_menu_label(LABEL_STEREO_POSITION, stereo_position_label(voice.pan)),
+                lambda s2, _: VoiceMenuShared.ask_stereo_position(s2, i),
+                superlabel=LABEL_EFFECTS_SUPERLABEL,
+                # Auto-advance doesn't record which voice spoke a line, so output stays centered
+                sublabel=(
+                    "No effect in auto-advance voice selection mode"
+                    if s.project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE else None
+                ),
+            ))
+            items.append(MenuItem(
+                make_menu_label(LABEL_ROOM_REVERB, voice.room_reverb.label),
+                lambda s2, _: VoiceMenuShared.room_reverb_submenu(s2, i),
+            ))
+            return items
+
+        MenuUtil.menu(
+            state=state,
+            heading=make_heading,
+            items=make_items,
+            on_exit=lambda: PlaySoundUtil.stop_sound_async(),
+            breadcrumb=lambda _: f"{LABEL_VOICE_SAMPLE_ITEM} {current[0] + 1}",
+        )
+
+    @staticmethod
+    def ask_stereo_position(state: State, index: int) -> None:
+        """Prompt for the voice's stereo position, -100 (full left) to 100 (full right)."""
+        voice = state.project.voice_references[index]
+        current = stereo_position_to_percent(voice.pan)
+        printt("Enter stereo position, from -100 (full left) to 100 (full right), or 0 for center:")
+        printt(f"{COL_DIM}(Subtle values like -30 or 30 work well for separating voices.)")
+        value = ask.ask_input(prefill=str(current))
+        if not value:
+            return
+        try:
+            percent = int(round(float(value)))
+        except (ValueError, OverflowError):
+            ask.ask_error("Bad value")
+            return
+        if not -100 <= percent <= 100:
+            ask.ask_error("Out of range")
+            return
+        if percent == current:
+            return
+        pan = percent / 100
+        err = ProjectVoiceUtil.set_voice_pan_at_index_and_save(state.project, index, pan)
+        if err:
+            ask.ask_error(err)
+        else:
+            print_feedback(f"{LABEL_STEREO_POSITION} set to: {stereo_position_label(pan)}")
+
+    @staticmethod
+    def room_reverb_submenu(state: State, index: int) -> None:
+
+        voice = state.project.voice_references[index]
+
+        def on_select(value: RoomReverb) -> None:
+            err = ProjectVoiceUtil.set_voice_room_reverb_at_index_and_save(state.project, index, value)
+            if err:
+                ask.ask_error(err)
+            else:
+                print_feedback(f"{LABEL_ROOM_REVERB} set to: {value.label}")
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text=LABEL_ROOM_REVERB,
+            labels=[item.label for item in RoomReverb],
+            values=list(RoomReverb),
+            current_value=voice.room_reverb,
+            default_value=RoomReverb.get_default(),
+            on_select=on_select
+        )
 
     @staticmethod
     def ask_voice_sample_position(prompt: str, count: int) -> int | None:
@@ -637,29 +776,27 @@ class VoiceMenuShared:
         return index
 
     @staticmethod
-    def move_voice_sample_from_menu(state: State) -> None:
+    def move_voice_sample_from_menu(state: State, index: int) -> int:
+        """Asks for the new position of the sample at `index`. Returns its index afterward."""
         count = len(state.project.voice_references)
-        if not count:
-            print_feedback("No voice samples")
-            return
-        index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to move:", count)
-        if index is None:
-            return
-        new_index = VoiceMenuShared.ask_voice_sample_position("Enter new position:", count)
+        if not 0 <= index < count:
+            return index
+        new_index = VoiceMenuShared.ask_voice_sample_position(f"Enter new position {COL_DIM}(1-{count}):", count)
         if new_index is None:
-            return
+            return index
         if index == new_index:
             print_feedback("Voice sample position unchanged")
-            return
+            return index
         error = ProjectVoiceUtil.move_voice_at_index_and_save(state.project, index, new_index)
         if error:
             ask.ask_error(error)
-        else:
-            print_feedback(f"Moved voice sample {index + 1} to position {new_index + 1}")
+            return index
+        print_feedback(f"Moved voice sample {index + 1} to position {new_index + 1}")
+        return new_index
 
     @staticmethod
-    def crop_voice_sample_from_menu(state: State) -> None:
-        """Set or revert the active-range crop of one voice sample.
+    def crop_voice_sample_from_menu(state: State, index: int) -> None:
+        """Set or revert the active-range crop of the voice sample at `index`.
 
         Runs the full-screen interactive crop editor (Textual). On save, the
         cropped span is auto-transcribed; on failure the empty crop
@@ -669,18 +806,13 @@ class VoiceMenuShared:
         from tts_audiobook_tool.textual.voice_crop_app import run_voice_crop_app
 
         entries = state.project.voice_references
-        if not entries:
-            print_feedback("No voice samples")
+        if not 0 <= index < len(entries):
+            print_feedback("No such voice sample")
             return
-        index = 0
-        if len(entries) > 1:
-            index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to trim:", len(entries))
-            if index is None:
-                return
 
         entry = entries[index]
-        crop_range = ProjectVoiceUtil.get_crop_range(entry)
-        file_name = entry["file_name"]
+        crop_range = entry.crop_range
+        file_name = entry.file_name
         path = ProjectVoiceUtil.resolve_voice_file_path(state.project, file_name)
         sound = SoundFileUtil.load(path)
         if isinstance(sound, str):
@@ -733,16 +865,10 @@ class VoiceMenuShared:
             ask.ask_error(save_err)
 
     @staticmethod
-    def edit_voice_sample_transcript(state: State) -> None:
-        entries = state.project.voice_references
-        if not entries:
-            print_feedback("No voice samples")
+    def edit_voice_sample_transcript(state: State, index: int) -> None:
+        if not 0 <= index < len(state.project.voice_references):
+            print_feedback("No such voice sample")
             return
-        index = 0
-        if len(entries) > 1:
-            index = VoiceMenuShared.ask_voice_sample_position("Enter voice sample number to edit transcription:", len(entries))
-            if index is None:
-                return
         # Edit the transcript generation actually consumes: the cropped
         # span's transcript when a crop is active (and its file present),
         # otherwise the original sample's transcript. Decided through the
@@ -756,11 +882,13 @@ class VoiceMenuShared:
         effective_name, current = ProjectVoiceUtil.effective_voice_reference(state.project, model_type, index)
         is_cropped = index < len(voices) and effective_name != voices[index]
         scope_note = " (trimmed span)" if is_cropped else ""
-        message = f'Enter voice sample transcript{scope_note} (or "/clear" to clear): '
+        printt(f'Enter voice sample transcript{scope_note} (or "/clear" to clear):')
+        if not Tts.requires_reference_transcript(state.project):
+            printt(f"{COL_DIM}(Note that the current TTS model does not utilize the transcript value)")
         # ask_input (not raw AskAdvanced.ask): the app-standard helper adds
         # the input color/reset, clears stale buffered input, strips escape
         # sequences, and catches terminals prompt_toolkit cannot drive.
-        transcript = ask.ask_input(message=message, prefill=current, lower=False)
+        transcript = ask.ask_input(prefill=current, lower=False)
         if not transcript or transcript == current:
             return
         if transcript == "/clear":
@@ -775,38 +903,18 @@ class VoiceMenuShared:
             print_feedback("Transcript saved")
 
     @staticmethod
-    def remove_voice_sample_from_menu(state: State, tts_type: TtsModelType) -> bool:
+    def remove_voice_sample_from_menu(state: State, tts_type: TtsModelType, index: int) -> bool:
+        """Removes the sample at `index` after confirmation. Returns True if it was removed."""
         voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
-        if not voices:
-            return True
-
-        index = 0
-        clear_all = False
-        label = ""
-        if len(voices) > 1:
-            printt(f"Enter voice sample number to remove {COL_DIM}(or \"all\" to clear all)")
-            inp = ask.ask_input()
-            if not inp:
-                return False
-            if inp.lower() in {"a", "all"}:
-                ProjectVoiceUtil.clear_voice_and_save(state.project, tts_type)
-                label = "all"
-                clear_all = True
-            else:
-                try:
-                    index = int(inp) - 1
-                except ValueError:
-                    print_feedback("Bad value", is_error=True)
-                    return False
-                if index < 0 or index >= len(voices):
-                    print_feedback("Out of range", is_error=True)
-                    return False
-
-        if not clear_all:
-            removed = ProjectVoiceUtil.remove_voice_at_index_and_save(state.project, tts_type, index)
-            label = ProjectVoiceUtil.make_voice_sample_display_label(state.project, removed, tts_type.value)
+        if not 0 <= index < len(voices):
+            return False
+        label = ProjectVoiceUtil.make_voice_sample_display_label(state.project, voices[index], tts_type.value)
+        printt(f"Remove voice sample {index + 1}: {label}?")
+        if not ask.ask_confirm():
+            return False
+        ProjectVoiceUtil.remove_voice_at_index_and_save(state.project, tts_type, index)
         print_feedback(f"Removed {label}")
-        return not ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+        return True
 
     @staticmethod
     def ask_voice_file(initial_dir: str, tts_type: TtsModelType, message_override: str="") -> str:

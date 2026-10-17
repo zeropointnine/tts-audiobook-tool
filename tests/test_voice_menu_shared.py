@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -7,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from tts_audiobook_tool.app_types import VoiceSelectMode
+from tts_audiobook_tool.app_types.voice import Voice, VoiceCrop
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
@@ -22,6 +24,17 @@ from tts_audiobook_tool.textual.content_textual_app import (
 from textual_editor_stubs import StubPhraseGroup, StubProject
 
 
+def capture_menus(monkeypatch) -> list[dict]:
+    """Record the kwargs of every MenuUtil.menu call (main menu first, submenus after)."""
+    menus: list[dict] = []
+    monkeypatch.setattr(voice_menu_shared.MenuUtil, "menu", lambda **kwargs: menus.append(kwargs))
+    return menus
+
+
+def find_item(state, items, label) -> MenuItem:
+    return next(item for item in items if get_string_from(state, item.label) == label)
+
+
 @pytest.mark.parametrize("model_id", ["none", "unknown-model"])
 def test_remote_voice_menu_removes_controls_when_selection_is_unresolved(monkeypatch, model_id):
     state = cast(State, SimpleNamespace(project=Project(
@@ -30,11 +43,12 @@ def test_remote_voice_menu_removes_controls_when_selection_is_unresolved(monkeyp
     )))
     captured = {}
     monkeypatch.setattr(voice_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
     VoiceMenuShared.menu(state)
     assert captured["items"](state)
     state.project.tts_model_type = model_id
     assert captured["items"](state) == []
-    assert get_string_from(state, captured["subheading"]) == ""
+    assert captured["subheading"] is None
 
 
 def test_remote_voice_menu_tracks_selection_on_redraw_and_edit(monkeypatch):
@@ -42,42 +56,48 @@ def test_remote_voice_menu_tracks_selection_on_redraw_and_edit(monkeypatch):
     state.project.set_model_setting("omnivoice_audiocpp", "file_name", ["old.flac"])
     captured = {}
     monkeypatch.setattr(voice_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
     VoiceMenuShared.menu(state)
-    assert "old.flac" in get_string_from(state, captured["subheading"])
+    assert captured["subheading"] is None
+    assert "old.flac" in get_string_from(state, captured["items"](state)[0].label)
 
     state.project.tts_model_type = "breeze_tts_2_audiocpp"
     state.project.set_model_setting("breeze_tts_2_audiocpp", "file_name", ["new.flac"])
-    subheading = get_string_from(state, captured["subheading"])
-    assert "new.flac" in subheading and "old.flac" not in subheading
+    items = captured["items"](state)
+    label = get_string_from(state, items[0].label)
+    assert "new.flac" in label and "old.flac" not in label
     calls = []
     monkeypatch.setattr(VoiceMenuShared, "ask_and_set_voice_file",
                         lambda current, model, **kwargs: calls.append((model.id, kwargs)))
-    monkeypatch.setattr(VoiceMenuShared, "remove_voice_sample_from_menu",
-                        lambda current, model: calls.append((model.id, "remove")) or False)
-    items = captured["items"](state)
-    items[0].handler(state, items[0])
+    monkeypatch.setattr(VoiceMenuShared, "voice_sample_submenu",
+                        lambda current, model, index, _on_clear: calls.append((model.id, index)))
     items[1].handler(state, items[1])
-    assert calls == [("breeze_tts_2_audiocpp", {"append": True}), ("breeze_tts_2_audiocpp", "remove")]
+    items[0].handler(state, items[0])
+    assert calls == [("breeze_tts_2_audiocpp", {"append": True}), ("breeze_tts_2_audiocpp", 0)]
     state.project.tts_model_type = "none"
     assert captured["items"](state) == []
-    assert get_string_from(state, captured["subheading"]) == ""
 
 
 @pytest.mark.parametrize("model_id", [
     "mira_local", "dots_local", "chatterbox_audiocpp",
     "omnivoice_audiocpp", "zonos2_sglomni", "higgs_v3_sglomni",
 ])
-@pytest.mark.parametrize("voice_count", [0, 1, 2])
-def test_transcript_editing_is_available_without_changing_transcripts(model_id, voice_count):
+@pytest.mark.parametrize("voice_count", [1, 2])
+def test_transcript_editing_is_available_without_changing_transcripts(monkeypatch, model_id, voice_count):
     project = Project(tts_model_type=model_id, voice_references=[
         {"file_name": f"voice-{i}.flac", "transcript": "Retained reference text"}
         for i in range(voice_count)
     ])
     state = cast(State, SimpleNamespace(project=project))
+    menus = capture_menus(monkeypatch)
+    monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
     items = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())
-    labels = [get_string_from(state, item.label) for item in items]
-    assert voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION in labels
-    assert all(entry["transcript"] == "Retained reference text" for entry in project.voice_references)
+    for item in items[:voice_count]:
+        item.handler(state, item)  # opens that sample's submenu
+        labels = [get_string_from(state, sub.label) for sub in menus[-1]["items"](state)]
+        assert any(label.startswith(voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION) for label in labels)
+    assert len(menus) == voice_count
+    assert all(entry.transcript == "Retained reference text" for entry in project.voice_references)
 
 
 def test_remote_transcript_editing_is_available_on_redraw(monkeypatch):
@@ -85,36 +105,39 @@ def test_remote_transcript_editing_is_available_on_redraw(monkeypatch):
         {"file_name": "voice.flac", "transcript": "Retained reference text"},
     ])
     state = cast(State, SimpleNamespace(project=project))
-    captured = {}
-    monkeypatch.setattr(voice_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
+    menus = capture_menus(monkeypatch)
+    monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
     VoiceMenuShared.menu(state)
+    make_main_items = menus[0]["items"]
     for model_id in [
         "omnivoice_audiocpp", "chatterbox_audiocpp", "zonos2_sglomni", "higgs_v3_sglomni",
     ]:
         project.tts_model_type = model_id
-        labels = [get_string_from(state, item.label) for item in captured["items"](state)]
-        assert voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION in labels
-        assert project.voice_references[0]["transcript"] == "Retained reference text"
+        voice_item = make_main_items(state)[0]
+        voice_item.handler(state, voice_item)
+        labels = [get_string_from(state, item.label) for item in menus[-1]["items"](state)]
+        assert any(label.startswith(voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION) for label in labels)
+        assert project.voice_references[0].transcript == "Retained reference text"
 
 
 def test_voice_menu_direct_actions_refresh_samples_and_preserve_callbacks(monkeypatch):
     state = cast(State, SimpleNamespace(project=Project(tts_model_type="dots_local")))
     model = state.project.get_tts_model_type()
-    captured = {}
+    menus = capture_menus(monkeypatch)
     events = []
-    monkeypatch.setattr(voice_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
     monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: 1.25)
 
     def add_sample(current, selected, **kwargs):
         assert selected == model and kwargs == {"append": True}
         events.append("add")
-        current.project.voice_references.append({"file_name": "new.flac", "transcript": "text"})
+        current.project.voice_references.append(Voice("new.flac", "text"))
 
-    def remove_sample(current, selected):
-        assert selected == model
+    def remove_sample(current, selected, index):
+        assert selected == model and index == 0
         events.append("remove")
+        removed = bool(current.project.voice_references)
         current.project.voice_references.clear()
-        return True
+        return removed
 
     monkeypatch.setattr(VoiceMenuShared, "ask_and_set_voice_file", add_sample)
     monkeypatch.setattr(VoiceMenuShared, "remove_voice_sample_from_menu", remove_sample)
@@ -128,22 +151,25 @@ def test_voice_menu_direct_actions_refresh_samples_and_preserve_callbacks(monkey
         )
 
     VoiceMenuShared.menu_wrapper(state, make_items, subheading=lambda _: "Sample guidance")
-    assert get_string_from(state, captured["subheading"]) == "Sample guidance"
-    items = captured["items"](state)
+    main = menus[0]
+    items = main["items"](state)
+    assert get_string_from(state, items[0].label).startswith(voice_menu_shared.LABEL_ADD_FIRST_VOICE_SAMPLE)
     assert items[0].handler(state, items[0]) is None
-    subheading = get_string_from(state, captured["subheading"])
-    assert "Voice sample 1:" in subheading and "new.flac" in subheading
-    assert "(1.2s)" in subheading
-    assert subheading.endswith("\n\nSample guidance")
-    items = captured["items"](state)
-    assert get_string_from(state, items[0].label) == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
-    assert items[1].handler(state, items[1]) is None  # clearing must not exit Voice clone
-    assert get_string_from(state, captured["subheading"]) == "Sample guidance"
-    # Zero samples: no move item.
-    assert len(captured["items"](state)) == 5
+    # Samples are listed as items, no longer prepended to the caller's subheading.
+    assert get_string_from(state, main["subheading"]) == "Sample guidance"
+    items = main["items"](state)
+    label = get_string_from(state, items[0].label)
+    assert "Voice sample 1:" in label and "new.flac" in label and "(1.2s)" in label
+    assert items[0].data == 0
+    assert get_string_from(state, items[1].label) == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
+    assert items[0].handler(state, items[0]) is None  # opens the sample's submenu
+    remove = find_item(state, menus[-1]["items"](state), voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE)
+    assert remove.handler(state, remove) is True  # exits the sample submenu, not Voice clone
+    # Zero samples: Add and voice/line selections only.
+    assert len(main["items"](state)) == 2
     assert events == ["before", "add", "after", "remove", "clear"]
     # Removing from an already-empty list must not unload a model again.
-    items[1].handler(state, items[1])
+    assert remove.handler(state, remove) is False
     assert events[-1] == "remove"
     assert events.count("clear") == 1
 
@@ -155,6 +181,8 @@ def test_voice_menu_canceled_actions_keep_samples_and_clear_callback(monkeypatch
     ])
     state = cast(State, SimpleNamespace(project=project))
     events = []
+    menus = capture_menus(monkeypatch)
+    monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
     monkeypatch.setattr(VoiceMenuShared, "ask_and_set_voice_file", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(VoiceMenuShared, "remove_voice_sample_from_menu", lambda *_: False)
     items = VoiceMenuShared.make_voice_sample_items(
@@ -164,11 +192,15 @@ def test_voice_menu_canceled_actions_keep_samples_and_clear_callback(monkeypatch
         on_set_callback=lambda: events.append("after"),
         on_clear_callback=lambda: events.append("clear"),
     )
-    assert get_string_from(state, items[0].label) == (
+    add = items[voice_count]
+    assert get_string_from(state, add.label) == (
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE if voice_count else "Custom empty label"
     )
-    assert items[0].handler(state, items[0]) is None
-    assert items[1].handler(state, items[1]) is None
+    assert add.handler(state, add) is None
+    if voice_count:
+        items[0].handler(state, items[0])
+        remove = find_item(state, menus[-1]["items"](state), voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE)
+        assert remove.handler(state, remove) is False  # canceled: stay in the submenu
     assert len(project.voice_references) == voice_count
     assert events == ["before", "after"]  # retain the existing post-prompt callback behavior
 
@@ -216,45 +248,46 @@ def test_voice_sample_assignment_reports_editor_failures(
 
 
 @pytest.mark.parametrize("voice_count", [0, 1, 2])
-def test_voice_samples_subheading_has_no_trailing_newline(monkeypatch, voice_count):
-    project = Project(tts_model_type="mira_local")
-    voices = [f"voice-{index}.flac" for index in range(voice_count)]
-    monkeypatch.setattr(voice_menu_shared.ProjectVoiceUtil, "get_voice_values", lambda *_: voices)
+def test_voice_sample_items_list_each_sample(monkeypatch, voice_count):
+    project = Project(tts_model_type="mira_local", voice_references=[
+        {"file_name": f"voice-{index}.flac", "transcript": ""} for index in range(voice_count)
+    ])
+    state = cast(State, SimpleNamespace(project=project))
     monkeypatch.setattr(voice_menu_shared.ProjectVoiceUtil, "make_voice_sample_display_label", lambda _, name, __: name)
     monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
 
-    text = VoiceMenuShared.make_voice_samples_subheading(project, TtsModelType.require_by_id("mira_local"))
+    items = VoiceMenuShared.make_voice_sample_items(state, TtsModelType.require_by_id("mira_local"))
 
-    assert not text.endswith("\n")
-    assert text.count("\n") == max(0, voice_count - 1)
-    for index, voice in enumerate(voices, start=1):
-        assert f"Voice sample {index}:" in text and voice in text
+    for index, item in enumerate(items[:voice_count]):
+        label = get_string_from(state, item.label)
+        assert f"Voice sample {index + 1}:" in label and f"voice-{index}.flac" in label
+        assert "\n" not in label
+        assert item.data == index
+        assert item.superlabel == (voice_menu_shared.LABEL_VOICE_SAMPLES_SUPERLABEL if index == 0 else "")
+        assert item.sublabel is None
+    assert get_string_from(state, items[voice_count].label).startswith(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
 
 
 @pytest.mark.parametrize("model_id", ["omnivoice_local", "echo_tts_audiocpp", "omnivoice_audiocpp"])
-def test_voice_samples_subheading_marks_only_long_samples_with_one_footnote(monkeypatch, model_id):
+def test_voice_sample_items_mark_only_long_samples_with_one_footnote(monkeypatch, model_id):
     project = Project(tts_model_type=model_id, voice_references=[
         {"file_name": "long.flac", "transcript": ""},
         {"file_name": "short.flac", "transcript": ""},
         {"file_name": "also-long.flac", "transcript": ""},
     ])
+    state = cast(State, SimpleNamespace(project=project))
     durations = iter([15.1, 14.6, 16.0])
     monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: next(durations))
 
-    text = VoiceMenuShared.make_voice_samples_subheading(project, project.get_tts_model_type())
+    items = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())
 
-    marker = f"{voice_menu_shared.COL_ERROR}*{voice_menu_shared.COL_DEFAULT}"
-    lines = text.splitlines()
-    assert lines[0].endswith(f"(15.1s){voice_menu_shared.COL_DEFAULT}{marker}")
-    assert lines[1].endswith(f"(14.6s){voice_menu_shared.COL_DEFAULT}")
-    assert lines[2].endswith(f"(16.0s){voice_menu_shared.COL_DEFAULT}{marker}")
-    assert lines[3] == (
-        f"  {voice_menu_shared.COL_ERROR}* {voice_menu_shared.COL_DEFAULT}"
-        f"{voice_menu_shared.COL_DIM_ITALICS}Sample exceeds recommended duration "
-        f"for the current model (15s){voice_menu_shared.COL_DEFAULT}"
-    )
-    assert text.count("Sample exceeds") == 1
-    assert not text.endswith("\n")
+    m = voice_menu_shared
+    marker = f"{m.COL_ERROR}*{m.COL_DIM}"
+    labels = [get_string_from(state, item.label) for item in items[:3]]
+    assert labels[0].endswith(f"(15.1s{marker}){m.COL_DEFAULT}")
+    assert labels[1].endswith(f"(14.6s){m.COL_DEFAULT}")
+    assert labels[2].endswith(f"(16.0s{marker}){m.COL_DEFAULT}")
+    assert all(item.sublabel is None for item in items)
 
 
 @pytest.mark.parametrize("duration, warned", [(14.6, False), (15.0, False), (15.1, True), (15.01, True), (None, False)])
@@ -262,13 +295,16 @@ def test_voice_sample_duration_warning_uses_unrounded_duration(monkeypatch, dura
     project = Project(tts_model_type="echo_tts_audiocpp", voice_references=[
         {"file_name": "voice.flac", "transcript": ""},
     ])
+    state = cast(State, SimpleNamespace(project=project))
     monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: duration)
 
-    text = VoiceMenuShared.make_voice_samples_subheading(project, project.get_tts_model_type())
+    label, is_long = VoiceMenuShared.make_voice_sample_item_label(project, project.get_tts_model_type(), 0)
+    item = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())[0]
 
-    assert ("Sample exceeds" in text) == warned
-    assert (f"{voice_menu_shared.COL_ERROR}*" in text) == warned
-    assert ("(" in text) == (duration is not None)
+    assert is_long == warned
+    assert item.sublabel is None
+    assert (f"{voice_menu_shared.COL_ERROR}*" in label) == warned
+    assert ("(" in label) == (duration is not None)
 
 
 def make_crop_project(tmp_path) -> Project:
@@ -290,9 +326,10 @@ def make_crop_project(tmp_path) -> Project:
     return project
 
 
-def test_voice_samples_subheading_reports_cropped_duration(tmp_path, monkeypatch):
+def test_voice_sample_item_reports_cropped_duration(tmp_path, monkeypatch):
     """The saved crop drives the shown duration and the warning."""
     project = make_crop_project(tmp_path)
+    state = cast(State, SimpleNamespace(project=project))
     entry = project.voice_references[0]
     crop_path = Path(ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry))
     crop_path.parent.mkdir(parents=True)
@@ -304,17 +341,19 @@ def test_voice_samples_subheading_reports_cropped_duration(tmp_path, monkeypatch
         lambda path: durations[Path(path).name],
     )
 
-    text = VoiceMenuShared.make_voice_samples_subheading(project, project.get_tts_model_type())
+    item = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())[0]
+    label = get_string_from(state, item.label)
 
-    assert "(trimmed, 9.9s)" in text
-    assert "11.1572" not in text
-    assert "*" not in text
-    assert "Sample exceeds" not in text
+    assert "(trimmed, 9.9s)" in label
+    assert "11.1572" not in label
+    assert "*" not in label
+    assert item.sublabel is None
 
 
-def test_voice_samples_subheading_falls_back_when_cropped_file_missing(tmp_path, monkeypatch):
+def test_voice_sample_item_falls_back_when_cropped_file_missing(tmp_path, monkeypatch):
     """No cropped file on disk means generation uses the original, so the warning applies."""
     project = make_crop_project(tmp_path)
+    state = cast(State, SimpleNamespace(project=project))
     durations = {"long.flac": 11.1572}
     monkeypatch.setattr(
         voice_menu_shared.AudioMetaUtil,
@@ -322,11 +361,11 @@ def test_voice_samples_subheading_falls_back_when_cropped_file_missing(tmp_path,
         lambda path: durations[Path(path).name],
     )
 
-    text = VoiceMenuShared.make_voice_samples_subheading(project, project.get_tts_model_type())
+    item = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())[0]
+    label = get_string_from(state, item.label)
 
-    assert "(trimmed, 11.2s)" in text
-    assert f"{voice_menu_shared.COL_ERROR}*" in text
-    assert "Sample exceeds recommended duration for the current model (10s)" in text
+    assert f"(trimmed, 11.2s{voice_menu_shared.COL_ERROR}*{voice_menu_shared.COL_DIM})" in label
+    assert item.sublabel is None
 
 
 @pytest.mark.parametrize("model_id", ["chatterbox_local", "chatterbox_audiocpp", "higgs_v3_sglomni"])
@@ -334,13 +373,15 @@ def test_voice_samples_without_duration_recommendation_have_no_warning(monkeypat
     project = Project(tts_model_type=model_id, voice_references=[
         {"file_name": "voice.flac", "transcript": ""},
     ])
+    state = cast(State, SimpleNamespace(project=project))
     monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: 120.0)
 
-    text = VoiceMenuShared.make_voice_samples_subheading(project, project.get_tts_model_type())
+    item = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())[0]
+    label = get_string_from(state, item.label)
 
-    assert "Voice sample 1:" in text
-    assert "*" not in text
-    assert "Sample exceeds" not in text
+    assert "Voice sample 1:" in label
+    assert "*" not in label
+    assert item.sublabel is None
 
 
 def test_voice_menu_duration_warning_tracks_current_model_on_redraw(monkeypatch):
@@ -356,15 +397,13 @@ def test_voice_menu_duration_warning_tracks_current_model_on_redraw(monkeypatch)
     for model_id, warned in [("echo_tts_audiocpp", True), ("fish_s2_sglomni", False),
                               ("auk_sglomni", True), ("chatterbox_audiocpp", False)]:
         project.tts_model_type = model_id
-        text = get_string_from(state, captured["subheading"])
-        assert ("Sample exceeds" in text) == warned
-        if warned:
-            max_duration = project.get_tts_model_type().value.ui["voice_sample_max_duration_s"]
-            assert text.endswith(f"({max_duration:g}s){voice_menu_shared.COL_DEFAULT}")
+        label = get_string_from(state, captured["items"](state)[0].label)
+        assert (f"{voice_menu_shared.COL_ERROR}*" in label) == warned
 
 
-@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 5), (1, 5), (2, 7), (9, 6)])
+@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 2), (1, 3), (2, 5), (9, 11)])
 def test_voice_sample_selection_mode_item_requires_multiple_samples(
+        monkeypatch,
         voice_count: int,
         expected_item_count: int,
 ) -> None:
@@ -372,27 +411,26 @@ def test_voice_sample_selection_mode_item_requires_multiple_samples(
         "mira_voice_file_name": [f"voice-{index}.flac" for index in range(voice_count)],
     })
     state = cast(State, SimpleNamespace(project=project))
+    monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
 
     items = VoiceMenuShared.make_voice_sample_items(state, TtsModelType.require_by_id("mira_local"))
 
     assert len(items) == expected_item_count
     labels = [get_string_from(state, item.label) for item in items]
+    for index, label in enumerate(labels[:voice_count]):
+        assert f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {index + 1}: " in label
     expected = []
-    if voice_count < 9:
+    if voice_count == 0:
+        expected.append(voice_menu_shared.LABEL_ADD_FIRST_VOICE_SAMPLE)
+    elif voice_count < 9:
         expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
-    expected.append(voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE)
-    if voice_count > 1:
-        expected.append(voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE)
-    expected.extend([
-        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
-    ])
     assert items[-2 if voice_count > 1 else -1].blank_line_before
     if voice_count > 1:
         expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
         assert VoiceSelectMode.DISABLED.current_label in labels[-2]
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
-    assert all(label.startswith(prefix) for label, prefix in zip(labels, expected))
+    assert len(labels[voice_count:]) == len(expected)
+    assert all(label.startswith(prefix) for label, prefix in zip(labels[voice_count:], expected))
     assert not any(label.startswith("Add/remove") for label in labels)
 
 
@@ -472,22 +510,15 @@ def _validate_state(tmp_path, model_id, entries, *, preset=False):
 
 
 def _validate_entry(file_name, transcript, *, cropped):
-    entry = {"file_name": file_name, "transcript": transcript}
     if cropped:
-        entry.update(
-            transcript="original text",
-            crop_file_name=f"trim-{file_name}",
-            crop_start="0.0",
-            crop_end="3.0",
-            crop_transcript=transcript,
-        )
-    return entry
+        return Voice(file_name, "original text", VoiceCrop(f"trim-{file_name}", 0.0, 3.0, transcript))
+    return Voice(file_name, transcript)
 
 
 def _write_active_sample(tmp_path, entry):
-    sample_path = tmp_path / entry["file_name"]
-    if "crop_file_name" in entry:
-        sample_path = tmp_path / "voice" / "crops" / entry["crop_file_name"]
+    sample_path = tmp_path / entry.file_name
+    if entry.crop is not None:
+        sample_path = tmp_path / "voice" / "crops" / entry.crop.file_name
     sample_path.parent.mkdir(parents=True, exist_ok=True)
     sample_path.write_bytes(b"valid")
     return sample_path
@@ -558,7 +589,7 @@ def test_validate_voices_reports_missing_and_invalid_files(tmp_path, monkeypatch
     if cropped:
         sample_dir.mkdir()
         for entry in entries:
-            (sample_dir / entry["file_name"]).write_bytes(b"original")
+            (sample_dir / entry.file_name).write_bytes(b"original")
         sample_dir /= "crops"
     sample_dir.mkdir(parents=True, exist_ok=True)
     bad_name = "trim-bad.flac" if cropped else "bad.flac"
@@ -619,10 +650,13 @@ def test_validate_voices_transcribes_empty_transcript_and_saves(tmp_path, monkey
     assert not (tmp_path / "project.json").exists()
 
     assert VoiceMenuShared.validate_voices(state) is True
-    expected = {**entry, "crop_transcript" if cropped else "transcript": "transcribed text"}
+    expected = (
+        replace(entry, crop=replace(entry.crop, transcript="transcribed text"))
+        if entry.crop is not None else replace(entry, transcript="transcribed text")
+    )
     assert state.project.voice_references == [expected]
     saved = json.loads((tmp_path / "project.json").read_text())
-    assert saved["voice_references"] == [expected]
+    assert saved["voice_references"] == [expected.to_dict()]
     assert loaded == [str(sample_path), str(sample_path)]
     assert transcribed == [sound]
     assert not capture.errors
@@ -694,7 +728,7 @@ def test_voice_validation_preserves_existing_active_transcript(tmp_path, monkeyp
     capture = _ValidateCapture(monkeypatch)
     entry = _validate_entry("a.flac", " kept ", cropped=cropped)
     if cropped:
-        entry["transcript"] = ""
+        entry = replace(entry, transcript="")
     _write_active_sample(tmp_path, entry)
     monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: object())
     monkeypatch.setattr(VoiceMenuShared, "transcribe_voice_sample_to_text", lambda *_: pytest.fail("must not transcribe"))
@@ -737,7 +771,7 @@ def test_get_voice_problems_lists_every_problem_without_side_effects(tmp_path, m
     sample_dir = tmp_path / "voice" / "crops" if cropped else tmp_path
     sample_dir.mkdir(parents=True, exist_ok=True)
     for entry in entries[1:]:
-        name = entry["crop_file_name"] if cropped else entry["file_name"]
+        name = entry.crop.file_name if entry.crop is not None else entry.file_name
         (sample_dir / name).write_bytes(b"sample")
     monkeypatch.setattr(
         voice_menu_shared.SoundFileUtil, "load",
@@ -790,13 +824,13 @@ class TestCropVoiceSampleMenu:
         from tts_audiobook_tool.app_types import Sound
         from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
         import numpy as np
-        for entry in entries:
-            if "crop_file_name" in entry:
+        project = Project(tts_model_type="glm_local", voice_references=list(entries))
+        for entry in project.voice_references:
+            if entry.crop is not None:
                 (voice_dir / ProjectVoiceUtil.get_cropped_voice_relative_path(entry)).parent.mkdir(parents=True, exist_ok=True)
             rng = np.random.default_rng(0)
             data = (rng.uniform(0.01, 0.02, 24000 * 8)).astype(np.float32)
-            assert SoundFileUtil.save_flac(Sound(data, 24000), str(voice_dir / entry["file_name"])) == ""
-        project = Project(tts_model_type="glm_local", voice_references=list(entries))
+            assert SoundFileUtil.save_flac(Sound(data, 24000), str(voice_dir / entry.file_name)) == ""
         project.dir_path = str(tmp_path)
         return cast(State, SimpleNamespace(project=project)), voice_dir
 
@@ -812,18 +846,37 @@ class TestCropVoiceSampleMenu:
         )
         return prompts, captured_errors
 
-    def test_item_present_before_transcript_item(self):
+    def test_item_present_before_transcript_item(self, monkeypatch):
         project = Project(tts_model_type="glm_local", voice_references=[
             {"file_name": "a.flac", "transcript": "t"},
         ])
         state = cast(State, SimpleNamespace(project=project))
-        items = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())
-        labels = [get_string_from(state, item.label) for item in items]
-        assert voice_menu_shared.LABEL_CROP_VOICE_SAMPLE == "Trim or play voice sample"
-        assert voice_menu_shared.LABEL_CROP_VOICE_SAMPLE in labels
-        assert labels.index(voice_menu_shared.LABEL_CROP_VOICE_SAMPLE) < labels.index(
-            voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION
+        menus = capture_menus(monkeypatch)
+        monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: 3.0)
+        VoiceMenuShared.voice_sample_submenu(state, project.get_tts_model_type(), 0)
+        labels = [get_string_from(state, item.label) for item in menus[-1]["items"](state)]
+        assert voice_menu_shared.LABEL_CROP_VOICE_SAMPLE == "Trim or play"
+        crop_label = f"{voice_menu_shared.LABEL_CROP_VOICE_SAMPLE} {voice_menu_shared.COL_DIM}(3.0s)"
+        assert crop_label in labels
+        edit_label = f'{voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION} {voice_menu_shared.COL_DIM}("t")'
+        assert labels.index(crop_label) < labels.index(edit_label)
+
+    @pytest.mark.parametrize("duration, warned", [(15.0, False), (15.3, True)])
+    def test_crop_item_notes_long_sample(self, monkeypatch, duration, warned):
+        project = Project(tts_model_type="echo_tts_audiocpp", voice_references=[
+            {"file_name": "a.flac", "transcript": "t"},
+        ])
+        state = cast(State, SimpleNamespace(project=project))
+        menus = capture_menus(monkeypatch)
+        monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: duration)
+        VoiceMenuShared.voice_sample_submenu(state, project.get_tts_model_type(), 0)
+        crop_label = get_string_from(state, menus[-1]["items"](state)[0].label)
+        m = voice_menu_shared
+        note = (
+            f" {m.COL_ERROR}*{m.COL_DIM_ITALICS}exceeds current model's "
+            f"recommended limit of 15s{m.COL_DEFAULT}"
         )
+        assert crop_label.endswith(note) == warned
 
     def _patch_crop_app(self, monkeypatch, result):
         from tts_audiobook_tool.textual import voice_crop_app
@@ -852,7 +905,7 @@ class TestCropVoiceSampleMenu:
         launched = self._patch_crop_app(monkeypatch, SimpleNamespace(saved=False, cleared=False))
         errors = []
         monkeypatch.setattr(voice_menu_shared.ask, "ask_error", errors.append)
-        VoiceMenuShared.crop_voice_sample_from_menu(state)
+        VoiceMenuShared.crop_voice_sample_from_menu(state, 0)
         assert len(launched) == 1
         assert launched[0][0].duration == pytest.approx(seconds)
         assert not errors
@@ -867,19 +920,19 @@ class TestCropVoiceSampleMenu:
             VoiceMenuShared, "transcribe_voice_sample_to_text",
             lambda state, sound: transcribed.append(sound) or ("auto transcript", ""),
         )
-        VoiceMenuShared.crop_voice_sample_from_menu(state)
+        VoiceMenuShared.crop_voice_sample_from_menu(state, 0)
         assert len(launched) == 1
         sound, title, initial = launched[0]
         assert title == "a"
         assert initial is None  # no existing crop
         entry = state.project.voice_references[0]
-        assert entry["crop_file_name"].endswith(".flac")
-        assert "/" not in entry["crop_file_name"] and "\\" not in entry["crop_file_name"]
+        assert entry.crop is not None
+        assert entry.crop.file_name.endswith(".flac")
+        assert "/" not in entry.crop.file_name and "\\" not in entry.crop.file_name
         assert Path(ProjectVoiceUtil.resolve_cropped_voice_file_path(state.project, entry)).is_file()
         assert len(transcribed) == 1  # the cropped span, not the original
-        assert entry["crop_start"] == "1.0"
-        assert entry["crop_end"] == "4.5"
-        assert entry["crop_transcript"] == "auto transcript"
+        assert entry.crop_range == (1.0, 4.5)
+        assert entry.crop.transcript == "auto transcript"
         assert feedback == ["Trim saved: 1s - 4.5s (used for generation)"]
 
     def test_existing_crop_is_passed_as_initial(self, tmp_path, monkeypatch):
@@ -892,7 +945,7 @@ class TestCropVoiceSampleMenu:
         monkeypatch.setattr(
             VoiceMenuShared, "transcribe_voice_sample_to_text", lambda state, sound: ("x", "")
         )
-        VoiceMenuShared.crop_voice_sample_from_menu(state)
+        VoiceMenuShared.crop_voice_sample_from_menu(state, 0)
         assert launched[0][2] == (0.25, 4.0)
 
     def test_cleared_result_reverts_existing_crop(self, tmp_path, monkeypatch):
@@ -908,9 +961,9 @@ class TestCropVoiceSampleMenu:
         ))
         crop_path.write_bytes(b"x")
         self._patch_crop_app(monkeypatch, SimpleNamespace(saved=False, cleared=True))
-        VoiceMenuShared.crop_voice_sample_from_menu(state)
+        VoiceMenuShared.crop_voice_sample_from_menu(state, 0)
         assert not crop_path.exists()
-        assert state.project.voice_references == [{"file_name": "a.flac", "transcript": "t"}]
+        assert state.project.voice_references == [Voice("a.flac", "t")]
         assert feedback == ["Trim reset; using original sample a.flac"]
 
     def test_cleared_without_crop_is_a_noop(self, tmp_path, monkeypatch):
@@ -919,7 +972,7 @@ class TestCropVoiceSampleMenu:
         state, _ = self._make_state(tmp_path, [{"file_name": "a.flac", "transcript": "t"}])
         self._patch_crop_app(monkeypatch, SimpleNamespace(saved=False, cleared=True))
         before = list(state.project.voice_references)
-        VoiceMenuShared.crop_voice_sample_from_menu(state)
+        VoiceMenuShared.crop_voice_sample_from_menu(state, 0)
         assert state.project.voice_references == before
         assert feedback == ["No trim to reset"]
 
@@ -931,10 +984,10 @@ class TestCropVoiceSampleMenu:
         }])
         # The app reports saved=False when values did not change.
         self._patch_crop_app(monkeypatch, SimpleNamespace(saved=False, cleared=False))
-        VoiceMenuShared.crop_voice_sample_from_menu(state)
+        VoiceMenuShared.crop_voice_sample_from_menu(state, 0)
         entry = state.project.voice_references[0]
         assert not Path(ProjectVoiceUtil.resolve_cropped_voice_file_path(state.project, entry)).exists()
-        assert entry["crop_start"] == "1.0"
+        assert entry.crop_range == (1.0, 4.0)
 
     def test_reversed_adjustment_preserves_edited_crop_transcript(self, tmp_path, monkeypatch):
         import asyncio
@@ -944,7 +997,7 @@ class TestCropVoiceSampleMenu:
         assert voice_menu_shared.ProjectVoiceUtil.apply_voice_crop_and_save(
             state.project, 0, 0.1, 5.0, "Manually corrected crop transcript",
         ) == ""
-        previous_entry = dict(state.project.voice_references[0])
+        previous_entry = state.project.voice_references[0]
         crop_path = Path(ProjectVoiceUtil.resolve_cropped_voice_file_path(state.project, previous_entry))
         previous_audio = crop_path.read_bytes()
         previous_settings = (tmp_path / "project.json").read_bytes()
@@ -967,42 +1020,41 @@ class TestCropVoiceSampleMenu:
             lambda *_: pytest.fail("Unchanged audio must not be retranscribed"),
         )
         with patch.object(voice_menu_shared.ProjectVoiceUtil, "apply_voice_crop_and_save") as apply:
-            VoiceMenuShared.crop_voice_sample_from_menu(state)
+            VoiceMenuShared.crop_voice_sample_from_menu(state, 0)
         apply.assert_not_called()
         assert state.project.voice_references[0] == previous_entry
         assert crop_path.read_bytes() == previous_audio
         assert (tmp_path / "project.json").read_bytes() == previous_settings
 
-    def test_multi_sample_selection(self, tmp_path, monkeypatch):
+    def test_multi_sample_index_targets_that_sample(self, tmp_path, monkeypatch):
         state, voice_dir = self._make_state(tmp_path, [
             {"file_name": "a.flac", "transcript": "A"},
             {"file_name": "b.flac", "transcript": "B"},
         ])
-        positions = []
         monkeypatch.setattr(
             VoiceMenuShared, "ask_voice_sample_position",
-            lambda prompt, count: positions.append(prompt) or 1,
+            lambda *_: pytest.fail("the sample index is given; must not prompt"),
         )
         launched = self._patch_crop_app(monkeypatch, SimpleNamespace(saved=True, cleared=False, start_s=0.25, end_s=4.0))
         monkeypatch.setattr(
             VoiceMenuShared, "transcribe_voice_sample_to_text", lambda state, sound: ("auto transcript", "")
         )
-        VoiceMenuShared.crop_voice_sample_from_menu(state)
-        assert positions and "trim" in positions[0]
+        VoiceMenuShared.crop_voice_sample_from_menu(state, 1)
         assert launched[0][1] == "b"
         entry = state.project.voice_references[1]
-        assert entry["crop_file_name"].endswith(".flac")
-        assert "/" not in entry["crop_file_name"] and "\\" not in entry["crop_file_name"]
+        assert entry.crop is not None
+        assert entry.crop.file_name.endswith(".flac")
+        assert "/" not in entry.crop.file_name and "\\" not in entry.crop.file_name
         assert Path(ProjectVoiceUtil.resolve_cropped_voice_file_path(state.project, entry)).is_file()
-        assert state.project.voice_references[0] == {"file_name": "a.flac", "transcript": "A"}
-        assert entry["crop_start"] == "0.25"
+        assert state.project.voice_references[0] == Voice("a.flac", "A")
+        assert entry.crop_range == (0.25, 4.0)
 
     def test_app_error_is_reported(self, tmp_path, monkeypatch):
         state, _ = self._make_state(tmp_path, [{"file_name": "a.flac", "transcript": "t"}])
         self._patch_crop_app(monkeypatch, "terminal does not support")
         errors = []
         monkeypatch.setattr(voice_menu_shared.ask, "ask_error", errors.append)
-        VoiceMenuShared.crop_voice_sample_from_menu(state)
+        VoiceMenuShared.crop_voice_sample_from_menu(state, 0)
         assert errors == ["terminal does not support"]
 
     def test_transcript_edit_targets_cropped_span_when_crop_active(self, tmp_path, monkeypatch):
@@ -1023,12 +1075,12 @@ class TestCropVoiceSampleMenu:
         )
         lines = []
         monkeypatch.setattr(voice_menu_shared, "printt", lambda s="": lines.append(s))
-        VoiceMenuShared.edit_voice_sample_transcript(state)
+        VoiceMenuShared.edit_voice_sample_transcript(state, 0)
         entry = state.project.voice_references[0]
-        assert entry["crop_transcript"] == "cut text 2"
-        assert entry["transcript"] == "full text"  # original untouched
+        assert entry.crop is not None and entry.crop.transcript == "cut text 2"
+        assert entry.transcript == "full text"  # original untouched
         assert prompts[0][1] == "cut text"  # prefilled with the crop transcript
-        assert "trimmed span" in prompts[0][0]
+        assert "trimmed span" in lines[0]  # the prompt is printed above the input line
 
     def test_transcript_edit_falls_back_to_original_when_cropped_file_missing(self, tmp_path, monkeypatch):
         state, _ = self._make_state(tmp_path, [{
@@ -1042,8 +1094,8 @@ class TestCropVoiceSampleMenu:
             voice_menu_shared.ask, "ask_input",
             lambda message="", prefill="", **_: (prompts.append((message, prefill)) or "edited full"),
         )
-        VoiceMenuShared.edit_voice_sample_transcript(state)
+        VoiceMenuShared.edit_voice_sample_transcript(state, 0)
         entry = state.project.voice_references[0]
-        assert entry["transcript"] == "edited full"
-        assert entry["crop_transcript"] == "cut text"  # crop transcript untouched
+        assert entry.transcript == "edited full"
+        assert entry.crop is not None and entry.crop.transcript == "cut text"  # crop transcript untouched
         assert prompts[0][1] == "full text"

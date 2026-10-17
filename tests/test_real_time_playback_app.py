@@ -12,6 +12,7 @@ from textual.widgets import Input, Rule, Static
 from tts_audiobook_tool import real_time_playback
 from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo, RoomTone, SttVariant, VoiceSelectMode
 from tts_audiobook_tool.app_types.validation_result import SkippedResult
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut, ModelUnhealthy
 from tts_audiobook_tool.model_worker import ModelWorker
@@ -880,9 +881,9 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
                 get_high_shelf=lambda: 0,
                 realtime_save=False,
                 get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
+                voice_references=[],
                 voice_select_mode=VoiceSelectMode.USER_DEFINED,
                 room_tone=RoomTone.OFF,
-                room_reverb=RoomReverb.OFF,
                 room_reverb_stereo=RoomReverbStereo.MONO,
             ),
         ),
@@ -1079,9 +1080,9 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
                 get_high_shelf=lambda: 0,
                 realtime_save=False,
                 get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
+                voice_references=[],
                 voice_select_mode=VoiceSelectMode.USER_DEFINED,
                 room_tone=RoomTone.OFF,
-                room_reverb=RoomReverb.OFF,
                 room_reverb_stereo=RoomReverbStereo.MONO,
             ),
         ),
@@ -1336,10 +1337,13 @@ def test_realtime_save_writes_exactly_what_was_played(
     voice_index: int,
     break_effect: bool,
     ending: str = "normal",
+    other_voice_reverb: RoomReverb | None = None,
 ) -> None:
     # Saved realtime segments are free-standing artifacts of the playback: the
     # file must hold the post-processed audio (reverb, room tone bed, pause)
-    # sent to the output stream, not the raw generation
+    # sent to the output stream, not the raw generation.
+    # `room_reverb` is the speaking voice's; `other_voice_reverb`, when given,
+    # is every other voice's (never fed, but it can make the run stereo).
     from tts_audiobook_tool.app_types import Sound
 
     class FakeStream:
@@ -1379,6 +1383,7 @@ def test_realtime_save_writes_exactly_what_was_played(
     raw = Sound(raw_data, 48000)
     saved: list[np.ndarray] = []
     spatial_processors = []
+    speech_rooms = []
     spatial_type = real_time_playback.VoiceSpatialProcessor
 
     def make_spatial(**kwargs):
@@ -1390,6 +1395,8 @@ def test_realtime_save_writes_exactly_what_was_played(
             # after the actual loop end may fade the remaining room.
             assert not options.get("is_last", False)
             assert options.get("pan", 0.0) == 0.0
+            if "send_end" not in options:
+                speech_rooms.append(options.get("room_reverb"))
             return apply(*args, **options)
 
         processor.apply = apply_unfaded
@@ -1459,10 +1466,15 @@ def test_realtime_save_writes_exactly_what_was_played(
                 get_high_shelf=lambda: 0,
                 realtime_save=True,
                 get_tts_model_type=lambda: TtsModelType.require_by_id("chatterbox_local"),
-                voice_references=[{"file_name": f"voice{i}.flac"} for i in range(voice_count)],
+                voice_references=[
+                    Voice(f"voice{i}.flac", room_reverb=(
+                        room_reverb if other_voice_reverb is None or i == min(voice_index, voice_count - 1)
+                        else other_voice_reverb
+                    ))
+                    for i in range(voice_count)
+                ],
                 voice_select_mode=VoiceSelectMode.USER_DEFINED,
                 room_tone=RoomTone.HIGH,
-                room_reverb=room_reverb,
                 room_reverb_stereo=room_reverb_stereo,
             ),
         ),
@@ -1493,6 +1505,8 @@ def test_realtime_save_writes_exactly_what_was_played(
 
     stream = streams[-1]
     assert stream.channels == expected_channels
+    # Each segment's narration feeds the speaking voice's room
+    assert speech_rooms and set(speech_rooms) == {room_reverb}
     assert len(spatial_processors) == 1
     assert spatial_processors[0].channels == expected_channels
     warnings = [i for i, line in enumerate(printed) if "Couldn't open the sound output in stereo" in line]
@@ -1554,10 +1568,33 @@ def test_realtime_save_writes_exactly_what_was_played(
     if expected_channels == 2:
         # Only active stereo reverb can make app playback stereo; voice slot 2
         # stays centered even in a multi-voice project.
-        assert room_reverb is not RoomReverb.OFF and room_reverb_stereo.is_stereo
-        assert not np.allclose(pause_start[:, 0], pause_start[:, 1])
+        assert room_reverb_stereo.is_stereo
+        # ...requested by some voice's room (the speaking voice's or another's)
+        assert has_reverb or other_voice_reverb not in (None, RoomReverb.OFF)
+        if has_reverb:
+            assert not np.allclose(pause_start[:, 0], pause_start[:, 1])
+        else:
+            # A dry speaking voice stays centered, even in a stereo run
+            np.testing.assert_array_equal(pause_start[:, 0], pause_start[:, 1])
     if warnings:
         assert "voice positioning" in printed[warnings[0]]
+
+
+@pytest.mark.parametrize(
+    ("speaking", "other", "stereo", "channels"),
+    [
+        # Another voice's room is never fed: the dry voice's pause stays dry
+        (RoomReverb.OFF, RoomReverb.MEDIUM_DRR21, RoomReverbStereo.MONO, 1),
+        (RoomReverb.MEDIUM_DRR21, RoomReverb.OFF, RoomReverbStereo.MONO, 1),
+        # ...but any voice with a room makes the whole run stereo
+        (RoomReverb.OFF, RoomReverb.MEDIUM_DRR21, RoomReverbStereo.ALL_W100, 2),
+        (RoomReverb.SMALL_DRR22, RoomReverb.MEDIUM_DRR21, RoomReverbStereo.LATE_W100, 2),
+    ],
+)
+def test_realtime_uses_each_segments_voice_room(monkeypatch, speaking, other, stereo, channels) -> None:
+    test_realtime_save_writes_exactly_what_was_played(
+        monkeypatch, speaking, stereo, True, channels, 2, 1, False, other_voice_reverb=other,
+    )
 
 
 @pytest.mark.parametrize("ending", ["one", "failed", "cancelled", "cancelled_first", "empty"])

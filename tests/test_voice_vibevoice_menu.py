@@ -36,16 +36,15 @@ def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
                         lambda *_: pytest.fail("Opening voice controls must not load the model"))
     menu.VoiceVibeVoiceMenu.menu(state)
     items = captured["items"](state)
-    # The crop item replaced the old play item (one-for-one), so the item
-    # count and indices are unchanged from before the crop feature.
-    select = items[7]
-    assert get_string_from(state, items[6].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    # Sample group: 2 sample items, Add, selection mode, edit selections.
+    select = items[5]
+    assert get_string_from(state, items[4].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     label = strip_ansi_codes(get_string_from(state, select.label))
     assert label.startswith("Select LoRA")
     assert (lora_target or "(optional)") in label
     assert select.blank_line_before
-    assert len(items) == (9 if lora_target else 8)
-    assert all(not item.superlabel for item in items)
+    assert len(items) == (7 if lora_target else 6)
+    assert all(not item.superlabel for item in items[1:])
     select.handler(state, select)
     assert asked["project"] is state.project
     assert asked["current_target"] == lora_target
@@ -58,7 +57,7 @@ def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
         assert not clear.blank_line_before
         clear.handler(state, clear)
         assert state.project.get_model_setting("vibevoice_local", "lora_target") == ""
-        assert len(captured["items"](state)) == 8
+        assert len(captured["items"](state)) == 6
         assert saved == [state.project]
         assert cleared == [True]
         assert len(state.project.voice_references) == 2

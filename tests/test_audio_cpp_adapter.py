@@ -304,15 +304,14 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
     items = VoiceAudioCppMenu.make_items(state, definition(ECHO_ID))
 
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: suzie yeung hanya 1_4.flac",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: second.flac",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
         f"{voice_menu_shared.LABEL_VOICE_SELECTION_MODE} (currently: user-defined)",
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
     ]
-    assert all(not item.superlabel for item in items)
+    # Only the sample list carries its shared superlabel; no model headings.
+    assert [item.superlabel for item in items] == [voice_menu_shared.LABEL_VOICE_SAMPLES_SUPERLABEL, "", "", "", ""]
 
     items = ModelAudioCppMenu.make_items(state, definition(ECHO_ID))
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [

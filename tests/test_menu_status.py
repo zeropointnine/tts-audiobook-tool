@@ -6,6 +6,7 @@ import pytest
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot, RemoteTtsIssue
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.main_menu import make_voice_label
 from tts_audiobook_tool.menus.menu_status import _make_stt_text
 from tts_audiobook_tool.menus.menu_status import MenuStatus
@@ -658,7 +659,7 @@ def test_project_load_skips_samples_without_duration_recommendation(monkeypatch,
 
     state = make_state(TtsModelType.require_by_id(model_id))
     state.pending_project_load_checks = True
-    state.project.voice_references = [{"file_name": "voice.flac", "transcript": ""}]
+    state.project.voice_references = [Voice("voice.flac")]
     monkeypatch.setattr(AudioMetaUtil, "get_audio_duration",
                         lambda _: pytest.fail("No recommendation: do not probe sample durations"))
     MenuStatus.show_pending_project_hints(state, is_first_main_menu=True)
@@ -790,7 +791,7 @@ def test_model_switch_rearms_checks_and_prints_only_compatibility_fyis(monkeypat
     state = make_state(model)
     state.has_shown_main_menu = True
     state.project.dir_path = "/example/book"
-    state.project.voice_references = [{"file_name": "voice.flac", "transcript": ""}]
+    state.project.voice_references = [Voice("voice.flac")]
     state.project.phrase_groups = [PhraseGroup([Phrase("Short text.", Reason.PARAGRAPH)])]
     state.project.book.segmentation_settings = state.project.book.segmentation_settings._replace(
         max_words_per_segment=100,

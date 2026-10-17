@@ -29,7 +29,6 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.reason_pauses import ReasonPauses
 from tts_audiobook_tool.sound.noise_bed import NoiseBed
-from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor
 from tts_audiobook_tool.sound.voice_spatial import VoiceSpatialProcessor
 from tts_audiobook_tool.sound.sentence_gap_util import SentenceGapInsertion
 from tts_audiobook_tool.sound.silence_util import GapTrimMap, SilenceUtil
@@ -348,6 +347,10 @@ class ConcatUtil:
             spatial_policy.pan_for_voice_index(group.voice_index)
             for group in state.project.phrase_groups
         ]
+        voice_reverbs = [
+            spatial_policy.room_reverb_for_voice_index(group.voice_index)
+            for group in state.project.phrase_groups
+        ]
 
         # [1] Concatenated audio file
 
@@ -373,9 +376,9 @@ class ConcatUtil:
                 limit_silence_gaps_duration=state.project.limit_silence_gaps_duration,
                 min_sentence_silence=state.project.min_segment_sentence_silence.duration,
                 room_tone_db=state.project.room_tone.level_db,
-                room_reverb=state.project.room_reverb,
                 room_reverb_stereo=state.project.room_reverb_stereo,
                 voice_pans=voice_pans,
+                voice_reverbs=voice_reverbs,
                 stereo_required=spatial_policy.requested_channels == 2,
             )
         finally:
@@ -550,6 +553,7 @@ class ConcatUtil:
         room_reverb: RoomReverb = RoomReverb.OFF,
         room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO,
         voice_pans: list[float] | None = None,
+        voice_reverbs: list[RoomReverb] | None = None,
         stereo_required: bool = False,
     ) -> ConcatRenderResult | str:
         """
@@ -582,15 +586,20 @@ class ConcatUtil:
             output, including pauses and break effects (see NoiseBed). None
             disables it.
         :param room_reverb:
-            Room reverb preset, streamed over the whole output before the noise
-            bed (see RoomReverbProcessor). Only the narration feeds it; pauses
-            and break effects stay dry, with the tail decaying under them.
+            Room reverb preset for every entry, when `voice_reverbs` is None.
         :param room_reverb_stereo:
-            Stereo spread of the room reverb. When reverb is on and this isn't
-            MONO, the output is stereo, independently of voice positioning.
+            Stereo spread of the room reverb. When any entry's reverb is on and
+            this isn't MONO, the output is stereo, independently of voice
+            positioning.
         :param voice_pans:
             Per-entry direct narration pan, aligned with phrases_and_paths,
             including entries with missing files. None keeps every voice centered.
+        :param voice_reverbs:
+            Per-entry room reverb preset (the speaking voice's), aligned like
+            `voice_pans`. Streamed over the whole output before the noise bed,
+            one room per preset (see VoiceSpatialProcessor): only an entry's
+            narration feeds its room; pauses and break effects stay dry, and
+            every room's tail keeps decaying under whatever follows.
         :param stereo_required:
             Project-level stereo requirement, even if this range has no panned
             speech. Nonzero voice_pans also require stereo for low-level callers.
@@ -612,7 +621,11 @@ class ConcatUtil:
             voice_pans = [0.0] * len(phrases_and_paths)
         elif len(voice_pans) != len(phrases_and_paths):
             raise ValueError("voice_pans must align with phrases_and_paths")
-        has_reverb = room_reverb.design is not None and room_reverb.drr_db is not None
+        if voice_reverbs is None:
+            voice_reverbs = [room_reverb] * len(phrases_and_paths)
+        elif len(voice_reverbs) != len(phrases_and_paths):
+            raise ValueError("voice_reverbs must align with phrases_and_paths")
+        has_reverb = any(reverb.design is not None and reverb.drr_db is not None for reverb in voice_reverbs)
         channels = 2 if (stereo_required or any(pan != 0 for pan in voice_pans)
                          or (has_reverb and room_reverb_stereo.is_stereo)) else 1
 
@@ -638,8 +651,8 @@ class ConcatUtil:
         # Room tone setting: a constant noise bed under the whole output.
         # Created on first use, at the rendered audio's sample rate.
         noise_bed: NoiseBed | None = None
-        # One shared spatial processor; its room tail spans voice changes.
-        spatial: VoiceSpatialProcessor | None = None
+        # One shared spatial processor; its room tails span voice changes.
+        spatial = VoiceSpatialProcessor(channels=channels, room_reverb_stereo=room_reverb_stereo)
 
         def flush_pending(next_sound: Sound | None) -> None:
             """
@@ -648,7 +661,7 @@ class ConcatUtil:
             segment's rendered sound (without pause), or None for the final
             segment (no compensation applied).
             """
-            nonlocal duration_sum, noise_bed, spatial
+            nonlocal duration_sum, noise_bed
             assert pending is not None
             sound, phrase, idx, path = pending
             narration_end = len(sound.data)
@@ -692,20 +705,12 @@ class ConcatUtil:
                 pause_duration_override=override,
             )
 
-            # Pan only direct narration; shared room sound stays independent
-            # of voice position. Appended effects stay dry and centered.
-            if spatial is None:
-                reverb = None
-                if room_reverb.design is not None and room_reverb.drr_db is not None:
-                    reverb = RoomReverbProcessor(
-                        sound.sr, room_reverb.design, room_reverb.drr_db,
-                        width=room_reverb_stereo.width if channels == 2 else 0.0,
-                        spread_early=room_reverb_stereo.spread_early,
-                    )
-                spatial = VoiceSpatialProcessor(channels=channels, reverb=reverb)
+            # Pan only direct narration; room sound stays independent of voice
+            # position. The narration feeds its voice's room only. Appended
+            # effects stay dry and centered.
             sound = spatial.apply(
                 sound, pan=voice_pans[idx], send_end=narration_end,
-                is_last=is_final_segment,
+                is_last=is_final_segment, room_reverb=voice_reverbs[idx],
             )
 
             # Constant noise bed under the segment and its pause or break

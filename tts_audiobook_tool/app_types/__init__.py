@@ -460,19 +460,19 @@ class VoiceSelectMode(tuple[str, str, str, str], Enum):
         "custom",
         "user-defined",
         "User-defined",
-        "On TTS inference, uses user-defined line-by-line selections",
+        "User-defined voice/line selections",
     )
     AUTO_ADVANCE = (
         "auto_advance",
         "auto-advance",
         "Auto-advance",
-        "Cycles through voice samples in order, on each batch generation",
+        "On each TTS batch generation, cycles through voices in order\n      Uses the reverb settings of voice sample 1",
     )
     DISABLED = (
         "disabled",
         "disabled",
         "Disabled",
-        "Uses voice sample 1 for every generation",
+        "Uses voice sample 1 for every TTS generation\n      Uses the reverb settings of voice sample 1",
     )
 
     @property

@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.project_support.model_settings_compat import RETIRED_GROUPS, SHARED_MEMBERS
@@ -17,6 +18,7 @@ IDS = SHARED_MEMBERS["fish_s2"]
 SAMPLING = {"temperature": 0.8, "top_p": 0.85, "top_k": 50}
 REFERENCES = [{"file_name": "one.flac", "transcript": "one"},
               {"file_name": "two.flac", "transcript": ""}]
+VOICES = [Voice(**ref) for ref in REFERENCES]
 
 
 def old_source():
@@ -60,7 +62,7 @@ def test_migrated_values_resolve_identically_for_local_and_server():
         assert project.get_model_setting("fish_s2_local", name) == value
         assert ConfiguredSettings.get(project, definition.parameters[name], "fish_s2_sglomni") == value
     assert project.get_model_setting("fish_s2_local", "seed") == 7
-    assert project.voice_references == REFERENCES
+    assert project.voice_references == VOICES
 
 
 @pytest.mark.parametrize("reset", [None, -1.0, 0.5])
@@ -97,7 +99,7 @@ def test_flat_fish_s2_fields_fork_with_private_local_and_server_fields(version):
     assert project.get_model_setting("fish_s2_local", "rolling_cont") == 2
     assert project.get_model_setting("fish_s2_sglomni", "concurrent_requests") == 3
     # The flat list is one source even though two models historically read it.
-    assert project.voice_references == REFERENCES
+    assert project.voice_references == VOICES
     saved = ProjectSerializationUtil.to_project_json_dict(project)
     assert "fish_s2" not in saved["model_settings"]["shared"]
     assert not any(key.startswith("fish_s2_") for key in saved)

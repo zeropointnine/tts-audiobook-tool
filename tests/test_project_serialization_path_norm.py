@@ -6,13 +6,14 @@ the load side must reduce them to the app's portable form and the write side
 must not persist anything machine-local. These tests pin both directions, and
 pin the completeness of the field list that drives them.
 
-Version 4 stores ordered voice references at project level; legacy model-scoped
+Version 4+ stores ordered voice references at project level; legacy model-scoped
 and flat voice fields are accepted on load and never written back.
 """
 
 from pathlib import Path
 from typing import Any, cast
 
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings_declarations import (
     BUILTIN_LEGACY_FIELDS,
@@ -60,8 +61,8 @@ def test_normalize_loaded_project_dict_reduces_a_foreign_voice_list() -> None:
 
     references = d["voice_references"]
     assert references == [
-        {"file_name": "narrator.flac", "transcript": ""},
-        {"file_name": "voice/second.flac", "transcript": ""},
+        Voice("narrator.flac", ""),
+        Voice("voice/second.flac", ""),
     ]
     assert "chatterbox_voice_file_name" not in d
     # A single legacy source is migrated silently, including canonical paths.
@@ -112,7 +113,7 @@ def test_normalize_loaded_project_dict_leaves_transcript_text_alone() -> None:
     ProjectSerializationUtil.normalize_loaded_project_dict(d)
 
     references = d["voice_references"]
-    assert references == [{"file_name": "voice.flac", "transcript": text}]
+    assert references == [Voice("voice.flac", text)]
 
 
 def test_normalize_loaded_project_dict_leaves_aliased_transcript_text_alone() -> None:
@@ -130,7 +131,7 @@ def test_normalize_loaded_project_dict_leaves_aliased_transcript_text_alone() ->
     ProjectSerializationUtil.normalize_loaded_project_dict(d)
 
     references = d["voice_references"]
-    assert references == [{"file_name": "voice.flac", "transcript": text}]
+    assert references == [Voice("voice.flac", text)]
     assert "glm_voice_text" not in d
     assert "glm_voice_transcript" not in d
 

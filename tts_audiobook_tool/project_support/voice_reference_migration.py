@@ -1,12 +1,12 @@
-"""Pure v4 voice migration, with interaction confined to explicit UI callers."""
+"""Pure v4/v5 voice migration, with interaction confined to explicit UI callers."""
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
-import math
+from dataclasses import dataclass, replace
 from typing import Any
 
-from tts_audiobook_tool.app_support import path_norm
+from tts_audiobook_tool.app_types import RoomReverb
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, PROJECT_SPEC_VERSION
 
 
@@ -14,7 +14,7 @@ from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, PROJE
 class VoiceReferenceSource:
     owner: tuple[str, str]
     model_ids: tuple[str, ...]
-    references: list[dict[str, str]]
+    references: list[Voice]
 
     @property
     def label(self) -> str:
@@ -29,7 +29,7 @@ class VoiceReferenceSource:
 class VoiceReferenceMigrationRequired(ValueError):
     def __init__(self, sources: list[VoiceReferenceSource]):
         self.sources = sources
-        details = '; '.join(f"{s.label}: {', '.join(r['file_name'] for r in s.references)}" for s in sources)
+        details = '; '.join(f"{s.label}: {', '.join(r.file_name for r in s.references)}" for s in sources)
         super().__init__(
             'Voice clone migration requires a model-list choice. Open/import this project '
             f'interactively to choose which list to keep. Sources: {details}'
@@ -40,123 +40,41 @@ class VoiceReferenceMigrationCancelled(ValueError):
     pass
 
 
-# Optional per-entry crop fields (see docs-dev/voice-sample-crop.md). Times
-# are stored as canonical decimal strings so the entry dicts remain
-# dict[str, str] throughout the serialization/compat stack.
-VOICE_CROP_SUBDIR = 'crops'
-CROP_FILE_NAME_FIELD = 'crop_file_name'
-CROP_START_FIELD = 'crop_start'
-CROP_END_FIELD = 'crop_end'
-CROP_TRANSCRIPT_FIELD = 'crop_transcript'
-CROP_FIELDS = (CROP_FILE_NAME_FIELD, CROP_START_FIELD, CROP_END_FIELD, CROP_TRANSCRIPT_FIELD)
+def normalize_voice_references(
+        value: Any,
+        where: str = 'voice_references',
+        *,
+        default_room_reverb: RoomReverb = RoomReverb.OFF,
+) -> list[Voice]:
+    """Parse a stored list into `Voice` objects (see `Voice.from_dict`).
 
-
-def normalize_crop_file_name(value: Any) -> str | None:
-    """Accept only a FLAC basename; the managed directory is not persisted."""
-    if not isinstance(value, str):
-        return None
-    if (not value.endswith('.flac') or value == '.flac'
-            or any(char in value for char in ('/', '\\', ':', '\x00'))):
-        return None
-    return value
-
-
-def format_crop_seconds(value: float) -> str:
-    """Canonical persisted form of a crop boundary in seconds."""
-    return str(float(value))
-
-
-def parse_crop_range(ref: dict) -> tuple[float, float] | None:
-    """Parse a validated entry's crop range, or None when no crop is set.
-
-    Only meaningful for entries that already passed through
-    `normalize_voice_references`; malformed values yield None.
+    `Voice` instances pass through unchanged. Dict entries without their own
+    `room_reverb` (all pre-v5 data) take `default_room_reverb`.
     """
-    if normalize_crop_file_name(ref.get(CROP_FILE_NAME_FIELD)) is None:
-        return None
-    try:
-        start = float(ref[CROP_START_FIELD])
-        end = float(ref[CROP_END_FIELD])
-    except (KeyError, TypeError, ValueError, OverflowError):
-        return None
-    if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end):
-        return None
-    return start, end
-
-
-def copy_crop_fields(ref: dict) -> dict:
-    """Copy the crop subset of an already-normalized entry."""
-    return {name: ref[name] for name in CROP_FIELDS if name in ref}
-
-
-def _normalize_crop_fields(ref: dict, where: str, index: int) -> dict:
-    """Drop malformed crop metadata with a warning; never infer a crop path.
-
-    The pre-deployment sibling naming scheme is intentionally unsupported.
-    Original sample files and transcripts are retained untouched.
-    """
-    from tts_audiobook_tool.l import L
-
-    if not any(name in ref for name in CROP_FIELDS):
-        return {}
-
-    crop_file_name = normalize_crop_file_name(ref.get(CROP_FILE_NAME_FIELD))
-    if crop_file_name is None:
-        L.w(f'{where}[{index}]: trim requires an explicit <name>.flac basename; dropping trim')
-        return {}
-
-    transcript = ref.get(CROP_TRANSCRIPT_FIELD, '')
-    if not isinstance(transcript, str):
-        L.w(f'{where}[{index}]: trim transcript must be a string; dropping trim')
-        return {}
-
-    parsed: tuple[float, float] | None = None
-    try:
-        start_raw = ref.get(CROP_START_FIELD)
-        end_raw = ref.get(CROP_END_FIELD)
-        if start_raw is None or end_raw is None:
-            raise ValueError('trim start and end must both be present')
-        start = float(start_raw)  # accepts numbers or numeric strings
-        end = float(end_raw)
-        if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end):
-            raise ValueError('expected finite seconds with 0 <= start < end')
-        parsed = start, end
-    except (TypeError, ValueError, OverflowError) as e:
-        L.w(f'{where}[{index}]: invalid trim range ({e}); dropping trim')
-        return {}
-
-    assert parsed is not None
-    start, end = parsed
-    return {
-        CROP_FILE_NAME_FIELD: crop_file_name,
-        CROP_START_FIELD: format_crop_seconds(start),
-        CROP_END_FIELD: format_crop_seconds(end),
-        CROP_TRANSCRIPT_FIELD: transcript,
-    }
-
-
-def normalize_voice_references(value: Any, where: str = 'voice_references') -> list[dict[str, str]]:
     if not isinstance(value, list):
         raise ValueError(f'{where} must be an array')
-    result = []
+    result: list[Voice] = []
     for index, ref in enumerate(value):
-        if (not isinstance(ref, dict) or not isinstance(ref.get('file_name'), str)
-                or not isinstance(ref.get('transcript', ''), str)):
-            raise ValueError(f'{where}[{index}]: expected file_name and optional transcript strings')
-        file_name, _ = path_norm.normalize_stored_relative_path(ref['file_name'])
-        if not file_name:
-            # A stored name that cannot be a project-local file (e.g. a stray
-            # absolute path) drops that entry rather than failing the project,
-            # matching the old flat-field handling of unusable paths.
-            from tts_audiobook_tool.l import L
-            L.w(f'{where}[{index}].file_name is not a usable project-local path; dropping entry')
+        if isinstance(ref, Voice):
+            result.append(ref)
             continue
-        entry = {'file_name': file_name, 'transcript': ref.get('transcript', '')}
-        crop_fields = _normalize_crop_fields(ref, where, index)
-        if crop_fields:
-            entry.update(crop_fields)
-        result.append(entry)
+        voice = Voice.from_dict(ref, where, index, default_room_reverb=default_room_reverb)
+        if voice is not None:
+            result.append(voice)
     return result
+
+
+def _pop_legacy_room_reverb(d: dict[str, Any]) -> RoomReverb | None:
+    """Remove the pre-v5 project-wide `room_reverb`; None when absent.
+
+    An unknown id loads as Off, as it did as a project setting.
+    """
+    if 'room_reverb' not in d:
+        return None
+    value = d.pop('room_reverb')
+    if isinstance(value, RoomReverb):
+        return value
+    return (RoomReverb.get_by_id(value) if isinstance(value, str) else None) or RoomReverb.OFF
 
 
 def _legacy_strings(value: Any, where: str) -> list[str]:
@@ -164,7 +82,7 @@ def _legacy_strings(value: Any, where: str) -> list[str]:
 
     Old flat fields were permissively flattened on load (non-strings and empty
     strings dropped), so sloppy historical data must not fail the project now
-    that this data feeds the v4 list. Structured top-level `voice_references`
+    that this data feeds the project-wide list. Structured top-level `voice_references`
     entries stay strict; only these pre-v3 spellings are forgiving.
     """
     from tts_audiobook_tool.l import L
@@ -299,7 +217,7 @@ def choose_voice_reference_source(
     )
     printt()
     for index, source in enumerate(sources, 1):
-        printt(f"[{index}] {source.label}: {COL_DIM} {', '.join(ref['file_name'] for ref in source.references)}")
+        printt(f"[{index}] {source.label}: {COL_DIM} {', '.join(ref.file_name for ref in source.references)}")
     printt('[0] Abort')
     printt()
     while True:
@@ -315,7 +233,12 @@ def choose_voice_reference_source(
 def prepare_project_voice_references(
     d: dict[str, Any], *, prompt: bool = False, dir_name: str | None = None,
 ) -> dict[str, Any]:
-    """Return a copy with one authoritative list; never save or mutate the input."""
+    """Return a copy with one authoritative list; never save or mutate the input.
+
+    The list is `list[Voice]`. v4 -> v5: the project-wide `room_reverb` moves
+    onto every voice (an entry's own `room_reverb` wins) and is removed from
+    the project; with no voices it is dropped.
+    """
     from tts_audiobook_tool.project_support.model_settings import REGISTRY, ModelSettings
     from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
     from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -329,8 +252,11 @@ def prepare_project_voice_references(
     if isinstance(version, int) and version > PROJECT_SPEC_VERSION:
         raise ValueError(f'Unsupported project format version {version}; update the app before opening it.')
     ProjectLoadUtil.remap_legacy_keys(d)
+    legacy_room_reverb = _pop_legacy_room_reverb(d)
     if 'voice_references' in d:
-        refs = normalize_voice_references(d['voice_references'])
+        refs = normalize_voice_references(
+            d['voice_references'], default_room_reverb=legacy_room_reverb or RoomReverb.OFF,
+        )
     else:
         sources = _collect_sources(d)
         if len(sources) > 1:
@@ -339,9 +265,12 @@ def prepare_project_voice_references(
             refs = choose_voice_reference_source(sources, dir_name).references
         else:
             refs = sources[0].references if sources else []
-    d['voice_references'] = deepcopy(refs)
+        if legacy_room_reverb is not None:
+            # Pre-v4 sources never carry per-voice reverb.
+            refs = [replace(ref, room_reverb=legacy_room_reverb) for ref in refs]
+    d['voice_references'] = list(refs)
     # Remove scoped copies from every object, including unknown models/groups:
-    # v4 has exactly one authoritative list, and unrecognized scoped voice data
+    # since v4 there is exactly one authoritative list, and unrecognized scoped voice data
     # is dropped, not preserved as a second voice source.
     settings = d.get('model_settings')
     if isinstance(settings, ModelSettings):

@@ -106,7 +106,7 @@ Selecting **None** in the model picker is not a permanent opt-out: if exactly on
 - **Model settings > TTS model:** (server mode only) offer None plus the currently available distinct types. An explicit selection updates the project, saves it, and binds it. It clears any pending model-change notice and re-arms the duration and segmentation FYI checks for the next complete menu. Subsequent reconciliation still applies the table above.
 - **Workers and noninteractive callers:** runtime binding does not perform interactive reconciliation, mutate the saved selection, or ask for input. They validate the selection supplied to them.
 
-Changing the selected ID does not copy or discard other models' settings or the shared project voice list. All models use the same ordered filename/transcript pairs within that project; model-specific clone/transcript capability still controls how they are consumed. For storage ownership and migration, refer to [Project Spec v4](<project-spec-v4.md>).
+Changing the selected ID does not copy or discard other models' settings or the shared project voice list. All models use the same ordered filename/transcript pairs within that project; model-specific clone/transcript capability still controls how they are consumed. For storage ownership and migration, refer to [Project Spec v5](<project-spec-v5.md>).
 
 ## 4. Bind selection separately from choosing it
 

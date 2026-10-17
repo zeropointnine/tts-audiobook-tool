@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo, Sound
 from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor, StreamingReverb
 from tts_audiobook_tool.sound.voice_spatial import VoiceSpatialProcessor, center_unity_pan_gains
 
@@ -209,4 +209,85 @@ def test_drain_after_pause_only_emits_residual_tail_not_full_room_length():
     assert tail is not None
     # Two of the four pending frames already played during the pause.
     assert len(tail.data) == 2
+    assert processor.drain_tail() is None
+
+
+# --- Several rooms (one per voice preset)
+
+def test_idle_room_shortcut_matches_convolving_silence():
+    ir = np.random.default_rng(1).normal(0, 0.1, 300)
+    fed = noise(500).data
+    for n in (1, 100, 299, 300, 1000):
+        a, b = StreamingReverb(ir, 3.0), StreamingReverb(ir, 3.0)
+        a.process_wet(fed), b.process_wet(fed)
+        np.testing.assert_allclose(a.process_wet(np.zeros(n), send_end=0), b.process_wet(np.zeros(n)), atol=1e-12)
+        np.testing.assert_allclose(a.process_wet(fed), b.process_wet(fed), atol=1e-12)
+
+
+@pytest.mark.parametrize("channels,stereo", [(1, RoomReverbStereo.ALL_W100), (2, RoomReverbStereo.MONO),
+                                             (2, RoomReverbStereo.LATE_W100)])
+def test_each_call_feeds_only_its_room_and_every_room_keeps_decaying(channels, stereo):
+    first, second, pause = noise(3000), sound(np.random.default_rng(9).normal(0, 0.03, 2000)), sound(np.zeros(4000))
+    processor = VoiceSpatialProcessor(channels, room_reverb_stereo=stereo)
+    out = [
+        processor.apply(first, room_reverb=RoomReverb.SMALL_DRR22).data,
+        processor.apply(second, room_reverb=RoomReverb.MEDIUM_DRR21).data,
+        processor.apply(pause, send_end=0, room_reverb=RoomReverb.SMALL_DRR22).data,
+    ]
+    assert list(processor.rooms) == [RoomReverb.SMALL_DRR22, RoomReverb.MEDIUM_DRR21]
+    # Rooms made with mono output never spread
+    width = stereo.width if channels == 2 else 0.0
+    a = RoomReverbProcessor(SR, "small", 22.0, width=width, spread_early=stereo.spread_early)
+    b = RoomReverbProcessor(SR, "medium", 21.0, width=width, spread_early=stereo.spread_early)
+
+    def mix(source, *wets):
+        dry = source.data.astype(np.float64)
+        total = np.repeat(dry[:, None], 2, axis=1) if channels == 2 else dry
+        for wet in wets:
+            total = total + (wet[:, None] if channels == 2 and wet.ndim == 1 else wet)
+        return total
+
+    expected = [
+        mix(first, a.process_wet(first)),
+        mix(second, a.process_wet(second, 0), b.process_wet(second)),
+        mix(pause, a.process_wet(pause, 0), b.process_wet(pause, 0)),
+    ]
+    for got, want in zip(out, expected):
+        np.testing.assert_allclose(got, want, atol=1e-6)
+    # The second voice's room is still audible in the pause after the first's
+    assert np.any(np.abs(expected[2] - mix(pause, a.process_wet(sound(np.zeros(4000)), 0))) > 0)
+
+
+def test_off_voice_adds_no_room_and_feeds_none():
+    processor = VoiceSpatialProcessor(1)
+    source = noise()
+    np.testing.assert_array_equal(processor.apply(source, room_reverb=RoomReverb.OFF).data, source.data)
+    assert processor.rooms == {}
+    processor.apply(source, room_reverb=RoomReverb.SMALL_DRR17)
+    reference = VoiceSpatialProcessor(1)
+    reference.apply(source, room_reverb=RoomReverb.SMALL_DRR17)
+    # An Off voice's narration only advances the existing room
+    np.testing.assert_allclose(
+        processor.apply(noise(2000), room_reverb=RoomReverb.OFF).data - noise(2000).data,
+        reference.apply(sound(np.zeros(2000)), send_end=0, room_reverb=RoomReverb.OFF).data,
+        atol=1e-7,
+    )
+
+
+def test_drain_mixes_every_rooms_tail():
+    first, second = noise(3000), sound(np.random.default_rng(5).normal(0, 0.03, 2000))
+    processor = VoiceSpatialProcessor(2, room_reverb_stereo=RoomReverbStereo.LATE_W100)
+    processor.apply(first, room_reverb=RoomReverb.MEDIUM_DRR21)
+    processor.apply(second, room_reverb=RoomReverb.SMALL_DRR22)
+    a = RoomReverbProcessor(SR, "medium", 21.0, width=1.0)
+    b = RoomReverbProcessor(SR, "small", 22.0, width=1.0)
+    a.process_wet(first), a.process_wet(second, 0)
+    b.process_wet(second)
+    tails = [a.drain_wet(), b.drain_wet()]
+    expected = np.zeros((max(map(len, tails)), 2))
+    for wet in tails:
+        expected[:len(wet)] += wet
+    tail = processor.drain_tail(dtype=np.float64)
+    assert tail is not None
+    np.testing.assert_allclose(tail.data, expected, atol=1e-9)
     assert processor.drain_tail() is None

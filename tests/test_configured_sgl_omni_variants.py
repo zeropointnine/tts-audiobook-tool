@@ -15,6 +15,7 @@ from catalog_toml_support import read_catalog, write_catalog
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
@@ -414,7 +415,7 @@ def test_moss_server_payload_uses_only_its_private_settings(model_id, prefix, se
     (tmp_path / filename).write_bytes(b"audio")
     project.set_model_setting(model_id, "file_name", [filename])
     project.set_model_setting(model_id, "transcript", [f"voice {selected_index}"])
-    assert project.voice_references == [{"file_name": filename, "transcript": f"voice {selected_index}"}]
+    assert project.voice_references == [Voice(file_name=filename, transcript=f"voice {selected_index}")]
     for index, owner in enumerate(moss_ids, start=1):
         for seed_name in (("delay_seed", "local_seed", "local_v15_seed") if owner == "moss_local" else ("seed",)):
             assert project.get_model_setting(owner, seed_name) == index

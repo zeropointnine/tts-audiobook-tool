@@ -120,7 +120,9 @@ def test_cosyvoice_buffered_and_streamed_payloads(cosyvoice, monkeypatch, tmp_pa
     assert settings["parameters"] == {"temperature": 0.6, "top_p": None, "top_k": 32, "repetition_penalty": None}
     # V4: the pair lives in the project-wide list, not the model object.
     assert "voice_references" not in settings
-    assert saved["voice_references"] == [{"file_name": "reference.wav", "transcript": "Reference transcript"}]
+    assert saved["voice_references"] == [
+        {"file_name": "reference.wav", "transcript": "Reference transcript", "room_reverb": "off"}
+    ]
     restored = Project.model_validate(saved)
     assert restored.get_model_setting(MODEL_ID, "top_k") == 32
     assert restored.get_model_setting(MODEL_ID, "transcript") == ["Reference transcript"]

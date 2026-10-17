@@ -209,7 +209,7 @@ class _ResponseEngine:
         self.output_turn_tts_started_at: float | None = None
         self.output_turn_tts_mode: str | None = None
         self.output_turn_tts_preview_text: str = ""
-        # Room reverb (project setting, as in concat and realtime playback),
+        # Room reverb (voice 0's setting; see Project.get_voice_chat_room_reverb),
         # created lazily on the TTS worker thread. One per turn: an
         # interrupted turn clears the buffered audio, so a tail carried over
         # from it would be stale.
@@ -224,7 +224,7 @@ class _ResponseEngine:
         """
         if not self._room_reverb_made:
             self._room_reverb_made = True
-            room_reverb = self.project.room_reverb
+            room_reverb = self.project.get_voice_chat_room_reverb()
             if room_reverb.design is not None and room_reverb.drr_db is not None:
                 stereo = self.project.room_reverb_stereo
                 self._room_reverb = RoomReverbProcessor(

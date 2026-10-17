@@ -36,6 +36,20 @@ def make_state(model_id="mira_local", voice_count=0, dir_path="/example/book"):
     return cast(State, SimpleNamespace(project=project))
 
 
+def sample_group_prefixes(voice_count):
+    """Expected (ANSI-stripped) label prefixes of the shared sample group.
+
+    The no-samples Add label is model-specific, so it is checked separately.
+    """
+    prefixes = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(voice_count)]
+    if 0 < voice_count < 9:
+        prefixes.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
+    if voice_count >= 2:
+        prefixes.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
+    prefixes.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    return prefixes
+
+
 def test_main_menu_has_separate_voice_and_model_hotkeys(monkeypatch):
     captured = {}
     monkeypatch.setattr(main_menu.MenuUtil, "menu",
@@ -85,10 +99,10 @@ def test_all_local_voice_menus_keep_sample_selection_group(
                         lambda *_: pytest.fail("Sample management must not load the TTS model"))
     VoiceMenuShared.menu(state)
     items = captured["items"]
-    labels = [get_string_from(state, item.label) for item in items]
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
     if model_id == "indextts2_local":
         assert [item.superlabel for item in items[-3:]] == ["Emotion", "", ""]
-        emotion_labels = [strip_ansi_codes(label) for label in labels[-3:]]
+        emotion_labels = labels[-3:]
         assert emotion_labels[:2] == ["Select emotion voice sample (optional)", "Emotion vector (optional)"]
         assert emotion_labels[2].startswith("Emotion alpha (strength)")
         assert "0.65" in emotion_labels[2] and "default" in emotion_labels[2]
@@ -102,22 +116,16 @@ def test_all_local_voice_menus_keep_sample_selection_group(
         assert labels[-1].startswith(expected_label)
         assert items[-1].blank_line_before
         items, labels = items[:-1], labels[:-1]
-    assert all(not item.superlabel for item in items)
+    assert items[0].superlabel == (voice_menu_shared.LABEL_VOICE_SAMPLES_SUPERLABEL if voice_count else "")
+    assert all(not item.superlabel for item in items[1:])
     assert not any(label.startswith("Add/remove voice samples") for label in labels)
-    if voice_count < 9:
+    first_selection = items[-2 if voice_count >= 2 else -1]
+    assert [item for item in items if item.blank_line_before] == [first_selection]
+    if voice_count == 0:
         add_label = labels.pop(0)
         assert "voice" in add_label.lower() and "sample" in add_label.lower()
-        if voice_count:
-            assert add_label == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
-    expected = [
-        voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
-    ]
-    if voice_count >= 2:
-        expected.insert(1, voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE)
-        expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
-    expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in labels) == (0 < voice_count < 9)
+    expected = sample_group_prefixes(voice_count)
     assert len(labels) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, expected))
 
@@ -132,10 +140,11 @@ def test_all_local_models_route_settings_without_sample_controls(monkeypatch, mo
     monkeypatch.setattr(ModelWorker, "inspect_tts_blocking",
                         lambda *_: (SimpleNamespace(metadata={"model_type": "base"}), ""))
     ModelMenuShared.menu(state)
-    labels = [get_string_from(state, item.label) for item in captured["items"]]
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in captured["items"]]
     assert labels
     assert all(not item.superlabel for item in captured["items"])
-    assert not any(label.startswith((voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
+    assert not any(label.startswith((voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM,
+                                     voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
                                      voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
                                      voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
                                      voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
@@ -190,16 +199,16 @@ def test_local_pocket_predefined_voice_follows_samples_with_blank_line(monkeypat
                         lambda *_: pytest.fail("Predefined voice selection must not load the model"))
     VoiceMenuShared.menu(state)
     items = captured["items"](state)
-    select = items[7]
-    assert get_string_from(state, items[6].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    select = items[5]
+    assert get_string_from(state, items[4].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     label = strip_ansi_codes(get_string_from(state, select.label))
     assert label.startswith("Select predefined voice")
     assert ("alba" in label) == bool(predefined_voice)
     assert select.blank_line_before
-    assert items[5].blank_line_before
-    assert all(not item.blank_line_before for item in items if item is not select and item is not items[5])
-    assert all(not item.superlabel for item in items)
-    assert len(items) == (9 if predefined_voice else 8)
+    assert items[3].blank_line_before
+    assert all(not item.blank_line_before for item in items if item is not select and item is not items[3])
+    assert all(not item.superlabel for item in items[1:])
+    assert len(items) == (7 if predefined_voice else 6)
     select.handler(state, select)
     assert options["heading_text"] == "Select predefined voice"
     assert options["labels"] == options["values"] == menu.PocketBaseModel.PREDEFINED_VOICES
@@ -211,7 +220,7 @@ def test_local_pocket_predefined_voice_follows_samples_with_blank_line(monkeypat
     assert not clear.blank_line_before
     clear.handler(state, clear)
     assert state.project.get_model_setting("pocket_local", "predefined_voice") == ""
-    assert len(captured["items"](state)) == 8
+    assert len(captured["items"](state)) == 6
     assert len(state.project.voice_references) == 2
     assert saved == [state.project, state.project]
 
@@ -227,19 +236,19 @@ def test_local_omnivoice_instructions_follow_samples_with_blank_line(monkeypatch
     monkeypatch.setattr(Project, "save", lambda self: saved.append(self))
     VoiceMenuShared.menu(state)
     items = captured["items"]
-    design = items[7]
-    assert get_string_from(state, items[6].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    design = items[5]
+    assert get_string_from(state, items[4].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     assert get_string_from(state, design.label).startswith("Voice design instructions")
     assert design.blank_line_before
-    assert items[5].blank_line_before
-    assert all(not item.blank_line_before for item in items if item is not design and item is not items[5])
-    assert all(not item.superlabel for item in items)
+    assert items[3].blank_line_before
+    assert all(not item.blank_line_before for item in items if item is not design and item is not items[3])
+    assert all(not item.superlabel for item in items[1:])
     design.handler(state, design)
     args, kwargs = edited[0]
     assert args[:3] == (state.project, "omnivoice_local", "instruct")
     assert "instructions may have minimal effect" in args[3]
     assert kwargs["validate_omnivoice"] is True
-    assert len(items) == (9 if instruct else 8)
+    assert len(items) == (7 if instruct else 6)
     if instruct:
         clear = items[-1]
         assert clear.label == "Clear instructions"
@@ -305,17 +314,13 @@ def test_voice_wrapper_does_not_include_model_settings_note(monkeypatch, voice_c
     state = make_state("chatterbox_audiocpp", voice_count=voice_count)
     captured = {}
     monkeypatch.setattr(main_menu.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
-    monkeypatch.setattr("tts_audiobook_tool.menus.voice.voice_menu_shared.AudioMetaUtil.get_audio_duration",
-                        lambda _: None)
     VoiceMenuShared.menu_wrapper(state, [], subheading="Sample guidance")
     assert captured["heading"] == "Voice clone"
     assert captured["breadcrumb"] == "Voice"
-    assert callable(captured["subheading"])
-    rendered = strip_ansi_codes(get_string_from(state, captured["subheading"]))
-    if voice_count:
-        assert rendered == "- Voice sample 1: voice-0.flac\n- Voice sample 2: voice-1.flac\n\nSample guidance"
-    else:
-        assert rendered == "Sample guidance"
+    # The sample list lives in the menu items; the subheading passes through unchanged.
+    assert captured["subheading"] == "Sample guidance"
+    VoiceMenuShared.menu_wrapper(state, [])
+    assert captured["subheading"] is None
 
 
 @pytest.mark.parametrize("next_id", ["higgs_v3_sglomni", "breeze_tts_2_audiocpp"])
@@ -326,19 +331,13 @@ def test_remote_voice_factory_tracks_backend_changes(monkeypatch, next_id):
     VoiceMenuShared.menu(state)
     assert captured["items"] is VoiceMenuShared.make_remote_items
     state.project.tts_model_type = next_id
-    labels = [get_string_from(state, item.label) for item in captured["items"](state)]
-    assert len(labels) == (8 if next_id == "breeze_tts_2_audiocpp" else 7)
-    assert labels[:5] == [
-        voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_MOVE_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
-    ]
-    assert labels[5].startswith(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
-    assert labels[6].startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in captured["items"](state)]
+    assert len(labels) == (6 if next_id == "breeze_tts_2_audiocpp" else 5)
+    expected = sample_group_prefixes(2)
+    assert all(label.startswith(prefix) for label, prefix in zip(labels, expected))
+    assert labels[2] == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
     if next_id == "breeze_tts_2_audiocpp":
-        assert labels[7].startswith("Instructions ")
+        assert labels[5].startswith("Instructions ")
 
 
 @pytest.mark.parametrize("remote_mode,expected_opened", [(True, True), (False, False)])

@@ -18,7 +18,8 @@ import pytest
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
-from tts_audiobook_tool.constants import PROJECT_SOUND_SEGMENTS_SUBDIR, PROJECT_VOICE_SUBDIR
+from tts_audiobook_tool.app_types.voice import Voice, VoiceCrop
+from tts_audiobook_tool.constants import PROJECT_SOUND_SEGMENTS_SUBDIR, PROJECT_SPEC_VERSION, PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.menus import project_new_menu as project_new_menu_module
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
@@ -368,11 +369,11 @@ def test_abr_import_voice_choice_blocks_before_destination_creation(monkeypatch,
     with _quiet_project_setter():
         assert ProjectNewMenu.make_new_project_using_abr(state) is True
     assert not errors
-    assert state.project.voice_references == [{"file_name": "glm.flac", "transcript": "glm text"}]
+    assert state.project.voice_references == [Voice("glm.flac", "glm text")]
     saved = json.loads((tmp_path / "dest" / "project.json").read_text())
-    assert saved["version"] == 4
-    assert saved["voice_references"] == state.project.voice_references
-    assert not (tmp_path / "dest" / "project.json.pre-v4.bak").exists()
+    assert saved["version"] == PROJECT_SPEC_VERSION
+    assert saved["voice_references"] == [v.to_dict() for v in state.project.voice_references]
+    assert not list((tmp_path / "dest").glob("project.json.pre-*"))
 
 
 def test_abr_import_cancelled_voice_choice_keeps_destination_and_selection_untouched(monkeypatch, tmp_path):
@@ -421,9 +422,13 @@ def test_abr_import_preserves_explicit_crop_and_warns_when_missing(
 
     assert not errors
     dest = tmp_path / 'dest'
-    assert state.project.voice_references == [entry]
+    assert state.project.voice_references == [Voice(
+        'narrator.flac', 'Original transcript.', VoiceCrop('a.flac', 1.25, 4.5, 'Trimmed transcript.'),
+    )]
     saved = json.loads((dest / 'project.json').read_text())
-    assert saved['voice_references'] == [entry]
+    assert saved['voice_references'] == [{
+        **entry, 'crop_start': 1.25, 'crop_end': 4.5, 'room_reverb': 'off',
+    }]
     assert (dest / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == b'original audio'
     crop_path = dest / PROJECT_VOICE_SUBDIR / 'crops/a.flac'
     output = capsys.readouterr().out

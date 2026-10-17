@@ -191,14 +191,16 @@ def test_reapplying_crop_is_consumed_by_retained_project_model(model, tmp_path):
     assert ProjectVoiceUtil.apply_voice_crop_and_save(project, 0, 0, 3, "first") == ""
     assert isinstance(model.generate_using_project(project, ["First sentence."]), list)
     entry = project.voice_references[0]
-    crop_file_name = entry["crop_file_name"]
+    assert entry.crop is not None
+    crop_file_name = entry.crop.file_name
     crop = Path(ProjectVoiceUtil.resolve_cropped_voice_file_path(project, entry))
     assert "/" not in crop_file_name and "\\" not in crop_file_name
     assert crop == voice_dir / "crops" / crop_file_name
     first_audio = crop.read_bytes()
     first_mtime = crop.stat().st_mtime_ns
     assert ProjectVoiceUtil.apply_voice_crop_and_save(project, 0, 4, 7, "second") == ""
-    assert project.voice_references[0]["crop_file_name"] == crop_file_name
+    assert project.voice_references[0].crop is not None
+    assert project.voice_references[0].crop.file_name == crop_file_name
     assert Path(ProjectVoiceUtil.resolve_cropped_voice_file_path(project, project.voice_references[0])) == crop
     assert crop.read_bytes() != first_audio
     os.utime(crop, ns=(crop.stat().st_atime_ns, first_mtime + 1_000_000_000))

@@ -4,6 +4,7 @@ from typing import Any, cast
 
 import pytest
 
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.constants import (
     PROJECT_TEXT_EPUB_FILE_NAME,
     PROJECT_TEXT_FILE_NAME,
@@ -32,13 +33,13 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
     })
     # A project object that never passed through the load funnel can still
     # hold malformed entries; the collector must skip them rather than crash.
-    project.voice_references.extend(cast(Any, [
-        {'file_name': ''},
-        {'file_name': 123},
-        {'file_name': str(tmp_path / 'absolute.flac')},
-        {'file_name': 'C:\\Users\\lee\\mybook\\voice\\narrator.flac'},
-        {'file_name': 'primary-c.flac'},
-    ]))
+    project.voice_references.extend([
+        Voice(''),
+        Voice(cast(Any, 123)),
+        Voice(str(tmp_path / 'absolute.flac')),
+        Voice('C:\\Users\\lee\\mybook\\voice\\narrator.flac'),
+        Voice('primary-c.flac'),
+    ])
     # Scoped copies are obsolete and must not become a second source of files.
     project.model_settings.models['pocket_local'] = {'voice_references': [{'file_name': 'obsolete.flac'}]}
 
@@ -210,6 +211,12 @@ def test_copy_supporting_project_files_does_not_escape_the_project_dir(tmp_path:
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'escaped.flac').read_bytes() == b'escaped'
 
 
+def _cropped_voice(**overrides: str) -> Voice:
+    voice = Voice.from_dict({**_cropped_reference(), **overrides})
+    assert voice is not None and voice.crop is not None
+    return voice
+
+
 def _cropped_reference() -> dict[str, str]:
     return {
         'file_name': 'narrator.flac',
@@ -223,12 +230,12 @@ def _cropped_reference() -> dict[str, str]:
 
 def test_transfer_collector_includes_missing_active_explicit_crops(tmp_path: Path) -> None:
     project = Project(dir_path=str(tmp_path), voice_references=[_cropped_reference()])
-    project.voice_references.extend([
+    project.voice_references.extend(cast(list[Voice], [Voice.from_dict(entry) for entry in [
         # Old implicit crop metadata must not infer narrator_crop.flac.
         {'file_name': 'old.flac', 'crop_start': '0', 'crop_end': '3', 'crop_transcript': 'Old crop.'},
         {'file_name': 'invalid.flac', 'crop_file_name': 'invalid.flac',
          'crop_start': '4', 'crop_end': '1'},
-    ])
+    ]]))
 
     _, names = ProjectTransferUtil.collect_supporting_project_file_names(project)
 
@@ -257,7 +264,7 @@ def test_transfer_preserves_explicit_crop_bytes_metadata_and_effective_pair(
     assert dest.save() == ''
     reloaded = ProjectLoadUtil.load_using_dir_path(str(dest_dir))
     assert isinstance(reloaded, Project)
-    assert reloaded.voice_references == source.voice_references == [_cropped_reference()]
+    assert reloaded.voice_references == source.voice_references == [_cropped_voice()]
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == original_path.read_bytes()
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac').read_bytes() == crop_path.read_bytes()
     assert not (dest_dir / PROJECT_VOICE_SUBDIR / 'a.flac').exists()
@@ -286,7 +293,7 @@ def test_transfer_keeps_original_matching_crop_basename_unambiguous(tmp_path: Pa
 
     assert voice_names == ['a.flac', 'crops/a.flac']
     assert ProjectTransferUtil.copy_supporting_project_files(dest, str(source_dir), [], voice_names) == []
-    assert dest.voice_references == [entry]
+    assert dest.voice_references == [_cropped_voice(file_name='a.flac')]
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'a.flac').read_bytes() == original.read_bytes()
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac').read_bytes() == crop.read_bytes()
     assert ProjectVoiceUtil.resolve_voice_file_path(dest, 'a.flac') == str(
@@ -328,7 +335,7 @@ def test_voice_transfer_prefers_generation_original_over_same_named_root_file(tm
     assert dest.save() == ''
     reloaded = ProjectLoadUtil.load_using_dir_path(str(dest_dir))
     assert isinstance(reloaded, Project)
-    assert reloaded.voice_references == source.voice_references == [_cropped_reference()]
+    assert reloaded.voice_references == source.voice_references == [_cropped_voice()]
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == voice_original.read_bytes()
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'crops/a.flac').read_bytes() == b'active crop audio'
     model = TtsModelType.require_by_id('fish_s2_local')

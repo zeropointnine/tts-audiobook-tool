@@ -61,8 +61,9 @@ class ProjectLoadUtil:
         settings = d.get('model_settings', {})
         # Scoped voice lists that the v4 migration actually removes. Retired
         # historical shared groups are retained verbatim by both the migration
-        # and the serializer, so counting them here would flag needs_v4_save
-        # on every open and create a new numbered backup each time.
+        # and the serializer, so counting them here would flag
+        # needs_migration_save on every open and create a new numbered backup
+        # each time.
         had_scoped_voices = isinstance(settings, dict) and any(
             isinstance(objects, dict) and any(
                 isinstance(obj, dict) and 'voice_references' in obj
@@ -71,8 +72,9 @@ class ProjectLoadUtil:
             )
             for section, objects in (('models', settings.get('models', {})), ('shared', settings.get('shared', {})))
         )
-        needs_v4_save = (
+        needs_migration_save = (
             d.get('version') != PROJECT_SPEC_VERSION or 'voice_references' not in d or had_scoped_voices
+            or 'room_reverb' in d
             or any(attr in d for attr, binding in REGISTRY.legacy.items() if binding.section == 'voice_references')
         )
         try:
@@ -118,10 +120,13 @@ class ProjectLoadUtil:
         except Exception as e:
             return f"Failed to parse project: {e}"
 
-        if needs_v4_save:
+        if needs_migration_save:
             # No load-time migration may overwrite settings before their exact
             # original bytes are backed up. Never clobber an earlier backup.
-            backup_path = project_dict_path + '.pre-v4.bak'
+            # Named for the format being migrated to: the file as it was
+            # before the v{PROJECT_SPEC_VERSION} migration.
+            backup_base = project_dict_path + f'.pre-v{PROJECT_SPEC_VERSION}.bak'
+            backup_path = backup_base
             suffix = 1
             while True:
                 try:
@@ -132,9 +137,9 @@ class ProjectLoadUtil:
                     break
                 except FileExistsError:
                     suffix += 1
-                    backup_path = project_dict_path + f'.pre-v4.bak.{suffix}'
+                    backup_path = f'{backup_base}.{suffix}'
                 except OSError as exc:
-                    return f'Could not back up project settings before v4 migration: {exc}'
+                    return f'Could not back up project settings before v{PROJECT_SPEC_VERSION} migration: {exc}'
 
         if inline_text_source:
             err = ProjectTextIOUtil.save_book(project)
@@ -158,7 +163,7 @@ class ProjectLoadUtil:
                 f"to {BOOK_FORMAT}: {dir_path}"
             )
 
-        if needs_v4_save and not inline_text_source and not (external_text_source and external_text_source != BOOK_FORMAT):
+        if needs_migration_save and not inline_text_source and not (external_text_source and external_text_source != BOOK_FORMAT):
             err = project.save()
             if err:
                 return err
