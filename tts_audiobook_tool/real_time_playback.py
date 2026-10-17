@@ -44,8 +44,9 @@ from tts_audiobook_tool.real_time_playback_events import (
 from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPhase, ModelUnhealthy
 from tts_audiobook_tool.sound.noise_bed import NoiseBed
 from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor
+from tts_audiobook_tool.sound.voice_spatial import VoiceSpatialProcessor
+from tts_audiobook_tool.project_support.voice_spatial_policy import VoiceSpatialPolicy
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
-from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
@@ -186,14 +187,19 @@ def _start_impl(
     # stream is seamless across segments.
     room_tone_db = state.project.room_tone.level_db
     noise_bed: NoiseBed | None = None
-    # Room reverb (same settings as concat), likewise one per run. The stereo
-    # effect makes the output stream stereo (falling back to mono if the
-    # device can't), as it makes concat's export stereo.
+    # Snapshot the whole project's channel policy, independent of this range.
+    # One spatial/room processor per run, created after device fallback.
+    spatial_policy = VoiceSpatialPolicy.from_project(state.project)
     room_reverb = state.project.room_reverb
     room_reverb_stereo = state.project.room_reverb_stereo
-    reverb: RoomReverbProcessor | None = None
+    spatial: VoiceSpatialProcessor | None = None
     has_reverb = room_reverb.design is not None and room_reverb.drr_db is not None
-    stereo_channels = 2 if has_reverb and room_reverb_stereo.is_stereo else 1
+    # Keep only the latest successful save pending: a later failure/cancel can
+    # make it the final segment, whose artifact must include the drained room.
+    pending_save = None
+    last_segment = None
+    final_tail: Sound | None = None
+    room_drained = False
 
     for index in range(start_index, end_index + 1):
 
@@ -263,6 +269,9 @@ def _start_impl(
             printt()
             continue
         validation_result = result_opt
+        if pending_save is not None:
+            save_played_sound(state, *pending_save)
+            pending_save = None
 
         # Post-processing, in the same order as concat: sentence gaps extended,
         # then playback shaping (gap limiting, resample, high shelf), then the
@@ -308,10 +317,9 @@ def _start_impl(
                 silence_duration = state.project.reason_pauses.get_pause_for(phrase.reason)
                 appended_sound = np.zeros(int(sound.sr * silence_duration), dtype=sound.data.dtype)
 
-        # Start stream lazy, before the reverb, whose channel count follows the
-        # stream's: stereo when the stereo effect is on and the device allows it
+        # Actual device channels, not the request, determine spatial processing.
         if not stream:
-            stream, started = open_output_stream(stereo_channels, pause_requested)
+            stream, started = open_output_stream(spatial_policy.requested_channels, pause_requested)
             stream_holder.append(stream)
             if not started:
                 # Abort. Stream is in a not-started state, so no shut_down() is needed;
@@ -325,35 +333,37 @@ def _start_impl(
                     s,
                 )
 
-        # Reverb first, on the narration only: the segment, then its pause or
-        # break effect (dry, with the tail decaying under it), in turn. Stereo
-        # out if the stream is (the voice stays mono, centered).
-        if (room_reverb.design is not None and room_reverb.drr_db is not None
-                and sound.data.size > 0):
-            if reverb is None:
-                reverb = RoomReverbProcessor(
+        # Pan narration's direct path only. Effects stay centered/dry while
+        # advancing the same room tail. Stereo output never enables room spread.
+        if spatial is None:
+            reverb = (
+                RoomReverbProcessor(
                     sound.sr, room_reverb.design, room_reverb.drr_db,
                     width=room_reverb_stereo.width if stream.channels == 2 else 0.0,
                     spread_early=room_reverb_stereo.spread_early,
-                )
-            sound = reverb.apply(sound, is_last=appended_sound is None)
-            if appended_sound is not None and appended_sound.size > 0:
-                appended_sound = reverb.apply(
-                    Sound(appended_sound.astype(sound.data.dtype), sound.sr), send_end=0).data
-        if stream.channels == 2:
-            # Safety net (reverb skips audio it can't process): keep the segment
-            # and its pause in the same shape, so they concatenate for saving
-            sound = Sound(SoundUtil.as_stereo(sound.data), sound.sr)
-            if appended_sound is not None:
-                appended_sound = SoundUtil.as_stereo(appended_sound)
+                ) if has_reverb else None
+            )
+            spatial = VoiceSpatialProcessor(channels=stream.channels, reverb=reverb)
+        sound = spatial.apply(
+            sound, pan=spatial_policy.pan_for_voice_index(phrase_group.voice_index),
+        )
+        if appended_sound is not None:
+            appended_sound = spatial.apply(
+                Sound(appended_sound.astype(sound.data.dtype), sound.sr), send_end=0,
+            ).data
 
-        # The bed's stream continues across calls, so the segment and its pause
-        # are fed in turn. No appended sound means the run ends here, so the bed
-        # fades out at the end of the segment.
+        if appended_sound is None:
+            # A known final segment can drain now, before choosing the bed's
+            # fade location. A silent/fully decayed room adds no extra frames.
+            final_tail = spatial.drain_tail(dtype=sound.data.dtype)
+            room_drained = True
+
+        # The bed continues under speech, pauses and the final room drain.
+        # Without reverb, retain the legacy final-speech fade and lengths.
         if room_tone_db is not None and sound.data.size > 0:
             if noise_bed is None:
                 noise_bed = NoiseBed(sound.sr, room_tone_db)
-            sound = noise_bed.apply(sound, is_last=appended_sound is None)
+            sound = noise_bed.apply(sound, is_last=appended_sound is None and final_tail is None)
             if appended_sound is not None and appended_sound.size > 0:
                 appended_sound = noise_bed.apply(
                     Sound(appended_sound.astype(sound.data.dtype), sound.sr)).data
@@ -369,7 +379,8 @@ def _start_impl(
             played = sound
             if appended_sound is not None:
                 played = Sound(np.concatenate([sound.data, appended_sound]), sound.sr)
-            save_played_sound(state, phrase_group, index, validation_result, played)
+            pending_save = (phrase_group, index, validation_result, played)
+        last_segment = (phrase_group, index, sound.data.dtype)
 
         RealTimePlaybackEvents.emit(RealTimePlaybackBuffer(stream.buffer_duration))
         if segment_end > segment_start:
@@ -401,6 +412,36 @@ def _start_impl(
             did_interrupt = wait_for_buffer_runway(stream)
             if did_interrupt:
                 break
+
+    # Drain exactly once, after the actual last successful submission. No
+    # synthetic pause is needed, and failed/skipped final generations or a
+    # cooperative interrupt still let the already submitted room decay finish.
+    if spatial is not None and stream is not None and last_segment is not None:
+        last_group, last_index, dtype = last_segment
+        tail = final_tail if room_drained else spatial.drain_tail(dtype=dtype)
+        if tail is not None and tail.data.size > 0:
+            if noise_bed is not None:
+                tail = noise_bed.apply(tail, is_last=True)
+            tail_start, tail_end = stream.add_data(tail.data)
+            if pending_save is not None:
+                group, saved_index, validation, played = pending_save
+                pending_save = (
+                    group, saved_index, validation,
+                    Sound(np.concatenate([played.data, tail.data]), played.sr),
+                )
+            RealTimePlaybackEvents.emit(RealTimePlaybackBuffer(stream.buffer_duration))
+            if tail_end > tail_start:
+                RealTimePlaybackEvents.emit(
+                    RealTimePlaybackSegmentText(
+                        index=last_index,
+                        text=last_group.presentable_text,
+                        start_sample=tail_start,
+                        end_sample=tail_end,
+                        played_samples=stream.played_samples,
+                    )
+                )
+    if pending_save is not None:
+        save_played_sound(state, *pending_save)
 
     # Finished. Preserve the legacy behavior: buffered audio continues until
     # the user presses Enter, at which point the stream is closed by start()'s
@@ -568,7 +609,7 @@ def open_output_stream(
     """
     Creates and starts the realtime output stream. Returns the stream and
     whether it started. A stereo stream that fails to start falls back to
-    mono (with a warning), so the stereo reverb effect never blocks playback.
+    mono (with a warning), so positioning/reverb never block playback.
     """
     def make(channels: int) -> SoundDeviceStream:
         # Keep other audio users' larger/high-latency stream defaults;
@@ -585,7 +626,7 @@ def open_output_stream(
     stream.shut_down()
     printt(
         f"{COL_ERROR}Warning: Couldn't open the sound output in stereo{COL_DIM}, "
-        "playing in mono (room reverb stereo effect off)"
+        "playing in mono (voice positioning and room reverb stereo effect off)"
     )
     printt()
     stream = make(1)

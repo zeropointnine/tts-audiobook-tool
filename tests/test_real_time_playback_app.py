@@ -10,7 +10,7 @@ from textual.geometry import Size
 from textual.widgets import Input, Rule, Static
 
 from tts_audiobook_tool import real_time_playback
-from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo, RoomTone, SttVariant
+from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo, RoomTone, SttVariant, VoiceSelectMode
 from tts_audiobook_tool.app_types.validation_result import SkippedResult
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut, ModelUnhealthy
@@ -879,6 +879,8 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
                 reason_pauses=SimpleNamespace(get_pause_for=lambda reason: 0.0),
                 get_high_shelf=lambda: 0,
                 realtime_save=False,
+                get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
+                voice_select_mode=VoiceSelectMode.USER_DEFINED,
                 room_tone=RoomTone.OFF,
                 room_reverb=RoomReverb.OFF,
                 room_reverb_stereo=RoomReverbStereo.MONO,
@@ -1076,6 +1078,8 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
                 reason_pauses=SimpleNamespace(get_pause_for=lambda reason: 0.0),
                 get_high_shelf=lambda: 0,
                 realtime_save=False,
+                get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
+                voice_select_mode=VoiceSelectMode.USER_DEFINED,
                 room_tone=RoomTone.OFF,
                 room_reverb=RoomReverb.OFF,
                 room_reverb_stereo=RoomReverbStereo.MONO,
@@ -1319,12 +1323,19 @@ def test_interface_failure_cleanup_reports_worker_restart_failure(
         (RoomReverb.MEDIUM_DRR21, RoomReverbStereo.ALL_W100, False, 1),
     ],
 )
+@pytest.mark.parametrize("voice_count,voice_index,break_effect", [
+    (1, 1, False), (2, 0, False), (2, 1, False), (2, 1, True),
+])
 def test_realtime_save_writes_exactly_what_was_played(
     monkeypatch,
     room_reverb: RoomReverb,
     room_reverb_stereo: RoomReverbStereo,
     device_stereo_ok: bool,
     expected_channels: int,
+    voice_count: int,
+    voice_index: int,
+    break_effect: bool,
+    ending: str = "normal",
 ) -> None:
     # Saved realtime segments are free-standing artifacts of the playback: the
     # file must hold the post-processed audio (reverb, room tone bed, pause)
@@ -1367,12 +1378,51 @@ def test_realtime_save_writes_exactly_what_was_played(
     raw_data[-4800:] = 0.2 * np.sin(np.arange(4800, dtype=np.float32) * 0.1)
     raw = Sound(raw_data, 48000)
     saved: list[np.ndarray] = []
+    spatial_processors = []
+    spatial_type = real_time_playback.VoiceSpatialProcessor
+
+    def make_spatial(**kwargs):
+        processor = spatial_type(**kwargs)
+        apply = processor.apply
+
+        def apply_unfaded(*args, **options):
+            # Final speech must retain its complete wet path; only draining
+            # after the actual loop end may fade the remaining room.
+            assert not options.get("is_last", False)
+            assert options.get("pan", 0.0) == 0.0
+            return apply(*args, **options)
+
+        processor.apply = apply_unfaded
+        spatial_processors.append(processor)
+        return processor
+
+    monkeypatch.setattr(real_time_playback, "VoiceSpatialProcessor", make_spatial)
+    bed_calls = []
+    noise_bed_type = real_time_playback.NoiseBed
+
+    class TrackingNoiseBed(noise_bed_type):
+        def apply(self, sound, is_last=False):
+            bed_calls.append((len(sound.data), is_last))
+            return super().apply(sound, is_last=is_last)
+
+    monkeypatch.setattr(real_time_playback, "NoiseBed", TrackingNoiseBed)
+    if break_effect:
+        monkeypatch.setattr(real_time_playback.BreakEffectTracker, "next_break_effect", lambda *args, **kwargs: object())
+        monkeypatch.setattr(
+            real_time_playback.SoundPipeline, "make_break_effect_sound",
+            lambda *args: Sound(np.full(24000, .05, dtype=np.float32), 48000),
+        )
 
     monkeypatch.setattr(real_time_playback, "SoundDeviceStream", fake_stream_factory)
-    monkeypatch.setattr(
-        real_time_playback, "generate_full_flow",
-        lambda *args, **kwargs: (SkippedResult(raw, message=""), False, 0),
-    )
+    generated_indices = []
+
+    def generate(state, groups, index, **kwargs):
+        generated_indices.append(index)
+        if index == 1 and ending in ("failed", "cancelled"):
+            return None, ending == "cancelled", 0
+        return SkippedResult(raw, message=""), ending == "cancelled_first", 0
+
+    monkeypatch.setattr(real_time_playback, "generate_full_flow", generate)
     monkeypatch.setattr(
         real_time_playback, "save_played_sound",
         lambda state, phrase_group, index, validation_result, played: saved.append(played.data),
@@ -1408,6 +1458,9 @@ def test_realtime_save_writes_exactly_what_was_played(
                 reason_pauses=SimpleNamespace(get_pause_for=lambda reason: 0.5),
                 get_high_shelf=lambda: 0,
                 realtime_save=True,
+                get_tts_model_type=lambda: TtsModelType.require_by_id("chatterbox_local"),
+                voice_references=[{"file_name": f"voice{i}.flac"} for i in range(voice_count)],
+                voice_select_mode=VoiceSelectMode.USER_DEFINED,
                 room_tone=RoomTone.HIGH,
                 room_reverb=room_reverb,
                 room_reverb_stereo=room_reverb_stereo,
@@ -1415,15 +1468,33 @@ def test_realtime_save_writes_exactly_what_was_played(
         ),
     )
     phrase_groups = [
-        PhraseGroup([Phrase(f"Segment {i}.", Reason.SENTENCE)], voice_index=0) for i in range(2)
+        PhraseGroup([Phrase(f"Segment {i}.", Reason.SENTENCE)], voice_index=voice_index) for i in range(2)
     ]
+    if ending == "one":
+        phrase_groups = phrase_groups[:1]
+    elif ending == "empty":
+        phrase_groups = []
     Interrupts().clear()
     continue_event = threading.Event()
     continue_event.set()
-    real_time_playback.start(state, phrase_groups, (1, 2), continue_event=continue_event)
+    received = []
+    with RealTimePlaybackEvents.using_sink(received.append):
+        result = real_time_playback.start(state, phrase_groups, None, continue_event=continue_event)
+    if ending == "empty":
+        assert not streams and not saved and not spatial_processors and not generated_indices
+        assert result.status is real_time_playback.RealTimePlaybackRunStatus.COMPLETED
+        return
+    assert generated_indices == ([0] if ending in ("one", "cancelled_first") else [0, 1])
+    assert result.status is (
+        real_time_playback.RealTimePlaybackRunStatus.ABORTED
+        if ending in ("cancelled", "cancelled_first")
+        else real_time_playback.RealTimePlaybackRunStatus.COMPLETED
+    )
 
     stream = streams[-1]
     assert stream.channels == expected_channels
+    assert len(spatial_processors) == 1
+    assert spatial_processors[0].channels == expected_channels
     warnings = [i for i, line in enumerate(printed) if "Couldn't open the sound output in stereo" in line]
     if device_stereo_ok:
         assert len(streams) == 1 and not warnings
@@ -1434,14 +1505,38 @@ def test_realtime_save_writes_exactly_what_was_played(
         assert len(warnings) == 1 and printed[warnings[0] + 1] == ""
 
     played = stream.chunks
-    # First segment: content + pause; last segment: content only
-    assert len(played) == 3 and len(saved) == 2
-    np.testing.assert_array_equal(saved[0], np.concatenate(played[:2]))
-    np.testing.assert_array_equal(saved[1], played[2])
+    has_reverb = room_reverb is not RoomReverb.OFF
+    speech_chunks = 3 if ending == "normal" else (2 if ending in ("failed", "cancelled") else 1)
+    assert len(played) == speech_chunks + int(has_reverb)
+    assert len(saved) == (2 if ending == "normal" else 1)
+    if ending == "normal":
+        np.testing.assert_array_equal(saved[0], np.concatenate(played[:2]))
+        np.testing.assert_array_equal(saved[1], np.concatenate(played[2:]))
+    else:
+        np.testing.assert_array_equal(saved[0], np.concatenate(played))
+    ranges = [event for event in received if isinstance(event, RealTimePlaybackSegmentText)]
+    assert ranges[0].start_sample == 0
+    assert ranges[-1].end_sample == sum(map(len, played))
+    assert all(a.end_sample == b.start_sample for a, b in zip(ranges, ranges[1:]))
+    if has_reverb:
+        assert len(played[-1]) > 0
+        assert [is_last for _, is_last in bed_calls] == [False] * speech_chunks + [True]
+        assert bed_calls[-1][0] == len(played[-1])
+        assert np.any(played[-1] != 0)
+        np.testing.assert_array_equal(played[-1][-1], np.zeros_like(played[-1][-1]))
+        # Draining clears the processor; neither an ordinary boundary nor a
+        # second drain can duplicate the final wet frames.
+        assert spatial_processors[0].drain_tail() is None
     for chunk in played:
         assert chunk.ndim == (1 if expected_channels == 1 else 2)
         if expected_channels == 2:
             assert chunk.shape[1] == 2
+    if ending != "normal":
+        assert len(played[0]) == 48000
+        if ending in ("failed", "cancelled"):
+            assert len(played[1]) == 24000  # Preserve the already submitted pause.
+        assert len(saved[-1]) == sum(map(len, played))
+        return
     # Post-processed: the room tone bed was added to the silent start of the
     # raw generation
     assert np.any(saved[0][:4800] != 0)
@@ -1449,11 +1544,30 @@ def test_realtime_save_writes_exactly_what_was_played(
     # With reverb, the segment's tail carries into its pause, far above the bed
     pause_start = played[1][:2400].astype(np.float64)
     pause_rms_db = 10 * np.log10(np.mean(pause_start ** 2))
-    if room_reverb is RoomReverb.OFF:
+    if room_reverb is RoomReverb.OFF and not break_effect:
         assert pause_rms_db < -55
     else:
         assert pause_rms_db > -45
+    if room_reverb is RoomReverb.OFF and break_effect:
+        # An audible break effect remains dry and center-unity, not voice-panned.
+        assert np.mean(played[1]) == pytest.approx(.05, abs=.0001)
     if expected_channels == 2:
-        # Stereo reverb: the channels differ in the pause (reverb only),
-        # while the room tone bed is identical in both
+        # Only active stereo reverb can make app playback stereo; voice slot 2
+        # stays centered even in a multi-voice project.
+        assert room_reverb is not RoomReverb.OFF and room_reverb_stereo.is_stereo
         assert not np.allclose(pause_start[:, 0], pause_start[:, 1])
+    if warnings:
+        assert "voice positioning" in printed[warnings[0]]
+
+
+@pytest.mark.parametrize("ending", ["one", "failed", "cancelled", "cancelled_first", "empty"])
+def test_realtime_drains_actual_final_segment(monkeypatch, ending: str) -> None:
+    # Reuse the exact-playback fixture without multiplying the normal spatial
+    # policy matrix. Request stereo but exercise actual mono device fallback.
+    test_realtime_save_writes_exactly_what_was_played(
+        monkeypatch,
+        RoomReverb.MEDIUM_DRR21,
+        RoomReverbStereo.ALL_W100,
+        False, 1, 2, 1, False,
+        ending=ending,
+    )

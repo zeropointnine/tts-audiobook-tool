@@ -122,6 +122,8 @@ EFFECT_S = 0.2
 def run_concat(
         phrases: list[Phrase], sounds: list[np.ndarray], room_reverb: RoomReverb, effect_level: float = EFFECT_LEVEL,
         room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO, init_stream: MagicMock | None = None,
+        voice_pans: list[float] | None = None, stereo_required: bool = False,
+        paths: list[str] | None = None,
 ) -> list[np.ndarray]:
     """
     Runs the concat flow with real pauses (0.4 s, or a constant 0.2 s "effect"
@@ -147,13 +149,18 @@ def run_concat(
          patch.object(SoundPipeline, "append_pause_or_section_effect", side_effect=fake_append):
         ConcatUtil.concatenate_sound_segments(
             dest_path="output.flac",
-            phrases_and_paths=[(phrase, f"segment{i}.flac") for i, phrase in enumerate(phrases)],
+            phrases_and_paths=[
+                (phrase, paths[i] if paths is not None else f"segment{i}.flac")
+                for i, phrase in enumerate(phrases)
+            ],
             use_break_sound_effect=True,
             high_shelf=HighShelfEq.DISABLED,
             reason_pauses=ReasonPauseTypes.NORMAL.value,
             print_progress=False,
             room_reverb=room_reverb,
             room_reverb_stereo=room_reverb_stereo,
+            voice_pans=voice_pans,
+            stereo_required=stereo_required,
         )
     return streamed
 
@@ -190,6 +197,63 @@ class TestConcatFlow:
         for sound, out in zip(sounds, streamed):
             assert np.array_equal(out[:len(sound)], sound)
             assert energy(out[len(sound):]) == 0.0
+
+
+class TestConcatVoicePositioning:
+
+    def test_pans_without_reverb_and_keeps_effect_centered(self) -> None:
+        from tts_audiobook_tool.sound.voice_spatial import center_unity_pan_gains
+
+        phrases = [Phrase("One.", Reason.SECTION_BREAK), Phrase("Two.", Reason.SENTENCE)]
+        sounds = [noise(0.3, i) for i in range(2)]
+        init = MagicMock()
+        streamed = run_concat(phrases, sounds, RoomReverb.OFF,
+                              voice_pans=[0.25, 0.0], init_stream=init)
+        assert init.call_args.kwargs["channels"] == 2
+        gains = center_unity_pan_gains(0.25)
+        np.testing.assert_allclose(streamed[0][:len(sounds[0])],
+                                   sounds[0][:, None] * gains, atol=1e-7)
+        np.testing.assert_allclose(streamed[0][len(sounds[0]):], EFFECT_LEVEL)
+        np.testing.assert_array_equal(streamed[1][:len(sounds[1]), 0], sounds[1])
+        np.testing.assert_array_equal(streamed[1][:len(sounds[1]), 1], sounds[1])
+
+    def test_project_requirement_keeps_centered_range_stereo(self) -> None:
+        init = MagicMock()
+        dry = noise(0.3)
+        streamed = run_concat([Phrase("One.", Reason.SENTENCE)], [dry], RoomReverb.OFF,
+                              voice_pans=[0.0], stereo_required=True, init_stream=init)
+        assert init.call_args.kwargs["channels"] == 2
+        np.testing.assert_array_equal(streamed[0][:len(dry)], np.stack([dry, dry], axis=1))
+
+    def test_voice_pan_stays_aligned_across_missing_files_and_lookahead(self) -> None:
+        from tts_audiobook_tool.sound.voice_spatial import center_unity_pan_gains
+
+        phrases = [Phrase(str(i), Reason.SENTENCE) for i in range(4)]
+        sounds = [noise(0.3, i) for i in range(2)]
+        streamed = run_concat(phrases, sounds, RoomReverb.OFF,
+                              paths=["", "one.flac", "", "two.flac"],
+                              voice_pans=[0.25, 0.0, 0.0, 0.25])
+        np.testing.assert_array_equal(streamed[0][:len(sounds[0]), 0], sounds[0])
+        np.testing.assert_allclose(streamed[1][:len(sounds[1])],
+                                   sounds[1][:, None] * center_unity_pan_gains(0.25), atol=1e-7)
+
+    def test_pan_changes_only_direct_speech_not_shared_room(self) -> None:
+        phrases = [Phrase("One.", Reason.SENTENCE), Phrase("Two.", Reason.SENTENCE)]
+        sounds = [noise(0.3, i) for i in range(2)]
+        common = dict(room_reverb_stereo=RoomReverbStereo.LATE_W100, stereo_required=True)
+        centered = run_concat(phrases, sounds, RoomReverb.SMALL_DRR22,
+                              voice_pans=[0.0, 0.0], **common)
+        panned = run_concat(phrases, sounds, RoomReverb.SMALL_DRR22,
+                           voice_pans=[0.25, 0.0], **common)
+        np.testing.assert_array_equal(centered[0][len(sounds[0]):], panned[0][len(sounds[0]):])
+        np.testing.assert_array_equal(centered[1], panned[1])
+
+    def test_stereo_for_pan_does_not_enable_room_spread(self) -> None:
+        dry = noise(0.3)
+        out = run_concat([Phrase("One.", Reason.SENTENCE)], [dry], RoomReverb.SMALL_DRR22,
+                         voice_pans=[0.25])[0]
+        np.testing.assert_array_equal(out[len(dry):, 0], out[len(dry):, 1])
+        assert np.any(out[len(dry):, 0] != 0)
 
 
 class TestStereo:

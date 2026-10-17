@@ -1,14 +1,14 @@
 # Room Reverb
 
-Last updated: 2026-10-13
+Last updated: 2026-10-16
 
 ## Overview
 
 The project setting `room_reverb` ("Room reverb" in the Create menu, under Post-processing, after
 "Room tone") places the narration in a room: convolution with a synthetic room impulse response
 (IR), run as one continuous pass over the whole output, so tails decay naturally across segment
-boundaries and pauses instead of resetting with each TTS segment. Durations and timing maps are
-unchanged.
+boundaries and pauses instead of resetting with each TTS segment. Concat durations and timing maps
+are unchanged. Realtime playback additionally emits the remaining room decay at run end.
 
 | `RoomReverb` | id | Room design | DRR (dB) | Label |
 |---|---|---|---|---|
@@ -31,19 +31,21 @@ new design key. An unknown id loads as `OFF`.
 ## Stereo effect
 
 The project setting `room_reverb_stereo` ("Room reverb stereo effect", shown in the menu only while
-Room reverb is on) spreads the reverb across left and right; the voice stays mono, identical in both
-channels. Applies to concat and realtime playback.
+Room reverb is on) spreads the reverb across left and right. Direct narration stays centered in
+concat, realtime playback, and voice chat. Concat and realtime retain dormant voice-positioning
+infrastructure (see below), but no app voice currently has a nonzero pan.
 
 | `RoomReverbStereo` | id | Spread | Label |
 |---|---|---|---|
-| `MONO` (default) | `mono` | none | Disabled (mono) |
+| `MONO` (default) | `mono` | none | Centered (no spread) |
 | `LATE_W100` | `late_w100` | late tail, full width | Wide |
 | `ALL_W100` | `all_w100` | early reflections and late tail, full width | Wider |
 
 Ids name the processing, like `RoomReverb`'s. With reverb on and anything but `MONO`, the export is
 stereo: the reverb processor outputs `(n, 2)`, the noise bed adds the same bed to both channels
 (so room tone stays centered), and the ffmpeg stream is opened with `-ac 2`. With reverb off the
-setting does nothing and exports stay mono. Loudness normalization measures stereo per BS.1770
+spread setting does nothing. Stereo output is currently requested only by active stereo reverb,
+regardless of the project's voice count. Loudness normalization measures stereo per BS.1770
 (channels summed), so the target is met as before; chapters (M4B) and app metadata were checked on
 real stereo FLAC and M4B exports, and the app's own loader downmixes to mono.
 
@@ -63,13 +65,44 @@ reflections (the source of the "phasey" quality) identical in both channels.
 FLAC files are ~40-55% larger (the decorrelated reverb compresses poorly); AAC keeps its size at a
 fixed bitrate, with fewer bits per channel.
 
+## Dormant voice-positioning infrastructure (audiobook concat and realtime only)
+
+Direct narration uses center-unity equal-power panning: `theta = (pan + 1) * pi/4`,
+`L = sqrt(2)*cos(theta)`, `R = sqrt(2)*sin(theta)`. Center therefore preserves the existing
+unit gain in both channels and the existing dry/reverb balance. The shared lookup currently returns
+zero for every voice index: the app cannot activate positioning, and the former index-1 `+0.25`
+mapping has been removed. DSP and both rendering integrations remain available for future use.
+User-defined voice selections are clamped to available voices using the same rule as generation;
+default `-1` selects voice zero.
+Disabled voice selection stays centered. Auto-advance also stays centered: saved phrase metadata
+does not identify the voice actually used in that mode, and guessing from render order would make
+export and realtime disagree. Per-voice configuration/UI and persisted auto-advance identity are deferred.
+
+Pan is applied on a parallel direct path, not to the reverb input or the completed room output.
+Reverb always receives the same mono narration regardless of pan. Its wet-only signal is added to
+the panned direct signal; preceding voices' tails therefore do not move at speaker transitions.
+Appended break effects remain dry and centered; room tone remains centered. At extreme pans,
+reflections can still be heard in the ear receiving no direct speech. Position-dependent room
+responses/early reflections are deliberately not modeled.
+
+The shared policy can request stereo if any available project voice has nonzero pan, or if stereo
+reverb is active. Since all voice pans are currently zero, only active stereo reverb requests stereo.
+This is independent of the selected output range; channels never switch per segment. Stereo output
+does not itself turn on reverb spread. Actual mono
+playback after device fallback retains original mono speech/reverb, rather than folding down pan
+gains. Voice chat is excluded from the voice-pan policy.
+
+The boosted-side gain can exceed unity (`+0.25`: approximately 0.786 left, 1.176 right). DSP sums
+floating-point dry and wet signals before clipping safety checks; downstream export normalization
+preserves channel balance. No per-channel normalization is applied.
+
 ## Signal chain
 
 Per held segment in concat (`ConcatUtil.concatenate_sound_segments`, `flush_pending`):
 
     segment (resample, treble EQ, sentence-gap extension, gap limiting)
       -> pause or break effect appended (pause timing rules)
-      -> room reverb (narration only)
+      -> direct voice pan + parallel room reverb (narration only)
       -> room tone noise bed
       -> ffmpeg stream -> loudness normalization (whole file) -> metadata
 
@@ -83,11 +116,22 @@ Per held segment in concat (`ConcatUtil.concatenate_sound_segments`, `flush_pend
 
 **Realtime playback** applies the same settings in the same order: the segment, then its pause or
 break effect (`send_end=0`), are fed in turn; `realtime_save` files include the reverb. With the
-stereo effect on, the output stream (`SoundDeviceStream(channels=2)`, whose buffer then holds
+project requesting stereo from active reverb spread, the output stream (`SoundDeviceStream(channels=2)`, whose buffer then holds
 `(n, 2)` frames; sample counts and positions stay in frames) and saved files are stereo. The stream
 is opened before the reverb processor is created (`open_output_stream`): if the device can't open in
 stereo, playback falls back to mono with a warning in the content area, and the reverb is the plain
 mono preset.
+
+At the end of a realtime run, `VoiceSpatialProcessor.drain_tail()` consumes the remaining finite
+convolution tail and emits it after the last submitted audio. Speech is no longer marked with the
+legacy `is_last` wet fade: only the final 50 ms of the drained tail are softened. Room tone continues
+under that tail and fades at the actual output end. The final successful segment's saved realtime
+file includes the emitted tail, including when later generation fails or the run stops early.
+Ordinary segment boundaries do not drain/reset the room, so tails still overlap following speech.
+No extra duration is added with reverb off or an empty room. Concat and voice chat retain their
+existing endpoint behavior; realtime draining cannot recover ambience already cut off in stored
+TTS source audio. An output-buffer underrun while waiting for generation can still interrupt audio;
+this change finalizes completed runs rather than synthesizing audio in the device callback.
 
 **Voice chat** (`conversation/`) applies the same settings; no room tone. The output stream is
 opened once per session (`ConversationRuntime.initialize`, `open_chat_output_stream`): stereo with
@@ -100,6 +144,18 @@ in concat; phrase alignment (STT) gets the dry mono sound. Streaming TTS
 the trailing pause with `send_end=0`. Saved chat files include the reverb.
 
 Not applied in the server.
+
+## Diagnosing ambience cutoffs with reverb disabled
+
+`room_reverb_stereo` alone does not add room sound while `room_reverb` is off. A roomy/reverberant
+character can already be baked into generated mono audio (including its voice reference). Compare
+stored source PCM against export PCM before attributing a cutoff to the room processor. In the
+2026-10-16 jkharu example, the first line ended at 3.340 s in both source and concat; generation logs
+recorded trimming 180 ms from the original 3.520 s result. Other stored lines ended loudly even
+without a logged end trim. Export followed these existing endpoints with the configured pause/bed;
+normalization preserved the waveform rather than gating it. Raw pre-trim audio was unavailable, so
+whether the removed quiet audio contained useful decay could not be established. Natural-tail
+draining cannot recover already removed source ambience, and should not synthesize reverb when off.
 
 ## Implementation (`sound/room_reverb.py`)
 

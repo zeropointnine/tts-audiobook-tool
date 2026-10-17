@@ -9,8 +9,8 @@ Only narration feeds the reverb; appended break sound effects pass through dry
 (though the tail decays underneath them). Applied before the room tone noise
 bed, so the bed isn't reverberated. See docs-dev/room-reverb.md.
 
-The output is always the same length as the input (the tail past the end of
-the output is dropped), so durations and timing maps are unchanged.
+Normal processing preserves input length; callers can explicitly drain the
+remaining wet tail at run end. Concat/chat keep their fixed-duration behavior.
 
 Optionally stereo (per `room_reverb_stereo`): the voice stays mono
 and centered, and the reverb is spread across the channels (see
@@ -198,15 +198,25 @@ class StreamingReverb:
         self._ir = ir_unit * 10 ** (-drr_db / 20)
         self._tail = np.zeros(len(self._ir) - 1)
 
+    def drain_wet(self) -> np.ndarray:
+        """Consume the remaining finite convolution tail without feeding audio."""
+        tail = self._tail.copy()
+        self._tail.fill(0.0)
+        return tail
+
     def process(self, data: np.ndarray, send_end: int | None = None) -> np.ndarray:
         """
         Returns `data` plus reverb (float64). Only `data[:send_end]` feeds the
         reverb (all of it when None); the rest passes through dry, with any
         earlier tail still decaying underneath.
         """
+        return np.asarray(data, dtype=np.float64) + self.process_wet(data, send_end)
+
+    def process_wet(self, data: np.ndarray, send_end: int | None = None) -> np.ndarray:
+        """Return unclipped, wet-only float64 audio, advancing the same tail."""
         n = len(data)
         if n == 0:
-            return np.asarray(data, dtype=np.float64)
+            return np.zeros(0, dtype=np.float64)
         send = np.asarray(data, dtype=np.float64)
         if send_end is not None and send_end < n:
             send = send.copy()
@@ -214,7 +224,7 @@ class StreamingReverb:
         wet = signal.oaconvolve(send, self._ir)
         wet[:len(self._tail)] += self._tail
         self._tail = wet[n:].copy()
-        return np.asarray(data, dtype=np.float64) + wet[:n]
+        return wet[:n]
 
 
 class RoomReverbProcessor:
@@ -244,6 +254,24 @@ class RoomReverbProcessor:
     def channels(self) -> int:
         return len(self._reverbs)
 
+    def drain_wet(self) -> np.ndarray:
+        """Consume pending wet audio at run end, not at ordinary boundaries.
+
+        Unlike ``is_last``, this emits extra frames instead of fading the room
+        inside the last speech/pause. Trim unused zero padding, then soften only
+        the end of the emitted tail. Repeated drains return empty arrays.
+        """
+        tails = [reverb.drain_wet() for reverb in self._reverbs]
+        wet = tails[0] if len(tails) == 1 else np.stack(tails, axis=1)
+        active = np.flatnonzero(wet != 0.0) if wet.ndim == 1 else np.flatnonzero(np.any(wet != 0.0, axis=1))
+        n = int(active[-1]) + 1 if len(active) else 0
+        wet = wet[:n]
+        k = min(n, round(self.END_FADE_S * self.sr))
+        if k:
+            fade = np.linspace(1.0, 0.0, k)
+            wet[-k:] *= fade if wet.ndim == 1 else fade[:, None]
+        return wet
+
     def apply(self, sound: Sound, send_end: int | None = None, is_last: bool = False) -> Sound:
         """
         Returns `sound` with reverb added (same length; stereo if the processor is).
@@ -255,16 +283,31 @@ class RoomReverbProcessor:
         if data.ndim != 1 or n == 0 or sound.sr != self.sr:
             return sound
 
-        outs = [reverb.process(data, send_end) for reverb in self._reverbs]
-        out = outs[0] if len(outs) == 1 else np.stack(outs, axis=1)
-        if is_last:
-            k = min(n, round(RoomReverbProcessor.END_FADE_S * self.sr))
-            dry_end = data[n - k:].astype(np.float64)
-            fade = np.linspace(1.0, 0.0, k)
-            if out.ndim == 2:
-                dry_end, fade = dry_end[:, None], fade[:, None]
-            out[n - k:] = dry_end + (out[n - k:] - dry_end) * fade
+        wet = self.process_wet(sound, send_end, is_last)
+        dry = data.astype(np.float64)
+        out = dry + wet if wet.ndim == 1 else dry[:, None] + wet
         # Safety net: ffmpeg streaming casts to int16 without clipping
         if np.max(np.abs(out)) > 1.0:
             out = np.clip(out, -1.0, 1.0)
         return Sound(out.astype(data.dtype), sound.sr)
+
+    def process_wet(self, sound: Sound, send_end: int | None = None, is_last: bool = False) -> np.ndarray:
+        """
+        Advance the room and return wet-only float64 audio, without clipping.
+
+        Output is mono or stereo according to this processor's spread, independent
+        of the caller's output channel count. Only narration before `send_end`
+        feeds the room. `is_last` fades only this wet path, never direct sound.
+        Unlike legacy `apply`, invalid input raises rather than passing through.
+        """
+        data = sound.data
+        if data.ndim != 1 or sound.sr != self.sr:
+            raise ValueError("Room reverb requires mono input at its configured sample rate")
+        outs = [reverb.process_wet(data, send_end) for reverb in self._reverbs]
+        wet = outs[0] if len(outs) == 1 else np.stack(outs, axis=1)
+        if is_last and len(data):
+            k = min(len(data), round(self.END_FADE_S * self.sr))
+            if k:
+                fade = np.linspace(1.0, 0.0, k)
+                wet[-k:] *= fade if wet.ndim == 1 else fade[:, None]
+        return wet

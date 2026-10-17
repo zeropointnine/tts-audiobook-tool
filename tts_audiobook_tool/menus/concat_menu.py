@@ -12,6 +12,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.voice_spatial_policy import VoiceSpatialPolicy
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
@@ -542,7 +543,7 @@ class ConcatMenu:
 
 def make_enabled_option_confirmation_lines(state: State) -> list[str]:
     """
-    Lists only the post-processing options that are enabled (disabled ones are omitted).
+    Lists enabled post-processing options, followed by the output channel format.
     """
     lines = []
 
@@ -572,12 +573,14 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
     high_shelf = state.project.get_high_shelf()
     if high_shelf != HighShelfEq.DISABLED:
         add("Treble EQ", high_shelf.id.capitalize())
+    channels = VoiceSpatialPolicy.from_project(state.project).requested_channels
+    add("Output", "Stereo" if channels == 2 else "Mono")
     return lines
 
 
 def print_enabled_option_confirmation_lines(state: State) -> None:
     """
-    Prints the enabled-option lines preceded by a blank line (nothing if none are enabled).
+    Prints enabled options and output channel format, preceded by a blank line.
     """
     lines = make_enabled_option_confirmation_lines(state)
     if not lines:
@@ -762,9 +765,10 @@ Is also applied to realtime playback and voice chat."""
 ROOM_REVERB_STEREO_TITLE = "Room reverb stereo effect"
 
 ROOM_REVERB_STEREO_SUBHEADING = \
-"""Spreads the room reverb across left and right while the voice stays centered.
-Most noticeable on headphones. Wider also spreads the room's early reflections.
-Creates stereo files (FLAC files are about 50% larger).
+"""Controls the spread of room reflections while narration stays centered.
+Centered (no spread) keeps output mono.
+Wide and Wider spread reflections across left and right, most noticeable on headphones.
+Wider also spreads the room's early reflections. Both require stereo output (FLAC files are about 50% larger).
 Is also applied to realtime playback and voice chat."""
 
 REASON_PAUSES_SUBHEADING = \

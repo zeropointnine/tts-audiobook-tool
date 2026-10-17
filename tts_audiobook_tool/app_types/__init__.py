@@ -303,8 +303,8 @@ class RoomReverb(tuple[str, str | None, float | None, str], Enum):
 class RoomReverbStereo(tuple[str, float, bool, str], Enum):
     """
     Stereo spread of the room reverb (concat, realtime playback and voice
-    chat). The voice stays mono and centered; only the reverb differs between
-    the channels. No effect while `RoomReverb` is off; otherwise anything but
+    chat). Controls room reflections only, independently of voice positioning.
+    No effect while `RoomReverb` is off; otherwise anything but
     MONO makes the export and the realtime and chat output streams stereo.
     Value shape: (id, width, spread_early, label). `id` is the JSON
     serialization value and, like `RoomReverb`'s, names the processing:
@@ -312,7 +312,7 @@ class RoomReverbStereo(tuple[str, float, bool, str], Enum):
     reflections are spread as well as the late tail.
     """
 
-    MONO = ("mono", 0.0, False, "Disabled (mono)")
+    MONO = ("mono", 0.0, False, "Centered (no spread)")
     LATE_W100 = ("late_w100", 1.0, False, "Wide")
     ALL_W100 = ("all_w100", 1.0, True, "Wider")
 

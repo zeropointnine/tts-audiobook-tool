@@ -116,6 +116,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Loudness normalization: Stronger",
         "  - Generative upsampling: True",
         "  - Treble EQ: Moderate",
+        "  - Output: Mono",
     ]
 
     project.room_tone = RoomTone.MEDIUM
@@ -136,6 +137,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Room reverb: Larger room",
         "  - Room reverb stereo effect: Wide",
         "  - Room tone: Medium",
+        "  - Output: Stereo",
     ]
     project.room_tone = RoomTone.OFF
     project.room_reverb = RoomReverb.OFF
@@ -148,9 +150,9 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     )
 
     project.high_shelf = HighShelfEq.STRONGER.id
-    assert plain_option_lines(state)[-1] == (
-        "  - Treble EQ: Stronger"
-    )
+    assert plain_option_lines(state)[-2:] == [
+        "  - Treble EQ: Stronger", "  - Output: Mono",
+    ]
 
     project.limit_silence_gaps = True
     project.limit_silence_gaps_duration = 0.35
@@ -164,7 +166,11 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     project.high_shelf = HighShelfEq.DISABLED.id
     project.limit_silence_gaps = False
 
-    assert plain_option_lines(state) == []
+    assert plain_option_lines(state) == ["  - Output: Mono"]
+
+    # The confirmation reflects the shared channel policy, not voice counts.
+    with patch.object(concat_menu.VoiceSpatialPolicy, "from_project", return_value=SimpleNamespace(requested_channels=2)):
+        assert plain_option_lines(state) == ["  - Output: Stereo"]
 
 
 def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_single_book_section() -> None:
@@ -518,7 +524,7 @@ def test_room_reverb_stereo_item_only_shows_with_reverb_on() -> None:
 
     project.room_reverb = RoomReverb.SMALL_DRR22
     result = labels()
-    index = result.index("Room reverb stereo effect (currently: Disabled (mono))")
+    index = result.index("Room reverb stereo effect (currently: Centered (no spread))")
     assert result[index - 1].startswith("Room reverb (currently: Small room, light)")
 
 
@@ -532,7 +538,7 @@ def test_room_reverb_stereo_menu_writes_project_setting() -> None:
         ConcatMenu.room_reverb_stereo_menu(state)
         kwargs = options_menu.call_args.kwargs
         assert kwargs["heading_text"] == "Room reverb stereo effect"
-        assert kwargs["labels"] == ["Disabled (mono)", "Wide", "Wider"]
+        assert kwargs["labels"] == ["Centered (no spread)", "Wide", "Wider"]
         assert kwargs["default_value"] is RoomReverbStereo.MONO
 
         kwargs["on_select"](RoomReverbStereo.ALL_W100)
