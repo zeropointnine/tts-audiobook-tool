@@ -574,6 +574,20 @@ html, body {
     align-items: center;
     gap: 10px;
 }
+#sectionList .navigationItem {
+    position: relative;
+    padding-left: 18px;
+    color: var(--color-text-dim);
+}
+#sectionList .currentSection::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    background-color: currentColor;
+}
 .navigationItemDisabled .navigationItemText {
     color: var(--color-text-dim);
     opacity: 0.5;

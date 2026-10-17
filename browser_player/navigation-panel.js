@@ -8,6 +8,8 @@
 class NavigationPanel {
 
     activeTab = "sections";
+    activeSectionIndex = -1;
+    sectionItemEls = [];
 
     /**
      * @param {Object} config - Configuration object
@@ -170,8 +172,30 @@ class NavigationPanel {
         }
     }
 
+    updateCurrentSection(index) {
+        const sectionIndex = this.sections.findIndex(section =>
+            index >= section.start_index && index < section.end_index);
+        if (sectionIndex === this.activeSectionIndex) {
+            return;
+        }
+
+        const previousItem = this.sectionItemEls[this.activeSectionIndex];
+        if (previousItem) {
+            previousItem.classList.remove("currentSection");
+            previousItem.removeAttribute("aria-current");
+        }
+        const currentItem = this.sectionItemEls[sectionIndex];
+        if (currentItem) {
+            currentItem.classList.add("currentSection");
+            currentItem.setAttribute("aria-current", "location");
+        }
+        this.activeSectionIndex = sectionIndex;
+    }
+
     _updateSectionList() {
         this.sectionList.replaceChildren();
+        this.sectionItemEls = [];
+        this.activeSectionIndex = -1;
 
         if (this.sections.length === 0) {
             const noneItem = this._makeElement(`<div class="navigationItemNone">No sections available.</div>`);
@@ -181,6 +205,7 @@ class NavigationPanel {
 
         for (const [i, section] of this.sections.entries()) {
             const itemEl = this._makeSectionItemEl(section, i);
+            this.sectionItemEls.push(itemEl);
             this.sectionList.appendChild(itemEl);
         }
     }

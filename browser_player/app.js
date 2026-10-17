@@ -429,6 +429,12 @@ class App {
             this.toast.hide();
         }
         this.rootAttributer.set("data-player-status", "play");
+        // Re-center on resume even when the highlighted segment hasn't changed.
+        // Refresh first so a seek immediately before play uses the new position.
+        if (!this.bookText.updateHighlight(this.audio.currentTime)) {
+            this.bookText.scrollToIndex(this.bookText.currentIndex);
+        }
+        this.navigationPanel.updateCurrentSection(this.bookText.getCurrentIndex());
     }
 
     onAudioPause() {
@@ -529,6 +535,7 @@ class App {
 
         // Update highlighted text segment
         this.bookText.updateHighlight(this.audio.currentTime);
+        this.navigationPanel.updateCurrentSection(this.bookText.getCurrentIndex());
     }
 
     syncAddressBar(audioFileUrl) {
