@@ -41,7 +41,7 @@ The following is illustrative: absent override keys are normal, and these object
      "crop_file_name": "0f3c…e1.flac", "crop_start": 1.5, "crop_end": 9.0, "crop_transcript": "Trimmed text.",
      "room_reverb": "off"},
     {"file_name": "third.flac", "transcript": "", "room_reverb": "off",
-     "preset": "alba", "instructions": "Speak warmly, with a slight rasp."}
+     "preset": "alba", "instructions": {"qwen3tts_local": "Speak warmly, with a slight rasp."}}
   ],
   "model_settings": {
     "models": {
@@ -64,7 +64,9 @@ The following is illustrative: absent override keys are normal, and these object
 }
 ```
 
-Top-level `voice_references` is the sole authoritative clone list and is always serialized, including `[]`. Each entry is one voice: a project-local voice filename with its transcript, in order; an unused/absent transcript is represented by `""`. Output does not store authoritative clone lists under private models or shared groups.
+Top-level `voice_references` is the sole authoritative clone list and is always serialized. Each entry is one voice: a project-local voice filename with its transcript, in order; an unused/absent transcript is represented by `""`. Output does not store authoritative clone lists under private models or shared groups.
+
+**A project always has at least one voice.** An empty list (absent, `[]`, or migrated from legacy data with no populated source) loads as one default voice (`Voice()`: no sample, reverb off, centered), and removing the last voice leaves a fresh default voice. A voice's sample is optional: `file_name: ""` is a voice without a sample, kept in place so later voices keep their indexes. When no voice has a sample, no clone reference is sent; per-voice effects (pan, room reverb) still apply. A voice without a sample generates with the model's built-in voice where supported; for a model that requires a clone sample it is a pre-flight error only if that voice is needed by the job. Unused sample-less voices never block a job. Builds that predate sample-less voices drop `file_name: ""` entries on load (shifting later voice indexes).
 
 ### Voice entries
 
@@ -72,15 +74,17 @@ In memory the list is `list[Voice]`. `Voice` and its optional `VoiceCrop` are fr
 
 | Key | In memory | Notes |
 | --- | --- | --- |
-| `file_name` | `Voice.file_name` | Project-local sample path. An unusable path drops the entry with a warning. |
+| `file_name` | `Voice.file_name` | Project-local sample path; `""` means the voice has no sample (`Voice.has_sample`). A non-empty unusable path drops the entry with a warning. |
 | `transcript` | `Voice.transcript` | `""` when absent. |
 | `crop_file_name`, `crop_start`, `crop_end`, `crop_transcript` | `Voice.crop: VoiceCrop \| None` | All or none; see below. |
 | `room_reverb` | `Voice.room_reverb: RoomReverb` | `RoomReverb` id. **Always written**, including `"off"`. Missing loads as off (or, in v4 input, the migrated project value); an unknown id loads as off. New voices default to off. |
 | `pan` | `Voice.pan: float` | Stereo position, -1 (full left) to 1 (full right). **Written only when nonzero**. Missing or malformed (non-numeric, non-finite) loads as 0 (centered); out-of-range values are clamped. Optional, so no version bump. |
 | `preset` | `Voice.preset: str` | Model preset voice id, for models with built-in voices (e.g. Pocket TTS). **Written only when non-empty**. Missing or non-string loads as `""`. Optional, so no version bump. |
-| `instructions` | `Voice.instructions: str` | Free-text voice instructions for "instruct" models (e.g. Qwen3-TTS Instruct). **Written only when non-empty**. Missing or non-string loads as `""`. Optional, so no version bump. |
+| `instructions` | `Voice.instructions: dict[str, str]` | Free-text voice instructions for "instruct" models (e.g. Qwen3-TTS Instruct), keyed by TTS model id. **Written only when non-empty**. Missing or non-object (including a legacy plain string, which is not migrated) loads as `{}`; entries with a non-string key or value are dropped. Optional, so no version bump. |
 
-**Room reverb** is per voice; `room_reverb_stereo` (the stereo effect) remains a project-wide setting. Concat and realtime playback put each segment in its voice's room: the phrase group's `voice_index` in user-defined voice selection, otherwise voice 0. Voice chat uses voice 0's. There is no reverb with no voices, or while a Pocket predefined voice is in use. Both are set in the voice sample submenu (Effects > Stereo position, Room reverb).
+**Instructions** are owned only by `Voice.instructions`, keyed by the exact TTS model ID. They are not model settings, and old model-global instruction values are not migrated or used as a fallback. Local OmniVoice, local Qwen3-TTS CustomVoice/VoiceDesign, audio.cpp OmniVoice, Breeze TTS 2 and CosyVoice3, and SGL-Omni CosyVoice3, AuK and AuK-Flash consume the selected voice's value. AuK and AuK-Flash use it only while the voice has no voice sample (as its voice description); the submenu still offers it on a voice with a sample, marked as unused, and the voice list previews it only when used. CosyVoice3 (either backend, each under its own model ID) uses it only in Instruct mode; its Mode choice remains model-wide. SGL-Omni CosyVoice3 stores that Mode as `template_name` (default `zero_shot`, so existing projects are unchanged); it is never sent to the server. The voice submenu shows `Instructions/{model short name}` (or the catalog's optional `spec.ui.instructions_label` in place of `Instructions`) when the runtime `can_instructions(project)` is true, followed by Clear instructions only when this model's value is present. Editing preserves case, strips surrounding whitespace, and rejects more than 4,000 characters without truncation; blank/cancel leaves the value unchanged. Clear removes only this model's key. Failed saves restore the previous voice list. Catalog `spec.ui.instructions_message` supplies model-specific prompts. Local OmniVoice validates entered text with OmniVoice's own instruct resolver and rejects unsupported items without saving; the stored value is the text as entered, not the normalized form.
+
+**Room reverb** is per voice; `room_reverb_stereo` (the stereo effect) remains a project-wide setting. Concat and realtime playback put each segment in its voice's room: the phrase group's `voice_index` in user-defined voice selection, otherwise voice 0. Voice chat uses voice 0's. There is no reverb while a Pocket predefined voice is in use. Both are set in the voice sample submenu (Effects > Stereo position, Room reverb).
 
 **Stereo position** (`pan`) is per voice and applies to concat and realtime playback only (not voice chat): user-defined voice selection uses the phrase group's voice, Disabled uses voice 0's, Auto-advance stays centered. Any heard off-center voice makes the output stereo. See [room reverb](<room-reverb.md>).
 
@@ -92,7 +96,7 @@ In memory the list is `list[Voice]`. `Voice` and its optional `VoiceCrop` are fr
 
 Top-level values such as `language_code`, `markers`, `generate_range`, `voice_select_mode`, export options, and the compatibility placeholder `none_voice_file_name` remain project-wide. A project does not record which TTS model produced its audio: remote servers expose several models at once, so "the model in use" is not a stable property to compare against. `project_text.json` remains separately serialized as a structured `Book`; `voice_index` belongs to each phrase group there, whereas the voice samples it selects are the project-wide ordered pairs here. For selection modes and scheduling, see [`generate-files-ordering.md`](generate-files-ordering.md).
 
-All voice consumers use this same ordered list: menus and editing, generation and rotation, per-line/dialog assignment, local and server adapters, workers, and clone/transfer/snapshot paths. A transcript is collected for every added primary sample — sidecar text file or STT — regardless of the selected model, so the shared list is complete for any model. Before a full-screen TTS feature launches (generation, chat, realtime playback), the interactive app pre-flights the list: a required-but-empty list, a missing or undecodable file, or an unresolvable transcript blocks the launch, and empty transcripts are auto-transcribed for a transcript-using selection. There is no load-time and no readiness-based voice-file verification: missing or undecodable references survive loading untouched, readiness deliberately ignores voice state, and model adapters surface voice problems only at generation time. Transcripts stay paired with their filenames during append, replace, reorder, and clear operations. They remain stored and editable even while a model that does not use reference transcripts is selected; that model simply does not send/use them. Clone support and transcript requirements remain model-specific capabilities, not a reason to create separate storage.
+All voice consumers use this same ordered list: menus and editing, generation and rotation, per-line/dialog assignment, local and server adapters, workers, and clone/transfer/snapshot paths. A transcript is collected for every added primary sample — sidecar text file or STT — regardless of the selected model, so the shared list is complete for any model. Before a full-screen TTS feature launches (generation, chat, realtime playback), the interactive app pre-flights the job's voice dependencies: Disabled checks voice 1, User-defined checks the distinct clamped assignments of the actual submitted lines (or playback range), and Auto-advance checks all voices, regardless of job length, batching or retries. Chat and literal previews have no per-line assignment, so User-defined uses voice 1 there. `ProjectVoiceUtil.get_job_voice_indices()` resolves that scope without filtering/reordering the shared list or advancing rotation; `get_effective_voice_index()` shares the assignment clamp with inference and batch scheduling. Within that scope a missing required sample, missing or undecodable active file, or unresolvable required transcript blocks launch. Empty required transcripts are auto-transcribed only for selected voices; unused voice files/transcripts are neither checked nor repaired. The console-free quick-job pre-flight uses the same scope but does not auto-transcribe. Both validator APIs accept `voice_indices=None` to check the whole list and an explicit empty iterable to check none. There is no load-time and no readiness-based voice-file verification: missing or undecodable references survive loading untouched, readiness deliberately ignores voice state, and model adapters surface voice problems only at generation time. Transcripts stay paired with their filenames during append, replace, reorder, and clear operations. They remain stored and editable even while a model that does not use reference transcripts is selected; that model simply does not send/use them. Clone support and transcript requirements remain model-specific capabilities, not a reason to create separate storage.
 
 Pocket's selected predefined voice takes precedence during generation without clearing the shared list. IndexTTS2's secondary emotion reference remains a model-specific file setting, not a second project clone list.
 
@@ -124,11 +128,11 @@ Migration is **load-driven and one-way**. [`ProjectUtil.load_using_dir_path`](..
 
 ### Selecting the project voice list (v1–v3 → v4)
 
-An **explicit top-level `voice_references`, including `[]`, wins** over all stale legacy clone lists. It is not merged with or repopulated from them. Otherwise, migration collects populated legacy sources from v1/v2 flat filename/transcript fields and v3 private/shared clone lists, retaining each list's order and paired transcripts. Empty lists do not count as populated sources.
+An **explicit top-level `voice_references`, including `[]`, wins** over all stale legacy clone lists. It is not merged with or repopulated from them. Otherwise, migration collects populated legacy sources from v1/v2 flat filename/transcript fields and v3 private/shared clone lists, retaining each list's order and paired transcripts. Empty lists do not count as populated sources, and legacy entries without a sample are not migrated as voices.
 
 | Populated independent legacy sources | Action |
 | --- | --- |
-| Zero | Use `voice_references: []`; do not prompt. |
+| Zero | Use one default voice; do not prompt. |
 | One | Adopt its complete list silently. |
 | Two or more | Block until the user chooses one complete list to keep. Do not merge or auto-select. |
 

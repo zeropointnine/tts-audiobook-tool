@@ -64,4 +64,8 @@ class TtsModelSpec(NamedTuple):
     substitutions: list[ tuple[str, str] ]
     # Inclusive random seed limit; -1 means no model-specific cap
     max_random_seed: int = -1
+    # Whether the model accepts per-voice free-text instructions (`Voice.instructions`)
+    can_instructions: bool = False
+    # Whether the model can clone a voice from a voice sample
+    can_voice_clone: bool = True
 

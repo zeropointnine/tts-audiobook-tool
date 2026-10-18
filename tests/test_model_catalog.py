@@ -56,6 +56,33 @@ def test_settings_note_can_be_omitted():
     assert "settings_note" not in parse_spec(entry).ui
 
 
+@pytest.mark.parametrize("model_id", ["omnivoice_local", "omnivoice_audiocpp", "auk_sglomni"])
+@pytest.mark.parametrize("message", ["", "Custom instructions prompt.\nModel-specific guidance."])
+def test_optional_instructions_message_is_generic_and_roundtrips(tmp_path, model_id, message):
+    path = _copy_catalog(tmp_path, lambda data: _entry(data, model_id)["spec"]["ui"].update(
+        instructions_message=message))
+    catalog = read_catalog(path)
+    assert tomllib.loads(catalog_to_toml(catalog)) == catalog
+    specs, _, _ = load_catalog(path)
+    assert next(spec for spec in specs if spec.id == model_id).ui["instructions_message"] == message
+
+
+@pytest.mark.parametrize("key", ["instructions_message", "instructions_label", "instructions_voice_variation_note"])
+@pytest.mark.parametrize("message", [None, True, 123, [], {}])
+def test_instructions_ui_strings_must_be_strings(key, message):
+    entry = _entry(read_catalog(CATALOG_PATH), "omnivoice_audiocpp")
+    entry["spec"]["ui"][key] = message
+    with pytest.raises(ValueError, match=rf"model omnivoice_audiocpp\.spec\.ui\.{key}: expected str"):
+        parse_spec(entry)
+
+
+@pytest.mark.parametrize("key", ["instructions_message", "instructions_label"])
+def test_instructions_ui_strings_can_be_omitted(key):
+    entry = _entry(read_catalog(CATALOG_PATH), "omnivoice_audiocpp")
+    del entry["spec"]["ui"][key]
+    assert key not in parse_spec(entry).ui
+
+
 @pytest.mark.parametrize("model_id", ["dots_local", "echo_tts_audiocpp", "auk_sglomni"])
 @pytest.mark.parametrize("duration", [5, 15.5])
 def test_optional_voice_sample_max_duration_is_generic_and_roundtrips(tmp_path, model_id, duration):
@@ -105,10 +132,90 @@ def test_catalog_random_seed_cap_defaults_and_int32_limits():
 
 def test_model_spec_preserves_legacy_positional_constructor():
     spec = TtsModelType.require_by_id("echo_tts_audiocpp").value
-    assert TtsModelSpec._fields[-1] == "max_random_seed"
-    legacy = TtsModelSpec(*spec[:-1])
-    assert legacy[:-1] == spec[:-1]
+    assert TtsModelSpec._fields[-3:] == ("max_random_seed", "can_instructions", "can_voice_clone")
+    legacy = TtsModelSpec(*spec[:-3])
+    assert legacy[:-3] == spec[:-3]
     assert legacy.max_random_seed == -1
+    assert legacy.can_instructions is False
+    assert legacy.can_voice_clone is True
+
+
+def test_shipped_can_voice_clone_is_true_for_every_real_model():
+    specs, _, _ = load_catalog()
+    assert [spec.id for spec in specs if not spec.can_voice_clone] == ["none"]
+    assert all(model.value.can_voice_clone is (model.id != "none") for model in TtsModelType.all())
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda spec: spec.pop("can_voice_clone"),
+    lambda spec: spec.update(can_voice_clone=True),
+])
+def test_none_placeholder_must_declare_no_voice_clone(mutate):
+    entry = _entry(read_catalog(CATALOG_PATH), "none")
+    mutate(entry["spec"])
+    with pytest.raises(ValueError, match="none placeholder cannot have local inference settings"):
+        parse_spec(entry)
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_optional_can_voice_clone_is_settable_for_local_models(tmp_path, value):
+    path = _copy_catalog(tmp_path, lambda data: _entry(data, "chatterbox_local")["spec"].update(
+        can_voice_clone=value))
+    specs, _, _ = load_catalog(path)
+    assert next(spec for spec in specs if spec.id == "chatterbox_local").can_voice_clone is value
+
+
+@pytest.mark.parametrize("value", [1, "true", None])
+def test_can_voice_clone_must_be_a_bool(value):
+    entry = _entry(read_catalog(CATALOG_PATH), "chatterbox_local")
+    entry["spec"]["can_voice_clone"] = value
+    with pytest.raises(ValueError, match=r"model chatterbox_local\.spec\.can_voice_clone: expected bool"):
+        parse_spec(entry)
+
+
+@pytest.mark.parametrize("model_id", ["echo_tts_audiocpp", "auk_sglomni"])
+def test_can_voice_clone_is_not_yet_accepted_for_server_models(model_id):
+    entry = _entry(read_catalog(CATALOG_PATH), model_id)
+    entry["spec"]["can_voice_clone"] = False
+    with pytest.raises(ValueError, match="can_voice_clone"):
+        parse_spec(entry)
+
+
+def test_shipped_can_instructions_is_only_local_omnivoice():
+    specs, _, _ = load_catalog()
+    assert [spec.id for spec in specs if spec.can_instructions] == ["omnivoice_local"]
+    assert TtsModelType.require_by_id("omnivoice_local").value.can_instructions is True
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_optional_can_instructions_is_settable_for_local_models(tmp_path, value):
+    path = _copy_catalog(tmp_path, lambda data: _entry(data, "chatterbox_local")["spec"].update(
+        can_instructions=value))
+    specs, _, _ = load_catalog(path)
+    assert next(spec for spec in specs if spec.id == "chatterbox_local").can_instructions is value
+
+
+@pytest.mark.parametrize("value", [1, "true", None])
+def test_can_instructions_must_be_a_bool(value):
+    entry = _entry(read_catalog(CATALOG_PATH), "omnivoice_local")
+    entry["spec"]["can_instructions"] = value
+    with pytest.raises(ValueError, match=r"model omnivoice_local\.spec\.can_instructions: expected bool"):
+        parse_spec(entry)
+
+
+@pytest.mark.parametrize("model_id", ["echo_tts_audiocpp", "auk_sglomni"])
+def test_can_instructions_is_not_yet_accepted_for_server_models(model_id):
+    entry = _entry(read_catalog(CATALOG_PATH), model_id)
+    entry["spec"]["can_instructions"] = True
+    with pytest.raises(ValueError, match="can_instructions"):
+        parse_spec(entry)
+
+
+def test_none_placeholder_cannot_take_instructions():
+    entry = _entry(read_catalog(CATALOG_PATH), "none")
+    entry["spec"]["can_instructions"] = True
+    with pytest.raises(ValueError, match="none placeholder cannot have local inference settings"):
+        parse_spec(entry)
 
 
 @pytest.mark.parametrize("model_id", ["none", "chatterbox_local", "echo_tts_audiocpp", "auk_sglomni"])
@@ -530,9 +637,8 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
         "top_p": ("float", 1.0, "top_level"),
         "top_k": ("int", 50, "top_level"),
         "guidance_scale": ("float", 1.0, "top_level"),
-        "instruct": ("str", "", "options"),
     }
-    assert breeze["audio_cpp"]["parameters"]["instruct"]["request_key"] == "instruction"
+    assert breeze["audio_cpp"]["voice_instructions"] is True
 
     assert "sgl_omni" not in chatterbox and "match" not in chatterbox
     assert all("sgl_omni" in item and "audio_cpp" not in item and "match" not in item
@@ -570,10 +676,8 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
         "guidance_scale": ("float", 2.0, "top_level"),
         # An audio.cpp request option, not a forwarded top-level field.
         "speed": ("float", 1.0, "options"),
-        # Voice-design instruction; the server reads it from `options`.
-        "instruct": ("str", "", "options"),
     }
-    assert omnivoice["audio_cpp"]["parameters"]["instruct"]["request_key"] == "instruction"
+    assert omnivoice["audio_cpp"]["voice_instructions"] is True
     # The chunker suppression local OmniVoice hardcodes is pinned here rather
     # than exposed: not a parameter, so not a persisted setting either.
     assert omnivoice["audio_cpp"]["request_options"] == {"audio_chunk_threshold": 999.0}
@@ -603,7 +707,6 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
 @pytest.mark.parametrize("model_id, expected", [
     ("breeze_tts_2_audiocpp", [
         ("voice_samples", None, "", ""),
-        ("voice_instructions", "voice", "instruct", ""),
         ("parameter", "model", "temperature", "Temperature"),
         ("parameter", "model", "guidance_scale", "Guidance scale"),
         ("parameter", "model", "top_p", "Top-P"),
@@ -701,20 +804,19 @@ def test_audio_cpp_menu_is_required(model_id):
     ("echo_tts_audiocpp",
      lambda entry: entry["audio_cpp"].update(max_words_range_reco=[20, 50, 3]),
      "expected a string note"),
-    ("omnivoice_audiocpp",
-     lambda entry: entry["audio_cpp"]["parameters"]["instruct"].update(min=0),
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["parameters"]["template_name"].update(min=0),
      "min.*not valid for a string parameter"),
-    ("omnivoice_audiocpp",
-     lambda entry: entry["audio_cpp"]["parameters"]["instruct"].update(target="top_level"),
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["parameters"]["template_name"].update(target="top_level"),
      "a string parameter must travel in options"),
-    ("omnivoice_audiocpp",
-     lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed", "target_menu": "model"},
-                                                   {"parameter": "instruct", "label": "Instruct", "target_menu": "model"}]),
-     "requires the voice_instructions control"),
+    ("cosyvoice3_audiocpp",
+     lambda entry: entry["audio_cpp"]["menu"][1].pop("kind"),
+     "requires the choice control"),
     ("omnivoice_audiocpp",
      lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed", "target_menu": "model"},
                                                    {"kind": "voice_instructions", "parameter": "speed", "target_menu": "model"}]),
-     "requires a string parameter"),
+     "invalid control"),
     # Fixed-choice string parameters (CosyVoice3's "Mode").
     ("cosyvoice3_audiocpp",
      lambda entry: entry["audio_cpp"]["parameters"]["template_name"].update(default="sft"),
@@ -731,7 +833,7 @@ def test_audio_cpp_menu_is_required(model_id):
      "choices.*only supported for string parameters"),
     ("cosyvoice3_audiocpp",
      lambda entry: entry["audio_cpp"]["menu"][1].update(kind="voice_instructions", label=None) or entry["audio_cpp"]["menu"][1].pop("label"),
-     "requires the choice control"),
+     "invalid control"),
     ("cosyvoice3_audiocpp",
      lambda entry: entry["audio_cpp"]["menu"][2].update(kind="choice", label="Instruction"),
      "choice requires a string parameter with choices"),
@@ -827,6 +929,38 @@ def test_voice_and_transcript_cannot_have_different_storage_owners(tmp_path, nam
         load_catalog(write_catalog(tmp_path / "split-voice-owner.toml", data))
 
 
+def test_sgl_omni_voice_instructions_are_an_optional_bool(tmp_path):
+    definitions = load_definitions()
+    assert {model_id for model_id, d in definitions.models.items() if d.voice_instructions} == {
+        "auk_sglomni", "auk_flash_sglomni", "cosyvoice3_sglomni"}
+    path = _copy_catalog(tmp_path, lambda data: _entry(data, "cosyvoice3_sglomni")["sgl_omni"]["behavior"].update(
+        voice_instructions="yes"))
+    with pytest.raises(ValueError, match=r"behavior.voice_instructions: expected bool"):
+        load_definitions(path)
+
+
+def _cosyvoice_mode(data):
+    return _entry(data, "cosyvoice3_sglomni")["sgl_omni"]["parameters"]["template_name"]
+
+
+@pytest.mark.parametrize("mutate, match", [
+    # The Mode is app-side only; it can never become a request field.
+    (lambda data: _cosyvoice_mode(data).update(request_key="template_name"), "unsupported field.*request_key"),
+    (lambda data: _cosyvoice_mode(data).pop("choices"), "requires choices"),
+    (lambda data: _cosyvoice_mode(data).update(default="sft"), "must match the catalog storage default"),
+    (lambda data: next(m for m in _entry(data, "cosyvoice3_sglomni")["sgl_omni"]["menu"]
+                       if m.get("parameter") == "template_name").pop("kind"), "undeclared parameter template_name"),
+    (lambda data: next(m for m in _entry(data, "cosyvoice3_sglomni")["sgl_omni"]["menu"]
+                       if m.get("parameter") == "top_k").update(kind="choice"), "choice requires a string parameter"),
+    (lambda data: _entry(data, "cosyvoice3_sglomni")["sgl_omni"]["menu"].pop(1), "each parameter exactly once"),
+    (lambda data: _entry(data, "cosyvoice3_sglomni")["sgl_omni"].setdefault("request_defaults", {}).update(
+        instructions="x"), "request_defaults.instructions.*reserved"),
+])
+def test_sgl_omni_choice_parameter_contracts(tmp_path, mutate, match):
+    with pytest.raises(ValueError, match=match):
+        load_definitions(_copy_catalog(tmp_path, mutate))
+
+
 def test_missing_shipped_data_only_cosyvoice_definition_is_rejected(tmp_path):
     data = read_catalog(CATALOG_PATH)
     data["models"] = [entry for entry in data["models"] if entry["id"] != "cosyvoice3_sglomni"]
@@ -842,3 +976,32 @@ def test_sgl_backend_detector_returns_catalog_and_served_id_pairs():
         (TtsModelType.require_by_id("auk_flash_sglomni"), "tencent/AuK-Flash"),
         (TtsModelType.require_by_id("moss_local_sglomni"), "OpenMOSS/MOSS-TTS-Local"),
     ]
+
+
+@pytest.mark.parametrize("model_id", ["breeze_tts_2_audiocpp", "cosyvoice3_audiocpp", "omnivoice_audiocpp"])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_audio_cpp_voice_instructions_are_an_optional_bool(tmp_path, model_id, enabled):
+    from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
+    path = _copy_catalog(tmp_path, lambda data: _entry(data, model_id)["audio_cpp"].update(voice_instructions=enabled))
+    definition = load_audio_cpp_definitions(path).models[model_id]
+    assert definition.voice_instructions is enabled
+    assert not {"instruct", "instruction", "instructions"}.intersection(definition.parameters)
+    assert not any(item.kind == "voice_instructions" for item in definition.menu)
+
+
+@pytest.mark.parametrize("value", [None, "yes", 0, 1, [], {}])
+def test_audio_cpp_voice_instructions_reject_non_bool_values(value):
+    entry = _entry(read_catalog(CATALOG_PATH), "breeze_tts_2_audiocpp")
+    entry["audio_cpp"]["voice_instructions"] = value
+    with pytest.raises(ValueError, match=r"audio_cpp.voice_instructions: expected a boolean"):
+        parse_spec(entry)
+
+
+def test_audio_cpp_voice_instructions_default_to_false(tmp_path):
+    from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
+    definitions = load_audio_cpp_definitions().models
+    assert {model_id for model_id, definition in definitions.items() if definition.voice_instructions} == {
+        "breeze_tts_2_audiocpp", "cosyvoice3_audiocpp", "omnivoice_audiocpp",
+    }
+    path = _copy_catalog(tmp_path, lambda data: _entry(data, "omnivoice_audiocpp")["audio_cpp"].pop("voice_instructions"))
+    assert not load_audio_cpp_definitions(path).models["omnivoice_audiocpp"].voice_instructions

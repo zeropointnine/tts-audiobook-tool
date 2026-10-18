@@ -470,7 +470,7 @@ class VoiceSelectMode(tuple[str, str, str, str], Enum):
     )
     DISABLED = (
         "disabled",
-        "disabled",
+        "disabled - always Voice 1",
         "Disabled",
         "Uses voice sample 1 for every TTS generation\n      Uses the reverb settings of voice sample 1",
     )

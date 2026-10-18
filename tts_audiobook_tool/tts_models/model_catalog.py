@@ -6,6 +6,7 @@ sgl_omni_definition.py, after the project settings registry is available.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import math
 import tomllib
@@ -22,10 +23,12 @@ _LOCAL_SPEC_KEYS = {
     "local_module_test", "local_torch_devices", "file_tag", "default_output_sample_rate",
     "requires_voice", "can_stream", "requires_ffmpeg_libs", "un_all_caps",
     "requirements_file_name", "ui", "output_filters", "substitutions", "max_random_seed",
+    "can_instructions", "can_voice_clone",
 }
 _SERVER_SPEC_KEYS = {"file_tag", "default_output_sample_rate", "un_all_caps", "requirements_file_name", "ui", "substitutions", "max_random_seed"}
 _UI_KEYS = {"proper_name", "short_name", "voice_path_console", "voice_path_requestor", "project_links", "settings_note",
-            "voice_sample_max_duration_s"}
+            "voice_sample_max_duration_s", "instructions_message", "instructions_label",
+            "instructions_voice_variation_note"}
 
 
 def _fail(where: str, reason: str) -> NoReturn:
@@ -52,7 +55,7 @@ def _field(obj: dict, key: str, where: str, typ: type) -> Any:
 # adapter interpret whatever a family declares here.
 _AUDIO_CPP_GROUP_KEYS = {"match", "parameters", "menu", "reference_transcript", "max_words_range_reco",
                          "request_options", "voice_required", "language_policy", "language_target",
-                         "language_hint_note", "music_and_trim"}
+                         "language_hint_note", "music_and_trim", "voice_instructions"}
 _AUDIO_CPP_MATCH_KEYS = {"task", "tasks", "family", "mode", "session_options"}
 _AUDIO_CPP_PARAMETER_KEYS = {"type", "default", "min", "max", "default_sentinel", "request_key", "target",
                              "input_prompt_suffix", "choices"}
@@ -60,11 +63,20 @@ _AUDIO_CPP_CHOICE_KEYS = {"value", "label", "description"}
 _AUDIO_CPP_TARGETS = ("top_level", "options")
 
 
-def _parse_audio_cpp_choices(value: Any, default: str, where: str) -> list[dict[str, str]]:
+@dataclass(frozen=True)
+class ParameterChoice:
+    """One option of a fixed-choice string setting, shared by both server backends."""
+    value: str
+    label: str
+    description: str = ""
+
+
+def parse_choices(value: Any, default: str, where: str) -> list[dict[str, str]]:
     """Validate a string parameter's fixed option list (eg CosyVoice3's template).
 
     Choices are plain data. Behavior that depends on the selected choice
-    belongs in an ``AudioCppModelBehavior`` subclass, not in further choice keys.
+    belongs in a backend behavior subclass (``AudioCppModelBehavior`` /
+    ``SglOmniModelBehavior``), not in further choice keys.
     """
     if not isinstance(value, list) or not value:
         _fail(where, "expected a nonempty array of choices")
@@ -117,15 +129,14 @@ def _parse_audio_cpp_parameters(value: Any, where: str) -> dict[str, dict[str, A
         if typ == "str":
             if suffix:
                 _fail(f"{item_where}.input_prompt_suffix", "only supported for numeric input prompts")
-            # A text control has no bounds; audio.cpp reads the only such
-            # control this backend declares (`instruction`) from `options`.
+            # Fixed-choice string controls have no numeric bounds.
             for key in ("min", "max", "default_sentinel"):
                 if param.get(key) is not None:
                     _fail(f"{item_where}.{key}", "numeric bounds are not valid for a string parameter")
             default = _field(param, "default", item_where, str)
             if target != "options":
                 _fail(f"{item_where}.target", "a string parameter must travel in options")
-            choices = (_parse_audio_cpp_choices(param["choices"], default, f"{item_where}.choices")
+            choices = (parse_choices(param["choices"], default, f"{item_where}.choices")
                        if "choices" in param else [])
             parameters[name] = {"type": typ, "default": default, "min": None, "max": None,
                                 "default_sentinel": None, "request_key": request_key, "target": target,
@@ -165,8 +176,6 @@ def _parse_audio_cpp_menu(value: Any, parameters: dict[str, dict[str, Any]], whe
             continue
         if kind == "seed":
             control = _object(item, item_where, {"kind", "target_menu"})
-        elif kind == "voice_instructions":
-            control = _object(item, item_where, {"kind", "parameter", "target_menu"})
         elif kind == "choice":
             control = _object(item, item_where, {"kind", "parameter", "label", "target_menu"})
         elif "kind" not in item:
@@ -182,27 +191,17 @@ def _parse_audio_cpp_menu(value: Any, parameters: dict[str, dict[str, Any]], whe
         name = _field(control, "parameter", item_where, str)
         if name not in parameters:
             _fail(f"{item_where}.{name}", "unknown parameter")
-        if kind == "voice_instructions":
-            # A text parameter is edited by its own prompt, not by the numeric
-            # control, so name it explicitly rather than by position.
-            if parameters[name]["type"] != "str":
-                _fail(f"{item_where}.{name}", "voice_instructions requires a string parameter")
-            if parameters[name]["choices"]:
-                _fail(f"{item_where}.{name}", "a parameter with choices requires the choice control")
-            menu.append({"kind": kind, "parameter": name, "target_menu": target_menu})
-            continue
         if kind == "choice":
             if parameters[name]["type"] != "str" or not parameters[name]["choices"]:
                 _fail(f"{item_where}.{name}", "choice requires a string parameter with choices")
         elif parameters[name]["type"] == "str":
-            _fail(f"{item_where}.{name}", "a string parameter requires the voice_instructions control "
-                                          "(or the choice control, when it declares choices)")
+            _fail(f"{item_where}.{name}", "a string parameter requires the choice control")
         label = _field(control, "label", item_where, str)
         if not label:
             _fail(f"{item_where}.{name}.label", "must not be empty")
         menu.append({"kind": "choice" if kind == "choice" else "parameter", "parameter": name, "label": label,
                      "target_menu": target_menu})
-    if (sorted(item["parameter"] for item in menu if item["kind"] in ("parameter", "voice_instructions", "choice"))
+    if (sorted(item["parameter"] for item in menu if item["kind"] in ("parameter", "choice"))
             != sorted(parameters)):
         _fail(where, "expected each parameter exactly once")
     if (sum(item["kind"] == "seed" for item in menu) != 1
@@ -310,6 +309,9 @@ def parse_audio_cpp_declaration(entry: dict[str, Any], where: str) -> dict[str, 
     voice_required = group.get("voice_required", True)
     if type(voice_required) is not bool:
         _fail(f"{where}.audio_cpp.voice_required", "expected a boolean")
+    voice_instructions = group.get("voice_instructions", False)
+    if type(voice_instructions) is not bool:
+        _fail(f"{where}.audio_cpp.voice_instructions", "expected a boolean")
     language_policy = group.get("language_policy", "project_code")
     if language_policy not in ("project_code", "moss", "omit", "normalized"):
         _fail(f"{where}.audio_cpp.language_policy", "expected project_code, moss, omit or normalized")
@@ -332,7 +334,7 @@ def parse_audio_cpp_declaration(entry: dict[str, Any], where: str) -> dict[str, 
         group.get("request_options"), f"{where}.audio_cpp.request_options")
     return {"family": match["family"], "tasks": tasks, "mode": match["mode"],
             "session_options": dict(session_options), "reference_transcript": reference_transcript,
-            "voice_required": voice_required,
+            "voice_required": voice_required, "voice_instructions": voice_instructions,
             "language_policy": language_policy, "language_target": language_target,
             "language_hint_note": language_hint_note.strip(),
             "music_and_trim": music_and_trim,
@@ -378,8 +380,9 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
         _fail(f"{where}.spec.ui.project_links", "expected strings")
     if "opt_in_url" in ui:
         _field(ui, "opt_in_url", f"{where}.spec.ui", str)
-    if "settings_note" in ui:
-        _field(ui, "settings_note", f"{where}.spec.ui", str)
+    for key in ("settings_note", "instructions_message", "instructions_label", "instructions_voice_variation_note"):
+        if key in ui:
+            _field(ui, key, f"{where}.spec.ui", str)
     if "voice_sample_max_duration_s" in ui:
         duration = ui["voice_sample_max_duration_s"]
         if (isinstance(duration, bool) or not isinstance(duration, (int, float))
@@ -391,6 +394,8 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
     module = ""
     devices: list[DeviceType] = []
     requires_ffmpeg = False
+    can_instructions = False
+    can_voice_clone = True
     filters: list[str] = []
     if backend == TtsBackendKind.SGL_OMNI.value:
         if "audio_cpp" in entry:
@@ -402,7 +407,8 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
         if not substring.strip():
             _fail(f"{where}.sgl_omni.match.model_id_substring", "must not be empty")
         behavior = _object(group.get("behavior"), f"{where}.sgl_omni.behavior",
-                           {"streaming", "seed", "voice_required", "transcript", "prompt_policy", "language", "music_and_trim", "orchestration", "can_batch"})
+                           {"streaming", "seed", "voice_required", "transcript", "prompt_policy", "language", "music_and_trim", "orchestration", "can_batch",
+                            "voice_instructions"})
         streaming = _field(behavior, "streaming", f"{where}.sgl_omni.behavior", bool)
         voice_required = _field(behavior, "voice_required", f"{where}.sgl_omni.behavior", bool)
         if "can_batch" in behavior:
@@ -438,15 +444,22 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
         filters = _field(meta, "output_filters", f"{where}.spec", list)
         if not all(isinstance(s, str) for s in filters):
             _fail(f"{where}.spec.output_filters", "expected strings")
+        # Optional; server backends do not declare these yet and keep the defaults.
+        if "can_instructions" in meta:
+            can_instructions = _field(meta, "can_instructions", f"{where}.spec", bool)
+        if "can_voice_clone" in meta:
+            can_voice_clone = _field(meta, "can_voice_clone", f"{where}.spec", bool)
         if id == "none":
-            if module or devices or voice_required or streaming or requires_ffmpeg:
+            if (module or devices or voice_required or streaming or requires_ffmpeg
+                    or can_instructions or can_voice_clone):
                 _fail(f"{where}.spec", "the none placeholder cannot have local inference settings")
         elif not module.strip():
             _fail(f"{where}.spec.local_module_test", "local models require a module probe")
     return TtsModelSpec(id, TtsBackendKind(backend) if backend else None,
                         module, devices, file_tag, rate, voice_required, streaming,
                         requires_ffmpeg, caps, requirements, ui, filters,
-                        [tuple(pair) for pair in replacements], max_random_seed)
+                        [tuple(pair) for pair in replacements], max_random_seed, can_instructions,
+                        can_voice_clone)
 
 
 def _load_catalog(path: Path) -> tuple[dict[str, Any], list[TtsModelSpec], list[dict[str, Any]], str]:

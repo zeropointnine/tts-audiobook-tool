@@ -1,21 +1,33 @@
 """Routing and shared controls for model settings menus."""
-from typing import Callable
+from typing import Callable, Protocol, Sequence
 
 from tts_audiobook_tool import ask, target_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, get_string_from
-from tts_audiobook_tool.menus.voice import voice_instruct_util
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import SettingRef
-from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.model_catalog import ParameterChoice
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
+
+
+class ChoiceSetting(Protocol):
+    """The fixed-choice parameter shape both server backends share."""
+    @property
+    def model_id(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def default(self) -> str: ...
+    @property
+    def choices(self) -> Sequence[ParameterChoice]: ...
+
 
 class ModelMenuShared:
     @staticmethod
@@ -145,82 +157,6 @@ class ModelMenuShared:
         )
 
     @staticmethod
-    def make_voice_instructions_item(
-            state: State,
-            model_id: str,
-            name: str = "instruct",
-            label: str = "Voice design instructions",
-            validate_omnivoice: bool = False,
-            required_label: str | None = None,
-    ) -> list[MenuItem]:
-        """
-        Makes the voice-design/edit item for a string instruction setting, plus
-        its "Clear" item while a value is stored.
-
-        Shared by local and audio.cpp models. OmniVoice callers opt into their
-        tag-based validation; other models accept free-form instructions.
-        `required_label` (eg "required for Instruct") replaces "(optional)"
-        while the value is empty, in the error color; the corresponding
-        readiness blocker is what actually stops generation.
-        """
-        def make_label(current: State) -> str:
-            value = current.project.get_model_setting(model_id, name)
-            if not value:
-                suffix = (f"{COL_DIM}({COL_ERROR}{required_label}{COL_DIM})" if required_label
-                          else f"{COL_DIM}(optional)")
-            else:
-                suffix = make_currently_string(truncate_pretty(value, 40, content_color=COL_ACCENT))
-            return f"{label} {suffix}"
-
-        def on_clear(current: State, _: MenuItem) -> None:
-            current.project.set_model_setting(model_id, name, None, reset=True)
-            current.project.save()
-            print_feedback("Instructions cleared")
-
-        def on_edit(current: State, _: MenuItem) -> None:
-            no_voice_note = ""
-            if validate_omnivoice and ProjectVoiceUtil.get_primary_voice_value(current.project, TtsModelType.require_by_id(model_id)):
-                no_voice_note = "Note: When used alongside voice cloning, instructions may have minimal effect"
-            ModelMenuShared.ask_instruct(
-                current.project, model_id, name, no_voice_note,
-                label=label, validate_omnivoice=validate_omnivoice)
-
-        items = [MenuItem(make_label, on_edit)]
-        if state.project.get_model_setting(model_id, name):
-            items.append(MenuItem("Clear instructions", on_clear))
-        return items
-
-    @staticmethod
-    def ask_instruct(
-            project: Project, model_id: str, name: str = "instruct", no_voice_note: str = "",
-            *, label: str = "Voice design instructions", validate_omnivoice: bool = False,
-    ) -> None:
-        """Edit instructions with the current value prefilled.
-
-        Only OmniVoice callers use its best-effort tag validation. Free-form
-        instructions must not be checked against OmniVoice's vocabulary.
-        """
-
-        def validator(value: str) -> str:
-            error, _ = voice_instruct_util.validate_instruct(value)
-            return error
-
-        prompt = [f"Enter {label.lower()}"]
-        if validate_omnivoice:
-            prompt.append(f"{COL_DIM}Eg: \"male, british accent, low pitch\" / \"female, young adult, high pitch\"")
-        else:
-            prompt.append(f"{COL_DIM}Eg: \"Speak warmly and naturally, with calm pacing.\"")
-        if no_voice_note:
-            prompt.append(f"{COL_DIM}{no_voice_note}")
-        ask.ask_string_and_save(
-            project,
-            "\n".join(prompt),
-            SettingRef(model_id, name),
-            "Set instructions:",
-            validator=validator if validate_omnivoice else None,
-        )
-
-    @staticmethod
     def ask_temperature(
             state: State,
             target: str | SettingRef,
@@ -343,6 +279,63 @@ class ModelMenuShared:
             min_value=min_value,
             max_value=max_value
         )
+
+    @staticmethod
+    def make_choice_item(
+            state: State,
+            parameter: ChoiceSetting,
+            label: str,
+            get_value: Callable[[Project], object],
+            set_value: Callable[[Project, str], str],
+    ) -> MenuItem:
+        """A fixed-choice string setting, edited through a one-shot option submenu.
+
+        Shared by both server backends. `get_value` returns the validated stored
+        choice (raising ValueError when storage is invalid); `set_value` saves
+        and returns an error message or "".
+        """
+        labels = {choice.value: choice.label for choice in parameter.choices}
+
+        def valid_value(current: State) -> str | None:
+            """The stored choice, or None when storage holds an invalid value."""
+            try:
+                return str(get_value(current.project))
+            except ValueError:
+                return None
+
+        def display(current: State) -> str:
+            value = valid_value(current)
+            if value is None:
+                # Show the broken value rather than the default it would
+                # otherwise masquerade as; readiness blocks on it.
+                raw = current.project.get_model_setting(parameter.model_id, parameter.name)
+                return f"{label} {COL_DIM}({COL_ERROR}invalid: {raw!r}{COL_DIM})"
+            return make_menu_label(label, labels[value], labels[parameter.default])
+
+        def on_select(current: State, value: str) -> None:
+            err = set_value(current.project, value)
+            if err:
+                ask.ask_error(err)
+                return
+            print_feedback(f"{label} set:", labels[value])
+
+        def edit(current: State, _: MenuItem) -> None:
+            MenuUtil.options_menu(
+                state=current,
+                heading_text=label,
+                labels=[choice.label for choice in parameter.choices],
+                values=[choice.value for choice in parameter.choices],
+                # None when invalid: nothing shows as selected, so every
+                # option (including the default) saves and repairs storage.
+                current_value=valid_value(current),
+                default_value=parameter.default,
+                on_select=lambda value: on_select(current, value),
+                sublabels=([choice.description for choice in parameter.choices]
+                           if any(choice.description for choice in parameter.choices) else None),
+                breadcrumb=label,
+            )
+
+        return MenuItem(display, edit)
 
     @staticmethod
     def make_seed_item(

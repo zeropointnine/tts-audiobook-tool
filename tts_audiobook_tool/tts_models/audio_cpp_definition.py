@@ -8,6 +8,7 @@ from typing import Any
 
 from tts_audiobook_tool.tts_models.model_catalog import (
     CATALOG_PATH,
+    ParameterChoice,
     load_catalog,
     parse_audio_cpp_declaration,
     parse_spec,
@@ -37,22 +38,8 @@ class AudioCppParameter:
 
 
 @dataclass(frozen=True)
-class AudioCppChoice:
-    value: str
-    label: str
-    description: str = ""
-
-
-@dataclass(frozen=True)
 class AudioCppTextParameter:
-    """A string request control: free text (eg OmniVoice's voice-design
-    `instruction`) or, when ``choices`` is set, one of a fixed list of values
-    (eg CosyVoice3's `template_name`).
-
-    audio.cpp has no text control that is not read from the request's
-    ``options`` map, so ``target`` is fixed rather than declared, and there are
-    no numeric bounds to validate against.
-    """
+    """A fixed-choice string request control sent in the ``options`` map."""
 
     model_id: str
     name: str
@@ -60,7 +47,7 @@ class AudioCppTextParameter:
     request_key: str = ""
     type: str = "str"
     target: str = "options"
-    choices: tuple[AudioCppChoice, ...] = ()
+    choices: tuple[ParameterChoice, ...] = ()
 
     def validate(self, value: object) -> str:
         if not isinstance(value, str):
@@ -112,6 +99,8 @@ class AudioCppModelDefinition:
     # warning, eg when only some served variants read the hint.
     language_hint_note: str = ""
     music_and_trim: bool = False
+    # Per-voice instructions, not a persisted model parameter or menu control.
+    voice_instructions: bool = False
 
 
 @dataclass(frozen=True)
@@ -139,7 +128,7 @@ def load_audio_cpp_definitions(path: Path = CATALOG_PATH) -> AudioCppDefinitions
         parameters: dict[str, AudioCppParameterTypes] = {}
         for name, raw in declaration["parameters"].items():
             if raw["type"] == "str":
-                choices = tuple(AudioCppChoice(item["value"], item["label"], item["description"])
+                choices = tuple(ParameterChoice(item["value"], item["label"], item["description"])
                                 for item in raw["choices"])
                 parameters[name] = AudioCppTextParameter(
                     spec.id, name, raw["default"], raw["request_key"], choices=choices)
@@ -162,5 +151,6 @@ def load_audio_cpp_definitions(path: Path = CATALOG_PATH) -> AudioCppDefinitions
             language_target=declaration["language_target"],
             language_hint_note=declaration["language_hint_note"],
             music_and_trim=declaration["music_and_trim"],
+            voice_instructions=declaration["voice_instructions"],
         )
     return AudioCppDefinitions(models, fingerprint)

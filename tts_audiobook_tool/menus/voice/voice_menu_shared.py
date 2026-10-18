@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 import os
 from typing import TYPE_CHECKING, Callable
 
@@ -32,24 +33,34 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.transcriber import Transcriber
 
 # Menu item labels shared by per-model voice menus; tests reference these.
-LABEL_VOICE_SAMPLE_ITEM = "Voice sample"  # "Voice sample N: <name> (<duration>)"
+LABEL_VOICE_SAMPLE_ITEM = "Voice"  # "Voice N: <name> (<duration>); "<instructions>""
 LABEL_VOICE_SAMPLES_SUPERLABEL = "Select to move, remove, edit properties"
-LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed samples
-LABEL_ADD_FIRST_VOICE_SAMPLE = "Add voice sample"  # No samples yet
+LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sample-less) voice
 LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 
-# Per-sample submenu labels
+# Per-voice submenu labels
+LABEL_SET_VOICE_SAMPLE = "Voice sample"
+LABEL_CLEAR_VOICE_SAMPLE = "Clear voice sample"
 LABEL_REMOVE_VOICE_SAMPLE = "Remove"
+LABEL_RESET_VOICE_SAMPLE = "Remove (reset to default)"  # The only voice
 LABEL_MOVE_VOICE_SAMPLE = "Move voice sample position"
 LABEL_CROP_VOICE_SAMPLE = "Trim or play"
-LABEL_EDIT_VOICE_TRANSCRIPTION = "Edit transcription"
+LABEL_EDIT_VOICE_TRANSCRIPTION = "Transcription"
+LABEL_SET_INSTRUCTIONS = "Instructions"
+LABEL_CLEAR_INSTRUCTIONS = "Clear instructions"
+SUBLABEL_INSTRUCTIONS_UNUSED_WITH_SAMPLE = "Not used while this voice has a voice sample"
 LABEL_EFFECTS_SUPERLABEL = "Effects"
 LABEL_STEREO_POSITION = "Stereo position"
 LABEL_ROOM_REVERB = "Room reverb"
 
 # Max length of the transcript preview under the edit-transcription item
 TRANSCRIPT_PREVIEW_LENGTH = 40
+# Max length of instruction previews in voice list and submenu items
+INSTRUCTIONS_PREVIEW_LENGTH = 40
+# UI input guard, not a model-specific instruction vocabulary/context limit
+INSTRUCTIONS_MAX_LENGTH = 4000
+DEFAULT_INSTRUCTIONS_MESSAGE = "Enter instructions for this voice:"
 
 # Minimum duration of an imported voice sample, checked before and after silence trim
 VOICE_SAMPLE_MIN_DURATION_S = 2.0
@@ -139,30 +150,163 @@ class VoiceMenuShared:
         return []
 
     @staticmethod
+    def with_voice_selection_items(items: MenuItemListOrMaker) -> Callable[[State], list[MenuItem]]:
+        """Item maker for a Voices menu: `items`, then the selection controls.
+        An empty menu (eg an unresolved remote model) stays empty."""
+        def make(state: State) -> list[MenuItem]:
+            base = items(state) if callable(items) else items
+            if not base:
+                return []
+            return [*base, *VoiceMenuShared.make_voice_selection_items(
+                state, state.project.get_tts_model_type())]
+        return make
+
+    @staticmethod
     def menu_wrapper(
             state: State,
             items: MenuItemListOrMaker,
             subheading: StringOrMaker | None = None,
     ) -> None:
-        """Show sample management independently of model settings."""
+        """Show sample management independently of model settings.
+
+        `items` is the voice list plus any model-specific items (eg Qwen3-TTS's
+        Set speaker); the shared selection controls are always appended last.
+        """
         MenuUtil.menu(
             state=state,
-            heading="Voice clone",
-            items=items,
+            heading="Voices",
+            items=VoiceMenuShared.with_voice_selection_items(items),
             subheading=subheading,
             on_exit=lambda: PlaySoundUtil.stop_sound_async(),
-            breadcrumb="Voice",
+            breadcrumb="Voices",
         )
 
     @staticmethod
-    def make_resolved_voice_label(state: State) -> str:
-        if state.project.get_tts_model_type().value.requires_voice and not ProjectVoiceUtil.has_voice(state.project):
-            currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
-        elif not ProjectVoiceUtil.has_voice(state.project):
-            currently = make_currently_string("none", color_code=COL_ERROR)
-        else:
-            currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
-        return f"{LABEL_ADD_FIRST_VOICE_SAMPLE} {currently}"
+    def ask_and_load_voice_sound(
+            state: State,
+            tts_type: TtsModelType,
+            message_override: str = "",
+    ) -> tuple[str, "Sound"] | None:
+        """
+        Asks for a voice sound file path, loads and validates it (minimum
+        duration before and after silence trim), applies voice clone
+        post-processing, and starts playing it.
+        Returns (path, sound), or None on cancel or error (after the error
+        prompt). Saves nothing to the project.
+        """
+        if state.prefs.last_voice_dir and not os.path.exists(state.prefs.last_voice_dir):
+            state.prefs.last_voice_dir = ""
+            state.prefs.save()
+        path = VoiceMenuShared.ask_voice_file(state.prefs.last_voice_dir, tts_type, message_override)
+        if not path:
+            return None
+
+        if not os.path.exists(path) or not os.path.isfile(path):
+            ask.ask_error(f"File doesn't exist: {path}")
+            return None
+
+        state.prefs.last_voice_dir = str(Path(path).parent)
+        state.prefs.save()
+
+        # Load sound
+        sound_result = SoundFileUtil.load(path)
+        if isinstance(sound_result, str):
+            ask.ask_error(sound_result)
+            return None
+        sound = sound_result
+
+        if len(sound.data) / sound.sr < VOICE_SAMPLE_MIN_DURATION_S:
+            ask.ask_error("Sound file must be at least 2 seconds")
+            return None
+
+        sound = SoundPipeline.apply_voice_clone_post_processing(sound)
+
+        if sound.data.size == 0:
+            ask.ask_error("Selected sound sample is entirely silence")
+            return None
+
+        if len(sound.data) / sound.sr < VOICE_SAMPLE_MIN_DURATION_S:
+            ask.ask_error("Sound file post silence trim must be at least 2 seconds")
+            return None
+
+        duration_s = len(sound.data) / sound.sr
+        printt(f"{COL_DIM}Playing selected sound sample ({duration_s:.1f}s)...")
+        printt()
+        PlaySoundUtil.play_sound_async(sound)
+        return path, sound
+
+    @staticmethod
+    def get_voice_sample_transcript(state: State, path: str, sound: "Sound") -> tuple[str, str, bool]:
+        """
+        The transcript for a newly selected primary sample: its sidecar text
+        file's, otherwise speech-to-text.
+        Returns (transcript, error, transcribed); error is non-empty only when
+        speech-to-text failed.
+        """
+        # Retain sidecar text for every primary sample, so switching to a
+        # transcript-requiring model does not lose available reference text.
+        sidecar = VoiceMenuShared.load_transcript_sidecar(path)
+        if sidecar:
+            transcript_path, transcript = sidecar
+            printt(f"Loaded transcript text from")
+            printt(f"{transcript_path}:")
+            printt(f"{COL_DIM_ITALICS}{transcript}")
+            printt()
+            return transcript, "", False
+        # No sidecar text: transcribe every primary sample.
+        transcript, err = VoiceMenuShared.transcribe_voice_sample_to_text(state, sound)
+        return transcript, err, True
+
+    @staticmethod
+    def ask_and_set_voice_sample(state: State, tts_type: TtsModelType, index: int) -> None:
+        """
+        Asks for a voice sound file and sets it as the sample of the voice at
+        `index`, replacing any current one. Validation happens first; then the
+        sample is saved with its trim reset and its transcript cleared, and
+        then the transcript is filled from the sidecar text file or
+        speech-to-text. If speech-to-text fails, the sample stays with a
+        missing transcript (the generation pre-flight retries).
+        Prints feedback on success or fail.
+        """
+        if REGISTRY.voice_binding(tts_type.id) is None:
+            raise ValueError(f"Unsupported tts type for this operation {tts_type}")
+        if not 0 <= index < len(state.project.voice_references):
+            print_feedback("No such voice")
+            return
+
+        # Transcripts are always collected for primary samples (sidecar text
+        # or STT), so the shared list is complete for any model; whether a
+        # model actually sends the transcript at generation time remains a
+        # model-specific capability.
+        hints.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
+
+        loaded = VoiceMenuShared.ask_and_load_voice_sound(state, tts_type)
+        if loaded is None:
+            return
+        path, sound = loaded
+
+        err = ProjectVoiceUtil.set_voice_sample_at_index_and_save(
+            state.project, index, sound, Path(path).stem, tts_type,
+        )
+        if err:
+            ask.ask_error(err)
+            return
+
+        transcript, err, transcribed = VoiceMenuShared.get_voice_sample_transcript(state, path, sound)
+        if err:
+            ask.ask_error(f"Voice file saved, but its transcript is missing: {err}")
+            return
+        err = ProjectVoiceUtil.set_voice_transcript_at_index_and_save(state.project, index, transcript)
+        if err:
+            ask.ask_error(f"Voice file saved, but couldn't save its transcript: {err}")
+            return
+
+        print_feedback("Voice file saved")
+
+        hints.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME, and_prompt=not transcribed)
+
+        if transcribed:
+            ask.ask_enter_to_continue()
 
     @staticmethod
     def ask_and_set_voice_file(
@@ -175,92 +319,36 @@ class VoiceMenuShared:
         """
         Asks for voice sound file path.
         Transcribes text if necessary.
-        Saves to project.
+        Saves to project (replacing the voice list, or appending to it; or,
+        for IndexTTS2's secondary emotion clip, setting that).
         Prints feedback on success or fail.
+        The voice menu sets per-voice samples with `ask_and_set_voice_sample`.
         """
 
         if REGISTRY.voice_binding(tts_type.id) is None:
             raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
         secondary = tts_type.id == "indextts2_local" and is_secondary
-        # Transcripts are always collected for primary samples (sidecar text
-        # or STT), so the shared list is complete for any model; whether a
-        # model actually sends the transcript at generation time remains a
-        # model-specific capability.
-        requires_transcript = not secondary
-        if requires_transcript:
+        if not secondary:
             hints.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
 
-        if state.prefs.last_voice_dir and not os.path.exists(state.prefs.last_voice_dir):
-            state.prefs.last_voice_dir = ""
-            state.prefs.save()
-        path = VoiceMenuShared.ask_voice_file(state.prefs.last_voice_dir, tts_type, message_override)
-        if not path:
+        loaded = VoiceMenuShared.ask_and_load_voice_sound(state, tts_type, message_override)
+        if loaded is None:
             return
-
-        if not os.path.exists(path) or not os.path.isfile(path):
-            ask.ask_error(f"File doesn't exist: {path}")
-            return
-
-        state.prefs.last_voice_dir = str(Path(path).parent)
-        state.prefs.save()
-
-        # Load sound
-        sound_result = SoundFileUtil.load(path)
-        if isinstance(sound_result, str):
-            err = sound_result
-            ask.ask_error(err)
-            return
-        sound = sound_result
-
-        if len(sound.data) / sound.sr < VOICE_SAMPLE_MIN_DURATION_S:
-            ask.ask_error("Sound file must be at least 2 seconds")
-            return
-
-        sound = SoundPipeline.apply_voice_clone_post_processing(sound)
-
-        if sound.data.size == 0:
-            ask.ask_error("Selected sound sample is entirely silence")
-            return
-
-        if len(sound.data) / sound.sr < VOICE_SAMPLE_MIN_DURATION_S:
-            ask.ask_error("Sound file post silence trim must be at least 2 seconds")
-            return
-
-        duration_s = len(sound.data) / sound.sr
-        printt(f"{COL_DIM}Playing selected sound sample ({duration_s:.1f}s)...")
-        printt()
-        PlaySoundUtil.play_sound_async(sound)
+        path, sound = loaded
 
         force_enter_prompt = False
-
         transcript = ""
         if not secondary:
+            transcript, err, force_enter_prompt = VoiceMenuShared.get_voice_sample_transcript(state, path, sound)
+            if err:
+                ask.ask_error(err)
+                return
 
-            # Retain sidecar text for every primary sample, so switching to a
-            # transcript-requiring model does not lose available reference text.
-            sidecar = VoiceMenuShared.load_transcript_sidecar(path)
-            if sidecar:
-                transcript_path, transcript = sidecar
-                printt(f"Loaded transcript text from")
-                printt(f"{transcript_path}:")
-                printt(f"{COL_DIM_ITALICS}{transcript}")
-                printt()
-
-            if not transcript:
-                # [2] No sidecar text: transcribe every primary sample.
-                transcript, err = VoiceMenuShared.transcribe_voice_sample_to_text(state, sound)
-                if err:
-                    ask.ask_error(err)
-                    return
-
-                force_enter_prompt = True
-
-        file_stem = Path(path).stem
         err = ProjectVoiceUtil.set_voice_and_save(
             state.project,
             sound,
-            file_stem,
+            Path(path).stem,
             transcript,
             tts_type,
             is_secondary=is_secondary,
@@ -327,42 +415,23 @@ class VoiceMenuShared:
         return transcript, ""
 
     @staticmethod
-    def _voice_check_scope(state: State) -> tuple[str, bool] | None:
-        """Decide what the voice pre-flight must check for the active model.
+    def _voice_check_scope_for_project(project: Project) -> bool | None:
+        """Return the settings-aware transcript requirement, or None to skip samples.
 
-        Returns None when the model (or checkpoint) uses no voice samples and
-        nothing is to be checked. Otherwise ``(blocking_message, requires_transcript)``:
-        a non-empty message means generation cannot proceed at all (a required
-        voice is missing); else the project's voice references are to be
-        checked, which is trivially fine when there are none.
+        This describes the model/checkpoint, not the project's sample inventory.
+        Missing samples are checked per selected voice, never project-wide.
         """
-        project = state.project
         model_type = project.get_tts_model_type()
         if REGISTRY.voice_binding(model_type.id) is None:
             return None
         if model_type.id == "pocket_local" and project.get_model_setting(model_type.id, "predefined_voice"):
             return None
-        # Qwen3 needs a clone sample only for its "base" checkpoint type;
-        # custom_voice uses a speaker id and voice_design uses instructions,
-        # so those model types launch without any voice samples. An unset
-        # model_type defaults to "base".
-        if model_type.id == "qwen3tts_local" and project.get_model_setting(model_type.id, "model_type") in (
-            "custom_voice", "voice_design",
-        ):
+        # Samples are irrelevant when the model can't clone under the current
+        # settings (eg Qwen3-TTS CustomVoice/VoiceDesign checkpoints).
+        if not Tts.get_model_support(project).can_voice_clone(project):
             return None
-        if not project.voice_references:
-            # Readiness no longer blocks a required voice; this pre-flight is
-            # the single interactive place that does.
-            if model_type.value.requires_voice:
-                message = (
-                    "A voice clone sample or predefined voice is required"
-                    if model_type.id == "pocket_local"
-                    else "A voice clone sample is required"
-                )
-                return message, False
-            return "", False
         # Runtime requirement (settings-aware), not mere transcript storage.
-        return "", Tts.requires_reference_transcript(project)
+        return Tts.requires_reference_transcript(project)
 
     @staticmethod
     def _check_voice_sample(
@@ -372,9 +441,22 @@ class VoiceMenuShared:
             *,
             auto_transcribe: bool,
     ) -> str:
-        """Return an active-sample problem, optionally repairing its missing transcript."""
+        """Return an active-sample problem, optionally repairing its missing transcript.
+
+        A selected voice without a sample uses the model's built-in voice,
+        unless the model requires a clone sample, in which case it is a problem.
+        """
         project = state.project
         voice = project.voice_references[index]
+        if not voice.has_sample:
+            if not project.get_tts_model_type().value.requires_voice:
+                return ""
+            remedy = (
+                "set a sample or select a predefined voice"
+                if project.get_tts_model_type().id == "pocket_local"
+                else "set a sample or remove the voice"
+            )
+            return f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1} has no voice sample ({remedy})"
         file_name = voice.file_name
         cropped = voice.crop is not None
         if cropped:
@@ -411,64 +493,53 @@ class VoiceMenuShared:
         return ""
 
     @staticmethod
-    def get_voice_problems(state: State) -> list[str]:
-        """Pure (no console output, no transcription) voice pre-flight.
-
-        Returns every problem that would stop a TTS run: a missing required
-        voice, missing or invalid sample files, and, for models that use
-        transcripts, a sample whose transcript is still empty. For use by
-        full-screen UI that cannot run the interactive ``validate_voices``.
-        """
-        project = state.project
-        scope = VoiceMenuShared._voice_check_scope(state)
-        if scope is None:
+    def _collect_voice_problems(
+            state: State,
+            voice_indices: Iterable[int] | None,
+            *,
+            auto_transcribe: bool,
+    ) -> list[str]:
+        requires_transcript = VoiceMenuShared._voice_check_scope_for_project(state.project)
+        if requires_transcript is None:
             return []
-        blocking_message, requires_transcript = scope
-        if blocking_message:
-            return [blocking_message]
-
+        indices = (
+            range(len(state.project.voice_references))
+            if voice_indices is None else sorted(set(voice_indices))
+        )
         problems: list[str] = []
-        for index in range(len(project.voice_references)):
+        for index in indices:
             problem = VoiceMenuShared._check_voice_sample(
-                state, index, requires_transcript, auto_transcribe=False,
+                state, index, requires_transcript, auto_transcribe=auto_transcribe,
             )
             if problem:
                 problems.append(problem)
         return problems
 
     @staticmethod
-    def validate_voices(state: State) -> bool:
+    def get_voice_problems(state: State, *, voice_indices: Iterable[int] | None = None) -> list[str]:
+        """Pure (no console output, no transcription) voice pre-flight.
+
+        Check the job's selected voice slots for missing required samples,
+        invalid active files, and missing required transcripts. None checks
+        all voices; an explicit empty iterable checks none. For full-screen
+        UI that cannot run the interactive ``validate_voices``.
+        """
+        return VoiceMenuShared._collect_voice_problems(state, voice_indices, auto_transcribe=False)
+
+    @staticmethod
+    def validate_voices(state: State, *, voice_indices: Iterable[int] | None = None) -> bool:
         """Pre-flight check before full-screen TTS features (main process only).
 
-        Verifies every shared voice sample file and, when the active model
-        uses transcripts, auto-transcribes entries whose transcript is empty
-        (migrated projects may have none). Prints the collected problems,
-        then returns False when the feature must not launch.
+        Check only the job's selected voice slots; None checks all voices.
+        Auto-transcribe missing required transcripts only within that scope.
+        Print collected problems and wait for Enter before returning False.
         """
-        project = state.project
-        scope = VoiceMenuShared._voice_check_scope(state)
-        if scope is None:
-            return True
-        blocking_message, requires_transcript = scope
-        if blocking_message:
-            ask.ask_error(blocking_message)
-            return False
-        if not project.voice_references:
-            return True
-
-        errors: list[str] = []
-        for index in range(len(project.voice_references)):
-            problem = VoiceMenuShared._check_voice_sample(
-                state, index, requires_transcript, auto_transcribe=True,
-            )
-            if problem:
-                errors.append(problem)
-
+        errors = VoiceMenuShared._collect_voice_problems(state, voice_indices, auto_transcribe=True)
         if errors:
             for error in errors:
                 printt(f"{COL_ERROR}{error}{COL_DEFAULT}")
             printt()
-            ask.ask_error("Replace problem voice clone file")
+            ask.ask_enter_to_continue()
             return False
         return True
 
@@ -476,31 +547,31 @@ class VoiceMenuShared:
     def make_voice_sample_items(
             state: State,
             tts_type: TtsModelType,
-            no_samples_label: StringOrMaker | None = None,
             on_before_set_callback: Callable | None = None,
             on_set_callback: Callable | None = None,
             on_clear_callback: Callable | None = None,
     ) -> list[MenuItem]:
-        """Make the sample list (each opening its own submenu), Add, and selection controls.
+        """Make the voice list (each opening its own submenu) and Add.
+        The selection controls close the menu; `menu_wrapper` adds them.
 
-        Built on every redraw, so labels and indices are those of the current list.
+        Built on every redraw, so labels and indices are those of the current
+        list. A project always has at least one voice. The set callbacks run
+        around a voice's "Set voice sample"; `on_clear_callback` runs when a
+        removal leaves no voice with a sample.
         """
-        def make_add_label(s: State) -> str:
-            if ProjectVoiceUtil.get_voice_values(s.project, tts_type):
-                return LABEL_ADD_VOICE_SAMPLE
-            if no_samples_label:
-                return get_string_from(s, no_samples_label)
-            return VoiceMenuShared.make_resolved_voice_label(s)
+        def open_submenu(s: State, index: int) -> None:
+            VoiceMenuShared.voice_sample_submenu(
+                s, tts_type, index, on_clear_callback,
+                on_before_set_callback=on_before_set_callback,
+                on_set_callback=on_set_callback,
+            )
 
         def add_voice(s: State, _: MenuItem) -> None:
-            if on_before_set_callback:
-                on_before_set_callback()
-            VoiceMenuShared.ask_and_set_voice_file(s, tts_type, append=True)
-            if on_set_callback:
-                on_set_callback()
-
-        def open_voice(s: State, item: MenuItem) -> None:
-            VoiceMenuShared.voice_sample_submenu(s, tts_type, item.data, on_clear_callback)
+            index, err = ProjectVoiceUtil.add_voice_and_save(s.project)
+            if err:
+                ask.ask_error(err)
+                return
+            open_submenu(s, index)
 
         voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
         items: list[MenuItem] = []
@@ -508,19 +579,25 @@ class VoiceMenuShared:
             label, _ = VoiceMenuShared.make_voice_sample_item_label(state.project, tts_type, index)
             items.append(MenuItem(
                 label,
-                open_voice,
+                lambda s, item: open_submenu(s, item.data),
                 data=index,
                 superlabel=LABEL_VOICE_SAMPLES_SUPERLABEL if index == 0 else "",
                 superlabel_no_blank_line=True,
             ))
         if len(voices) < 9:
-            items.append(MenuItem(make_add_label, add_voice))
-        selection_items = []
+            items.append(MenuItem(LABEL_ADD_VOICE_SAMPLE, add_voice))
+        return items
+
+    @staticmethod
+    def make_voice_selection_items(state: State, tts_type: TtsModelType) -> list[MenuItem]:
+        """The closing group of every Voices menu: Voice selection mode (with
+        2+ voices) and Edit voice/line selections. Added by `menu_wrapper`."""
+        voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+        items: list[MenuItem] = []
         if len(voices) > 1:
-            selection_items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
-        selection_items.append(VoiceMenuShared.make_assign_voice_samples_to_text_lines_item(tts_type))
-        selection_items[0].blank_line_before = True
-        items.extend(selection_items)
+            items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
+        items.append(VoiceMenuShared.make_assign_voice_samples_to_text_lines_item(tts_type))
+        items[0].blank_line_before = True
         return items
 
     @staticmethod
@@ -607,30 +684,115 @@ class VoiceMenuShared:
         return "(trimmed)" if voice.crop is not None else ""
 
     @staticmethod
-    def make_voice_sample_item_label(project: Project, tts_type: TtsModelType, index: int) -> tuple[str, bool]:
-        """Returns the list item label for one sample, and whether it exceeds the model's recommended duration."""
+    def get_voice_sample_required_label(project: Project, index: int) -> str:
+        """For a voice without a sample: why one is required, else "".
+
+        A sample is required only when the model requires a voice clone
+        sample: then every voice needs one (including when another voice has
+        one). Otherwise a voice without a sample uses the model's built-in
+        voice. Never for a voice that has a sample, or when the model or its
+        settings use no voice samples (eg a Pocket predefined voice).
+        """
         voice = project.voice_references[index]
-        label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice.file_name, tts_type.value)
-        label = f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1}: {label}"
-        duration = VoiceMenuShared.get_voice_sample_duration(project, voice)
-        duration_text = VoiceMenuShared.make_voice_sample_duration_text(voice, duration)
-        max_duration = tts_type.value.ui.get("voice_sample_max_duration_s")
-        is_long = duration is not None and max_duration is not None and duration > max_duration
-        if is_long:
-            # Mark inside the closing paren, eg "(15.3s*)"
-            duration_text = f"{duration_text[:-1]}{COL_ERROR}*{COL_DIM})"
-        if duration_text:
-            label += f"{COL_DIM} {duration_text}{COL_DEFAULT}"
+        if voice.has_sample:
+            return ""
+        scope = VoiceMenuShared._voice_check_scope_for_project(project)
+        if scope is None:
+            return ""
+        model_type = project.get_tts_model_type()
+        if model_type.value.requires_voice:
+            if model_type.id == "pocket_local" and not ProjectVoiceUtil.has_any_voice_sample(project):
+                return "voice clone or predefined voice required"
+            return "required"
+        return ""
+
+    @staticmethod
+    def is_voice_transcript_missing(project: Project, tts_type: TtsModelType, index: int) -> bool:
+        """Whether the voice has a sample but its effective transcript (the trim's when trimmed) is empty."""
+        if not project.voice_references[index].has_sample:
+            return False
+        _, transcript = ProjectVoiceUtil.effective_voice_reference(project, tts_type, index)
+        return not transcript.strip()
+
+    @staticmethod
+    def get_missing_transcript_color(project: Project) -> str:
+        """Error-colored when the current model uses transcripts, else dim."""
+        return COL_ERROR if Tts.requires_reference_transcript(project) else COL_DIM
+
+    @staticmethod
+    def make_voice_sample_item_label(project: Project, tts_type: TtsModelType, index: int) -> tuple[str, bool]:
+        """
+        Returns the list item label for one voice, and whether its sample exceeds the model's recommended duration.
+        Eg: 'Voice 1: some_voice.flac (15.3s*); "some instructions"',
+        'Voice 1: some_voice.flac (12.3s); missing transcript', 'Voice 1: "some instructions"'
+        when the voice has instructions (for the current model) but no sample file, or
+        'Voice 1: no sample (required)' (only the requirement is error-colored), or
+        'Voice 1: no instructions' (error-colored hint) when the model expects them.
+        Sample details are omitted when the model can't clone under the current
+        settings (`can_voice_clone`).
+        """
+        voice = project.voice_references[index]
+        parts: list[str] = []
+        is_long = False
+        support = Tts.get_model_support(project)
+        # Sample details are hidden (not cleared) when the model can't clone
+        # under the current settings, eg Qwen3-TTS VoiceDesign.
+        can_clone = support.can_voice_clone(project)
+        required_label = VoiceMenuShared.get_voice_sample_required_label(project, index)
+        if voice.has_sample and can_clone:
+            part = ProjectVoiceUtil.make_voice_sample_display_label(project, voice.file_name, tts_type.value)
+            duration = VoiceMenuShared.get_voice_sample_duration(project, voice)
+            duration_text = VoiceMenuShared.make_voice_sample_duration_text(voice, duration)
+            max_duration = tts_type.value.ui.get("voice_sample_max_duration_s")
+            is_long = duration is not None and max_duration is not None and duration > max_duration
+            if is_long:
+                # Mark inside the closing paren, eg "(15.3s*)"
+                duration_text = f"{duration_text[:-1]}{COL_ERROR}*{COL_DIM})"
+            if duration_text:
+                part += f"{COL_DIM} {duration_text}{COL_DEFAULT}"
+            parts.append(part)
+            if VoiceMenuShared.is_voice_transcript_missing(project, tts_type, index):
+                color = VoiceMenuShared.get_missing_transcript_color(project)
+                parts.append(f"{color}missing transcript{COL_DEFAULT}")
+        elif required_label:
+            parts.append(f"no sample {COL_DIM}({COL_ERROR}{required_label}{COL_DIM}){COL_DEFAULT}")
+        # Same runtime gate as the submenu's Instructions item (eg CosyVoice3's Mode)
+        instructions = " ".join(voice.instructions.get(tts_type.value.id, "").split())
+        can_instructions = support.can_instructions(project)
+        # Eg AuK: a voice sample takes precedence, so its instructions are unused
+        instructions_unused = (voice.has_sample and can_clone
+                               and not support.uses_instructions_with_sample(project))
+        if can_instructions and not instructions_unused:
+            if instructions:
+                parts.append(f"\"{ellipsize(instructions, INSTRUCTIONS_PREVIEW_LENGTH)}\"")
+            elif support.expects_voice_instructions(project):
+                # Non-blocking hint, eg Qwen3-TTS VoiceDesign would get an arbitrary voice
+                parts.append(f"{COL_ERROR}no instructions{COL_DEFAULT}")
+        if not parts:
+            # Eg Qwen3-TTS CustomVoice without instructions: the speaker's default delivery
+            parts.append("no sample" if can_clone or not can_instructions else "no instructions")
+        label = f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1}: " + f"{COL_DIM};{COL_DEFAULT} ".join(parts)
         return label, is_long
 
     @staticmethod
     def make_transcript_preview(project: Project, tts_type: TtsModelType, index: int) -> str:
-        """The effective transcript (the crop's when in effect), flattened, ellipsized, and parenthesized."""
+        """The effective transcript (the crop's when in effect), flattened, ellipsized,
+        and quoted; "missing" when the voice has a sample but no transcript."""
         _, transcript = ProjectVoiceUtil.effective_voice_reference(project, tts_type, index)
         transcript = " ".join(transcript.split())
         if not transcript:
-            return "(none)"
-        return f"(\"{ellipsize(transcript, TRANSCRIPT_PREVIEW_LENGTH)}\")"
+            return "missing" if project.voice_references[index].has_sample else "none"
+        return f"\"{ellipsize(transcript, TRANSCRIPT_PREVIEW_LENGTH)}\""
+
+    @staticmethod
+    def make_set_voice_sample_label(project: Project, tts_type: TtsModelType, index: int) -> str:
+        """Eg 'Voice sample (currently: some_voice)' or 'Voice sample (currently: none)'."""
+        voice = project.voice_references[index]
+        if voice.has_sample:
+            value = ProjectVoiceUtil.make_voice_sample_display_label(project, voice.file_name, tts_type.value)
+            return make_menu_label(LABEL_SET_VOICE_SAMPLE, value)
+        color = COL_ERROR if VoiceMenuShared.get_voice_sample_required_label(project, index) else COL_ACCENT
+        return make_menu_label(LABEL_SET_VOICE_SAMPLE, "none", color_code=color)
 
     @staticmethod
     def voice_sample_submenu(
@@ -638,8 +800,10 @@ class VoiceMenuShared:
             tts_type: TtsModelType,
             index: int,
             on_clear_callback: Callable | None = None,
+            on_before_set_callback: Callable | None = None,
+            on_set_callback: Callable | None = None,
     ) -> None:
-        """Options for one voice sample. Follows the sample when it is moved; exits when it is removed."""
+        """Options for one voice. Follows the voice when it is moved; exits when it is removed."""
         current = [index]  # Updated on move
 
         def get_voice(s: State) -> Voice | None:
@@ -647,15 +811,46 @@ class VoiceMenuShared:
             return entries[current[0]] if 0 <= current[0] < len(entries) else None
 
         def make_heading(s: State) -> str:
+            return f"{LABEL_VOICE_SAMPLE_ITEM} {current[0] + 1}"
+
+        def on_set_sample(s: State, _: MenuItem) -> None:
+            if on_before_set_callback:
+                on_before_set_callback()
+            VoiceMenuShared.ask_and_set_voice_sample(s, tts_type, current[0])
+            if on_set_callback:
+                on_set_callback()
+
+        def on_clear_sample(s: State, _: MenuItem) -> None:
             voice = get_voice(s)
-            name = ellipsize(voice.file_name, 60) if voice else ""
-            return f"Options for {name} {COL_DIM}(voice index {current[0] + 1})"
+            if voice is None or not voice.has_sample:
+                return
+            error = ProjectVoiceUtil.clear_voice_sample_at_index_and_save(s.project, current[0])
+            if error:
+                ask.ask_error(error)
+                return
+            PlaySoundUtil.stop_sound_async()
+            if on_clear_callback and not ProjectVoiceUtil.has_any_voice_sample(s.project):
+                on_clear_callback()
+            print_feedback("Voice sample cleared")
+
+        def on_set_instructions(s: State, _: MenuItem) -> None:
+            VoiceMenuShared.ask_voice_instructions(s, tts_type, current[0])
+
+        def on_clear_instructions(s: State, _: MenuItem) -> None:
+            error = ProjectVoiceUtil.set_voice_instructions_at_index_and_save(
+                s.project, current[0], tts_type.id, "")
+            if error:
+                ask.ask_error(error)
+            else:
+                print_feedback("Instructions cleared")
 
         def on_remove(s: State, _: MenuItem) -> bool:
+            voice = get_voice(s)
+            had_sample = voice is not None and voice.has_sample
             removed = VoiceMenuShared.remove_voice_sample_from_menu(s, tts_type, current[0])
             if not removed:
                 return False
-            if on_clear_callback and not ProjectVoiceUtil.get_voice_values(s.project, tts_type):
+            if on_clear_callback and had_sample and not ProjectVoiceUtil.has_any_voice_sample(s.project):
                 on_clear_callback()
             return True
 
@@ -667,24 +862,62 @@ class VoiceMenuShared:
             if voice is None:
                 return []
             i = current[0]
-            duration = VoiceMenuShared.get_voice_sample_duration(s.project, voice)
-            duration_text = VoiceMenuShared.make_voice_sample_duration_text(voice, duration)
-            crop_label = f"{LABEL_CROP_VOICE_SAMPLE} {COL_DIM}{duration_text}" if duration_text else LABEL_CROP_VOICE_SAMPLE
-            max_duration = tts_type.value.ui.get("voice_sample_max_duration_s")
-            if duration is not None and max_duration is not None and duration > max_duration:
-                crop_label += (
-                    f" {COL_ERROR}*{COL_DIM_ITALICS}exceeds current model's "
-                    f"recommended limit of {max_duration:g}s{COL_DEFAULT}"
+            support = Tts.get_model_support(s.project)
+            items: list[MenuItem] = []
+            # Sample items are hidden (the sample is kept) when the model can't
+            # clone under the current settings, eg Qwen3-TTS VoiceDesign.
+            can_clone = support.can_voice_clone(s.project)
+            if can_clone:
+                items.append(MenuItem(
+                    VoiceMenuShared.make_set_voice_sample_label(s.project, tts_type, i),
+                    on_set_sample,
+                ))
+            if can_clone and voice.has_sample:
+                items.append(MenuItem(LABEL_CLEAR_VOICE_SAMPLE, on_clear_sample))
+                duration = VoiceMenuShared.get_voice_sample_duration(s.project, voice)
+                duration_text = VoiceMenuShared.make_voice_sample_duration_text(voice, duration)
+                crop_label = (
+                    make_menu_label(LABEL_CROP_VOICE_SAMPLE, duration_text[1:-1])
+                    if duration_text else LABEL_CROP_VOICE_SAMPLE
                 )
-            items = [MenuItem(crop_label, lambda s2, _: VoiceMenuShared.crop_voice_sample_from_menu(s2, i))]
-            transcript_preview = VoiceMenuShared.make_transcript_preview(s.project, tts_type, i)
-            items.append(MenuItem(
-                f"{LABEL_EDIT_VOICE_TRANSCRIPTION} {COL_DIM}{transcript_preview}",
-                lambda s2, _: VoiceMenuShared.edit_voice_sample_transcript(s2, i),
-            ))
+                max_duration = tts_type.value.ui.get("voice_sample_max_duration_s")
+                if duration is not None and max_duration is not None and duration > max_duration:
+                    crop_label += (
+                        f" {COL_ERROR}*{COL_DIM_ITALICS}exceeds current model's "
+                        f"recommended limit of {max_duration:g}s{COL_DEFAULT}"
+                    )
+                items.append(MenuItem(crop_label, lambda s2, _: VoiceMenuShared.crop_voice_sample_from_menu(s2, i)))
+                transcript_preview = VoiceMenuShared.make_transcript_preview(s.project, tts_type, i)
+                transcript_color = (
+                    VoiceMenuShared.get_missing_transcript_color(s.project)
+                    if VoiceMenuShared.is_voice_transcript_missing(s.project, tts_type, i) else COL_ACCENT
+                )
+                items.append(MenuItem(
+                    make_menu_label(LABEL_EDIT_VOICE_TRANSCRIPTION, transcript_preview, color_code=transcript_color),
+                    lambda s2, _: VoiceMenuShared.edit_voice_sample_transcript(s2, i),
+                ))
+            if support.can_instructions(s.project):
+                instructions = voice.instructions.get(tts_type.id, "")
+                preview = " ".join(instructions.split())
+                value = f'"{ellipsize(preview, INSTRUCTIONS_PREVIEW_LENGTH)}"' if preview else "none"
+                label_text = tts_type.value.ui.get("instructions_label", LABEL_SET_INSTRUCTIONS)
+                label = f"{label_text}/{tts_type.value.ui['short_name']}"
+                # Still editable (eg to prepare a voice before clearing its sample);
+                # the proviso only matters once there is a value to ignore.
+                unused = (bool(preview) and can_clone and voice.has_sample
+                          and not support.uses_instructions_with_sample(s.project))
+                items.append(MenuItem(
+                    make_menu_label(label, value), on_set_instructions,
+                    sublabel=SUBLABEL_INSTRUCTIONS_UNUSED_WITH_SAMPLE if unused else None,
+                ))
+                if instructions:
+                    items.append(MenuItem(LABEL_CLEAR_INSTRUCTIONS, on_clear_instructions))
             if len(s.project.voice_references) > 1:
                 items.append(MenuItem(LABEL_MOVE_VOICE_SAMPLE, on_move))
-            items.append(MenuItem(LABEL_REMOVE_VOICE_SAMPLE, on_remove))
+                items.append(MenuItem(LABEL_REMOVE_VOICE_SAMPLE, on_remove))
+            else:
+                # Removing the only voice leaves a fresh default voice.
+                items.append(MenuItem(LABEL_RESET_VOICE_SAMPLE, on_remove))
             items.append(MenuItem(
                 make_menu_label(LABEL_STEREO_POSITION, stereo_position_label(voice.pan)),
                 lambda s2, _: VoiceMenuShared.ask_stereo_position(s2, i),
@@ -708,6 +941,29 @@ class VoiceMenuShared:
             on_exit=lambda: PlaySoundUtil.stop_sound_async(),
             breadcrumb=lambda _: f"{LABEL_VOICE_SAMPLE_ITEM} {current[0] + 1}",
         )
+
+    @staticmethod
+    def ask_voice_instructions(state: State, tts_type: TtsModelType, index: int) -> None:
+        """Edit this voice's instructions; blank/cancel leaves them unchanged."""
+        current = state.project.voice_references[index].instructions.get(tts_type.id, "")
+        printt(tts_type.value.ui.get("instructions_message", DEFAULT_INSTRUCTIONS_MESSAGE))
+        value = ask.ask_input(lower=False, prefill=current).strip()
+        if not value or value == current:
+            return
+        if len(value) > INSTRUCTIONS_MAX_LENGTH:
+            ask.ask_error(f"Instructions must be at most {INSTRUCTIONS_MAX_LENGTH} characters")
+            return
+        # Validation only: the text is saved as entered
+        error = Tts.get_model_support_for_type(tts_type).validate_instructions(value)
+        if error:
+            ask.ask_error(error)
+            return
+        error = ProjectVoiceUtil.set_voice_instructions_at_index_and_save(
+            state.project, index, tts_type.id, value)
+        if error:
+            ask.ask_error(error)
+        else:
+            print_feedback("Instructions set")
 
     @staticmethod
     def ask_stereo_position(state: State, index: int) -> None:
@@ -779,7 +1035,7 @@ class VoiceMenuShared:
     def move_voice_sample_from_menu(state: State, index: int) -> int:
         """Asks for the new position of the sample at `index`. Returns its index afterward."""
         count = len(state.project.voice_references)
-        if not 0 <= index < count:
+        if count < 2 or not 0 <= index < count:
             return index
         new_index = VoiceMenuShared.ask_voice_sample_position(f"Enter new position {COL_DIM}(1-{count}):", count)
         if new_index is None:
@@ -811,6 +1067,9 @@ class VoiceMenuShared:
             return
 
         entry = entries[index]
+        if not entry.has_sample:
+            print_feedback("No voice sample")
+            return
         crop_range = entry.crop_range
         file_name = entry.file_name
         path = ProjectVoiceUtil.resolve_voice_file_path(state.project, file_name)
@@ -876,8 +1135,8 @@ class VoiceMenuShared:
         # lockstep.
         model_type = state.project.get_tts_model_type()
         voices = ProjectVoiceUtil.get_voice_values(state.project, model_type)
-        if not voices:
-            print_feedback("No voice samples")
+        if not voices or not voices[index]:
+            print_feedback("No voice sample")
             return
         effective_name, current = ProjectVoiceUtil.effective_voice_reference(state.project, model_type, index)
         is_cropped = index < len(voices) and effective_name != voices[index]
@@ -904,16 +1163,25 @@ class VoiceMenuShared:
 
     @staticmethod
     def remove_voice_sample_from_menu(state: State, tts_type: TtsModelType, index: int) -> bool:
-        """Removes the sample at `index` after confirmation. Returns True if it was removed."""
+        """Removes the voice at `index` after confirmation. Returns True if it was removed.
+
+        Removing the only voice resets it to a default voice; when it is
+        already at defaults that happens without confirmation.
+        """
         voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
         if not 0 <= index < len(voices):
             return False
-        label = ProjectVoiceUtil.make_voice_sample_display_label(state.project, voices[index], tts_type.value)
-        printt(f"Remove voice sample {index + 1}: {label}?")
-        if not ask.ask_confirm():
-            return False
+        label = f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1}"
+        if voices[index]:
+            name = ProjectVoiceUtil.make_voice_sample_display_label(state.project, voices[index], tts_type.value)
+            label += f" ({name})"
+        is_only = len(voices) == 1
+        if not (is_only and state.project.voice_references[index].is_default):
+            printt(f"Reset {label} to default?" if is_only else f"Remove {label}?")
+            if not ask.ask_confirm():
+                return False
         ProjectVoiceUtil.remove_voice_at_index_and_save(state.project, tts_type, index)
-        print_feedback(f"Removed {label}")
+        print_feedback(f"Reset {label} to default" if is_only else f"Removed {label}")
         return True
 
     @staticmethod

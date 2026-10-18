@@ -26,7 +26,7 @@ PREFIX_MODELS: dict[str, str] = {
 PRIVATE_FIELDS: dict[str, set[str]] = {
     "fish_s2": {"rolling_cont", "compile_enabled", "server_concurrent_requests"},
     "moss": {"target", "rolling_cont"},
-    "qwen3": {"target", "model_type", "rolling_cont", "speaker_id", "instructions", "batch_size", "server_concurrent_requests"},
+    "qwen3": {"target", "model_type", "rolling_cont", "speaker_id", "batch_size", "server_concurrent_requests"},
 }
 
 # Shared groups that no longer exist in the catalog. On load, each one is

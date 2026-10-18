@@ -44,6 +44,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, SkippedResult, ExcessiveDurationResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.transcriber import Transcriber
+from tts_audiobook_tool.tts_models.voice_variation_warning import get_run_warnings
 
 
 @dataclass(frozen=True)
@@ -138,8 +139,8 @@ class GenerateUtil:
             ask.ask_error(err)
             return True
 
-        # Print warnings if any
-        warnings = Tts.get_instance().get_warning_issues(state.project)
+        # Print warnings if any, including the voice-variation note for this run's voices
+        warnings = get_run_warnings(state.project, Tts.get_instance(), indices_set)
         if warnings:
             message = "\n".join(warnings)
             print_feedback(Ansi.ITALICS + message, no_preformat=True)
@@ -804,9 +805,8 @@ class GenerateUtil:
                 elif use_custom_voice_index:
                     requested_voice_index = phrase_groups[indices[0]].voice_index
                     # Silently clamp invalid (presumably stale) index to the nearest valid voice index
-                    voice_selection_index = min(
-                        max(requested_voice_index, 0),
-                        len(voice_values) - 1,
+                    voice_selection_index = ProjectVoiceUtil.get_effective_voice_index(
+                        requested_voice_index, len(voice_values),
                     )
                 else:
                     voice_selection_index = Tts.get_next_voice_selection_index()
@@ -1030,7 +1030,8 @@ class GenerateUtil:
 
         # Main-process UI flow only; see the lazy-import note above.
         from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-        if not VoiceMenuShared.validate_voices(state):
+        voice_indices = ProjectVoiceUtil.get_job_voice_indices(state.project, indices)
+        if not VoiceMenuShared.validate_voices(state, voice_indices=voice_indices):
             return
 
         from tts_audiobook_tool.textual.generation_app import run_generation_app
@@ -1178,7 +1179,7 @@ def effective_voice_indices(
     out-of-range value is clamped to the nearest valid voice sample index.
     """
     return {
-        index: min(max(phrase_groups[index].voice_index, 0), num_voice_values - 1)
+        index: ProjectVoiceUtil.get_effective_voice_index(phrase_groups[index].voice_index, num_voice_values)
         for index in indices
     }
 

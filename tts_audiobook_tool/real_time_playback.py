@@ -57,6 +57,7 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.app_types.validation_result import TranscriptResult, ValidationResult
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.transcriber import Transcriber
+from tts_audiobook_tool.tts_models.voice_variation_warning import get_run_warnings
 
 
 class ContinueEvent(Protocol):
@@ -138,8 +139,10 @@ def _start_impl(
         ask.ask_error(err)
         return RealTimePlaybackRunResult(RealTimePlaybackRunStatus.FAILED, err)
 
-    # Print warnings if any
-    warnings = Tts.get_instance().get_warning_issues(state.project)
+    # Print warnings if any, including the voice-variation note for the played lines'
+    # voices (the same one-based inclusive range and start clamp as the pre-flight)
+    played_indices = range(max(line_range[0] - 1, 0), line_range[1])
+    warnings = get_run_warnings(state.project, Tts.get_instance(), played_indices)
     if warnings:
         warnings_string = "\n".join(warnings)
         print_feedback(Ansi.ITALICS + warnings_string, no_preformat=True)

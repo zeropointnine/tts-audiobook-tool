@@ -11,7 +11,7 @@ from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, E
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
-from tts_audiobook_tool.app_types.voice import Voice
+from tts_audiobook_tool.app_types.voice import Voice, ensure_voice_slot
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.model_settings import ModelSettings, REGISTRY
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -106,19 +106,21 @@ class Project(BaseModel):
     # Persist the opaque catalog ID, including IDs unknown to this installation.
     tts_model_type: str = "none"
     model_settings: ModelSettings = Field(default_factory=ModelSettings)
-    voice_references: list[Voice] = Field(default_factory=list)
+    # Never empty: a project always has at least one (possibly sample-less) voice.
+    voice_references: list[Voice] = Field(default_factory=lambda: [Voice()])
 
     @field_validator("voice_references", mode="before")
     @classmethod
     def _validate_voice_references(cls, value: Any) -> list[Voice]:
         from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
-        return normalize_voice_references(value)
+        return ensure_voice_slot(normalize_voice_references(value))
 
     def get_voice_chat_room_reverb(self) -> RoomReverb:
         """The room reverb applied to voice chat output: voice 0's setting.
 
         Chat lines have no assigned voice (and auto-advance rotates per
-        chunk), so chat uses one room. Off with no voices, or while a Pocket
+        chunk), so chat uses one room. Off with no voices (not normally
+        possible), or while a Pocket
         predefined voice is in use. Concat and realtime playback instead use
         each segment's voice (`VoiceSpatialPolicy.room_reverb_for_voice_index`).
         """
@@ -165,10 +167,10 @@ class Project(BaseModel):
                 # samples, so they are new voices: crop fields and room reverb
                 # are not carried over (a crop range belongs to the file it was
                 # cut from; new voices default to reverb off).
-                self.voice_references = normalize_voice_references([
+                self.voice_references = ensure_voice_slot(normalize_voice_references([
                     {"file_name": item, "transcript": self.voice_references[i].transcript if i < len(self.voice_references) else ""}
                     for i, item in enumerate(value)
-                ])
+                ]))
             return
         if reset or (binding.has_sentinel and value == binding.sentinel):
             REGISTRY.assign(self.model_settings, binding, value, reset=True)

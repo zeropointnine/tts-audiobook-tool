@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -24,6 +25,7 @@ def run_generate_files(
         batch_size: int,
         max_retries: int,
         failing_indices: set[int],
+        voices: list[Voice] | None = None,
 ) -> tuple[bool, list[tuple[list[int], int]]]:
     """
     Runs generate_files with a mocked model layer.
@@ -39,7 +41,10 @@ def run_generate_files(
     project._sound_segments = sound_segments
     project.generate_range_string = "all"
     project.voice_select_mode = voice_select_mode
-    set_setting(project, "mira_voice_file_name", ["voice-a.flac", "voice-b.flac"])
+    if voices is None:
+        set_setting(project, "mira_voice_file_name", ["voice-a.flac", "voice-b.flac"])
+    else:
+        project.voice_references = voices
     state = cast(
         State,
         SimpleNamespace(
@@ -117,3 +122,16 @@ def test_single_voice_projects_pass_no_explicit_voice() -> None:
     for indices, voice in calls:
         assert voice is None
     assert sorted(index for indices, _ in calls for index in indices) == [0, 1, 2, 3]
+
+def test_sample_less_voices_still_batch_per_voice() -> None:
+    # Voices without samples can differ by instructions alone (eg Qwen3-TTS
+    # VoiceDesign), so user-defined lines must still be split per voice slot.
+    voices = [Voice(instructions={"mira_local": "a"}), Voice(instructions={"mira_local": "b"})]
+    voice_indices = [0, 1, 0, 1]
+    did_interrupt, calls = run_generate_files(
+        VoiceSelectMode.USER_DEFINED, voice_indices, num_words=5,
+        batch_size=2, max_retries=1, failing_indices=set(), voices=voices,
+    )
+
+    assert not did_interrupt
+    assert calls == [([0, 2], 0), ([1, 3], 1)]

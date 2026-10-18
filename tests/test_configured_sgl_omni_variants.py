@@ -600,9 +600,8 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
                         lambda _state, parameter, _label, *_, **__: MenuItem(parameter.name, lambda *_: None))
     monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("seed", lambda *_: None))
-    monkeypatch.setattr(ModelMenuShared, "make_voice_instructions_item",
-                        lambda *_, **__: [MenuItem("instructions", lambda *_: None),
-                                          MenuItem("clear instructions", lambda *_: None)])
+    monkeypatch.setattr(ModelMenuShared, "make_choice_item",
+                        lambda _state, parameter, *_, **__: MenuItem(parameter.name, lambda *_: None))
 
     actual_voice = VoiceConfiguredSglOmniMenu.make_items(state, definition)
     voice_control_count = sum(control.kind == "voice_samples" for control in definition.menu)
@@ -618,8 +617,6 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
             continue
         if control.kind == "seed":
             expected.append("seed")
-        elif control.kind == "voice_instructions":
-            expected.extend(("instructions", "clear instructions"))
         else:
             expected.append(control.parameter)
     assert [item.label for item in actual_model] == expected

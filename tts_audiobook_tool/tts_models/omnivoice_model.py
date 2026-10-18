@@ -101,11 +101,14 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             max_random_seed: int = -1,
     ) -> list[Sound] | str:
 
+        model_type = TtsModelType.require_by_id("omnivoice_local")
         voice_file_name, ref_text = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.require_by_id("omnivoice_local"), voice_selection_index
+            project, model_type, voice_selection_index
         )
         voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
-        instruct = project.get_model_setting('omnivoice_local', 'instruct')
+        # Instructions belong to the selected voice, keyed by model id.
+        voice = ProjectVoiceUtil.current_voice(project, model_type, voice_selection_index)
+        instruct = voice.instructions.get(model_type.id, "") if voice is not None else ""
         cfg      = project.get_model_setting('omnivoice_local', 'cfg') if project.get_model_setting('omnivoice_local', 'cfg') != -1 else self.CFG_DEFAULT
         speed    = project.get_model_setting('omnivoice_local', 'speed') if project.get_model_setting('omnivoice_local', 'speed') != -1 else self.DEFAULT_SPEED
         steps    = project.get_model_setting('omnivoice_local', 'num_step') if project.get_model_setting('omnivoice_local', 'num_step') != -1 else self.DEFAULT_STEPS

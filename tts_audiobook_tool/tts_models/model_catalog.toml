@@ -8,11 +8,17 @@
 # `spec` holds model metadata; backend tables hold matching and request configuration.
 # Optional `spec.ui.voice_sample_max_duration_s` is the upper duration advised by
 # the voice-path guidance (including "up to" limits); it only warns, never rejects samples.
+# Optional `spec.ui.instructions_message` replaces the shared per-voice instructions prompt.
+# Optional `spec.ui.instructions_label` replaces "Instructions" in the per-voice menu item label.
+# Optional `spec.ui.instructions_voice_variation_note` replaces the generic "voices may vary"
+# run note when an in-play sample-less voice has instructions (shown after "Note: ").
 # audio.cpp `match` accepts either `task = "<token>"` or, when a family's routes are the
 # same inference path, `tasks = [...]` of the tokens a server may advertise.
 # `settings` declares persisted values separately from request defaults.
 # audio.cpp requires an explicit `menu`; numeric controls require a nonempty `label`.
 # Both server backends require `target_menu = "model"` or "voice" on settings controls.
+# A `type = "str"` parameter with `choices` uses `kind = "choice"`; on SGL-Omni it is
+# app-side only (no request_key, never sent) and read by an SglOmniModelBehavior.
 # `voice_samples` has no target: it always expands in Voice clone.
 # audio.cpp `request_options` pins constants into every request's `options` object;
 # they are not persisted and have no menu control, unlike `parameters` entries.
@@ -43,6 +49,8 @@ default_output_sample_rate = 0
 requires_voice = false
 can_stream = false
 requires_ffmpeg_libs = false
+# Required here: the placeholder cannot clone (the field otherwise defaults to true).
+can_voice_clone = false
 un_all_caps = false
 # Only meaningful in SGL-Omni mode ("server not configured"); in local
 # mode there is no TTS model in the venv. Consumers presenting this file are
@@ -441,7 +449,6 @@ settings = [
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
     { name = "target", section = "parameters", type = "str", default = "" },
-    { name = "instruct", section = "parameters", type = "str", default = "" },
     { name = "cfg", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "speed", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "num_step", section = "parameters", type = "int", default = -1, sentinel = -1 },
@@ -462,6 +469,8 @@ requires_ffmpeg_libs = false
 un_all_caps = true
 requirements_file_name = "requirements-omnivoice.txt"
 output_filters = []
+# Accepts per-voice voice-design instructions. Optional local-model key; defaults to false.
+can_instructions = true
 # Generally handles caesura-related punctuation decently, with natural
 # variations in duration.
 substitutions = []
@@ -476,6 +485,8 @@ project_links = [
     "https://github.com/k2-fsa/OmniVoice",
     "https://huggingface.co/k2-fsa/OmniVoice",
 ]
+instructions_label = "Voice design"
+instructions_message = "Enter voice design instructions for this voice:\n(Comma-separated, eg \"female, young adult, high pitch, british accent\".\nWith voice sample, only reinforces matching traits; for full effect, clear voice sample)"
 
 # ------------------------------------------------------------------------
 [[models]]
@@ -527,7 +538,6 @@ settings = [
     { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "qwen3" },
     { name = "rolling_cont", section = "parameters", type = "int", default = 0 },
     { name = "speaker_id", section = "parameters", type = "str", default = "" },
-    { name = "instructions", section = "parameters", type = "str", default = "" },
     { name = "batch_size", section = "orchestration", type = "int", default = 1 },
     { name = "temperature", section = "parameters", type = "float", default = -1.0, group = "qwen3", sentinel = -1 },
     { name = "top_k", section = "parameters", type = "int", default = -1, group = "qwen3", sentinel = -1 },
@@ -562,6 +572,7 @@ project_links = [
     "https://github.com/QwenLM/Qwen3-TTS",
     "https://huggingface.co/collections/Qwen/qwen3-tts",
 ]
+instructions_message = "Enter instructions for this voice:\n(VoiceDesign: describe the voice, eg \"A warm, middle-aged male voice, speaking calmly\")\n(CustomVoice: describe the delivery, eg \"Very happy.\")"
 
 # ------------------------------------------------------------------------
 [[models]]
@@ -642,14 +653,21 @@ project_links = [
     "https://huggingface.co/tencent/AuK",
     "https://sgl-project.github.io/sglang-omni/cookbook/auk.html",
 ]
+instructions_message = "Enter a voice description for this voice:\n(Used only while the voice has no voice sample, eg \"A warm, relaxed female voice\")"
+instructions_voice_variation_note = "Generated voices may vary between segments (AuK instruction sets the kind of voice, but not a fixed speaker)."
 
 [models.sgl_omni.behavior]
 orchestration = "concurrent_requests"
 streaming = false
 seed = "resolved"
-voice_required = true
+# A voice with a sample clones it (the server then ignores instructions); a
+# voice without one is generated from its instructions as a voice description
+# (blank: the server's default description), with an app-estimated duration.
+voice_required = false
 transcript = "required_when_voice_present"
 prompt_policy = "auk_seconds"
+# Selected Voice.instructions[model ID] is sent as top-level `instructions`, only without a sample.
+voice_instructions = true
 # This server serializes requests; the setting is not offered and always resolves to one.
 can_batch = false
 
@@ -711,14 +729,21 @@ project_links = [
     "https://huggingface.co/tencent/AuK-Flash",
     "https://sgl-project.github.io/sglang-omni/cookbook/auk.html",
 ]
+instructions_message = "Enter a voice description for this voice:\n(Used only while the voice has no voice sample, eg \"A warm, relaxed female voice\")"
+instructions_voice_variation_note = "Generated voices may vary between segments (AuK-Flash instruction sets the kind of voice, but not a fixed speaker)."
 
 [models.sgl_omni.behavior]
 orchestration = "concurrent_requests"
 streaming = false
 seed = "resolved"
-voice_required = true
+# A voice with a sample clones it (the server then ignores instructions); a
+# voice without one is generated from its instructions as a voice description
+# (blank: the server's default description), with an app-estimated duration.
+voice_required = false
 transcript = "required_when_voice_present"
 prompt_policy = "auk_seconds"
+# Selected Voice.instructions[model ID] is sent as top-level `instructions`, only without a sample.
+voice_instructions = true
 # This server serializes requests; the setting is not offered and always resolves to one.
 can_batch = false
 
@@ -747,9 +772,15 @@ kind = "seed"
 target_menu = "model"
 
 # ------------------------------------------------------------------------
+# Fun-CosyVoice3 via SGL-Omni. The server infers its prompt mode from which
+# fields are present (`instructions` -> instruct, reference `text` ->
+# zero-shot, neither -> cross-lingual) and rejects both together. The app-side
+# "Mode" (never sent) makes that choice explicit, as in `cosyvoice3_audiocpp`;
+# `CosyVoice3SglOmniBehavior` decides what each Mode sends.
 [[models]]
 id = "cosyvoice3_sglomni"
 settings = [
+    { name = "template_name", section = "parameters", type = "str", default = "zero_shot" },
     { name = "temperature", section = "parameters", type = "float", default = 0.7 },
     { name = "top_p", section = "parameters", type = "float", default = 0.8 },
     { name = "top_k", section = "parameters", type = "int", default = 20 },
@@ -781,18 +812,34 @@ project_links = [
     "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
     "https://sgl-project.github.io/sglang-omni/cookbook/fun_cosyvoice3.html",
 ]
+instructions_message = "Enter instructions for this voice:\n(Effect may be subtle; try short, single instructions - speed, volume, emotion)"
 
 [models.sgl_omni.behavior]
 orchestration = "concurrent_requests"
 streaming = true
 seed = "unsupported"
 voice_required = true
+# Zero-shot only; the other Modes never send (or require) the transcript.
 transcript = "optional"
+# Selected Voice.instructions[model ID] is sent as top-level `instructions` in Instruct Mode.
+voice_instructions = true
 
 [models.sgl_omni.request_stream_defaults]
 response_format = "pcm"
 
 [models.sgl_omni.parameters]
+
+# App-side request template (not sent). Each one changes only what the
+# speech-token LM is conditioned on: zero_shot sees the sample's transcript and
+# speech tokens, cross_lingual sees neither, instruct sees the instructions.
+[models.sgl_omni.parameters.template_name]
+type = "str"
+default = "zero_shot"
+choices = [
+    { value = "zero_shot", label = "Zero-shot", description = "Follows the voice sample's timbre and speaking style (uses its transcript)" },
+    { value = "cross_lingual", label = "Cross-lingual", description = "Follows the voice sample's timbre only; suits a sample in a different language from the text" },
+    { value = "instruct", label = "Instruct", description = "Follows the voice sample's timbre; speaking style follows the instructions" },
+]
 
 [models.sgl_omni.parameters.temperature]
 type = "float"
@@ -824,6 +871,12 @@ max = 2.0
 
 [[models.sgl_omni.menu]]
 kind = "voice_samples"
+
+[[models.sgl_omni.menu]]
+kind = "choice"
+parameter = "template_name"
+target_menu = "model"
+label = "Mode"
 
 [[models.sgl_omni.menu]]
 parameter = "temperature"
@@ -1431,7 +1484,6 @@ label = "Repetition penalty"
 [[models]]
 id = "breeze_tts_2_audiocpp"
 settings = [
-    { name = "instruct", section = "parameters", type = "str", default = "" },
     { name = "temperature", section = "parameters", type = "float", default = 0.9 },
     { name = "guidance_scale", section = "parameters", type = "float", default = 1.0 },
     { name = "top_p", section = "parameters", type = "float", default = 1.0 },
@@ -1461,9 +1513,10 @@ project_links = [
 ]
 
 [models.audio_cpp]
+# Selected Voice.instructions[model ID] is sent as options.instruction when used.
+voice_instructions = true
 menu = [
     { kind = "voice_samples" },
-    { kind = "voice_instructions", parameter = "instruct", target_menu = "voice" },
     { parameter = "temperature", label = "Temperature", target_menu = "model" },
     { parameter = "guidance_scale", label = "Guidance scale", target_menu = "model" },
     { parameter = "top_p", label = "Top-P", target_menu = "model" },
@@ -1486,14 +1539,6 @@ text_chunk_size = 100000
 family = "breeze_tts"
 tasks = ["tts", "clon"]
 mode = "offline"
-
-# The speech endpoint's top-level `instructions` is an alias for this option.
-# Blank/cleared instructions are omitted, retaining the model's own default.
-[models.audio_cpp.parameters.instruct]
-type = "str"
-default = ""
-request_key = "instruction"
-target = "options"
 
 [models.audio_cpp.parameters.temperature]
 type = "float"
@@ -1625,7 +1670,6 @@ target = "options"
 id = "cosyvoice3_audiocpp"
 settings = [
     { name = "template_name", section = "parameters", type = "str", default = "zero_shot" },
-    { name = "instruction", section = "parameters", type = "str", default = "" },
     { name = "top_k", section = "parameters", type = "int", default = 25 },
     { name = "num_inference_steps", section = "parameters", type = "int", default = 10 },
     { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
@@ -1653,12 +1697,14 @@ project_links = [
     "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
     "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/cosyvoice3.md",
 ]
+instructions_message = "Enter instructions for this voice:\n(Effect may be subtle; try short, single instructions - speed, volume, emotion)"
 
 [models.audio_cpp]
+# Selected Voice.instructions[model ID] is sent as options.instruction when used.
+voice_instructions = true
 menu = [
     { kind = "voice_samples" },
     { kind = "choice", parameter = "template_name", label = "Mode", target_menu = "model" },
-    { kind = "voice_instructions", parameter = "instruction", target_menu = "model" },
     { parameter = "top_k", label = "Top-K", target_menu = "model" },
     { parameter = "num_inference_steps", label = "Steps", target_menu = "model" },
     { kind = "seed", target_menu = "model" },
@@ -1694,13 +1740,6 @@ choices = [
     { value = "cross_lingual", label = "Cross-lingual", description = "Follows the voice sample's timbre only; suits a sample in a different language from the text" },
     { value = "instruct", label = "Instruct", description = "Follows the voice sample's timbre; speaking style follows the instructions" },
 ]
-
-# Read only by the `instruct` template; blank/cleared is omitted from the
-# request, which the session treats as an empty instruction.
-[models.audio_cpp.parameters.instruction]
-type = "str"
-default = ""
-target = "options"
 
 # Forwarded from the top-level body; the session requires a positive value.
 [models.audio_cpp.parameters.top_k]
@@ -2607,7 +2646,6 @@ settings = [
     { name = "num_inference_steps", section = "parameters", type = "int", default = 32 },
     { name = "guidance_scale", section = "parameters", type = "float", default = 2.0 },
     { name = "speed", section = "parameters", type = "float", default = 1.0 },
-    { name = "instruct", section = "parameters", type = "str", default = "" },
     { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
@@ -2633,8 +2671,12 @@ project_links = [
     "https://huggingface.co/k2-fsa/OmniVoice",
     "https://github.com/0xShug0/audio.cpp/blob/main/docs/models/omnivoice.md"
 ]
+instructions_message = "Enter voice design instructions for this voice:\n(Must conform to OmniVoice instruction rules or else TTS generation will fail)"
+instructions_label = "Voice design"
 
 [models.audio_cpp]
+# Selected Voice.instructions[model ID] is sent as options.instruction when used.
+voice_instructions = true
 # Optional in the family, but used when present: the reference transcript
 # sharpens speaker/semantic conditioning, and local `omnivoice_local` already
 # stores and sends one. OmniVoice's own clone path actually rejects a reference
@@ -2686,25 +2728,8 @@ min = 0.5
 max = 2.0
 target = "options"
 
-# Voice-design instruction, the same string local `omnivoice_local` stores. The
-# server reads it from `options.instruction` (its top-level `instructions` body
-# field is only an alias), and applies it both to an instruction-only request
-# and, as a style hint, alongside a cloning reference.
-[models.audio_cpp.parameters.instruct]
-type = "str"
-default = ""
-request_key = "instruction"
-target = "options"
-
-# Menu order mirrors local `omnivoice_local`: voice samples, then settings
-# led by the voice-design instructions.
 [[models.audio_cpp.menu]]
 kind = "voice_samples"
-
-[[models.audio_cpp.menu]]
-kind = "voice_instructions"
-target_menu = "voice"
-parameter = "instruct"
 
 [[models.audio_cpp.menu]]
 parameter = "num_inference_steps"

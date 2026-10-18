@@ -166,7 +166,7 @@ def test_shared_source_wins_over_flat_remnants_even_when_empty():
     })
     project = Project(model_settings=settings)
     for model_id in IDS:
-        assert project.get_model_setting(model_id, "file_name") == []
+        assert project.get_model_setting(model_id, "file_name") == [""]
         if model_id == "moss_local":
             for name in ("delay_seed", "local_seed", "local_v15_seed"):
                 assert project.get_model_setting(model_id, name) == -1
@@ -195,9 +195,9 @@ def test_flat_fallback_fills_only_missing_private_keys_without_mutation():
     # V4 project voice access reads only the project-wide list; the scoped
     # fork that reconcile still performs for this direct call is not
     # authoritative project storage.
-    assert project.get_model_setting("moss_delay_sglomni", "file_name") == []
-    assert project.get_model_setting("moss_local_sglomni", "file_name") == []
-    assert project.voice_references == []
+    assert project.get_model_setting("moss_delay_sglomni", "file_name") == [""]
+    assert project.get_model_setting("moss_local_sglomni", "file_name") == [""]
+    assert project.voice_references == [Voice()]
     assert (source, legacy) == before
 
 
@@ -229,13 +229,13 @@ def test_edits_and_resets_after_fork_are_independent_and_do_not_resurrect():
     project.set_model_setting("moss_delay_sglomni", "delay_temperature", None, reset=True)
     # The shared voice list is project-wide: clearing it clears transcripts too.
     project.set_model_setting("moss_delay_sglomni", "file_name", [])
-    assert project.voice_references == []
-    assert project.get_model_setting("moss_delay_sglomni", "transcript") == []
+    assert project.voice_references == [Voice()]
+    assert project.get_model_setting("moss_delay_sglomni", "transcript") == [""]
     saved = ProjectSerializationUtil.to_project_json_dict(project)
     for _ in range(2):
         project = Project.model_validate(deepcopy(saved))
         assert project.get_model_setting("moss_delay_sglomni", "delay_temperature") == -1.0
-        assert project.voice_references == []
+        assert project.voice_references == [Voice()]
         assert "moss" not in project.model_settings.shared
         assert ProjectSerializationUtil.to_project_json_dict(project) == saved
 

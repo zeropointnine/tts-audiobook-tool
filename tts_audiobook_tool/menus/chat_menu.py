@@ -13,6 +13,7 @@ from tts_audiobook_tool.constants import CHAT_SYSTEM_PROMPTS
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool import readiness
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
@@ -38,7 +39,8 @@ class ChatMenu:
             # Pre-flight: verify shared voice samples (and transcripts) before
             # the full-screen conversation app takes over the console.
             from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-            if not VoiceMenuShared.validate_voices(state):
+            voice_indices = ProjectVoiceUtil.get_job_voice_indices(state.project, None)
+            if not VoiceMenuShared.validate_voices(state, voice_indices=voice_indices):
                 return
             run_conversation_app(state)
 

@@ -101,15 +101,18 @@ def test_model_selection_refreshes_qwen_menu_model_type(monkeypatch) -> None:
 def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_type, sample_count) -> None:
     project = Project(tts_model_type="qwen3tts_local")
     project.set_model_setting("qwen3tts_local", "model_type", model_type)
+    # No samples: the project's one default (sample-less) voice
     project.voice_references = [
         Voice(f"voice_{i}.flac", "Reference words.")
         for i in range(sample_count)
-    ]
+    ] or [Voice()]
     state = cast(State, SimpleNamespace(project=project))
     rendered_labels: list[str] = []
     raw_labels: list[str] = []
 
     def capture_menu(current: State, make_items) -> None:
+        # Keep the wrapper's own composition (selection controls appended last)
+        make_items = VoiceMenuShared.with_voice_selection_items(make_items)
         raw_labels.extend(get_string_from(current, item.label) for item in make_items(current))
         rendered_labels.extend(strip_ansi_codes(label) for label in raw_labels)
 
@@ -122,28 +125,31 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
     VoiceQwen3Menu.menu(state)
 
     assert rendered_labels
-    if sample_count == 0:
-        unused_checkpoint = {"voice_design": "VoiceDesign", "custom_voice": "CustomVoice"}.get(model_type)
-        suffix = f"not used by {unused_checkpoint}" if unused_checkpoint else "required"
-        assert rendered_labels[0] == f"Select voice clone sample ({suffix})"
-        if unused_checkpoint:
-            assert f"{voice_qwen3_menu.COL_DIM}(not used by {unused_checkpoint})" in raw_labels[0]
-            assert voice_qwen3_menu.COL_ERROR not in raw_labels[0]
+    first = f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: "
+    if model_type in ("custom_voice", "voice_design"):
+        # These checkpoints can't clone: sample details are hidden even when
+        # stored, and no voice has instructions here. Only VoiceDesign treats
+        # that as a (error-colored) hint; CustomVoice uses the speaker's delivery.
+        assert rendered_labels[0] == f"{first}no instructions"
+        assert (voice_qwen3_menu.COL_ERROR in raw_labels[0]) == (model_type == "voice_design")
+    elif sample_count == 0:
+        # The Base checkpoint uses (and requires) a voice clone sample
+        assert rendered_labels[0] == f"{first}no sample (required)"
+        assert voice_qwen3_menu.COL_ERROR in raw_labels[0]
     else:
-        assert rendered_labels[0] == f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: voice_0.flac"
-    assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in rendered_labels) == (0 < sample_count < 9)
+        assert rendered_labels[0] == f"{first}voice_0.flac"
+    assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in rendered_labels) == (sample_count < 9)
     assert not any(label.startswith(("Select Qwen3-TTS model", "Temperature", "Seed",
                                      "Add/remove voice samples")) for label in rendered_labels)
-    expected = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(sample_count)]
+    expected = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(max(sample_count, 1))]
     if sample_count < 9:
-        expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE if sample_count else "Select voice clone sample")
+        expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
+    # Model-specific items precede the shared selection controls
+    if model_type == "custom_voice":
+        expected.append("Set speaker")
     if sample_count > 1:
         expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
-    if model_type == "custom_voice":
-        expected.extend(["Set speaker", "Instructions"])
-    elif model_type == "voice_design":
-        expected.append("Instructions")
     assert len(rendered_labels) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(rendered_labels, expected))
 
@@ -152,7 +158,7 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
 def test_qwen_model_settings_exclude_voice_controls(monkeypatch, model_type):
     project = Project(tts_model_type="qwen3tts_local")
     project.set_model_setting("qwen3tts_local", "speaker_id", "Vivian")
-    project.set_model_setting("qwen3tts_local", "instructions", "Speak warmly")
+    project.voice_references = [Voice(instructions={"qwen3tts_local": "Speak warmly"})]
     state = cast(State, SimpleNamespace(project=project))
     captured = {}
     monkeypatch.setattr(model_qwen3_menu.ModelMenuShared, "menu_wrapper",
@@ -197,6 +203,10 @@ def test_qwen_speaker_selection_inspects_on_demand_and_keeps_validation(monkeypa
         assert "Vivian" in label and "invalid" not in label
         assert edits == []
         assert feedback == ["Model has only one speaker id (Vivian)"]
+        # Saved, so instance-less readiness sees a speaker id
+        assert project.get_model_setting("qwen3tts_local", "speaker_id") == "Vivian"
+        assert saves == [project]
+        saves.clear()
     else:
         assert "current id is invalid" in label
         args, kwargs = edits[0]
@@ -238,36 +248,33 @@ def test_qwen_speaker_edit_handles_inspection_failure_or_changed_checkpoint(monk
                        for item in captured["items"](state))
 
 
-@pytest.mark.parametrize("model_type", ["custom_voice", "voice_design"])
+@pytest.mark.parametrize("model_type", ["base", "custom_voice", "voice_design"])
 @pytest.mark.parametrize("instructions", ["", "Speak warmly"])
-def test_qwen_voice_instructions_keep_edit_clear_and_empty_label_semantics(monkeypatch, model_type, instructions):
-    project = Project(tts_model_type="qwen3tts_local")
+def test_qwen_voice_menu_has_no_model_global_instruction_controls(monkeypatch, model_type, instructions):
+    project = Project(tts_model_type="qwen3tts_local", voice_references=[
+        Voice(instructions={"qwen3tts_local": instructions}),
+    ])
     project.set_model_setting("qwen3tts_local", "model_type", model_type)
-    project.set_model_setting("qwen3tts_local", "instructions", instructions)
     state = cast(State, SimpleNamespace(project=project))
-    captured, edits, saves = {}, [], []
+    captured = {}
     monkeypatch.setattr(VoiceMenuShared, "menu_wrapper",
-                        lambda state, items: captured.update(items=items))
-    monkeypatch.setattr(voice_qwen3_menu.ask, "ask_string_and_save",
-                        lambda *args, **kwargs: edits.append(args))
-    monkeypatch.setattr(Project, "save", lambda self: saves.append(self))
+                        lambda state, items: captured.update(
+                            items=VoiceMenuShared.with_voice_selection_items(items)(state)))
     monkeypatch.setattr(voice_qwen3_menu.ModelWorker, "inspect_tts_blocking",
-                        lambda *_: pytest.fail("Instructions must not require a loaded model"))
+                        lambda *_: pytest.fail("Opening voice management must not load a model"))
+    original_get = Project.get_model_setting
+
+    def get_setting(self, model_id, name):
+        assert name != "instructions", "Global instructions must never be read"
+        return original_get(self, model_id, name)
+
+    monkeypatch.setattr(Project, "get_model_setting", get_setting)
     VoiceQwen3Menu.menu(state)
-    items = captured["items"](state)
-    edit = next(item for item in items if get_string_from(state, item.label).startswith("Instructions"))
-    label = strip_ansi_codes(get_string_from(state, edit.label))
-    assert (instructions or ("none" if model_type == "voice_design" else "optional")) in label
-    assert edit.blank_line_before == (model_type == "voice_design")
-    edit.handler(state, edit)
-    assert edits[0][0] is project
-    assert edits[0][2] == SettingRef("qwen3tts_local", "instructions")
-    # No samples: the no-samples Add item and Edit voice/line selections.
-    assert len(items) == (2 + (2 if model_type == "custom_voice" else 1) + bool(instructions))
-    if instructions:
-        clear = items[-1]
-        assert clear.label == "Clear instructions"
-        clear.handler(state, clear)
-        assert project.get_model_setting("qwen3tts_local", "instructions") == ""
-        assert saves == [project]
-        assert not any(item.label == "Clear instructions" for item in captured["items"](state))
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in captured["items"]]
+    assert not any(label.startswith(("Instructions", "Clear instructions")) for label in labels)
+    # Shared voice rows may still preview this voice's instructions.
+    # Default voice, Add, CustomVoice's speaker, then Edit voice/line selections.
+    assert len(labels) == 3 + (model_type == "custom_voice")
+    if model_type == "custom_voice":
+        assert labels[2].startswith("Set speaker")
+    assert labels[-1].startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)

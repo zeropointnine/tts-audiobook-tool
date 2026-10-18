@@ -115,6 +115,31 @@ class Qwen3BaseModel(TtsBaseModel):
     # ---
 
     @classmethod
+    def can_instructions(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
+        if instance is not None:
+            assert isinstance(instance, Qwen3BaseModel)
+            model_type = instance.model_type
+        else:
+            model_type = project.get_model_setting('qwen3tts_local', 'model_type')
+        return model_type in ("custom_voice", "voice_design")
+
+    @classmethod
+    def can_voice_clone(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
+        # Only the Base checkpoint clones from voice samples (an unset model_type means Base)
+        if instance is not None:
+            assert isinstance(instance, Qwen3BaseModel)
+            model_type = instance.model_type
+        else:
+            model_type = project.get_model_setting('qwen3tts_local', 'model_type')
+        return model_type not in ("custom_voice", "voice_design")
+
+    @classmethod
+    def expects_voice_instructions(cls, project: Project) -> bool:
+        # VoiceDesign without a description gets an arbitrary voice; CustomVoice
+        # without instructions is just the speaker's default delivery.
+        return project.get_model_setting('qwen3tts_local', 'model_type') == "voice_design"
+
+    @classmethod
     def uses_reference_transcript(cls, project: Project) -> bool:
         # Only the Base checkpoint clones from voice samples (an unset
         # model_type means Base); CustomVoice and VoiceDesign ignore them.
@@ -152,13 +177,17 @@ class Qwen3BaseModel(TtsBaseModel):
         match project.get_model_setting('qwen3tts_local', 'model_type'):
             case "custom_voice":
                 if not instance:
-                    ... # can't know if project settings valid wo instance
+                    # Can't validate the id against the checkpoint's speakers
+                    # without an instance, but an empty one never works
+                    # (single-speaker checkpoints get theirs saved by Set speaker).
+                    if not project.get_model_setting('qwen3tts_local', 'speaker_id'):
+                        items.append( ReadinessIssue("speaker id", "A speaker id is required (see Voices menu > Set speaker)") )
                 else:
                     is_valid = instance.get_resolved_speaker_info(project)[1]
                     if not is_valid:
                         items.append( ReadinessIssue("valid speaker id", "A valid speaker id is required") )
             case "voice_design":
-                ... # # has no requirements bc "instruction" is optional
+                ... # per-voice instructions do not add model-global requirements
             case "base" | _:
                 ... # voice-clone state is validated lazily (validate_voices)
 
@@ -170,10 +199,6 @@ class Qwen3BaseModel(TtsBaseModel):
 
         _, warning = self.resolve_language_code_and_warning(project.language_code)
         if warning:
-            warnings.append(warning)
-
-        if project.get_model_setting('qwen3tts_local', 'model_type') == "voice_design" and not project.get_model_setting('qwen3tts_local', 'instructions'):
-            warning = "Model may generate random voices because no instructions defined"
             warnings.append(warning)
 
         return warnings
@@ -209,18 +234,10 @@ class Qwen3BaseModel(TtsBaseModel):
                         resolved_speaker_id = "required"
                     value = ("" if is_valid else COL_ERROR) + resolved_speaker_id
                 else:
-                    is_valid = bool(project.get_model_setting('qwen3tts_local', 'speaker_id'))
                     value = project.get_model_setting('qwen3tts_local', 'speaker_id') or (COL_ERROR + "required")
-                if is_valid and project.get_model_setting('qwen3tts_local', 'instructions'):
-                    value += f"{COL_DIM} + instructions"
 
             case "voice_design":
-                status_prefix = "Voice instruction"
-                main_prefix = "voice instruction"
-                if not project.get_model_setting('qwen3tts_local', 'instructions'):
-                    value = COL_ERROR + "none"
-                else:
-                    value = truncate_pretty(project.get_model_setting('qwen3tts_local', 'instructions'), 30, middle=False)
+                return None
 
             case "base " | _:
                 display_info = super().get_voice_display_info(project, instance)

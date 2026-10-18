@@ -27,7 +27,8 @@ def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
     state = make_state(lora_target)
     captured, asked, applied, saved, cleared = {}, {}, [], [], []
     monkeypatch.setattr(menu.VoiceMenuShared, "menu_wrapper",
-                        lambda state, items: captured.update(items=items))
+                        lambda state, items: captured.update(
+                            items=menu.VoiceMenuShared.with_voice_selection_items(items)))
     monkeypatch.setattr(ModelMenuShared, "ask_target", lambda **kwargs: asked.update(kwargs))
     monkeypatch.setattr(menu, "apply_lora_and_validate", lambda *args: applied.append(args))
     monkeypatch.setattr(Project, "save", lambda self: saved.append(self))
@@ -36,9 +37,10 @@ def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
                         lambda *_: pytest.fail("Opening voice controls must not load the model"))
     menu.VoiceVibeVoiceMenu.menu(state)
     items = captured["items"](state)
-    # Sample group: 2 sample items, Add, selection mode, edit selections.
-    select = items[5]
-    assert get_string_from(state, items[4].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    # 2 voice items, Add, LoRA item(s), then selection mode and edit selections.
+    select = items[3]
+    assert get_string_from(state, items[2].label) == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
+    assert get_string_from(state, items[-1].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     label = strip_ansi_codes(get_string_from(state, select.label))
     assert label.startswith("Select LoRA")
     assert (lora_target or "(optional)") in label
@@ -52,7 +54,7 @@ def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
     asked["callback"](state.project, "new-lora")
     assert applied == [(state, "new-lora")]
     if lora_target:
-        clear = items[-1]
+        clear = items[4]
         assert clear.label == "Clear LoRA"
         assert not clear.blank_line_before
         clear.handler(state, clear)

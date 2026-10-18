@@ -140,6 +140,12 @@ class Tts:
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
         voice_value = ProjectVoiceUtil.current_voice_value(project, model_type, voice_selection_index)
         if not voice_value:
+            if ProjectVoiceUtil.has_any_voice_sample(project):
+                # A sample-less voice among sampled ones generates with the
+                # model's built-in voice: tag it as the model would with no
+                # sample, not with the primary sample's name.
+                from tts_audiobook_tool.app_types.voice import Voice
+                return support.get_voice_tag(project.model_copy(update={"voice_references": [Voice()]}))
             return support.get_voice_tag(project)
         return support.get_voice_tag_for_value(voice_value)
 

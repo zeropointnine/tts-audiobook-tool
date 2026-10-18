@@ -12,6 +12,7 @@ from omnivoice.models.omnivoice import OmniVoiceGenerationConfig, VoiceCloneProm
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 from tts_audiobook_tool.app_types import DeviceType
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
 
 
@@ -187,8 +188,7 @@ def test_omnivoice_project_language_reaches_generate(tmp_path, monkeypatch, mode
     model = make_model()
     voice_path = tmp_path / "voice.wav"
     voice_path.write_bytes(b"voice")
-    settings = {"instruct": "warm" if mode == "design" else "",
-                "cfg": -1, "speed": -1, "num_step": -1, "seed": 1}
+    settings = {"cfg": -1, "speed": -1, "num_step": -1, "seed": 1}
     project = SimpleNamespace(
         language_code=language,
         get_model_setting=lambda model_id, name: settings[name],
@@ -197,6 +197,9 @@ def test_omnivoice_project_language_reaches_generate(tmp_path, monkeypatch, mode
         ProjectVoiceUtil, "current_voice_reference_pair",
         lambda *args: (str(voice_path), "reference words") if mode == "clone" else ("", ""),
     )
+    # Design mode: the selected voice carries instructions but its sample is not on disk.
+    voice = Voice("missing.flac", instructions={"omnivoice_local": "warm"}) if mode == "design" else None
+    monkeypatch.setattr(ProjectVoiceUtil, "current_voice", lambda *args: voice)
     monkeypatch.setattr(ProjectVoiceUtil, "resolve_voice_file_path", lambda project, path: path)
 
     result = model.generate_using_project(project, ["First sentence.", "Second sentence."])
@@ -204,6 +207,8 @@ def test_omnivoice_project_language_reaches_generate(tmp_path, monkeypatch, mode
     assert isinstance(result, list)
     assert len(model._model.generate_calls) == 2
     assert all(call["language"] == language for call in model._model.generate_calls)
+    expected_instruct = "warm" if mode == "design" else None
+    assert all(call["instruct"] == expected_instruct for call in model._model.generate_calls)
 
 
 def test_omnivoice_kill_clears_everything(tmp_path):

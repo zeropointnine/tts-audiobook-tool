@@ -174,7 +174,7 @@ def test_pocket_removing_shared_list_does_not_clear_preset():
     project = Project(voice_references=references())
     project.set_model_setting("pocket_local", "predefined_voice", "alba")
     ProjectVoiceUtil.clear_voice_and_save(project, model("pocket_local"))
-    assert project.voice_references == []
+    assert project.voice_references == [Voice()]
     assert project.get_model_setting("pocket_local", "predefined_voice") == "alba"
 
 
@@ -214,7 +214,7 @@ def test_import_nonrequiring_model_retains_sidecar_but_secondary_ignores_it(tmp_
     monkeypatch.setattr(voice_menu_shared.Transcriber, "transcribe_to_words", lambda *_: pytest.fail("unexpected STT"))
     monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *_: None)
     VoiceMenuShared.ask_and_set_voice_file(state, model("indextts2_local" if secondary else "mira_local"), is_secondary=secondary)
-    assert project.voice_references == as_voices([] if secondary else [{"file_name": "clip.flac", "transcript": "Sidecar text"}])
+    assert project.voice_references == as_voices([{"file_name": ""}] if secondary else [{"file_name": "clip.flac", "transcript": "Sidecar text"}])
 
 
 def test_transcript_sidecar_prefers_stem_txt_and_skips_blank(tmp_path):
@@ -255,14 +255,14 @@ def test_import_rejects_raw_sound_under_two_seconds(tmp_path, monkeypatch):
     state, project, errors = _setup_short_import(tmp_path, monkeypatch, 1.0, 1.0)
     VoiceMenuShared.ask_and_set_voice_file(state, model())
     assert errors == ["Sound file must be at least 2 seconds"]
-    assert project.voice_references == []
+    assert project.voice_references == [Voice()]
 
 
 def test_import_rejects_sound_under_two_seconds_after_trim(tmp_path, monkeypatch):
     state, project, errors = _setup_short_import(tmp_path, monkeypatch, 3.0, 1.0)
     VoiceMenuShared.ask_and_set_voice_file(state, model())
     assert errors == ["Sound file post silence trim must be at least 2 seconds"]
-    assert project.voice_references == []
+    assert project.voice_references == [Voice()]
 
 
 def test_abr_validation_migrates_single_source_without_mutating_snapshot():
@@ -294,7 +294,7 @@ def test_abr_authoritative_empty_list_ignores_malformed_scoped_clones(stale_refs
     }
     original = deepcopy(snapshot)
     result = ProjectTransferUtil.validate_abr_snapshot(snapshot)
-    assert result.voice_references == []
+    assert result.voice_references == [Voice()]
     assert all("voice_references" not in obj for obj in result.model_settings.models.values())
     assert snapshot == original
 
@@ -347,6 +347,8 @@ def test_static_voice_menus_keep_entire_sample_group(monkeypatch, module_name, c
     labels = []
 
     def capture_menu(current, make_items):
+        # Keep the wrapper's own composition (selection controls appended last)
+        make_items = VoiceMenuShared.with_voice_selection_items(make_items)
         labels.extend(strip_ansi_codes(get_string_from(current, item.label)) for item in make_items(current))
 
     monkeypatch.setattr(VoiceMenuShared, "menu_wrapper", capture_menu)
@@ -358,15 +360,17 @@ def test_static_voice_menus_keep_entire_sample_group(monkeypatch, module_name, c
         f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: b.flac",
         f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 3: c.flac",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
-        voice_menu_shared.LABEL_VOICE_SELECTION_MODE,
-        voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
     ]
+    # Model-specific items sit between the voice list and the selection controls
     expected.extend({
         "indextts2_local": ["Select emotion voice sample", "Emotion vector", "Emotion alpha (strength)"],
-        "omnivoice_local": ["Voice design instructions"],
         "pocket_local": ["Select predefined voice"],
         "vibevoice_local": ["Select LoRA"],
     }.get(model_id, []))
+    expected.extend([
+        voice_menu_shared.LABEL_VOICE_SELECTION_MODE,
+        voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
+    ])
     assert len(labels) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, expected))
 

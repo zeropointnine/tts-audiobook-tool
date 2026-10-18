@@ -31,6 +31,13 @@ class ModelConfiguredSglOmniMenu:
         if control.kind == "seed":
             return [ModelMenuShared.make_seed_item(
                 state, SettingRef(definition.spec.id, "seed"), add_batch_warning=True)]
+        if control.kind == "choice":
+            choice = definition.choices[control.parameter]
+            return [ModelMenuShared.make_choice_item(
+                state, choice, control.label,
+                get_value=lambda project: ConfiguredSettings.get_choice(project, choice),
+                set_value=lambda project, value: ConfiguredSettings.set_choice(project, choice, value),
+            )]
         parameter = definition.parameters[control.parameter]
         return [ModelConfiguredSglOmniMenu.make_parameter_item(
             state, parameter, control.label, definition.spec.id,

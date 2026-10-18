@@ -1,17 +1,19 @@
 """Validated SGL-Omni request policies and catalog-owned settings declarations."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from pathlib import Path
 from typing import Any, Never
 
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelSpec, TtsModelType
-from tts_audiobook_tool.tts_models.model_catalog import CATALOG_PATH, _load_catalog, parse_spec
+from tts_audiobook_tool.tts_models.model_catalog import CATALOG_PATH, ParameterChoice, _load_catalog, parse_choices, parse_spec
 from tts_audiobook_tool.tts_models.catalog_settings import parse_model_settings
 
 DEFINITION_PATH = CATALOG_PATH
-_RESERVED = {"input", "stream", "references", "seed", "language", "max_new_tokens", "stage_params"}
+# Request fields only the adapter writes. `instructions` carries the selected
+# voice's per-voice instructions when the model's behavior uses them.
+_RESERVED = {"input", "stream", "references", "seed", "language", "max_new_tokens", "stage_params", "instructions"}
 _VALUE_TYPES = {"int": int, "float": float}
 _SEED_POLICIES = {"unsupported", "resolved"}
 _TRANSCRIPT_POLICIES = {"required_when_voice_present", "optional", "omitted"}
@@ -59,6 +61,29 @@ class NumericParameter:
 
 
 @dataclass(frozen=True)
+class ChoiceParameter:
+    """A fixed-choice string setting that is never sent to the server.
+
+    The request has no field for it; an ``SglOmniModelBehavior`` subclass reads
+    it to decide what the request contains (eg CosyVoice3's Mode deciding
+    between transcript, instructions or neither).
+    """
+    model_id: str
+    name: str
+    default: str
+    choices: tuple[ParameterChoice, ...]
+    type: str = "str"
+
+    def validate(self, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"{self.model_id}.{self.name} must be a string")
+        if value not in (choice.value for choice in self.choices):
+            allowed = ", ".join(choice.value for choice in self.choices)
+            raise ValueError(f"{self.model_id}.{self.name} must be one of: {allowed}")
+        return value
+
+
+@dataclass(frozen=True)
 class MenuControl:
     kind: str
     # Voice samples are implicitly routed; settings always declare a target.
@@ -86,6 +111,13 @@ class SglOmniModelDefinition:
     # retiring the stored `orchestration` value.
     can_batch: bool = True
     settings: tuple[dict[str, Any], ...] = ()
+    # App-side fixed-choice settings, kept apart from the numeric request
+    # parameters above; never sent.
+    choices: dict[str, ChoiceParameter] = field(default_factory=dict)
+    # Whether the model can consume the selected voice's per-voice instructions
+    # (sent as top-level `instructions`). Not a persisted setting or menu
+    # control; the behavior decides per request whether they are used.
+    voice_instructions: bool = False
 
 
 @dataclass(frozen=True)
@@ -129,7 +161,7 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
             _fail(where, f"cannot overlay the non-SGL-Omni built-in model {id}")
         is_overlay = builtin is not None
 
-        behavior = _object(obj.get("behavior"), f"{where}.behavior", {"streaming", "seed", "voice_required", "transcript", "prompt_policy", "language", "music_and_trim", "orchestration", "can_batch"})
+        behavior = _object(obj.get("behavior"), f"{where}.behavior", {"streaming", "seed", "voice_required", "transcript", "prompt_policy", "language", "music_and_trim", "orchestration", "can_batch", "voice_instructions"})
         streaming = _required(behavior, "streaming", f"{where}.behavior", bool)
         voice_required = _required(behavior, "voice_required", f"{where}.behavior", bool)
         seed = _required(behavior, "seed", f"{where}.behavior", str)
@@ -151,8 +183,9 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
         prompt_policy = behavior.get("prompt_policy", "")
         if prompt_policy not in ("", *_PROMPT_POLICIES):
             _fail(f"{where}.behavior.prompt_policy", f"unsupported prompt policy {prompt_policy!r}")
-        if prompt_policy == "auk_seconds" and (not voice_required or transcript != "required_when_voice_present" or streaming):
-            _fail(f"{where}.behavior.prompt_policy", "AuK duration requires voice, transcript and nonstreaming")
+        # A voice is optional: sample-less AuK requests get an app-estimated duration.
+        if prompt_policy == "auk_seconds" and (transcript != "required_when_voice_present" or streaming):
+            _fail(f"{where}.behavior.prompt_policy", "AuK duration requires transcript and nonstreaming")
         language = behavior.get("language", "")
         if language not in ("", "moss"):
             _fail(f"{where}.behavior.language", f"unsupported language policy {language!r}")
@@ -162,6 +195,9 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
         can_batch = behavior.get("can_batch", True)
         if not isinstance(can_batch, bool):
             _fail(f"{where}.behavior.can_batch", "expected boolean")
+        voice_instructions = behavior.get("voice_instructions", False)
+        if not isinstance(voice_instructions, bool):
+            _fail(f"{where}.behavior.voice_instructions", "expected boolean")
 
         spec = parse_spec(entry)
         file_tag = spec.file_tag
@@ -176,13 +212,29 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
         if not isinstance(params_obj, dict):
             _fail(f"{where}.parameters", "expected an object")
         parameters: dict[str, NumericParameter] = {}
-        request_keys: set[str] = {"input", "stream", "references", "seed", "language", "stage_params"}
+        choice_parameters: dict[str, ChoiceParameter] = {}
+        request_keys: set[str] = {"input", "stream", "references", "seed", "language", "stage_params", "instructions"}
         for name, data in params_obj.items():
             item_where = f"{where}.parameters.{name}"
             if not name or not isinstance(name, str):
                 _fail(item_where, "parameter name must be a nonempty string")
             if name in {"file_name", "transcript", "batch_size", "concurrent_requests", "seed"}:
                 _fail(item_where, "reserved model setting name")
+            if isinstance(data, dict) and data.get("type") == "str":
+                # App-side choice: no request key, bounds or sentinel.
+                param = _object(data, item_where, {"type", "default", "choices"})
+                default = _required(param, "default", item_where, str)
+                binding = storage.get(name)
+                if binding is None or binding["section"] != "parameters" or binding["type"] != "str":
+                    _fail(item_where, f"no catalog {id}.{name} string parameter binding")
+                if binding["default"] != default:
+                    _fail(f"{item_where}.default", "must match the catalog storage default")
+                if "choices" not in param:
+                    _fail(f"{item_where}.choices", "a string parameter requires choices")
+                choices = tuple(ParameterChoice(item["value"], item["label"], item["description"])
+                                for item in parse_choices(param["choices"], default, f"{item_where}.choices"))
+                choice_parameters[name] = ChoiceParameter(id, name, default, choices)
+                continue
             param = _object(data, item_where, {"type", "request_key", "default", "default_sentinel", "min", "max", "omit_when_unset", "max_request_value", "input_prompt_suffix"})
             suffix = param.get("input_prompt_suffix", "")
             if not isinstance(suffix, str):
@@ -255,22 +307,30 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
         for i, data in enumerate(menu_data):
             menu_where = f"{where}.menu[{i}]"
             control = _object(data, menu_where, {"kind", "parameter", "label", "target_menu"})
-            if "kind" in control:
-                kind = control["kind"]
-                if kind == "voice_samples":
-                    _object(control, menu_where, {"kind"})
-                    controls.append(MenuControl(kind, None))
-                    continue
-                if kind != "seed":
-                    _fail(menu_where, "unsupported menu control")
+            kind = control.get("kind", "parameter")
+            if kind == "voice_samples":
+                _object(control, menu_where, {"kind"})
+                controls.append(MenuControl(kind, None))
+                continue
+            if kind == "seed":
                 _object(control, menu_where, {"kind", "target_menu"})
                 if seed != "resolved":
                     _fail(menu_where, "seed control requires resolved seed")
+            elif kind != "choice" and "kind" in control:
+                _fail(menu_where, "unsupported menu control")
             target_menu = _required(control, "target_menu", menu_where, str)
             if target_menu not in ("model", "voice"):
                 _fail(f"{menu_where}.target_menu", "expected model or voice")
-            if "kind" in control:
+            if kind == "seed":
                 controls.append(MenuControl("seed", target_menu))
+            elif kind == "choice":
+                name = _required(control, "parameter", menu_where, str)
+                if name not in choice_parameters:
+                    _fail(f"{menu_where}.parameter", f"choice requires a string parameter with choices: {name}")
+                label = _required(control, "label", menu_where, str)
+                if not label:
+                    _fail(f"{menu_where}.label", "must not be empty")
+                controls.append(MenuControl("choice", target_menu, name, label))
             else:
                 name = _required(control, "parameter", menu_where, str)
                 if name not in parameters:
@@ -279,13 +339,14 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
                 if not label:
                     _fail(f"{menu_where}.label", "must not be empty")
                 controls.append(MenuControl("parameter", target_menu, name, label))
-        declared = [c.parameter for c in controls if c.kind == "parameter"]
+        declared = [c.parameter for c in controls if c.kind in ("parameter", "choice")]
         if (sum(c.kind == "voice_samples" for c in controls) != 1
-                or sorted(declared) != sorted(parameters)
+                or sorted(declared) != sorted([*parameters, *choice_parameters])
                 or len(declared) != len(set(declared))
                 or sum(c.kind == "seed" for c in controls) != (seed == "resolved")):
             _fail(f"{where}.menu", "expected one voice control and each parameter exactly once")
-        models[id] = SglOmniModelDefinition(spec, parameters, tuple(controls), dict(defaults), dict(stream_defaults), transcript, seed, prompt_policy, language, music_and_trim, orchestration_name, can_batch, settings)
+        models[id] = SglOmniModelDefinition(spec, parameters, tuple(controls), dict(defaults), dict(stream_defaults), transcript, seed, prompt_policy, language, music_and_trim, orchestration_name, can_batch, settings,
+                                            choices=choice_parameters, voice_instructions=voice_instructions)
     required = {id for id, spec in installed.items() if spec.backend_kind is TtsBackendKind.SGL_OMNI}
     missing = required - models.keys()
     if missing:

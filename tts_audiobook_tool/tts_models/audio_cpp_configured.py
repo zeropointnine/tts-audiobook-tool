@@ -128,7 +128,7 @@ class AudioCppModelSupport:
         voice = self.get_primary_voice_value(project)
         if voice:
             label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, self.INFO)
-            count = len(ProjectVoiceUtil.get_voice_values(project, self.model_type))
+            count = ProjectVoiceUtil.get_voice_sample_count(project, self.model_type)
             if count > 1:
                 label += f", +{count - 1} more"
         else:
@@ -178,8 +178,7 @@ class AudioCppModelSupport:
             language = normalize_language_code(project.language_code or "")
             note = f" ({self.definition.language_hint_note})" if self.definition.language_hint_note else ""
             warnings.append(f"Passing language hint to model: {language or 'auto'}{note}")
-        if not self.definition.voice_required and not self.get_primary_voice_value(project):
-            warnings.append("Note: Generated voices may vary because no voice reference has been configured.")
+        # The "voices may vary" note: voice_variation_warning.get_run_warnings()
         try:
             values = self.get_values(project)
         except ValueError:
@@ -196,6 +195,30 @@ class AudioCppModelSupport:
 
     def can_hallucinate_music(self, project: Project, instance: object = None) -> bool:
         return self.definition.music_and_trim
+
+    def can_instructions(self, project: Project, instance: object = None) -> bool:
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            return self.definition.voice_instructions
+        return self.behavior.uses_voice_instructions(values)
+
+    def validate_instructions(self, value: str) -> str:
+        # The server validates its own vocabulary at generation time.
+        return ""
+
+    def expects_voice_instructions(self, project: Project) -> bool:
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            return False
+        return self.behavior.expects_voice_instructions(values)
+
+    def uses_instructions_with_sample(self, project: Project) -> bool:
+        return True
+
+    def can_voice_clone(self, project: Project, instance: object = None) -> bool:
+        return self.INFO.can_voice_clone
 
 
 class AudioCppBackendAdapter:
@@ -263,6 +286,10 @@ class AudioCppBackendAdapter:
                 return "seed must be -1 or uint32"
             if seed == -1:
                 seed = random.randrange(get_random_seed_max(2**32 - 1, max_random_seed) + 1)
+            selected_voice = ProjectVoiceUtil.current_voice(project, self.support.model_type, voice_selection_index)
+            instruction = (selected_voice.instructions.get(self.INFO.id, "")
+                           if selected_voice is not None and self.support.behavior.uses_voice_instructions(values)
+                           else "")
             voice, transcript = ProjectVoiceUtil.current_voice_reference_pair(
                 project, self.support.model_type, voice_selection_index)
             if not voice and self.definition.voice_required:
@@ -282,7 +309,7 @@ class AudioCppBackendAdapter:
         except (ValueError, OSError) as exc:
             return str(exc)
         payloads = [self._make_payload(prompt, values, voice_ref, seed, project.language_code,
-                                       transcript if uses_transcript else "")
+                                       transcript if uses_transcript else "", instruction)
                     for prompt in prompts]
         # One request at a time: the audio.cpp server serializes requests per model,
         # so fanning out would only queue them behind its model lock.
@@ -296,7 +323,7 @@ class AudioCppBackendAdapter:
         return sounds
 
     def _make_payload(self, prompt: str, values: dict[str, int | float | str], voice_ref: dict[str, str] | None,
-                      seed: int, language: str, transcript: str) -> dict:
+                      seed: int, language: str, transcript: str, instruction: str = "") -> dict:
         """Place each declared control where this family's server reads it.
 
         audio.cpp forwards a fixed set of top-level request fields
@@ -336,15 +363,12 @@ class AudioCppBackendAdapter:
             if name in ignored:
                 continue  # The model reads nothing from it under these settings.
             value = values[name]
-            if isinstance(parameter, AudioCppTextParameter) and value == "":
-                # A cleared text control is "unset", not an empty instruction:
-                # audio.cpp reads the request option's presence, so an empty
-                # string would reach the model as an explicit instruct.
-                continue
             if parameter.target == "options":
                 options[parameter.request_key] = value
             else:
                 payload[parameter.request_key] = value
+        if instruction:
+            options["instruction"] = instruction
         if options:
             payload["options"] = options
         if transcript:

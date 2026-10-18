@@ -72,6 +72,8 @@ class MenuStatus:
             count = 0
             entries = state.project.voice_references
             for index, voice in enumerate(ProjectVoiceUtil.get_voice_values(state.project, model)):
+                if not voice:
+                    continue
                 # An active crop is what generation uses, so its (shorter)
                 # duration is what this hint should measure.
                 entry = entries[index] if index < len(entries) else Voice(voice)
@@ -160,7 +162,10 @@ class MenuStatus:
             state.project, None
         )
         if voice_display_info is not None:
-            lines.append((voice_display_info.status_prefix, voice_display_info.value))
+            if voice_display_info.status_prefix == "Voice clone":
+                lines.append(("Voices", _make_voices_text(state)))
+            else:
+                lines.append((voice_display_info.status_prefix, voice_display_info.value))
 
         text_text = _make_text_text(state)
         lines.append(("Text", text_text))
@@ -291,6 +296,22 @@ def _make_server_tts_text(state: State) -> str:
     elif selected.id != "none" and Tts._binding_issue is not None:
         text += f" {COL_ERROR}({Tts._binding_issue.verbose})"
     return text
+
+def _make_voices_text(state: State) -> str:
+    """Summarize voice slots, leading with the first sample when there is one."""
+    voices = state.project.voice_references
+    model = state.project.get_tts_model_type().value
+    first_sample = next((voice for voice in voices if voice.has_sample), None)
+    if first_sample is not None:
+        value = ProjectVoiceUtil.make_voice_sample_display_label(state.project, first_sample.file_name, model)
+        if len(voices) > 1:
+            value += f", +{len(voices) - 1} more"
+        return value
+    if model.requires_voice:
+        return COL_ERROR + "required"
+    count = len(voices)
+    return f"{count} item" if count == 1 else f"{count} items"
+
 
 def _make_text_text(state: State) -> str:
     total_lines = len(state.project.phrase_groups)

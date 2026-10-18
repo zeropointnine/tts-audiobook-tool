@@ -12,7 +12,8 @@ import pytest
 from textual.app import App
 from textual.widgets import Static
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, VoiceSelectMode
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.generation_events import GenerationTimedOut, ModelUnhealthy
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
@@ -547,6 +548,69 @@ def test_exit_during_reset_finishes_existing_reset_once(monkeypatch) -> None:
     assert calls == ["reset", "reset finished", "reconcile"]
     assert modal.terminal_result is not None
     assert modal.terminal_result.hard_reset_cause is HardResetCause.USER_ESCALATION
+
+
+@pytest.mark.parametrize(
+    ("kind", "phrase_index", "mode", "expected_scope", "problem_count"),
+    [
+        ("generation", 1, VoiceSelectMode.USER_DEFINED, [0], 0),
+        ("generation", 0, VoiceSelectMode.USER_DEFINED, [1], 1),
+        ("generation", 2, VoiceSelectMode.USER_DEFINED, [2], 1),
+        ("preview", None, VoiceSelectMode.USER_DEFINED, [0], 0),
+        ("generation", 0, VoiceSelectMode.DISABLED, [0], 0),
+        ("generation", 1, VoiceSelectMode.AUTO_ADVANCE, [0, 1, 2], 2),
+        ("preview", None, VoiceSelectMode.AUTO_ADVANCE, [0, 1, 2], 2),
+    ],
+)
+def test_quick_job_preflight_checks_only_job_voices(
+    monkeypatch, tmp_path, kind, phrase_index, mode, expected_scope, problem_count
+) -> None:
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+
+    (tmp_path / "valid.flac").write_bytes(b"sample")
+    state = make_state()
+    state.project = SimpleNamespace(
+        dir_path=str(tmp_path),
+        sound_segments_path=str(tmp_path / "segments"),
+        sound_segments=SimpleNamespace(get_best_item_for=lambda _index: None),
+        get_tts_model_type=lambda: TtsModelType.require_by_id("qwen3tts_local"),
+        get_model_setting=lambda *_args: "base",
+        voice_references=[
+            Voice(file_name="valid.flac", transcript="A valid transcript."),
+            Voice(),
+            Voice(file_name="missing.flac", transcript="Missing file."),
+        ],
+        voice_select_mode=mode,
+        # Selected line 1 is not line 0; the final assignment must clamp.
+        phrase_groups=[SimpleNamespace(voice_index=index) for index in (1, 0, 99)],
+    )
+    monkeypatch.setattr(quick_gen_module.readiness, "get_run_blocker_text", lambda *_a, **_k: "")
+    monkeypatch.setattr(quick_gen_module.readiness, "get_tts_preview_blocker_text", lambda *_a, **_k: "")
+    monkeypatch.setattr(ModelWorker, "is_busy", staticmethod(lambda: False))
+    monkeypatch.setattr(Tts, "requires_reference_transcript", staticmethod(lambda _p: True))
+    monkeypatch.setattr(SoundFileUtil, "load", staticmethod(lambda _path: object()))
+    scopes: list[list[int]] = []
+    get_problems = VoiceMenuShared.get_voice_problems
+
+    def scoped_problems(passed_state, *, voice_indices):
+        scopes.append(list(voice_indices))
+        return get_problems(passed_state, voice_indices=voice_indices)
+
+    monkeypatch.setattr(VoiceMenuShared, "get_voice_problems", staticmethod(scoped_problems))
+
+    job = (
+        quick_gen_module.make_preview_job(state, "Preview", "Literal prompt")
+        if kind == "preview"
+        else quick_gen_module.make_generation_job(state, phrase_index)
+    )
+
+    assert scopes == [expected_scope]
+    assert len(job.problems) == problem_count
+    if 1 in expected_scope:
+        assert any("has no voice sample" in problem for problem in job.problems)
+    if 2 in expected_scope:
+        assert any("missing.flac" in problem for problem in job.problems)
 
 
 def test_generation_job_is_staged_and_needs_no_reconciliation(monkeypatch) -> None:

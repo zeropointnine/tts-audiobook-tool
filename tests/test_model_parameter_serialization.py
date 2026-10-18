@@ -3,6 +3,9 @@ from copy import deepcopy
 from dataclasses import replace
 import json
 
+import pytest
+
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import Binding, ModelSettings, ModelSettingsRegistry, REGISTRY
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -94,14 +97,47 @@ def test_serialization_preserves_false_zero_empty_text_and_nonparameter_sections
     project = Project()
     project.set_model_setting("fish_s2_local", "compile_enabled", False)
     project.set_model_setting("fish_s2_local", "seed", 0)
-    project.set_model_setting("omnivoice_local", "instruct", "")
+    project.set_model_setting("omnivoice_local", "target", "")
     project.set_model_setting("fish_s2_sglomni", "concurrent_requests", 3)
     saved = ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]
     assert saved["models"]["fish_s2_local"]["parameters"]["compile_enabled"] is False
     assert saved["models"]["fish_s2_local"]["parameters"]["seed"] == 0
-    assert saved["models"]["omnivoice_local"]["parameters"]["instruct"] == ""
+    assert saved["models"]["omnivoice_local"]["parameters"]["target"] == ""
     assert saved["models"]["fish_s2_sglomni"]["orchestration"] == {"concurrent_requests": 3}
     assert "orchestration" not in saved["models"]["breeze_tts_2_audiocpp"]
+
+
+@pytest.mark.parametrize(("model_id", "old_name"), [
+    ("omnivoice_local", "instruct"),
+    ("qwen3tts_local", "instructions"),
+    ("breeze_tts_2_audiocpp", "instruct"),
+    ("omnivoice_audiocpp", "instruct"),
+    ("cosyvoice3_audiocpp", "instruction"),
+])
+def test_instructions_are_only_voice_data_not_model_settings(model_id, old_name):
+    voices = [Voice(instructions={model_id: "Speak softly."}),
+              Voice(instructions={model_id: "Speak brightly.", "other_model": "Unchanged."})]
+    source = ProjectSerializationUtil.to_project_json_dict(Project(voice_references=voices))
+    # Obsolete global values are ordinary undeclared parameters: dropped, not
+    # migrated, even when a voice already has its own instruction for this model.
+    source["model_settings"]["models"][model_id]["parameters"][old_name] = "Discard global value."
+    restored = Project.model_validate(deepcopy(source))
+    assert restored.voice_references == voices
+    with pytest.raises(ValueError, match="Unknown setting"):
+        restored.get_model_setting(model_id, old_name)
+    with pytest.raises(ValueError, match="Unknown setting"):
+        restored.set_model_setting(model_id, old_name, "No global editor")
+    saved = ProjectSerializationUtil.to_project_json_dict(restored)
+    assert old_name not in saved["model_settings"]["models"][model_id]["parameters"]
+    assert saved["voice_references"] == [voice.to_dict() for voice in voices]
+    assert Project.model_validate(deepcopy(saved)).voice_references == voices
+
+
+def test_flat_qwen_instruction_field_has_no_legacy_binding_or_migration():
+    assert "qwen3_instructions" not in REGISTRY.legacy
+    restored = Project.model_validate({"qwen3_instructions": "Discard global value."})
+    assert all(not voice.instructions for voice in restored.voice_references)
+    assert "qwen3_instructions" not in ProjectSerializationUtil.to_project_json_dict(restored)
 
 
 def test_dynamic_models_and_unknown_objects_keep_their_owners():

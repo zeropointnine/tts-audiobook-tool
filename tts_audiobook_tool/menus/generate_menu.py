@@ -396,7 +396,8 @@ def do_generate(state: State) -> None:
     # Pre-flight: verify shared voice samples (and transcripts) before the
     # full-screen generation app takes over the console.
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-    if not VoiceMenuShared.validate_voices(state):
+    voice_indices = ProjectVoiceUtil.get_job_voice_indices(state.project, indices)
+    if not VoiceMenuShared.validate_voices(state, voice_indices=voice_indices):
         return
 
     # Generate in full-screen modal.

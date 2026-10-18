@@ -172,8 +172,8 @@ def test_generate_menu_shows_blocker_but_delegates_launch_validation(monkeypatch
     assert editor_calls == [state]
 
 
-def test_generation_workflow_closed_result_performs_no_generation(monkeypatch) -> None:
-    state = cast(State, SimpleNamespace(project=object()))
+def test_generation_workflow_closed_result_performs_no_generation(monkeypatch, tmp_path) -> None:
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
         "persist_range_without_generated_items",
@@ -194,8 +194,8 @@ def test_generation_workflow_closed_result_performs_no_generation(monkeypatch) -
     assert errors == []
 
 
-def test_generation_workflow_reports_save_failure_without_generation(monkeypatch) -> None:
-    state = cast(State, SimpleNamespace(project=object()))
+def test_generation_workflow_reports_save_failure_without_generation(monkeypatch, tmp_path) -> None:
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
     feedback_calls: list[str] = []
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
@@ -215,8 +215,8 @@ def test_generation_workflow_reports_save_failure_without_generation(monkeypatch
     assert feedback_calls == ["Save failed: disk full"]
 
 
-def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch) -> None:
-    state = cast(State, SimpleNamespace(project=object()))
+def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch, tmp_path) -> None:
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
     feedback_calls: list[str] = []
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
@@ -265,7 +265,7 @@ def test_validation_confirmation_line_reflects_whisper_setting() -> None:
 
 def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(lambda _state: True))
+    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(lambda _state, **_kwargs: True))
     sound_segments = SimpleNamespace(
         num_generated=lambda: 0,
         num_generated_in_current_range=lambda: 0,
@@ -395,7 +395,7 @@ def make_empty_queue_env(
     """
 
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(lambda _state: True))
+    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(lambda _state, **_kwargs: True))
     generated_indices = set(generated_indices or [])
     calls: dict[str, Any] = {
         "confirms": [],
@@ -592,3 +592,39 @@ def test_do_generate_aborts_when_queue_save_fails(monkeypatch) -> None:
     assert state.project.generate_range_string == "2-3, 5"
     assert calls["errors"] == ["Save failed: disk full"]
     assert calls["runs"] == []
+
+
+@pytest.mark.parametrize("selected", [None, {2}])
+@pytest.mark.parametrize("valid", [True, False])
+def test_generation_preflight_scopes_actual_submitted_lines(monkeypatch, selected, valid) -> None:
+    from tts_audiobook_tool.app_types import VoiceSelectMode
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+
+    state, calls = make_empty_queue_env(monkeypatch, num_groups=4, generated_indices={0, 3})
+    state.project.phrase_groups = [make_phrase_group(index) for index in (0, 1, 9, 0)]
+    state.project.voice_select_mode = VoiceSelectMode.USER_DEFINED
+    monkeypatch.setattr(
+        generate_menu_module.ProjectVoiceUtil, "get_voice_values",
+        lambda _project, _tts_type: ["first.flac", "second.flac", "third.flac"],
+    )
+    if selected is not None:
+        monkeypatch.setattr(
+            generate_menu_module.ProjectUtil, "get_selected_indices_not_generated",
+            lambda _project: selected,
+        )
+    scopes: list[list[int]] = []
+
+    def validate(_state, *, voice_indices):
+        assert _state is state
+        scopes.append(list(voice_indices))
+        return valid
+
+    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(validate))
+
+    generate_menu_module.do_generate(state)
+
+    # Fallback queues only remaining lines; stale assignments clamp to the last voice.
+    assert scopes == ([[1, 2]] if selected is None else [[2]])
+    assert len(calls["runs"]) == int(valid)
+    if valid:
+        assert calls["runs"][0]["indices"] == ({1, 2} if selected is None else selected)

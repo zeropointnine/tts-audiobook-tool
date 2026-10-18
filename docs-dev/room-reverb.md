@@ -44,7 +44,7 @@ independent of the selected model's voice-clone support, so existing audio keeps
 line's `voice_index` changes after its audio was generated, the new voice's room is used (as for
 pan). Voice chat uses voice 0's room (`Project.get_voice_chat_room_reverb()`): chat lines have no
 assigned voice, and auto-advance rotates voices per chunk. Each voice's preset is set in its
-Voice clone submenu (select the voice sample, then Effects > Room reverb).
+Voice submenu (select the voice sample, then Effects > Room reverb).
 
 **Several rooms in one run** (`VoiceSpatialProcessor`): one room per preset, made the first time a
 voice with that preset speaks, so voices with the same preset share one room and its tail carries

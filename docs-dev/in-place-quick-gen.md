@@ -38,9 +38,11 @@ to the selected line. That round trip is gone.
   (`[ESC] to cancel`, then the kill-process prompt while a cancel is pending, then
   `[ESC] to close`). No memory or elapsed info. Body: a divider and a live
   `WorkerLog`. No find bar.
-- Pre-flight (`collect_preflight_problems`): readiness blockers, voice problems,
-  and a busy worker are all collected and listed in red inside the modal. Nothing
-  is submitted when any exist.
+- Pre-flight (`collect_preflight_problems`): readiness blockers, job-scoped voice
+  problems, and a busy worker are collected and listed in red inside the modal.
+  Disabled checks voice 1; User-defined checks the regenerated line's effective
+  assignment (voice 1 for a literal preview); Auto-advance checks all voices.
+  Unused voices do not block the job. Nothing is submitted when any problems exist.
 - A cleanly completed preview dismisses the modal immediately. A line
   regeneration never auto-dismisses. Anything without a staged candidate
   (cancelled, failed, aborted, reset) stays open until ESC/ENTER so the output can

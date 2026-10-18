@@ -18,13 +18,6 @@ class VoiceIndexTts2Menu:
     def menu(state: State) -> None:
         project = state.project
 
-        def voice_label(_) -> str:
-            if project.get_model_setting('indextts2_local', 'file_name'):
-                currently = make_currently_string(ProjectVoiceUtil.get_voice_label(project))
-            else:
-                currently = f"{COL_DIM}({COL_ERROR}required{COL_DIM})" # nb
-            return f"Select voice clone sample {currently}"
-
         def make_emo_voice_label(_) -> str:
             if project.get_model_setting('indextts2_local', 'emo_voice'):
                 value = ProjectVoiceUtil.make_voice_sample_display_label(
@@ -60,7 +53,6 @@ class VoiceIndexTts2Menu:
             items = VoiceMenuShared.make_voice_sample_items(
                 state,
                 TtsModelType.require_by_id("indextts2_local"),
-                no_samples_label=voice_label,
                 on_before_set_callback=lambda: hints.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN),
             )
             items.append(

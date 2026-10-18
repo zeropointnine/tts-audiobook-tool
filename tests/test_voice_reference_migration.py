@@ -123,7 +123,7 @@ def test_owner_object_masks_flat_list_and_retains_other_settings():
     project = Project.model_validate({'glm_voice_file_name': 'stale.flac', 'model_settings': {
         'models': {'glm_local': {'parameters': {'sr': 48000}}},
     }})
-    assert project.voice_references == []
+    assert project.voice_references == [Voice()]
     assert project.get_model_setting('glm_local', 'sr') == 48000
 
 
@@ -134,7 +134,7 @@ def test_unavailable_model_and_unrelated_unknown_objects_survive():
     project = Project.model_validate(source)
     # Scoped voice data in unknown whole objects is disregarded as a migration
     # source and dropped, while the unrelated unknown sections survive intact.
-    assert project.voice_references == []
+    assert project.voice_references == [Voice()]
     saved = ProjectSerializationUtil.to_project_json_dict(project)
     assert saved['model_settings']['models']['missing_model'] == {'future': {'anything': 42}}
     assert saved['model_settings']['shared']['future_group'] == {'future': 12}
@@ -151,7 +151,7 @@ def test_malformed_voice_data_fails_before_permissive_cleanup(source):
 
 
 @pytest.mark.parametrize('source, expected', [
-    ({'glm_voice_file_name': 42}, []),
+    ({'glm_voice_file_name': 42}, [Voice()]),
     ({'glm_voice_file_name': 'a.flac', 'glm_voice_transcript': [None]}, [voice('a.flac', '')]),
 ])
 def test_legacy_flat_voice_junk_is_tolerated(source, expected):
@@ -163,8 +163,24 @@ def test_legacy_flat_voice_junk_is_tolerated(source, expected):
 def test_unusable_file_name_drops_entry_instead_of_failing():
     # A name that cannot be a project-local path drops just that entry,
     # matching the old flat-field handling of unusable paths.
-    project = Project.model_validate({'voice_references': [{'file_name': ''}, ref('a.flac')]})
+    project = Project.model_validate({'voice_references': [{'file_name': '/'}, ref('a.flac')]})
     assert project.voice_references == [voice('a.flac')]
+
+
+def test_empty_file_name_is_a_voice_without_a_sample():
+    # An empty name is a valid sample-less voice, kept in place so later
+    # voices keep their indexes.
+    project = Project.model_validate({'voice_references': [{'file_name': '', 'pan': 0.5}, ref('a.flac')]})
+    assert project.voice_references == [Voice(pan=0.5), voice('a.flac')]
+    assert not project.voice_references[0].has_sample
+    saved = ProjectSerializationUtil.to_project_json_dict(project)
+    assert Project.model_validate(saved).voice_references == project.voice_references
+
+
+@pytest.mark.parametrize('source', [{}, {'voice_references': []}])
+def test_project_always_has_at_least_one_voice(source):
+    assert Project.model_validate(source).voice_references == [Voice()]
+    assert Project().voice_references == [Voice()]
 
 
 def test_canonical_paths_and_missing_transcripts():
@@ -246,7 +262,7 @@ def test_retained_retired_group_does_not_back_up_on_every_open(tmp_path, monkeyp
     monkeypatch.setattr(ask, 'ask_input', lambda *_args: pytest.fail('should be silent'))
     result = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(result, Project)
-    assert result.voice_references == []
+    assert result.voice_references == [Voice()]
     assert (tmp_path / 'project.json.pre-v5.bak').read_bytes() == original
     saved = json.loads(path.read_bytes())
     assert saved['version'] == PROJECT_SPEC_VERSION
@@ -254,7 +270,7 @@ def test_retained_retired_group_does_not_back_up_on_every_open(tmp_path, monkeyp
     assert saved['model_settings']['shared']['moss']['voice_references'] == [ref('old.flac', '')]
     result2 = ProjectLoadUtil.load_using_dir_path(str(tmp_path), prompt_on_warnings=False)
     assert isinstance(result2, Project)
-    assert result2.voice_references == []
+    assert result2.voice_references == [Voice()]
     assert sorted(p.name for p in tmp_path.glob('project.json.pre-*')) == ['project.json.pre-v5.bak']
 
 

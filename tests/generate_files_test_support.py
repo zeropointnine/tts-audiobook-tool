@@ -41,6 +41,8 @@ def generate_files_mock_stack(
             "tts_audiobook_tool.generate_util.Tts.get_instance",
             return_value=SimpleNamespace(get_warning_issues=lambda _: []),
         ),
+        # Run warnings (incl. the voice-variation note) read real project voice data
+        patch("tts_audiobook_tool.generate_util.get_run_warnings", return_value=[]),
         patch("tts_audiobook_tool.generate_util.Tts.clear_continuation"),
         patch("tts_audiobook_tool.generate_util.Tts.reset_voice_selection_index"),
         patch(

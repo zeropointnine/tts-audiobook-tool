@@ -36,6 +36,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.server.audio_stream import AudioStream
 from tts_audiobook_tool.server.audio_stream_http import AudioStreamHttp
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.voice_variation_warning import get_run_warnings
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
@@ -65,7 +66,8 @@ def is_missing_required_transcript(project: Project) -> bool:
     Whether the first voice sample lacks a transcript that generation with
     the project's current settings requires (server startup check).
     """
-    if not project.voice_references or not Tts.requires_reference_transcript(project):
+    if (not project.voice_references or not project.voice_references[0].has_sample
+            or not Tts.requires_reference_transcript(project)):
         return False
     from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
     # Validate the transcript generation will actually use: when a crop is
@@ -275,7 +277,8 @@ class Server:
 
             # Get and log TTS model warnings if any, now that the model instance exists
             model = Tts.get_instance_if_exists()
-            warnings = model.get_warning_issues(self._project) if model else []
+            # No line assignment here (voice 1 unless auto-advancing), as in the pre-flight
+            warnings = get_run_warnings(self._project, model, None) if model else []
             for warning in warnings:
                 logger.warning(warning)
 

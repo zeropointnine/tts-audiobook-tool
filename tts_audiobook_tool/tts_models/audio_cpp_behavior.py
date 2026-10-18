@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.audio_cpp_definition import (
-    AudioCppMenuControl,
     AudioCppModelDefinition,
     AudioCppParameter,
     AudioCppTextParameter,
@@ -72,6 +71,14 @@ class AudioCppModelBehavior:
         transcript storage and editing."""
         return self.definition.reference_transcript
 
+    def uses_voice_instructions(self, values: ParameterValues) -> bool:
+        """Whether this request consumes the selected voice's instructions."""
+        return self.definition.voice_instructions
+
+    def expects_voice_instructions(self, values: ParameterValues) -> bool:
+        """Whether empty instructions deserve a (non-blocking) voice-list hint."""
+        return False
+
     def get_ignored_parameters(self, values: ParameterValues) -> frozenset[str]:
         """Catalog parameters the server does not read under these values;
         they are left out of the request (their stored values are kept)."""
@@ -95,23 +102,6 @@ class AudioCppModelBehavior:
     def get_warning_issues(self, project: Project, values: ParameterValues) -> list[str]:
         """Model-specific pre-generation warnings, given valid resolved values."""
         return []
-
-    # Menu-facing questions. These answer *what* to show; the menu layer owns
-    # how it is drawn, so this module never imports menu code. Like the
-    # readiness hooks they run on every redraw, so they must stay cheap.
-
-    def is_control_visible(self, control: AudioCppMenuControl, values: ParameterValues) -> bool:
-        """Whether a settings control appears in its menu, given valid resolved
-        values. Hiding a control does not change its stored value."""
-        return True
-
-    def get_required_label(self, name: str, values: ParameterValues) -> str | None:
-        """Status text (eg "required for Instruct") shown in place of
-        "(optional)" when an optional-looking control such as free-text
-        instructions is currently required and empty; None when it is
-        optional. Should agree with ``get_blocking_issues``, which is what
-        actually stops generation."""
-        return None
 
 
 def get_audio_cpp_behavior(definition: AudioCppModelDefinition) -> AudioCppModelBehavior:

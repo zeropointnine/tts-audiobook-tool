@@ -13,8 +13,10 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.tts_models.auk_duration import estimate_instruct_tts_seconds
 from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
-from tts_audiobook_tool.tts_models.sgl_omni_definition import NumericParameter, SglOmniModelDefinition
+from tts_audiobook_tool.tts_models.sgl_omni_behavior import ParameterValues, get_sgl_omni_behavior
+from tts_audiobook_tool.tts_models.sgl_omni_definition import ChoiceParameter, NumericParameter, SglOmniModelDefinition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 if TYPE_CHECKING:
@@ -48,6 +50,19 @@ class ConfiguredSettings:
             project.set_model_setting(model_id, parameter.name, parameter.validate(value))
         return project.save()
 
+    @staticmethod
+    def get_choice(project: Project, parameter: ChoiceParameter) -> str:
+        stored = project.get_model_setting(parameter.model_id, parameter.name)
+        return parameter.default if stored is None else parameter.validate(stored)
+
+    @staticmethod
+    def set_choice(project: Project, parameter: ChoiceParameter, value: str | None) -> str:
+        if value is None or value == parameter.default:
+            project.set_model_setting(parameter.model_id, parameter.name, None, reset=True)
+        else:
+            project.set_model_setting(parameter.model_id, parameter.name, parameter.validate(value))
+        return project.save()
+
 
 def _cached_server_readiness_issue(model_id: str) -> ReadinessIssue | None:
     snapshot = RemoteTtsDiscovery.get_snapshot()  # Never poll per sentence.
@@ -64,8 +79,17 @@ class ConfiguredModelSupport:
 
     def __init__(self, definition: SglOmniModelDefinition):
         self.definition = definition
+        self.behavior = get_sgl_omni_behavior(definition)
         self.INFO = definition.spec
         self.model_type = TtsModelType.require_by_id(self.INFO.id)
+
+    def get_values(self, project: Project) -> ParameterValues:
+        """Resolved, validated parameter and choice values; raises ValueError on invalid storage."""
+        values: ParameterValues = {name: ConfiguredSettings.get(project, parameter, self.INFO.id)
+                                   for name, parameter in self.definition.parameters.items()}
+        values.update({name: ConfiguredSettings.get_choice(project, parameter)
+                       for name, parameter in self.definition.choices.items()})
+        return values
 
     def massage_for_inference(self, text: str) -> str:
         for before, after in self.INFO.substitutions:
@@ -114,7 +138,7 @@ class ConfiguredModelSupport:
         voice = self.get_primary_voice_value(project)
         if voice:
             value = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, self.INFO)
-            count = len(ProjectVoiceUtil.get_voice_values(project, self.model_type))
+            count = ProjectVoiceUtil.get_voice_sample_count(project, self.model_type)
             if count > 1:
                 value += f", +{count - 1} more"
         else:
@@ -122,11 +146,19 @@ class ConfiguredModelSupport:
         return VoiceDisplayInfo("Voice clone", "current voice clone", value)
 
     def uses_reference_transcript(self, project: Project) -> bool:
-        """Whether generation requires the voice sample transcript. Mirrors the
-        storage binding, so "optional" policies still count as required here
-        (the pre-flight fills them in)."""
+        """Whether generation with this project's settings requires the voice
+        sample transcript. Without a behavior override this mirrors the storage
+        binding, so "optional" policies still count as required here (the
+        pre-flight fills them in). Invalid stored settings fall back to the
+        binding; readiness blocks them anyway."""
         from tts_audiobook_tool.project_support.model_settings import REGISTRY
-        return REGISTRY.transcript_binding(self.INFO.id) is not None
+        if REGISTRY.transcript_binding(self.INFO.id) is None:
+            return False
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            return True
+        return self.behavior.uses_reference_transcript(values)
 
     def get_blocking_issues(self, project: Project, instance: object = None) -> list[ReadinessIssue]:
         issues = []
@@ -141,6 +173,11 @@ class ConfiguredModelSupport:
                 ConfiguredSettings.get(project, parameter, self.INFO.id)
             except ValueError as exc:
                 issues.append(ReadinessIssue(parameter.name, str(exc)))
+        for choice in self.definition.choices.values():
+            try:
+                ConfiguredSettings.get_choice(project, choice)
+            except ValueError as exc:
+                issues.append(ReadinessIssue(choice.name, str(exc)))
         server_issue = _cached_server_readiness_issue(self.INFO.id)
         if server_issue:
             issues.append(server_issue)
@@ -152,8 +189,7 @@ class ConfiguredModelSupport:
             from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
             language = MossBaseModel.get_language_name(project.language_code)
             return [f"Using MOSS-TTS language value: {language or 'None'}"]
-        if not self.INFO.requires_voice and not self.get_primary_voice_value(project):
-            warnings.append("Note: Generated voices may vary because no voice reference has been configured.")
+        # The "voices may vary" note: voice_variation_warning.get_run_warnings()
         warning = self.get_max_words_exceed_warning(project)
         if warning:
             warnings.append(warning)
@@ -170,6 +206,29 @@ class ConfiguredModelSupport:
 
     def can_hallucinate_music(self, project: Project, instance: object = None) -> bool:
         return self.definition.music_and_trim
+
+    def can_instructions(self, project: Project, instance: object = None) -> bool:
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            return self.definition.voice_instructions
+        return self.behavior.uses_voice_instructions(values)
+
+    def validate_instructions(self, value: str) -> str:
+        return ""
+
+    def expects_voice_instructions(self, project: Project) -> bool:
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            return False
+        return self.behavior.expects_voice_instructions(values)
+
+    def uses_instructions_with_sample(self, project: Project) -> bool:
+        return self.behavior.uses_instructions_with_sample()
+
+    def can_voice_clone(self, project: Project, instance: object = None) -> bool:
+        return self.INFO.can_voice_clone
 
 
 class SglOmniBackendAdapter:
@@ -220,6 +279,14 @@ class SglOmniBackendAdapter:
             return "Streaming generation supports exactly one prompt"
         policy = self.definition.prompt_policy
         try:
+            values = self.support.get_values(project)
+            behavior = self.support.behavior
+            # Decided by the behavior (eg CosyVoice3's Mode), so a transcript and
+            # instructions the server would refuse together are never combined.
+            uses_transcript = behavior.uses_reference_transcript(values)
+            selected_voice = ProjectVoiceUtil.current_voice(project, self.support.model_type, voice_selection_index)
+            instructions = (selected_voice.instructions.get(self.INFO.id, "").strip()
+                            if selected_voice is not None and behavior.uses_voice_instructions(values) else "")
             mapped: dict[str, int | float] = {}
             for parameter in self.definition.parameters.values():
                 value = ConfiguredSettings.get(project, parameter, self.INFO.id)
@@ -233,10 +300,14 @@ class SglOmniBackendAdapter:
                 project, self.support.model_type, voice_selection_index)
             if self.INFO.requires_voice and not voice:
                 return "A voice clone sample is required"
+            # Eg AuK: the server ignores instructions on a clone, so they are sent
+            # only for a sample-less voice.
+            if voice and not behavior.uses_instructions_with_sample():
+                instructions = ""
             references = None
             path = ""
             if voice:
-                if self.definition.transcript_policy == "required_when_voice_present" and not (
+                if uses_transcript and self.definition.transcript_policy == "required_when_voice_present" and not (
                         transcript.strip() if policy == "auk_seconds" else transcript):
                     return ("Voice clone transcript required for every AuK voice sample" if policy == "auk_seconds"
                             else "Voice clone transcript required when a voice clone sample is supplied")
@@ -244,8 +315,7 @@ class SglOmniBackendAdapter:
                 if not os.path.isfile(path):
                     return f"Voice clone sample file not found: {voice}"
                 reference = {"audio_path": SoundUtil.make_audio_data_uri(path)}
-                if self.definition.transcript_policy != "omitted" and (
-                        transcript or policy == "auk_seconds"):
+                if uses_transcript and (transcript or policy == "auk_seconds"):
                     reference["text"] = transcript
                 references = [reference]
             seed = None
@@ -257,7 +327,9 @@ class SglOmniBackendAdapter:
             speed: int | float = 1.0
             if policy == "auk_seconds":
                 speed = ConfiguredSettings.get(project, self.definition.parameters["speed"], self.INFO.id)
-                if speed != self.definition.parameters["speed"].default:
+                # With a sample at the default speed the server derives the
+                # duration from the sample and its transcript itself.
+                if voice and speed != self.definition.parameters["speed"].default:
                     reference_sound = SoundFileUtil.load(path)
                     if isinstance(reference_sound, str):
                         return reference_sound
@@ -271,10 +343,17 @@ class SglOmniBackendAdapter:
                 payload.update(self.definition.request_stream_defaults)
             if references:
                 payload["references"] = references
+            if instructions:
+                payload["instructions"] = instructions
             if seed is not None:
                 payload["seed"] = seed
             if policy == "zonos_tokens":
                 payload["max_new_tokens"] = min(200 + 40 * len(prompt.split()), 4096)
+            elif policy == "auk_seconds" and not references:
+                # Without reference audio the server requires an explicit
+                # duration: upstream AuK's ordinary-speaking estimate.
+                payload["stage_params"] = {"auk_engine": {"gen_seconds": (
+                    estimate_instruct_tts_seconds(prompt, project.language_code) / speed)}}
             elif policy == "auk_seconds" and reference_seconds is not None:
                 payload["stage_params"] = {"auk_engine": {"gen_seconds": (
                     reference_seconds * len(prompt.encode("utf-8")) /

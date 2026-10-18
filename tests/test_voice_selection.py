@@ -161,7 +161,9 @@ def test_custom_mode_uses_explicit_phrase_voice_index() -> None:
     assert (index, voice_tag, advance_count) == (1, "voice-1", 0)
 
 
-def test_custom_mode_without_configured_voice_retains_rotation() -> None:
+def test_custom_mode_without_voice_samples_uses_the_default_voice_slot() -> None:
+    # A project always has at least one voice; with no samples configured that
+    # is one sample-less voice, so the (stale) phrase index clamps to it.
     index, voice_tag, advance_count = run_generation(
         VoiceSelectMode.USER_DEFINED,
         [make_phrase_group(1)],
@@ -169,7 +171,7 @@ def test_custom_mode_without_configured_voice_retains_rotation() -> None:
         [],
     )
 
-    assert (index, voice_tag, advance_count) == (7, "voice-7", 1)
+    assert (index, voice_tag, advance_count) == (0, "voice-0", 0)
 
 
 def test_custom_mode_multi_item_batch_with_explicit_voice_uses_it() -> None:

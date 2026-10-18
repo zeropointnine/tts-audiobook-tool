@@ -171,6 +171,9 @@ def _collect_sources(d: dict[str, Any]) -> list[VoiceReferenceSource]:
                     ids = tuple(id for id in ids if 'voice_references' not in models.get(id, {}))
                     if not ids:
                         refs = []
+            # Pre-v4 scoped lists never held sample-less voices (such entries
+            # were dropped on load); keep that, so they are not migrated as voices.
+            refs = [ref for ref in refs if ref.has_sample]
             owner = (section, key)
             # Keep empty sources here: explicit empty lists mask flat legacy data.
             sources[owner] = VoiceReferenceSource(owner, ids, refs)

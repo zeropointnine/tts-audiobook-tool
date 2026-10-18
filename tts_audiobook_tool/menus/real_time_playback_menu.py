@@ -3,6 +3,7 @@ from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool import readiness
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual.real_time_playback_app import (
     run_real_time_playback_modal,
@@ -152,7 +153,14 @@ def do_start(state: State) -> None:
     # Pre-flight: verify shared voice samples (and transcripts) before the
     # full-screen playback app takes over the console.
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-    if not VoiceMenuShared.validate_voices(state):
+    # Match playback's one-based inclusive range and defensive start clamp.
+    phrase_indices = (
+        range(max(line_range[0] - 1, 0), line_range[1])
+        if line_range is not None
+        else range(len(text_groups))
+    )
+    voice_indices = ProjectVoiceUtil.get_job_voice_indices(state.project, phrase_indices)
+    if not VoiceMenuShared.validate_voices(state, voice_indices=voice_indices):
         return
 
     run_real_time_playback_modal(

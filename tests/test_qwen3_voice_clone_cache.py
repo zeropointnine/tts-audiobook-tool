@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 import torch
@@ -6,6 +8,8 @@ pytest.importorskip("qwen_tts")
 
 from qwen_tts.inference.qwen3_tts_model import VoiceClonePromptItem
 
+from tts_audiobook_tool.app_types.voice import Voice
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 
@@ -196,3 +200,142 @@ def test_qwen_rebuilds_changed_voice_and_clears_cache(tmp_path):
     model.kill()
     assert model._voice_clone_cache == {}
     assert model._model is None
+
+
+@pytest.mark.parametrize("model_type", ["", "unknown", "base", "custom_voice", "voice_design"])
+def test_qwen_instruction_capability_uses_saved_checkpoint_type(model_type):
+    project = Project(tts_model_type="qwen3tts_local")
+    project.set_model_setting("qwen3tts_local", "model_type", model_type)
+
+    assert Qwen3Model.can_instructions(project) is (model_type in ("custom_voice", "voice_design"))
+
+
+@pytest.mark.parametrize("saved_type", ["base", "custom_voice", "voice_design"])
+@pytest.mark.parametrize("runtime_type", ["unknown", "base", "custom_voice", "voice_design"])
+def test_qwen_instruction_capability_prefers_loaded_checkpoint(saved_type, runtime_type):
+    project = Project(tts_model_type="qwen3tts_local")
+    project.set_model_setting("qwen3tts_local", "model_type", saved_type)
+    model = make_model()
+    model._model.model = SimpleNamespace(tts_model_type=runtime_type)
+
+    assert Qwen3Model.can_instructions(project, model) is (runtime_type in ("custom_voice", "voice_design"))
+
+
+@pytest.mark.parametrize("model_type", ["", "unknown", "base", "custom_voice", "voice_design"])
+def test_qwen_voice_clone_capability_uses_saved_checkpoint_type(model_type):
+    project = Project(tts_model_type="qwen3tts_local")
+    project.set_model_setting("qwen3tts_local", "model_type", model_type)
+
+    assert Qwen3Model.can_voice_clone(project) is (model_type not in ("custom_voice", "voice_design"))
+
+
+@pytest.mark.parametrize("saved_type", ["base", "custom_voice", "voice_design"])
+@pytest.mark.parametrize("runtime_type", ["unknown", "base", "custom_voice", "voice_design"])
+def test_qwen_voice_clone_capability_prefers_loaded_checkpoint(saved_type, runtime_type):
+    project = Project(tts_model_type="qwen3tts_local")
+    project.set_model_setting("qwen3tts_local", "model_type", saved_type)
+    model = make_model()
+    model._model.model = SimpleNamespace(tts_model_type=runtime_type)
+
+    assert Qwen3Model.can_voice_clone(project, model) is (runtime_type not in ("custom_voice", "voice_design"))
+
+
+@pytest.mark.parametrize("model_type", ["custom_voice", "voice_design"])
+@pytest.mark.parametrize("missing_instructions", [{}, {"qwen3tts_sglomni": "Not local"}, {"qwen3tts_local": ""}])
+def test_qwen_project_generation_routes_selected_voice_instructions_to_library(
+    monkeypatch, model_type, missing_instructions
+):
+    project = Project(tts_model_type="qwen3tts_local", voice_references=[
+        Voice(instructions={"qwen3tts_local": "Speak warmly"}),
+        Voice(instructions={"qwen3tts_local": "Speak sternly"}),
+        Voice(instructions=missing_instructions),
+    ])
+    project.set_model_setting("qwen3tts_local", "model_type", model_type)
+    project.set_model_setting("qwen3tts_local", "speaker_id", "Ryan")
+    project.set_model_setting("qwen3tts_local", "seed", 7)
+    model = make_model()
+    wrapper = model._model
+    wrapper.model = SimpleNamespace(tts_model_type=model_type)
+    wrapper.get_supported_speakers = lambda: ["Vivian", "Ryan"]
+    calls = []
+
+    def generate(**kwargs):
+        calls.append(kwargs)
+        return [np.zeros(8, dtype=np.float32) for _ in kwargs["text"]], 24_000
+
+    # Exercise the real project adapter and instruction batching down to the
+    # fake library entry point, rather than replacing model generation methods.
+    setattr(wrapper, f"generate_{model_type}", generate)
+    original_get = Project.get_model_setting
+
+    def get_setting(self, model_id, name):
+        assert name != "instructions", "There must be no global instruction fallback"
+        return original_get(self, model_id, name)
+
+    monkeypatch.setattr(Project, "get_model_setting", get_setting)
+    prompts = ["First sentence.", "Second sentence."]
+    for index in (0, 1, 2, 3):
+        result = model.generate_using_project(project, prompts, voice_selection_index=index)
+        assert not isinstance(result, str)
+        assert len(result) == len(prompts)
+
+    empty = None if model_type == "custom_voice" else ["", ""]
+    assert [call["instruct"] for call in calls] == [
+        ["Speak warmly", "Speak warmly"],
+        ["Speak sternly", "Speak sternly"],
+        empty,
+        ["Speak warmly", "Speak warmly"],
+    ]
+    assert all(call["text"] == prompts for call in calls)
+    assert all(call["language"] == ["english", "english"] for call in calls)
+    if model_type == "custom_voice":
+        assert all(call["speaker"] == ["Ryan", "Ryan"] for call in calls)
+
+
+def test_qwen_base_project_generation_still_routes_selected_clone_not_instructions(tmp_path, monkeypatch):
+    voices = [
+        Voice("a.flac", "Words A", instructions={"qwen3tts_local": "Unused A"}),
+        Voice("b.flac", "Words B", instructions={"qwen3tts_local": "Unused B"}),
+    ]
+    project = Project(dir_path=str(tmp_path), tts_model_type="qwen3tts_local", voice_references=voices)
+    project.set_model_setting("qwen3tts_local", "model_type", "base")
+    project.set_model_setting("qwen3tts_local", "seed", 7)
+    for voice in voices:
+        (tmp_path / voice.file_name).write_bytes(b"voice")
+    model = make_model()
+    model._model.model = SimpleNamespace(tts_model_type="base")
+    original_get = Project.get_model_setting
+
+    def get_setting(self, model_id, name):
+        assert name != "instructions", "Base must not read global instructions"
+        return original_get(self, model_id, name)
+
+    monkeypatch.setattr(Project, "get_model_setting", get_setting)
+    for index in (0, 1, 0):
+        result = model.generate_using_project(project, ["A sentence."], voice_selection_index=index)
+        assert not isinstance(result, str)
+    assert model._model.create_calls == [
+        (str(tmp_path / "a.flac"), "Words A"),
+        (str(tmp_path / "b.flac"), "Words B"),
+    ]
+
+
+@pytest.mark.parametrize("instructions", ["", "Speak warmly"])
+def test_qwen_voice_design_warnings_do_not_read_model_global_instructions(monkeypatch, instructions):
+    project = Project(tts_model_type="qwen3tts_local", voice_references=[
+        Voice(instructions={"qwen3tts_local": instructions}),
+    ])
+    project.set_model_setting("qwen3tts_local", "model_type", "voice_design")
+    model = make_model()
+    original_get = Project.get_model_setting
+
+    def get_setting(self, model_id, name):
+        assert name != "instructions", "Warnings must not read global instructions"
+        return original_get(self, model_id, name)
+
+    monkeypatch.setattr(Project, "get_model_setting", get_setting)
+    assert model.get_warning_issues(project) == []
+    project.language_code = "xx"
+    warnings = model.get_warning_issues(project)
+    assert len(warnings) == 1
+    assert "doesn't map to a known Qwen3-TTS language" in warnings[0]

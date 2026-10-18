@@ -7,7 +7,7 @@ import pytest
 from dataclasses import replace
 
 from tts_audiobook_tool.app_types import Book, BookSection, RoomReverb, VoiceSelectMode
-from tts_audiobook_tool.app_types.voice import stereo_position_label
+from tts_audiobook_tool.app_types.voice import Voice, VoiceCrop, stereo_position_label
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.voice import voice_menu_shared as menu
@@ -132,16 +132,21 @@ def test_move_save_failure_restores_order(monkeypatch):
     assert not feedback
 
 
-@pytest.mark.parametrize("action", ["move", "edit"])
-def test_empty_sample_actions_do_not_prompt(monkeypatch, action):
+@pytest.mark.parametrize("action", ["move", "trim", "edit"])
+def test_sample_less_voice_actions_do_not_prompt(monkeypatch, action):
+    # A project with no samples still has one (default) voice.
     state = make_state(0)
+    assert state.project.voice_references == [Voice()]
     errors, prompts, feedback = capture(monkeypatch, [])
     if action == "move":
         assert menu.VoiceMenuShared.move_voice_sample_from_menu(state, 0) == 0
         assert not feedback
+    elif action == "trim":
+        menu.VoiceMenuShared.crop_voice_sample_from_menu(state, 0)
+        assert feedback == ["No voice sample"]
     else:
         menu.VoiceMenuShared.edit_voice_sample_transcript(state, 0)
-        assert feedback == ["No such voice sample"]
+        assert feedback == ["No voice sample"]
     assert not errors and not prompts
 
 
@@ -152,7 +157,7 @@ def test_transcription_edits_selected_pair(monkeypatch, text, expected):
     saved = Mock(return_value="")
     monkeypatch.setattr(Project, "save", saved)
     items = open_submenu(monkeypatch, state, 1)["items"](state)
-    edit = find_item(state, items, f'{menu.LABEL_EDIT_VOICE_TRANSCRIPTION} {menu.COL_DIM}("text 1")')
+    edit = find_item(state, items, menu.make_menu_label(menu.LABEL_EDIT_VOICE_TRANSCRIPTION, '"text 1"'))
     edit.handler(state, edit)
     assert [v.transcript for v in state.project.voice_references] == ["text 0", expected, "text 2"]
     assert state.project.voice_references[1].file_name == "1.flac"
@@ -204,11 +209,11 @@ def test_remove_requires_confirmation(monkeypatch, confirmed):
     assert menu.VoiceMenuShared.remove_voice_sample_from_menu(
         state, state.project.get_tts_model_type(), 1,
     ) is confirmed
-    assert prompts == ["Remove voice sample 2: 1.flac?"]
+    assert prompts == ["Remove Voice 2 (1.flac)?"]
     assert not errors
     if confirmed:
         assert state.project.voice_references == [original[0], original[2]]
-        assert feedback == ["Removed 1.flac"]
+        assert feedback == ["Removed Voice 2 (1.flac)"]
         saved.assert_called_once()
     else:
         assert state.project.voice_references == original
@@ -222,40 +227,163 @@ def test_remove_requires_confirmation(monkeypatch, confirmed):
 def test_submenu_items_for_one_and_multiple_samples(monkeypatch, count):
     state = make_state(count)
     captured = open_submenu(monkeypatch, state, 0)
-    assert get_string_from(state, captured["heading"]) == f"Options for 0.flac {menu.COL_DIM}(voice index 1)"
-    assert get_string_from(state, captured["breadcrumb"]) == "Voice sample 1"
+    assert get_string_from(state, captured["heading"]) == "Voice 1"
+    assert get_string_from(state, captured["breadcrumb"]) == "Voice 1"
     items = captured["items"](state)
     expected = [
-        f"{menu.LABEL_CROP_VOICE_SAMPLE} {menu.COL_DIM}(4.0s)",
-        f'{menu.LABEL_EDIT_VOICE_TRANSCRIPTION} {menu.COL_DIM}("text 0")',
+        menu.make_menu_label(menu.LABEL_SET_VOICE_SAMPLE, "0.flac"),
+        menu.LABEL_CLEAR_VOICE_SAMPLE,
+        menu.make_menu_label(menu.LABEL_CROP_VOICE_SAMPLE, "4.0s"),
+        menu.make_menu_label(menu.LABEL_EDIT_VOICE_TRANSCRIPTION, '"text 0"'),
+        menu.make_menu_label("Voice design/OmniVoice", "none"),
     ]
     if count > 1:
-        expected.append(menu.LABEL_MOVE_VOICE_SAMPLE)
+        expected.extend([menu.LABEL_MOVE_VOICE_SAMPLE, menu.LABEL_REMOVE_VOICE_SAMPLE])
+    else:
+        expected.append(menu.LABEL_RESET_VOICE_SAMPLE)
     expected.extend([
-        menu.LABEL_REMOVE_VOICE_SAMPLE,
         menu.make_menu_label(menu.LABEL_STEREO_POSITION, "Center"),
         menu.make_menu_label(menu.LABEL_ROOM_REVERB, RoomReverb.OFF.label),
     ])
     assert [get_string_from(state, item.label) for item in items] == expected
-    assert items[1].sublabel is None
+    assert items[2].sublabel is None
     # The Effects group starts at Stereo position
     assert items[-2].superlabel == menu.LABEL_EFFECTS_SUPERLABEL
     assert not items[-1].superlabel
     assert items[-2].sublabel is None
 
 
+@pytest.mark.parametrize("trimmed, duration, value", [
+    (False, 13.1, "13.1s"),
+    (True, 13.1, "trimmed, 13.1s"),
+    (True, None, "trimmed"),
+    (False, None, None),
+])
+def test_trim_item_uses_currently_treatment(monkeypatch, trimmed, duration, value):
+    state = make_state(1)
+    if trimmed:
+        state.project.voice_references[0] = replace(
+            state.project.voice_references[0], crop=VoiceCrop("trim.flac", 0, 13.1),
+        )
+    captured = open_submenu(monkeypatch, state, 0)
+    monkeypatch.setattr(menu.AudioMetaUtil, "get_audio_duration", lambda _: duration)
+    items = captured["items"](state)
+    expected = (
+        menu.make_menu_label(menu.LABEL_CROP_VOICE_SAMPLE, value)
+        if value else menu.LABEL_CROP_VOICE_SAMPLE
+    )
+    assert get_string_from(state, items[2].label) == expected
+
+
 @pytest.mark.parametrize("count, confirmed, cleared", [(1, True, True), (2, True, False), (1, False, False)])
-def test_submenu_remove_exits_and_clears_when_list_empties(monkeypatch, count, confirmed, cleared):
+def test_submenu_remove_exits_and_clears_when_no_sample_remains(monkeypatch, count, confirmed, cleared):
     state = make_state(count)
     monkeypatch.setattr(Project, "save", Mock(return_value=""))
     capture(monkeypatch, [])
     monkeypatch.setattr(menu.ask, "ask_confirm", lambda *_: confirmed)
     events = []
     captured = open_submenu(monkeypatch, state, 0, lambda: events.append("clear"))
-    remove = find_item(state, captured["items"](state), menu.LABEL_REMOVE_VOICE_SAMPLE)
+    label = menu.LABEL_REMOVE_VOICE_SAMPLE if count > 1 else menu.LABEL_RESET_VOICE_SAMPLE
+    remove = find_item(state, captured["items"](state), label)
     assert remove.handler(state, remove) is confirmed  # True exits the submenu
-    assert len(state.project.voice_references) == count - confirmed
+    if count == 1 and confirmed:
+        # Removing the only voice leaves a fresh default voice.
+        assert state.project.voice_references == [Voice()]
+    else:
+        assert len(state.project.voice_references) == count - confirmed
     assert events == (["clear"] if cleared else [])
+
+
+def test_resetting_sole_default_voice_needs_no_confirmation(monkeypatch):
+    state = make_state(0)
+    saved = Mock(return_value="")
+    monkeypatch.setattr(Project, "save", saved)
+    _, prompts, feedback = capture(monkeypatch, [])
+    monkeypatch.setattr(menu.ask, "ask_confirm", lambda *_: pytest.fail("must not confirm"))
+    assert menu.VoiceMenuShared.remove_voice_sample_from_menu(state, state.project.get_tts_model_type(), 0)
+    assert state.project.voice_references == [Voice()]
+    assert not prompts
+    assert feedback == ["Reset Voice 1 to default"]
+
+
+def test_resetting_sole_voice_with_values_confirms(monkeypatch):
+    state = make_state(0)
+    state.project.voice_references = [Voice(pan=0.5)]
+    monkeypatch.setattr(Project, "save", Mock(return_value=""))
+    _, prompts, _ = capture(monkeypatch, [])
+    monkeypatch.setattr(menu.ask, "ask_confirm", lambda *_: True)
+    assert menu.VoiceMenuShared.remove_voice_sample_from_menu(state, state.project.get_tts_model_type(), 0)
+    assert prompts == ["Reset Voice 1 to default?"]
+    assert state.project.voice_references == [Voice()]
+
+
+def test_submenu_for_sample_less_voice_hides_sample_items(monkeypatch):
+    state = make_state(0)
+    items = open_submenu(monkeypatch, state, 0)["items"](state)
+    labels = [get_string_from(state, item.label) for item in items]
+    # OmniVoice does not require a voice clone sample
+    assert labels[0] == menu.make_menu_label(menu.LABEL_SET_VOICE_SAMPLE, "none")
+    assert labels[1:] == [
+        menu.make_menu_label("Voice design/OmniVoice", "none"),
+        menu.LABEL_RESET_VOICE_SAMPLE,
+        menu.make_menu_label(menu.LABEL_STEREO_POSITION, "Center"),
+        menu.make_menu_label(menu.LABEL_ROOM_REVERB, RoomReverb.OFF.label),
+    ]
+
+
+@pytest.mark.parametrize("model_id", ["breeze_tts_2_audiocpp", "glm_local"])
+@pytest.mark.parametrize("count", [1, 2])
+def test_clear_sample_keeps_voice_and_submenu_open(monkeypatch, model_id, count):
+    state = make_state(count)
+    state.project.tts_model_type = model_id
+    state.project.voice_references[0] = replace(
+        state.project.voice_references[0], pan=-0.3, room_reverb=RoomReverb.SMALL_DRR17,
+        preset="alba", instructions={model_id: "warm"},
+    )
+    original = list(state.project.voice_references)
+    saved = Mock(return_value="")
+    monkeypatch.setattr(Project, "save", saved)
+    errors, prompts, feedback = capture(monkeypatch, [])
+    monkeypatch.setattr(menu.ask, "ask_confirm", lambda *_: pytest.fail("must not confirm"))
+    stopped = Mock()
+    monkeypatch.setattr(menu.PlaySoundUtil, "stop_sound_async", stopped)
+    cleared = Mock()
+    captured = open_submenu(monkeypatch, state, 0, cleared)
+    clear = find_item(state, captured["items"](state), menu.LABEL_CLEAR_VOICE_SAMPLE)
+    assert clear.handler(state, clear) is None  # Does not exit the submenu
+    assert state.project.voice_references == [
+        replace(original[0], file_name="", transcript="", crop=None), *original[1:],
+    ]
+    assert get_string_from(state, captured["heading"]) == "Voice 1"
+    labels = [get_string_from(state, item.label) for item in captured["items"](state)]
+    assert "currently:" in labels[0] and "none" in labels[0]
+    assert not any(label.startswith(menu.LABEL_CROP_VOICE_SAMPLE) for label in labels)
+    assert not any(label.startswith(menu.LABEL_EDIT_VOICE_TRANSCRIPTION) for label in labels)
+    assert menu.LABEL_CLEAR_VOICE_SAMPLE not in labels
+    assert menu.VoiceMenuShared.get_voice_sample_required_label(state.project, 0) == (
+        "required" if model_id == "glm_local" else ""
+    )
+    assert not errors and not prompts
+    assert feedback == ["Voice sample cleared"]
+    assert cleared.call_count == (count == 1)
+    saved.assert_called_once()
+    stopped.assert_called_once()
+
+
+def test_clear_sample_save_failure_preserves_voice_and_does_not_call_hook(monkeypatch):
+    state = make_state(1)
+    original = list(state.project.voice_references)
+    monkeypatch.setattr(Project, "save", lambda _: "disk full")
+    errors, _, feedback = capture(monkeypatch, [])
+    cleared = Mock()
+    captured = open_submenu(monkeypatch, state, 0, cleared)
+    clear = find_item(state, captured["items"](state), menu.LABEL_CLEAR_VOICE_SAMPLE)
+    assert clear.handler(state, clear) is None
+    assert state.project.voice_references == original
+    assert errors == ["disk full"]
+    assert not feedback
+    cleared.assert_not_called()
+    assert find_item(state, captured["items"](state), menu.LABEL_CLEAR_VOICE_SAMPLE)
 
 
 def test_submenu_follows_moved_sample(monkeypatch):
@@ -266,23 +394,42 @@ def test_submenu_follows_moved_sample(monkeypatch):
     move = find_item(state, captured["items"](state), menu.LABEL_MOVE_VOICE_SAMPLE)
     move.handler(state, move)
     assert [v.file_name for v in state.project.voice_references] == ["1.flac", "2.flac", "0.flac"]
-    assert get_string_from(state, captured["heading"]) == f"Options for 0.flac {menu.COL_DIM}(voice index 3)"
-    assert get_string_from(state, captured["breadcrumb"]) == "Voice sample 3"
-    edit_label = get_string_from(state, captured["items"](state)[1].label)
-    assert edit_label == f'{menu.LABEL_EDIT_VOICE_TRANSCRIPTION} {menu.COL_DIM}("text 0")'
+    assert get_string_from(state, captured["heading"]) == "Voice 3"
+    assert get_string_from(state, captured["breadcrumb"]) == "Voice 3"
+    edit_label = get_string_from(state, captured["items"](state)[3].label)
+    assert edit_label == menu.make_menu_label(menu.LABEL_EDIT_VOICE_TRANSCRIPTION, '"text 0"')
+    clear = find_item(state, captured["items"](state), menu.LABEL_CLEAR_VOICE_SAMPLE)
+    assert clear.handler(state, clear) is None
+    assert [v.file_name for v in state.project.voice_references] == ["1.flac", "2.flac", ""]
+    assert [v.transcript for v in state.project.voice_references] == ["text 1", "text 2", ""]
 
 
 @pytest.mark.parametrize("transcript, expected", [
-    ("Two  words\n here", '("Two words here")'),
-    ("x" * 40, f'("{"x" * 40}")'),
-    ("x" * 41, f'("{"x" * 37}...")'),
-    (" \n ", "(none)"),
+    ("Two  words\n here", '"Two words here"'),
+    ("x" * 40, f'"{"x" * 40}"'),
+    ("x" * 41, f'"{"x" * 37}..."'),
 ])
 def test_transcript_preview_is_flattened_and_ellipsized(transcript, expected):
     project = Project(tts_model_type="omnivoice_local", voice_references=[
         {"file_name": "a.flac", "transcript": transcript},
     ])
     assert menu.VoiceMenuShared.make_transcript_preview(project, project.get_tts_model_type(), 0) == expected
+
+
+@pytest.mark.parametrize("uses_transcript", [True, False])
+def test_transcript_preview_marks_missing_transcript(monkeypatch, uses_transcript):
+    monkeypatch.setattr(menu.Tts, "requires_reference_transcript", lambda _: uses_transcript)
+    project = Project(tts_model_type="omnivoice_local", voice_references=[
+        {"file_name": "a.flac", "transcript": " \n "},
+    ])
+    color = menu.COL_ERROR if uses_transcript else menu.COL_DIM
+    assert menu.VoiceMenuShared.make_transcript_preview(
+        project, project.get_tts_model_type(), 0,
+    ) == "missing"
+    state = cast(State, SimpleNamespace(project=project))
+    items = open_submenu(monkeypatch, state, 0)["items"](state)
+    expected = menu.make_menu_label(menu.LABEL_EDIT_VOICE_TRANSCRIPTION, "missing", color_code=color)
+    assert find_item(state, items, expected)
 
 
 @pytest.mark.parametrize("save_error", ["", "disk full"])

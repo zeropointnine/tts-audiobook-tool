@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 import os
 from pathlib import Path
@@ -11,7 +12,7 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_DEFAULT, PROJECT_BATCH_SIZE_MAX
 from tts_audiobook_tool.constants import PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.app_support import app_text, path_norm
-from tts_audiobook_tool.app_types.voice import VOICE_CROP_SUBDIR, Voice, VoiceCrop, normalize_crop_file_name
+from tts_audiobook_tool.app_types.voice import VOICE_CROP_SUBDIR, Voice, VoiceCrop, ensure_voice_slot, normalize_crop_file_name
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
@@ -95,10 +96,43 @@ class ProjectVoiceUtil:
 
     @staticmethod
     def get_voice_values(project: Project, tts_model_type: TtsModelType) -> list[str]:
-        """Return the shared clone list for a model that supports voice samples."""
+        """Return the shared clone list for a model that supports voice samples.
+
+        One entry per voice slot, so a voice without a sample is "" here.
+        """
         if _settings_registry().voice_binding(tts_model_type.id) is None:
             return []
         return [voice.file_name for voice in project.voice_references]
+
+    @staticmethod
+    def get_effective_voice_index(requested_index: int, num_voices: int) -> int:
+        """Clamp a per-line assignment, including unassigned (-1), as inference does."""
+        return min(max(requested_index, 0), num_voices - 1)
+
+    @staticmethod
+    def get_job_voice_indices(project: Project, phrase_indices: Iterable[int] | None = None) -> list[int]:
+        """Voice slots to pre-flight, without changing the list or advancing rotation.
+
+        Disabled uses slot 0; user-defined uses the job's clamped line
+        assignments; auto-advance checks every slot, including sample-less
+        ones. None denotes a literal prompt/chat with no line assignment
+        (slot 0 unless auto-advancing); an explicitly empty job uses no voices.
+        """
+        from tts_audiobook_tool.app_types import VoiceSelectMode
+
+        num_voices = len(ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type()))
+        indices = None if phrase_indices is None else list(phrase_indices)
+        if not num_voices or indices == []:
+            return []
+        if project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE:
+            return list(range(num_voices))
+        if project.voice_select_mode == VoiceSelectMode.USER_DEFINED and indices is not None:
+            phrase_groups = project.phrase_groups
+            return sorted({
+                ProjectVoiceUtil.get_effective_voice_index(phrase_groups[index].voice_index, num_voices)
+                for index in indices
+            })
+        return [0]
 
     @staticmethod
     def get_voice_transcript_values(project: Project, tts_model_type: TtsModelType) -> list[str]:
@@ -106,6 +140,16 @@ class ProjectVoiceUtil:
         if _settings_registry().voice_binding(tts_model_type.id) is None:
             return []
         return [voice.transcript for voice in project.voice_references]
+
+    @staticmethod
+    def has_any_voice_sample(project: Project) -> bool:
+        """Whether any voice has a sample. When none does, generation behaves as with no voices."""
+        return any(voice.has_sample for voice in project.voice_references)
+
+    @staticmethod
+    def get_voice_sample_count(project: Project, tts_model_type: TtsModelType) -> int:
+        """Number of voices that have a sample, for a model that supports voice samples."""
+        return sum(1 for value in ProjectVoiceUtil.get_voice_values(project, tts_model_type) if value)
 
     @staticmethod
     def get_primary_voice_value(project: Project, tts_model_type: TtsModelType) -> str:
@@ -157,6 +201,20 @@ class ProjectVoiceUtil:
         return ProjectVoiceUtil.resolve_voice_file_path(project, voice.file_name)
 
     @staticmethod
+    def current_voice(
+            project: Project,
+            tts_model_type: TtsModelType,
+            voice_selection_index: int,
+    ) -> Voice | None:
+        """The voice entry selected by `voice_selection_index` (wrapping), or
+        None when the model has no voice samples or none are configured.
+        Same selection as `effective_voice_reference()`."""
+        if not ProjectVoiceUtil.get_voice_values(project, tts_model_type):
+            return None
+        voices = project.voice_references
+        return voices[voice_selection_index % len(voices)]
+
+    @staticmethod
     def effective_voice_reference(
             project: Project,
             tts_model_type: TtsModelType,
@@ -170,11 +228,9 @@ class ProjectVoiceUtil:
         rolling-continuation voice identity are both the (path, transcript)
         pair.
         """
-        voices = ProjectVoiceUtil.get_voice_values(project, tts_model_type)
-        if not voices:
+        voice = ProjectVoiceUtil.current_voice(project, tts_model_type, voice_selection_index)
+        if voice is None:
             return "", ""
-        index = voice_selection_index % len(voices)
-        voice = project.voice_references[index]
         if voice.crop is not None:
             cropped_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice)
             if os.path.isfile(cropped_path):
@@ -182,8 +238,7 @@ class ProjectVoiceUtil:
             # Cropped file missing (manually deleted, partial copy): fall back
             # to the original rather than blocking generation. Pre-flight
             # validation surfaces this as a problem to fix.
-        transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_model_type)
-        return voices[index], transcripts[index] if index < len(transcripts) else ""
+        return voice.file_name, voice.transcript
 
     @staticmethod
     def current_voice_value(project: Project, tts_model_type: TtsModelType, voice_selection_index: int) -> str:
@@ -247,7 +302,7 @@ class ProjectVoiceUtil:
             voice.crop.relative_path for voice in project.voice_references if voice.crop is not None
         }
         if exclude_owner is None:
-            used.update(voice.file_name for voice in project.voice_references)
+            used.update(voice.file_name for voice in project.voice_references if voice.has_sample)
         emo_voice = project.get_model_setting("indextts2_local", "emo_voice")
         if not exclude_secondary and emo_voice:
             used.add(emo_voice)
@@ -274,10 +329,15 @@ class ProjectVoiceUtil:
         binding = None if secondary else _settings_registry().voice_binding(tts_type.id)
         exclude_owner = (binding.group or binding.model_id, binding.name) if binding else None
         used = ProjectVoiceUtil.get_used_voice_file_names(project, exclude_owner, exclude_secondary=secondary)
-        if append:
+        # A sole voice still at its defaults is a placeholder (a project always
+        # has one voice); an appended sample takes its place.
+        replaces_placeholder = (
+            append and len(project.voice_references) == 1 and project.voice_references[0].is_default
+        )
+        if append and not replaces_placeholder:
             # When appending, a same-stem sample should not clobber an
             # existing entry; give it a distinct name.
-            used.update(ProjectVoiceUtil.get_voice_values(project, tts_type))
+            used.update(value for value in ProjectVoiceUtil.get_voice_values(project, tts_type) if value)
         stem = voice_file_stem
         dest_file_name = f"{stem}.flac"
         count = 2
@@ -303,12 +363,140 @@ class ProjectVoiceUtil:
                 raise ValueError(f"Unsupported tts type {tts_type}")
             # A new voice: room reverb defaults to off.
             voice = Voice(file_name=dest_file_name, transcript=transcript)
-            project.voice_references = project.voice_references + [voice] if append else [voice]
+            if append and not replaces_placeholder:
+                project.voice_references = project.voice_references + [voice]
+            else:
+                project.voice_references = [voice]
 
         if tts_type.id == "pocket_local":
             project.set_model_setting('pocket_local', 'predefined_voice', "")
 
         return project.save()
+
+    @staticmethod
+    def set_voice_sample_at_index_and_save(
+            project: Project,
+            index: int,
+            sound: Sound,
+            voice_file_stem: str,
+            tts_type: TtsModelType,
+    ) -> str:
+        """Set (or replace) the sample of the voice at `index`.
+
+        Writes the sample file and, in one save, points the voice at it,
+        resets its trim (deleting the managed trim file) and clears its
+        transcript; the caller fills the transcript afterward. Other voice
+        properties are kept. The voice's own current file name is not
+        treated as taken, so re-setting the same stem overwrites in place.
+        Returns an error string or "" on success.
+        """
+        if index < 0 or index >= len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        if _settings_registry().voice_binding(tts_type.id) is None:
+            raise ValueError(f"Unsupported tts type {tts_type}")
+        stem_parts = path_norm.split_relative(voice_file_stem)
+        if len(stem_parts) > 1 and stem_parts[0].casefold() == VOICE_CROP_SUBDIR:
+            return "Voice samples cannot be imported into the managed trim directory"
+
+        voice = project.voice_references[index]
+        used = ProjectVoiceUtil.get_used_voice_file_names(project, exclude_owner=None)
+        shared_elsewhere = voice.file_name == project.get_model_setting("indextts2_local", "emo_voice") or any(
+            other.file_name == voice.file_name
+            for other_index, other in enumerate(project.voice_references) if other_index != index
+        )
+        if not shared_elsewhere:
+            used.discard(voice.file_name)
+        stem = voice_file_stem
+        dest_file_name = f"{stem}.flac"
+        count = 2
+        while dest_file_name in used:
+            dest_file_name = f"{stem}_{count}.flac"
+            count += 1
+
+        voice_dir = Path(ProjectVoiceUtil.get_voice_dir_path(project))
+        dest_path = voice_dir / dest_file_name
+        crop_dir = voice_dir / VOICE_CROP_SUBDIR
+        if dest_path.resolve().is_relative_to(crop_dir.resolve()):
+            return "Voice samples cannot be imported into the managed trim directory"
+
+        # Decided before the change: never delete a trim file that is also
+        # another input.
+        old_crop_path = ""
+        if voice.crop is not None:
+            candidate = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice)
+            if not ProjectVoiceUtil._crop_path_is_shared(project, index, candidate):
+                old_crop_path = candidate
+
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        err = SoundFileUtil.save_flac(sound, str(dest_path))
+        if err:
+            return err
+
+        previous_entries = project.voice_references
+        entries = list(previous_entries)
+        entries[index] = replace(voice, file_name=dest_file_name, transcript="", crop=None)
+        project.voice_references = entries
+        previous_predefined = ""
+        if tts_type.id == "pocket_local":
+            previous_predefined = project.get_model_setting('pocket_local', 'predefined_voice')
+            project.set_model_setting('pocket_local', 'predefined_voice', "")
+        save_error = project.save()
+        if save_error:
+            project.voice_references = previous_entries
+            if previous_predefined:
+                project.set_model_setting('pocket_local', 'predefined_voice', previous_predefined)
+            return save_error
+        if old_crop_path and os.path.lexists(old_crop_path):
+            try:
+                os.remove(old_crop_path)
+            except OSError:
+                # Leaves only an unreferenced managed trim file.
+                pass
+        return ""
+
+    @staticmethod
+    def clear_voice_sample_at_index_and_save(project: Project, index: int) -> str:
+        """Clear only a voice's sample, transcript and trim, keeping its slot/settings.
+
+        Keep the original sample on disk. Delete an unshared managed trim only
+        after saving; on save failure restore the original voice list.
+        """
+        if not 0 <= index < len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+
+        voice = project.voice_references[index]
+        cropped_path = ""
+        if voice.crop is not None:
+            candidate = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice)
+            if not ProjectVoiceUtil._crop_path_is_shared(project, index, candidate):
+                cropped_path = candidate
+
+        previous_entries = project.voice_references
+        entries = list(previous_entries)
+        entries[index] = replace(voice, file_name="", transcript="", crop=None)
+        project.voice_references = entries
+        save_error = project.save()
+        if save_error:
+            project.voice_references = previous_entries
+            return save_error
+        if cropped_path and os.path.lexists(cropped_path):
+            try:
+                os.remove(cropped_path)
+            except OSError:
+                # Leaves only an unreferenced managed trim file, as on Set.
+                pass
+        return ""
+
+    @staticmethod
+    def add_voice_and_save(project: Project) -> tuple[int, str]:
+        """Append a default (sample-less) voice. Returns (its index, error string or "")."""
+        previous_entries = project.voice_references
+        project.voice_references = previous_entries + [Voice()]
+        error = project.save()
+        if error:
+            project.voice_references = previous_entries
+            return -1, error
+        return len(project.voice_references) - 1, ""
 
     @staticmethod
     def remove_voice_at_index_and_save(project: Project, tts_type: TtsModelType, index: int) -> str:
@@ -320,7 +508,10 @@ class ProjectVoiceUtil:
             raise IndexError(f"Voice sample index out of range: {index}")
 
         removed = voices[index]
-        project.voice_references = project.voice_references[:index] + project.voice_references[index + 1:]
+        # Removing the last voice leaves a fresh default voice.
+        project.voice_references = ensure_voice_slot(
+            project.voice_references[:index] + project.voice_references[index + 1:]
+        )
 
         project.save()
         return removed
@@ -348,7 +539,7 @@ class ProjectVoiceUtil:
         else:
             if _settings_registry().voice_binding(tts_type.id) is None:
                 raise ValueError(f"Unsupported tts_type: {tts_type}")
-            project.voice_references = []
+            project.voice_references = ensure_voice_slot([])
 
         project.save()
 
@@ -361,6 +552,31 @@ class ProjectVoiceUtil:
         entries[index] = replace(entries[index], transcript=transcript)
         project.voice_references = entries
         return project.save()
+
+    @staticmethod
+    def set_voice_instructions_at_index_and_save(
+            project: Project, index: int, model_id: str, value: str,
+    ) -> str:
+        """Set one voice's model-specific instructions; empty removes only that key."""
+        if not 0 <= index < len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        voice = project.voice_references[index]
+        instructions = dict(voice.instructions)
+        value = value.strip()
+        if value:
+            instructions[model_id] = value
+        else:
+            instructions.pop(model_id, None)
+        if instructions == voice.instructions:
+            return ""
+        previous = project.voice_references
+        entries = list(previous)
+        entries[index] = replace(voice, instructions=instructions)
+        project.voice_references = entries
+        error = project.save()
+        if error:
+            project.voice_references = previous
+        return error
 
     @staticmethod
     def set_voice_room_reverb_at_index_and_save(project: Project, index: int, room_reverb: RoomReverb) -> str:
@@ -405,7 +621,7 @@ class ProjectVoiceUtil:
         target = normalized(crop_path)
         # Include this entry's original too: corrupt crop metadata must not
         # grant permission to overwrite its own source file.
-        original_names = {voice.file_name for voice in project.voice_references}
+        original_names = {voice.file_name for voice in project.voice_references if voice.has_sample}
         secondary = project.get_model_setting("indextts2_local", "emo_voice")
         if secondary:
             original_names.add(secondary)
@@ -590,10 +806,10 @@ class ProjectVoiceUtil:
 
     @staticmethod
     def has_voice(project: Project) -> bool:
-        if project.get_tts_model_type().id == "pocket_local":
-            return bool(project.get_model_setting('pocket_local', 'predefined_voice') or ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local")))
-        value = ProjectVoiceUtil.get_primary_voice_value(project, project.get_tts_model_type())
-        return bool(value)
+        """Whether any voice has a sample (or, for Pocket, a predefined voice is set)."""
+        if project.get_tts_model_type().id == "pocket_local" and project.get_model_setting('pocket_local', 'predefined_voice'):
+            return True
+        return ProjectVoiceUtil.get_voice_sample_count(project, project.get_tts_model_type()) > 0
 
     @staticmethod
     def emo_vector_to_string(project: Project) -> str:

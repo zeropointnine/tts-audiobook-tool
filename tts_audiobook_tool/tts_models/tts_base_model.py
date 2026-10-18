@@ -376,10 +376,8 @@ class TtsBaseModel(ABC):
 
         warnings = []
 
-        # Default implementation returns random voice warning if any
-        warning = self._get_standard_random_voice_reason(project)
-        if warning:
-            warnings.append(warning)
+        # The "voices may vary" note depends on the run's voices, so it is not
+        # a model warning: see voice_variation_warning.get_run_warnings().
 
         max_words_warning = self.get_max_words_exceed_warning(project)
         if max_words_warning:
@@ -437,7 +435,7 @@ class TtsBaseModel(ABC):
         if bool(voice_file_name):
             value = ProjectVoiceUtil.make_voice_sample_display_label(project, voice_file_name, tts_model_spec)
 
-            num_items = len(ProjectVoiceUtil.get_voice_values(project, TtsModelType.require_by_id(cls.INFO.id)))
+            num_items = ProjectVoiceUtil.get_voice_sample_count(project, TtsModelType.require_by_id(cls.INFO.id))
             if num_items > 1:
                 value += f", +{num_items - 1} more"
         else:
@@ -488,19 +486,58 @@ class TtsBaseModel(ABC):
         """
         return False
 
+    @classmethod
+    def can_instructions(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
+        """
+        Whether the model accepts per-voice free-text instructions
+        (`Voice.instructions`) under the project's current settings.
 
-    def _get_standard_random_voice_reason(self, project: Project) -> str:
+        Defaults to the catalog value (`INFO.can_instructions`). Override when
+        it depends on project or instance state. Callers should ask this
+        rather than read the spec field directly.
+        """
+        return cls.INFO.can_instructions
 
-        if self.INFO.requires_voice:
-            return ""
-        if not self._has_voice_binding(self.INFO.id):
-            return ""
+    @classmethod
+    def validate_instructions(cls, value: str) -> str:
+        """
+        Model-specific check of per-voice instructions entered by the user.
+        Returns an error message, or empty string when acceptable. Runs in
+        the interactive main process, so overrides must not construct a model.
+        Default accepts any text.
+        """
+        return ""
 
-        if self.get_primary_voice_value(project):
-            return ""
+    @classmethod
+    def expects_voice_instructions(cls, project: Project) -> bool:
+        """
+        Whether a voice without instructions likely gets an arbitrary voice
+        under the project's current settings (eg Qwen3-TTS VoiceDesign).
+        Drives a non-blocking "no instructions" hint only. Default False.
+        """
+        return False
 
-        # Voice is not required, and no voice file specified
-        return "Note: Generated voices may vary because no voice reference has been configured."
+    @classmethod
+    def uses_instructions_with_sample(cls, project: Project) -> bool:
+        """
+        Whether a voice's instructions still apply when the voice has a voice
+        sample. False means they apply only to sample-less voices (eg SGL-Omni
+        AuK). Default True.
+        """
+        return True
+
+    @classmethod
+    def can_voice_clone(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
+        """
+        Whether the model can clone a voice from a voice sample under the
+        project's current settings.
+
+        Defaults to the catalog value (`INFO.can_voice_clone`). Override when
+        it depends on project or instance state. Callers should ask this
+        rather than read the spec field directly.
+        """
+        return cls.INFO.can_voice_clone
+
 
 _PARAMS_PRINT_BLACKLIST = [
     "TtsBaseModel", "self", "print_params",

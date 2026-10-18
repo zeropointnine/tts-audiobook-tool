@@ -31,7 +31,8 @@ def test_auk_variants_have_distinct_catalog_identity(
     assert REGISTRY.voice_binding(model_type.id).group == "auk"
     assert REGISTRY.transcript_binding(model_type.id).group == "auk"
     assert REGISTRY.orchestration_binding(model_type.id).name == "concurrent_requests"
-    assert info.requires_voice
+    # A sample-less voice is generated from its instructions (voice description).
+    assert not info.requires_voice
     assert not info.can_stream
     assert info.requirements_file_name == "requirements-remote.txt"
 

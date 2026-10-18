@@ -1,11 +1,14 @@
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
+
 import tts_audiobook_tool.menus.real_time_playback_menu as menu_module
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.real_time_playback_menu import RealTimePlaybackMenu, do_start
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_util import strip_ansi_codes
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 def _make_state(
@@ -17,6 +20,7 @@ def _make_state(
         phrase_groups=phrase_groups if phrase_groups is not None else [object(), object(), object()],
         realtime_line_range=realtime_line_range,
         realtime_save=True,
+        get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
         save=lambda: None,
     )
     return cast(State, SimpleNamespace(project=project, prefs=object()))
@@ -74,7 +78,7 @@ def test_line_range_uses_project_text_and_persists_selection(monkeypatch) -> Non
 
 def test_start_always_passes_project_text_and_range(monkeypatch) -> None:
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(lambda _state: True))
+    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(lambda _state, **_kwargs: True))
     phrase_groups = [object(), object()]
     state = _make_state(phrase_groups=phrase_groups, realtime_line_range=(2, 2))
     calls: list[tuple[State, list[object], tuple[int, int] | None]] = []
@@ -124,3 +128,43 @@ def test_start_rejects_missing_project_text(monkeypatch) -> None:
 
     assert feedback == [("No text segments specified",)]
     assert launches == []
+
+
+@pytest.mark.parametrize(
+    ("line_range", "expected_indices"),
+    [(None, [0, 1, 2]), ((0, 0), [0, 1, 2]), ((2, 3), [1, 2]),
+     ((0, 2), [0, 1]), ((3, 2), [])],
+)
+@pytest.mark.parametrize("valid", [True, False])
+def test_start_preflight_matches_runtime_range(monkeypatch, line_range, expected_indices, valid) -> None:
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+
+    state = _make_state(realtime_line_range=line_range)
+    resolved: list[list[int]] = []
+    scopes: list[list[int]] = []
+    launches: list[dict] = []
+
+    def resolve(project, phrase_indices):
+        assert project is state.project
+        resolved.append(list(phrase_indices))
+        return [1] if expected_indices else []
+
+    def validate(_state, *, voice_indices):
+        assert _state is state
+        scopes.append(list(voice_indices))
+        return valid
+
+    monkeypatch.setattr(menu_module.ProjectVoiceUtil, "get_job_voice_indices", staticmethod(resolve))
+    monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(validate))
+    monkeypatch.setattr(menu_module.readiness, "get_run_blocker_text", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(menu_module.app_hint_util, "show_pre_inference_hints", lambda *_args: True)
+    monkeypatch.setattr(menu_module.ask, "can_hotkey", False)
+    monkeypatch.setattr(menu_module, "run_real_time_playback_modal", lambda **kwargs: launches.append(kwargs))
+
+    do_start(state)
+
+    assert resolved == [expected_indices]
+    assert scopes == ([[1]] if expected_indices else [[]])
+    assert len(launches) == int(valid)
+    if valid:
+        assert launches[0]["line_range"] == (None if line_range == (0, 0) else line_range)

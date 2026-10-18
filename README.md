@@ -2,6 +2,7 @@
 
 - [Description](#description)
 - [Installation](#installation)
+- [Supported features by TTS model](#supported-features-by-tts-model)
 - [Usage notes](#usage-notes)
 - [Update highlights](#update-highlights)
 
@@ -607,37 +608,11 @@ On Windows, download and install a pre-compiled wheel from a trustworthy source 
 </details>
 
 
-# Usage notes
-
-The app uses sane, conservative defaults, which should allow you to start generating your first audiobook in just a couple minutes. From there, you can explore and adjust the app's various knobs and settings to your preference.
-
-The app saves its state between sessions, so you can interrupt the program at any time and resume later.
-
-Additionally, setting "chapter cut points" can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full job is completed.
-
-
-### Voice cloning
-
-Voice samples and their transcripts belong to one shared list per project. Switching TTS models keeps the list and its order. Transcripts remain editable and are retained even for models that do not use them; each model still has its own clone support and transcript requirements. Pocket's selected predefined voice takes precedence without erasing the shared samples, and IndexTTS2's secondary emotion sample remains model-specific.
-
-Older projects migrate to the current project format (v5) on load. For v1/v2/v3 projects, with no populated old clone lists the new list is empty; a single source is adopted silently. Multiple independent sources require a numbered choice showing model names and all sample filenames, even when the lists are identical. An already-shared list counts once across backend variants. An explicit top-level `voice_references` list, including `[]`, wins over stale old lists. For v4 projects, the project-wide room reverb setting is copied onto each voice (room reverb is now a per-voice setting; the room reverb stereo effect stays project-wide). Successful migration saves immediately after backing up the original settings as `project.json.pre-v5.bak` (an unused numbered suffix is used if needed), without deleting voice or generated audio. Settings imports require the same choice before writing the destination; ambiguous noninteractive loads/imports fail with guidance rather than choosing automatically. See [Project Spec v5](<docs-dev/project-spec-v5.md>) for details.
-
-When prepping reference audio for voice cloning, it's worthwhile to prepare a few different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality, characteristics, and word error rate resulting from each sample from the same source can vary quite a bit. Some TTS models are especially sensitive to this.
-
-### VRAM considerations
-
-The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which needs to runs concurrently with the currently active TTS model to validate its output. If you are getting out of memory errors, try one of the following:
-
-- Use large-v3-turbo instead of large-v3 (saves a gig or two of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
-- Force Whisper to use system memory instead of running on the GPU (runs much slower, ofc) (`Options` > `Whisper device` > `CPU`)
-- Disable Whisper altogether (last resort) (`Options` > `Whisper model` > `Disabled`)
-
-
-### Configurable TTS settings by model
+# Supported features by TTS model
 
 Zero-shot voice cloning is a first-class feature, supported for all models.
 
-<ins>**Locally generated using dedicated venv:**</ins>
+### Locally generated using dedicated venv
 
 **Chatterbox**
 - Multilingual V2, Multilingual V3, and Turbo model variants
@@ -688,8 +663,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **OmniVoice**
 - Voice design
-- Steps
-- Speed, CFG, seed
+- Steps, speed, CFG, seed
 
 **Qwen3-TTS**
 - CustomVoice and VoiceDesign model variants
@@ -714,7 +688,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - CFG, steps, seed
 
 
-<ins>**SGL-Omni:**</ins>
+### SGL-Omni
 
 **AuK / AuK-Flash**
 - Base and Flash models
@@ -750,10 +724,10 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature, top_k, repetition_penalty
 
 
-<ins>**audio.cpp:**</ins>
+### audio.cpp
 
 **Breeze TTS 2**
-- Supports voice clone and/or voice design
+- Voice design
 - Temperature, top_p, top_k, guidance scale, seed
 
 **Chatterbox**
@@ -775,10 +749,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature,top_p, top_k, steps, flow guidance scale, seed
 
 **FireRedTTS3**
-- Voice cloning only (designed for the Base model; instruct features not supported)
 - Steps, guidance scale, stop threshold, seed
-- Language is derived from the project language code; unsupported languages block generation
-- Instruct model also works for cloning, minus its instruct features
 
 **Fish Audio Drama 3**
 - Experimental community port
@@ -798,11 +769,37 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 **MOSS-TTS**
 - MOSS-TTS v1.5 8B Delay and MOSS-TTS-Local v1.5
 - Temperature, top_p, top_k, seed
-- Music detection/rejection for MOSS-TTS-Local
+- Music detection/rejection (MOSS-TTS-Local)
 
 **OmniVoice**
-- Steps
-- Speed, CFG, seed
+- Voice design
+- Steps, speed, CFG, seed
+
+
+# Usage notes
+
+The app uses sane, conservative defaults, which should allow you to start generating your first audiobook in just a couple minutes. From there, you can explore and adjust the app's various knobs and settings to your preference.
+
+The app saves its state between sessions, so you can interrupt the program at any time and resume later.
+
+Additionally, setting "chapter cut points" can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full job is completed.
+
+
+### Voice cloning
+
+Voice samples and their transcripts belong to one shared list per project. Switching TTS models keeps the list and its order. Transcripts remain editable and are retained even for models that do not use them; each model still has its own clone support and transcript requirements. Pocket's selected predefined voice takes precedence without erasing the shared samples, and IndexTTS2's secondary emotion sample remains model-specific.
+
+Older projects migrate to the current project format (v5) on load. For v1/v2/v3 projects, with no populated old clone lists the new list is empty; a single source is adopted silently. Multiple independent sources require a numbered choice showing model names and all sample filenames, even when the lists are identical. An already-shared list counts once across backend variants. An explicit top-level `voice_references` list, including `[]`, wins over stale old lists. For v4 projects, the project-wide room reverb setting is copied onto each voice (room reverb is now a per-voice setting; the room reverb stereo effect stays project-wide). Successful migration saves immediately after backing up the original settings as `project.json.pre-v5.bak` (an unused numbered suffix is used if needed), without deleting voice or generated audio. Settings imports require the same choice before writing the destination; ambiguous noninteractive loads/imports fail with guidance rather than choosing automatically. See [Project Spec v5](<docs-dev/project-spec-v5.md>) for details.
+
+When prepping reference audio for voice cloning, it's worthwhile to prepare a few different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality, characteristics, and word error rate resulting from each sample from the same source can vary quite a bit. Some TTS models are especially sensitive to this.
+
+### VRAM considerations
+
+The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which needs to runs concurrently with the currently active TTS model to validate its output. If you are getting out of memory errors, try one of the following:
+
+- Use large-v3-turbo instead of large-v3 (saves a gig or two of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
+- Force Whisper to use system memory instead of running on the GPU (runs much slower, ofc) (`Options` > `Whisper device` > `CPU`)
+- Disable Whisper altogether (last resort) (`Options` > `Whisper model` > `Disabled`)
 
 
 ### Inference speeds, expectations

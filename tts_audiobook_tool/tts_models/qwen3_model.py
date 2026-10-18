@@ -235,6 +235,10 @@ class Qwen3Model(Qwen3BaseModel):
 
             case "custom_voice":
 
+                voice = ProjectVoiceUtil.current_voice(
+                    project, TtsModelType.require_by_id("qwen3tts_local"), voice_selection_index
+                )
+                instruct = voice.instructions.get(self.INFO.id, "") if voice else ""
                 speakers = self.supported_speakers
                 speaker_id = project.get_model_setting('qwen3tts_local', 'speaker_id')
                 if len(speakers) == 1:
@@ -247,16 +251,20 @@ class Qwen3Model(Qwen3BaseModel):
                     result = self.generate_custom_voice(
                         prompts=prompts,
                         speaker_id=speaker_id,
-                        instruct=project.get_model_setting('qwen3tts_local', 'instructions'),
+                        instruct=instruct,
                         language=language,
                         gen_kwargs=gen_kwargs,
                     )
 
             case "voice_design":
 
+                voice = ProjectVoiceUtil.current_voice(
+                    project, TtsModelType.require_by_id("qwen3tts_local"), voice_selection_index
+                )
+                instruct = voice.instructions.get(self.INFO.id, "") if voice else ""
                 result = self.generate_voice_design(
                     prompts=prompts,
-                    instruct=project.get_model_setting('qwen3tts_local', 'instructions'),
+                    instruct=instruct,
                     language=language,
                     gen_kwargs=gen_kwargs,
                 )

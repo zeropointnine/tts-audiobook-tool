@@ -11,7 +11,7 @@ Related documents:
 
 ## The hard constraint
 
-A single model call can use exactly **one voice sample**. In user-defined voice selection mode, a line's voice is fixed per line, so one call can never mix lines from different voices. Everything below is built around that constraint.
+A single model call can use exactly **one voice** — one `Voice` slot of the project's `voice_references` list (project spec v5). Everything generation-relevant about a voice is per slot and is resolved by the model from the call's `voice_selection_index`: sample/crop, transcript, and per-model `instructions` (eg Qwen3-TTS VoiceDesign/CustomVoice, OmniVoice). So "same slot index" is exactly "same generation settings", and the slot index is the sub-batch key. (`pan` and `room_reverb` are per voice too but are applied at playback/export, not at generation, so they don't constrain batching.) In user-defined voice selection mode, a line's voice is fixed per line, so one call can never mix lines from different voices. Everything below is built around that constraint.
 
 ## Scheduling vocabulary
 
@@ -26,16 +26,30 @@ The queue consumed by `generate_files()` has three levels:
 
 For single-voice projects a round holds exactly one sub-batch, so the shape degenerates to the classic flat list of batches.
 
+## Job voice pre-flight
+
+Before submission, `ProjectVoiceUtil.get_job_voice_indices(project, phrase_indices)`
+resolves the voice slots needed by the actual queued lines: Disabled checks voice 1;
+User-defined checks distinct effective assignments (including the usual clamp of
+unassigned/stale indices); Auto-advance checks every voice. The same pure clamp is
+used by `GenerateUtil.generate()` and `effective_voice_indices()`, so pre-flight
+and inference agree. Empty sample slots retain their indices and are never filtered
+out of the shared list. Unused voices neither block the job nor trigger transcript
+repair. Auto-advance intentionally checks all slots rather than predicting which
+ones batching/retries might reach. See [Project Spec v5](<project-spec-v5.md>).
+
 ## Queue construction
 
 `generate_files()` starts from `items`: the queued indices sorted in book order, each with retry count 0 ([generate_files()](../tts_audiobook_tool/generate_util.py:111)). It then picks one of two builders:
 
 ```
-batch_size > 1  AND  voice_select_mode == USER_DEFINED  AND  voice samples exist?
+batch_size > 1  AND  voice_select_mode == USER_DEFINED  AND  model has a voice binding?
 ├── yes → make_multi_voice_rounds(items, ..., voice_of_index, sort_by_words = not is_cjk)
 └── no  → bucket_items(items, ...)            # only if batch_size > 1 and not CJK
           make_single_voice_rounds(items, batch_size)
 ```
+
+The gate is `ProjectVoiceUtil.get_voice_values()` being non-empty, ie the model has a voice binding (every batchable model does); the voice list is never empty (`ensure_voice_slot`), and it has one entry per slot whether or not that slot has a sample. Sample-less voices therefore still get per-voice sub-batches — required, since they can differ by instructions alone (eg several Qwen3-TTS VoiceDesign voices).
 
 `voice_of_index` comes from [`effective_voice_indices()`](../tts_audiobook_tool/generate_util.py:1028), which maps each queued line to the voice sample index the call will actually use: a per-line selection of `-1` (no explicit assignment) or a stale out-of-range value is clamped to the nearest valid sample index.
 
@@ -104,7 +118,8 @@ The design contract in one sentence: *worst case is bounded by the window width,
 
 ## Invariants worth preserving
 
-- Single-voice projects (disabled or auto-advance mode, `batch_size == 1`, or no voice samples) take the `bucket_items` + `make_single_voice_rounds` path, which reproduces the pre-multi-voice flat queue byte-for-byte. Changes to the multi-voice path must not leak into that one.
+- Disabled or auto-advance mode, `batch_size == 1`, or a model without a voice binding take the `bucket_items` + `make_single_voice_rounds` path, which reproduces the pre-multi-voice flat queue byte-for-byte. Changes to the multi-voice path must not leak into that one. A user-defined project with no voice samples is *not* on that path (its slots may carry distinct instructions); with a single slot the multi-voice path produces the same order anyway (next invariant).
+- The sub-batch key is the voice slot index alone. If a future per-voice property affects generation, it must be resolved from `voice_selection_index` inside the model call (as `instructions` is), never per line, or batches would stop being homogeneous.
 - `make_multi_voice_rounds()` returns `[]` for empty input; with one distinct voice it is equivalent to the single-voice path (window collapses to `batch_size × 5`).
 - `voice_of_index` is computed once up front from the *queued* indices, so a line's voice for the whole run — including retry rounds — is fixed at queue-build time.
 - `generate()` raises a `ValueError` if handed a multi-item user-defined batch without an explicit `voice_selection_index` (a logic error, guarding against a future caller bypassing the sub-batch split).

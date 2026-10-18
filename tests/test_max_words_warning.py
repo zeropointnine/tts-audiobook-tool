@@ -55,7 +55,7 @@ def test_base_get_warning_issues_includes_max_words_warning(monkeypatch):
     project = make_project()
     set_book_max_words(project, 80)
     cls = Tts.get_model_support(project)
-    monkeypatch.setattr(cls, "_get_standard_random_voice_reason", classmethod(lambda c, p: None))
+    # (The "voices may vary" note is no longer a model warning; see voice_variation_warning.)
     stub_cls = type("StubModel", (cls,), {
         "generate_using_project": lambda *args, **kwargs: None,
         "kill": lambda *args, **kwargs: None,

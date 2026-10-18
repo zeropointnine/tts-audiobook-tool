@@ -13,17 +13,6 @@ class VoiceVibeVoiceMenu:
     def menu(state: State) -> None:
         project = state.project
 
-        def make_select_voice_label(_: State) -> str: # custom
-            if not ProjectVoiceUtil.has_voice(state.project):
-                if state.project.get_model_setting('vibevoice_local', 'lora_target'):
-                    col = COL_ACCENT
-                else:
-                    col = COL_ERROR
-                currently = make_currently_string("none", color_code=col)
-            else:
-                currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
-            return f"Select voice clone sample {currently}"
-
         def make_lora_target_label(_) -> str:
             if project.get_model_setting('vibevoice_local', 'lora_target'):
                 value = ellipsize_path_for_menu(project.get_model_setting('vibevoice_local', 'lora_target'))
@@ -36,7 +25,6 @@ class VoiceVibeVoiceMenu:
             items = VoiceMenuShared.make_voice_sample_items(
                 state,
                 TtsModelType.require_by_id("vibevoice_local"),
-                no_samples_label=make_select_voice_label,
             )
             items.append(
                 MenuItem(make_lora_target_label, lambda _, __: ask_lora_target(state), blank_line_before=True)

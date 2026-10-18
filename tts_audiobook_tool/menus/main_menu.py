@@ -154,7 +154,7 @@ def get_heading_tts_text(state: State) -> str:
 
 # Voice
 def make_voice_label(state: State) -> str:
-    return "Voice clone"
+    return "Voices"
 
 def on_voice(state: State, __) -> None:
     Tts.bind_project(state.project)

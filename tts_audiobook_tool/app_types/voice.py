@@ -15,8 +15,8 @@ On disk an entry is a flat JSON object:
         "pan": -0.3,                        # optional stereo position, -1 (left) to 1 (right);
                                             # written only when not centered
         "preset": "alba",                   # optional model preset voice id; written only when non-empty
-        "instructions": "..."               # optional voice instructions for "instruct" models;
-                                            # written only when non-empty
+        "instructions": {"<model id>": "..."}  # optional per-TTS-model voice instructions for
+                                            # "instruct" models; written only when non-empty
     }
 
 In memory the four crop keys are one optional `VoiceCrop`. Instances are
@@ -24,7 +24,7 @@ immutable; edits make a new instance with `dataclasses.replace`.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from typing import Any
 
@@ -98,15 +98,18 @@ class Voice:
     """A project voice: reference sample, its transcript, optional crop, room reverb,
     stereo position (`pan`, -1 full left to 1 full right, 0 centered), model
     preset voice id (`preset`, for models with built-in voices), and voice
-    `instructions` (for "instruct" models). Empty strings mean unused."""
+    `instructions` keyed by TTS model id (for "instruct" models). Empty
+    strings / an empty map mean unused; an empty `file_name` means the voice
+    has no sample. `Voice()` is the default voice."""
 
-    file_name: str
+    file_name: str = ""
     transcript: str = ""
     crop: VoiceCrop | None = None
     room_reverb: RoomReverb = RoomReverb.OFF
     pan: float = 0.0
     preset: str = ""
-    instructions: str = ""
+    # TTS model id -> instructions. Treat as read-only; excluded from hashing.
+    instructions: dict[str, str] = field(default_factory=dict, hash=False)
 
     def __post_init__(self) -> None:
         pan = float(self.pan)
@@ -115,8 +118,20 @@ class Voice:
         object.__setattr__(self, "pan", pan)
         if not isinstance(self.preset, str):
             raise ValueError("preset must be a string")
-        if not isinstance(self.instructions, str):
-            raise ValueError("instructions must be a string")
+        if not isinstance(self.instructions, dict) or not all(
+                isinstance(key, str) and isinstance(value, str) for key, value in self.instructions.items()):
+            raise ValueError("instructions must be a dict of model id to string")
+        # Own a copy so the caller's dict cannot mutate this instance.
+        object.__setattr__(self, "instructions", dict(self.instructions))
+
+    @property
+    def has_sample(self) -> bool:
+        return bool(self.file_name)
+
+    @property
+    def is_default(self) -> bool:
+        """Whether every value is the default (a fresh `Voice()`)."""
+        return self == Voice()
 
     @property
     def crop_range(self) -> tuple[float, float] | None:
@@ -137,7 +152,7 @@ class Voice:
         if self.preset:
             result[PRESET_FIELD] = self.preset
         if self.instructions:
-            result[INSTRUCTIONS_FIELD] = self.instructions
+            result[INSTRUCTIONS_FIELD] = dict(self.instructions)
         return result
 
     @staticmethod
@@ -150,13 +165,15 @@ class Voice:
     ) -> Voice | None:
         """Parse one stored entry.
 
-        Raises ValueError for a structurally invalid entry. Returns None when
+        Raises ValueError for a structurally invalid entry. An empty
+        `file_name` is a voice without a sample. Returns None when a non-empty
         `file_name` cannot be a project-local path (the entry is dropped, with
         a warning). Malformed crop metadata drops only the crop; an unknown
         `room_reverb` id loads as Off. A missing `room_reverb` key (all
         pre-v5 data) takes `default_room_reverb`. A missing or non-numeric
         `pan` loads as centered; an out-of-range one is clamped. A missing or
-        non-string `preset` / `instructions` loads as "".
+        non-string `preset` loads as "". A missing or non-object
+        `instructions` (including a legacy plain string) loads as an empty map.
         """
         from tts_audiobook_tool.app_support import path_norm
         from tts_audiobook_tool.l import L
@@ -165,7 +182,7 @@ class Voice:
                 or not isinstance(raw.get("transcript", ""), str)):
             raise ValueError(f"{where}[{index}]: expected file_name and optional transcript strings")
         file_name, _ = path_norm.normalize_stored_relative_path(raw["file_name"])
-        if not file_name:
+        if raw["file_name"] and not file_name:
             # A stored name that cannot be a project-local file (e.g. a stray
             # absolute path) drops that entry rather than failing the project.
             L.w(f"{where}[{index}].file_name is not a usable project-local path; dropping entry")
@@ -185,8 +202,26 @@ class Voice:
             room_reverb=room_reverb,
             pan=_parse_pan(raw, where, index),
             preset=_parse_optional_str(raw, PRESET_FIELD, where, index),
-            instructions=_parse_optional_str(raw, INSTRUCTIONS_FIELD, where, index),
+            instructions=_parse_instructions(raw, where, index),
         )
+
+
+def ensure_voice_slot(voices: list[Voice]) -> list[Voice]:
+    """A project's voice list is never empty: an empty list becomes one default voice."""
+    return voices if voices else [Voice()]
+
+
+def _parse_instructions(raw: dict, where: str, index: int) -> dict[str, str]:
+    """Empty when absent or not a map (the latter with a warning; a legacy
+    string value is not migrated). Entries with a non-string key or value
+    are dropped."""
+    from tts_audiobook_tool.l import L
+
+    value = raw.get(INSTRUCTIONS_FIELD, {})
+    if not isinstance(value, dict):
+        L.w(f"{where}[{index}]: invalid {INSTRUCTIONS_FIELD} ({value!r}); using empty")
+        return {}
+    return {key: item for key, item in value.items() if isinstance(key, str) and isinstance(item, str)}
 
 
 def _parse_optional_str(raw: dict, field: str, where: str, index: int) -> str:

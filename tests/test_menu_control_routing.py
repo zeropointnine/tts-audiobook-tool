@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pytest
 
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.constants import COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
 from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
@@ -41,8 +40,6 @@ def test_mixed_destinations_preserve_order_and_exclusively_partition_controls(ba
         control_type("parameter", "model", "top_p", "Model Top-P"),
         control_type("parameter", "voice", "top_k", "Voice Top-K"),
     ]
-    if model_menu is ModelAudioCppMenu:
-        controls.insert(4, control_type("voice_instructions", "voice", "instruct"))
     definition = replace(definition, menu=tuple(controls))
     state = SimpleNamespace(project=Project(tts_model_type=definition.spec.id))
     sample_calls = []
@@ -58,14 +55,9 @@ def test_mixed_destinations_preserve_order_and_exclusively_partition_controls(ba
                         lambda _state, _parameter, label, *_, **__: MenuItem(label, lambda *_: None))
     monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("Seed", lambda *_: None))
-    monkeypatch.setattr(ModelMenuShared, "make_voice_instructions_item",
-                        lambda *_, **__: [MenuItem("Edit instructions", lambda *_: None),
-                                          MenuItem("Clear instructions", lambda *_: None)])
     voice_items = voice_menu.make_items(state, definition)
     model_items = model_menu.make_items(state, definition)
     expected_voice = ["Voice temperature", "Add sample", "Select samples", "Voice Top-K"]
-    if model_menu is ModelAudioCppMenu:
-        expected_voice[3:3] = ["Edit instructions", "Clear instructions"]
     assert [item.label for item in voice_items] == expected_voice
     assert [item.label for item in model_items] == ["Seed", "Model Top-P"]
     assert {item.label for item in voice_items}.isdisjoint(item.label for item in model_items)
@@ -172,31 +164,23 @@ def test_voice_numeric_and_seed_edit_definition_owner_not_selected_model(backend
         assert shared["seed"] == 123
 
 
-@pytest.mark.parametrize("model_id,label,setting_count", [
-    ("breeze_tts_2_audiocpp", "Instructions", 5),
-    ("omnivoice_audiocpp", "Voice design instructions", 4),
+@pytest.mark.parametrize("model_id,setting_count", [
+    ("breeze_tts_2_audiocpp", 5), ("omnivoice_audiocpp", 4), ("cosyvoice3_audiocpp", 4),
 ])
 @pytest.mark.parametrize("instructions", ["", "Speak warmly and naturally."])
-def test_shipped_audio_cpp_instructions_and_clear_belong_to_voice_menu(
-        monkeypatch, model_id, label, setting_count, instructions):
+def test_audio_cpp_instructions_have_no_global_menu_controls(monkeypatch, model_id, setting_count, instructions):
     definition = load_audio_cpp_definitions().models[model_id]
-    project = Project(tts_model_type=definition.spec.id)
-    project.set_model_setting(definition.spec.id, "instruct", instructions)
+    project = Project(tts_model_type=model_id)
+    project.voice_references[0].instructions[model_id] = instructions
     state = SimpleNamespace(project=project)
     monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
                         lambda *_: [MenuItem("Samples", lambda *_: None)])
-
     voice_items = VoiceAudioCppMenu.make_items(state, definition)
-    assert [item.blank_line_before for item in voice_items] == [False, True] + ([False] if instructions else [])
-    voice_labels = [get_string_from(state, item.label) for item in voice_items]
-    model_labels = [get_string_from(state, item.label)
-                    for item in ModelAudioCppMenu.make_items(state, definition)]
-    assert voice_labels[0] == "Samples"
-    assert voice_labels[1].startswith(label + " ")
-    assert voice_labels[2:] == (["Clear instructions"] if instructions else [])
-    assert len(model_labels) == setting_count  # Numeric settings and seed.
-    assert not any(value.startswith(label + " ") or value == "Clear instructions"
-                   for value in model_labels)
+    assert [item.label for item in voice_items] == ["Samples"]
+    assert not voice_items[0].blank_line_before
+    items = ModelAudioCppMenu.make_items(state, definition)
+    assert len(items) == setting_count
+    assert not any("instructions" in get_string_from(state, item.label).lower() for item in items)
 
 
 def test_cosyvoice3_mode_item_shows_choice_label_and_saves_via_option_submenu(monkeypatch):
@@ -207,13 +191,13 @@ def test_cosyvoice3_mode_item_shows_choice_label_and_saves_via_option_submenu(mo
     definition = load_audio_cpp_definitions().models[model_id]
     project = Project(tts_model_type=model_id)
     monkeypatch.setattr(Project, "save", lambda self: "")
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_audio_cpp_menu.print_feedback",
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_menu_shared.print_feedback",
                         lambda *_, **__: None)
     state = SimpleNamespace(project=project)
     items = ModelAudioCppMenu.make_items(state, definition)
     labels = [get_string_from(state, item.label) for item in items]
     assert labels[0].startswith("Mode ") and "Zero-shot" in labels[0]
-    # Instructions are hidden outside Instruct mode.
+    # Per-voice instructions never add a global settings row.
     assert labels[1].startswith("Top-K ")
 
     offered = {}
@@ -238,62 +222,21 @@ def _cosyvoice3_model_labels(project: Project) -> list[str]:
     return [get_string_from(state, item.label) for item in ModelAudioCppMenu.make_items(state, definition)]
 
 
-def test_cosyvoice3_instructions_appear_only_in_instruct_mode():
-    # The behavior hides Instructions (and its Clear row) unless Mode is
-    # Instruct; the menu rebuilds on every redraw, so it follows Mode live.
-    # A stored instruction survives while hidden.
-    model_id = "cosyvoice3_audiocpp"
-    project = Project(tts_model_type=model_id)
-    project.set_model_setting(model_id, "instruction", "Speak warmly.")
-    for mode in ("zero_shot", "cross_lingual"):
-        project.set_model_setting(model_id, "template_name", mode)
-        labels = _cosyvoice3_model_labels(project)
-        assert not any(label.startswith("Instructions") or label == "Clear instructions" for label in labels)
-    assert project.get_model_setting(model_id, "instruction") == "Speak warmly."
-
-    project.set_model_setting(model_id, "template_name", "instruct")
+@pytest.mark.parametrize("mode", ["zero_shot", "cross_lingual", "instruct"])
+def test_cosyvoice3_mode_does_not_add_global_instruction_controls(mode):
+    project = Project(tts_model_type="cosyvoice3_audiocpp")
+    project.set_model_setting("cosyvoice3_audiocpp", "template_name", mode)
     labels = _cosyvoice3_model_labels(project)
-    assert labels[0].startswith("Mode ")
-    assert labels[1].startswith("Instructions ") and "Speak warmly." in labels[1]
-    assert labels[2] == "Clear instructions"
+    assert len(labels) == 4
+    assert not any("instructions" in label.lower() for label in labels)
 
 
-def test_cosyvoice3_empty_instructions_are_labeled_required_in_instruct_mode():
-    # In Instruct mode the readiness blocker requires instructions, so the
-    # label must not claim they are optional.
-    model_id = "cosyvoice3_audiocpp"
-    project = Project(tts_model_type=model_id)
-    project.set_model_setting(model_id, "template_name", "instruct")
+def test_invalid_stored_values_remain_editable():
+    project = Project(tts_model_type="cosyvoice3_audiocpp")
+    project.set_model_setting("cosyvoice3_audiocpp", "top_k", 0)
     labels = _cosyvoice3_model_labels(project)
-    assert labels[1].startswith("Instructions ") and "(" + COL_ERROR + "required for Instruct" in labels[1]
-    assert "optional" not in labels[1]
-    assert "Clear instructions" not in labels
-
-
-def test_invalid_stored_values_show_every_control():
-    # With an invalid stored value the behavior hooks are skipped, so nothing is
-    # hidden: a broken value must never hide the item needed to fix it.
-    model_id = "cosyvoice3_audiocpp"
-    project = Project(tts_model_type=model_id)
-    project.set_model_setting(model_id, "top_k", 0)  # Below the catalog minimum of 1.
-    labels = _cosyvoice3_model_labels(project)
-    assert any(label.startswith("Instructions ") and "optional" in label for label in labels)
-
-
-@pytest.mark.parametrize("model_id, label", [
-    ("breeze_tts_2_audiocpp", "Instructions"),
-    ("omnivoice_audiocpp", "Voice design instructions"),
-])
-def test_other_instruction_controls_stay_visible_and_optional(monkeypatch, model_id, label):
-    # Models without a behavior subclass are unaffected by the new hooks: their
-    # instruction controls (hosted in the Voice clone menu) always show as optional.
-    definition = load_audio_cpp_definitions().models[model_id]
-    state = SimpleNamespace(project=Project(tts_model_type=model_id))
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
-                        lambda *_: [MenuItem("Samples", lambda *_: None)])
-    labels = [get_string_from(state, item.label) for item in VoiceAudioCppMenu.make_items(state, definition)]
-    assert labels[0] == "Samples"
-    assert labels[1].startswith(label + " ") and "(optional)" in labels[1]
+    assert len(labels) == 4
+    assert any(label.startswith("Top-K (invalid:") for label in labels)
 
 
 def test_cosyvoice3_invalid_mode_is_shown_and_any_choice_repairs_it(monkeypatch):
@@ -306,7 +249,7 @@ def test_cosyvoice3_invalid_mode_is_shown_and_any_choice_repairs_it(monkeypatch)
     project = Project(tts_model_type=model_id)
     project.set_model_setting(model_id, "template_name", "sft")
     monkeypatch.setattr(Project, "save", lambda self: "")
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_audio_cpp_menu.print_feedback",
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_menu_shared.print_feedback",
                         lambda *_, **__: None)
     state = SimpleNamespace(project=project)
     item = ModelAudioCppMenu.make_items(state, definition)[0]

@@ -38,6 +38,12 @@ class OmniVoiceBaseModel(TtsBaseModel):
             s += f" {COL_DIM}({target})"
         return s
 
+    @classmethod
+    def validate_instructions(cls, value: str) -> str:
+        # Lazy: imports OmniVoice (not the model) on first use
+        from tts_audiobook_tool.tts_models.omnivoice_instruct_util import validate_omnivoice_instruct
+        return validate_omnivoice_instruct(value)
+
     def generate(
         self,
         text: str,

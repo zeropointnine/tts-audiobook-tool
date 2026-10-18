@@ -84,9 +84,7 @@ def test_shipped_setting_destinations_and_kind_only_samples(backend, loader):
                 assert raw == {"kind": "voice_samples"}
                 assert parsed.target_menu is None
             else:
-                expected = "voice" if (entry["id"] in ("breeze_tts_2_audiocpp", "omnivoice_audiocpp")
-                                       and parsed.kind == "voice_instructions") else "model"
-                assert raw["target_menu"] == parsed.target_menu == expected
+                assert raw["target_menu"] == parsed.target_menu == "model"
                 assert "group" not in raw
 
 

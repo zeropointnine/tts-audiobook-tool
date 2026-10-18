@@ -41,14 +41,17 @@ def test_mode_decisions_agree_across_entry_points(monkeypatch, tmp_path, mode, u
     project = Project(dir_path=str(tmp_path), tts_model_type=MODEL_ID,
                       voice_references=[{"file_name": "a.flac", "transcript": ""}])
     project.set_model_setting(MODEL_ID, "template_name", mode)
-    project.set_model_setting(MODEL_ID, "instruction", "Speak warmly.")
+    project.voice_references[0].instructions[MODEL_ID] = "Speak warmly."
     state = SimpleNamespace(project=project, prefs=SimpleNamespace(stt_variant=None, stt_config={}))
     definition = Tts._audio_cpp_definitions[MODEL_ID]
     support = AudioCppModelSupport(definition)
 
-    # Menu: Instructions appear only in Instruct mode.
+    # Instructions are per-voice data, never a global menu control.
     labels = [get_string_from(state, item.label) for item in ModelAudioCppMenu.make_items(state, definition)]
-    assert any(label.startswith("Instructions ") for label in labels) == (mode == "instruct")
+    assert not any("instructions" in label.lower() for label in labels)
+    assert support.can_instructions(project) is (mode == "instruct")
+    # Instruct mode hints (non-blocking) at a voice with no instructions.
+    assert support.expects_voice_instructions(project) is (mode == "instruct")
 
     # Readiness: no settings blockers in any mode (Instruct has its instruction).
     assert [issue for issue in support.get_blocking_issues(project) if issue.short != "audio.cpp server"] == []

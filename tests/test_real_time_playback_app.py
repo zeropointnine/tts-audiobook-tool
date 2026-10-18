@@ -861,6 +861,8 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
         "get_instance",
         lambda: SimpleNamespace(get_warning_issues=lambda project: None),
     )
+    # Run warnings (incl. the voice-variation note) read real project voice data
+    monkeypatch.setattr(real_time_playback, "get_run_warnings", lambda *args: [])
     heading_calls: list[list[int]] = []
     monkeypatch.setattr(
         real_time_playback.GenerateUtil,
@@ -1061,6 +1063,8 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
         "get_instance",
         lambda: SimpleNamespace(get_warning_issues=lambda project: None),
     )
+    # Run warnings (incl. the voice-variation note) read real project voice data
+    monkeypatch.setattr(real_time_playback, "get_run_warnings", lambda *args: [])
     monkeypatch.setattr(
         real_time_playback.GenerateUtil,
         "print_batch_heading",
@@ -1451,6 +1455,8 @@ def test_realtime_save_writes_exactly_what_was_played(
         real_time_playback.Tts, "get_instance",
         lambda: SimpleNamespace(get_warning_issues=lambda project: None),
     )
+    # Run warnings (incl. the voice-variation note) read real project voice data
+    monkeypatch.setattr(real_time_playback, "get_run_warnings", lambda *args: [])
     monkeypatch.setattr(real_time_playback.GenerateUtil, "print_batch_heading", lambda indices, voice_index=None: None)
 
     state = cast(

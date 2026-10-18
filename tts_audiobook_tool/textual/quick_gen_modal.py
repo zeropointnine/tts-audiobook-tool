@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from typing import ClassVar, Literal, cast
 
@@ -155,12 +155,15 @@ class QuickGenJob:
     review: QuickGenReview | None = None
 
 
-def collect_preflight_problems(state: State, *, for_preview: bool) -> tuple[str, ...]:
+def collect_preflight_problems(
+    state: State, *, for_preview: bool, phrase_indices: Iterable[int] | None = None
+) -> tuple[str, ...]:
     """Everything that should stop a quick job from starting, in one list.
 
-    Checks the run (or preview) readiness blockers, the voice samples
+    Checks the run (or preview) readiness blockers, the job's voice samples
     (including missing transcripts, which the modal cannot auto-transcribe),
-    and whether the shared model worker is already busy.
+    and whether the shared model worker is already busy. ``phrase_indices``
+    is None for a literal preview without a per-line voice assignment.
     """
     # Main-process UI flow only; lazy import keeps this module importable
     # without the menu chain.
@@ -174,7 +177,8 @@ def collect_preflight_problems(state: State, *, for_preview: bool) -> tuple[str,
     )
     if blocker_text:
         problems.append(blocker_text)
-    problems.extend(VoiceMenuShared.get_voice_problems(state))
+    voice_indices = ProjectVoiceUtil.get_job_voice_indices(state.project, phrase_indices)
+    problems.extend(VoiceMenuShared.get_voice_problems(state, voice_indices=voice_indices))
     if ModelWorker.is_busy():
         problems.append("The model worker is busy with another job")
     return tuple(problems)
@@ -199,7 +203,7 @@ def make_generation_job(state: State, phrase_index: int) -> QuickGenJob:
     return QuickGenJob(
         title=f"Quick generate - line {phrase_index + 1}",
         noun="Generation",
-        problems=collect_preflight_problems(state, for_preview=False),
+        problems=collect_preflight_problems(state, for_preview=False, phrase_indices=[phrase_index]),
         use_transcript=True,
         review=review,
         submit=lambda: ModelWorker.submit_generation(
@@ -217,7 +221,7 @@ def make_preview_job(state: State, title: str, prompt: str) -> QuickGenJob:
     return QuickGenJob(
         title=title,
         noun="Preview generation",
-        problems=collect_preflight_problems(state, for_preview=True),
+        problems=collect_preflight_problems(state, for_preview=True, phrase_indices=None),
         height=PREVIEW_DIALOG_HEIGHT,
         submit=lambda: ModelWorker.submit_tts_preview(
             state=state,

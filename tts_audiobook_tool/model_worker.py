@@ -1137,7 +1137,9 @@ def _model_worker_main(
                         state.project, instance
                     )
                 )
-                warnings = tuple(instance.get_warning_issues(state.project))
+                # Chat: no line assignment (voice 1 unless auto-advancing)
+                from tts_audiobook_tool.tts_models.voice_variation_warning import get_run_warnings
+                warnings = tuple(get_run_warnings(state.project, instance, None))
                 metadata: dict[str, object] = {}
                 for attribute in (
                     "model_type",

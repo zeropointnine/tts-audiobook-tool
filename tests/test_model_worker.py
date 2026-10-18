@@ -1587,6 +1587,9 @@ def test_worker_inspection_preserves_unsaved_params_after_selection_binding(tmp_
         staticmethod(lambda selected: SimpleNamespace(get_blocking_issues=lambda p, i: [])),
     )
     monkeypatch.setattr(ModelManager, "clear_all_models", staticmethod(lambda: None))
+    # Run warnings (incl. the voice-variation note) read real model support, stubbed above
+    from tts_audiobook_tool.tts_models import voice_variation_warning
+    monkeypatch.setattr(voice_variation_warning, "get_run_warnings", lambda *args: [])
     command = InspectTtsCommand(
         "inspection", str(tmp_path),
         GenerationSettings("disabled", "cpu_int8_float32", False, "vibevoice_local", "", False),

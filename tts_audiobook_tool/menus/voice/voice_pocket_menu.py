@@ -13,22 +13,11 @@ class VoicePocketMenu:
 
     @staticmethod
     def menu(state: State) -> None:
-        def make_voice_file_label(_: State) -> str:
-            label = "Select voice clone sample"
-            if not state.project.get_model_setting('pocket_local', 'file_name') and not state.project.get_model_setting('pocket_local', 'predefined_voice'):
-                label += f" {COL_DIM}({COL_ERROR}voice clone or predefined voice required{COL_DIM})"
-            else:
-                value = ProjectVoiceUtil.get_primary_voice_value(state.project, TtsModelType.require_by_id("pocket_local"))
-                if value:
-                    currently = make_currently_string(ellipsize_path_for_menu(value.removesuffix("_pocket.flac")))
-                    label += currently
-            return label
-
         def make_predefined_voice_label(_: State) -> str:
             name = state.project.get_model_setting('pocket_local', 'predefined_voice')
             currently = make_currently_string(name) if name else ""
             label = f"Select predefined voice {currently}".strip()
-            if name and state.project.voice_references:
+            if name and ProjectVoiceUtil.has_any_voice_sample(state.project):
                 label += f" {COL_DIM}(supercedes voice clone sample)"
             return label
 
@@ -36,7 +25,6 @@ class VoicePocketMenu:
             items = VoiceMenuShared.make_voice_sample_items(
                 state,
                 TtsModelType.require_by_id("pocket_local"),
-                no_samples_label=make_voice_file_label,
                 on_set_callback=lambda: validate_voice_file(state),
             )
             items.append(
@@ -88,7 +76,7 @@ def validate_voice_file(state: State) -> None:
     if state.pocket_voice_clone_access_validated:
         return
 
-    if state.project.get_model_setting('pocket_local', 'file_name') and not state.project.get_model_setting('pocket_local', 'predefined_voice'):
+    if ProjectVoiceUtil.has_any_voice_sample(state.project) and not state.project.get_model_setting('pocket_local', 'predefined_voice'):
 
         printt(f"{COL_DIM_ITALICS}Validating Pocket voice cloning access...")
         printt()
