@@ -10,6 +10,13 @@ from textual.widgets import Rule, Static
 
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.sound.waveform_util import (
+    WAVEFORM_LEVELS_PER_ROW,
+    color_played_columns,
+    compute_waveform_heights,
+    decode_peak_envelope,
+    render_centered_waveform_lines,
+)
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import duration_string
 
@@ -90,7 +97,7 @@ class RealTimePlaybackHeader(Vertical):
     def compose(self) -> ComposeResult:
         with Horizontal(classes="realtime-header-row"):
             yield Static(
-                Text.from_ansi(f"{COL_ACCENT}Realtime audiobook playback..."),
+                Text.from_ansi(f"{COL_ACCENT}Realtime audiobook playback"),
                 classes="realtime-header-left",
                 id="realtime-title",
             )
@@ -142,12 +149,82 @@ class RealTimePlaybackHeader(Vertical):
         )
 
 
+# Waveform band: rows above (positive peaks) and below (negative peaks) the
+# zero axis; the band is twice this tall.
+WAVEFORM_HALF_ROWS = 3
+# Gentler than the trim editor's 1.5: the shorter half-height would
+# otherwise erase quiet speech.
+WAVEFORM_AMPLITUDE_EXPONENT = 1.25
+# Amplitudes are measured against full scale (no per-segment normalization),
+# so relative loudness between segments stays visible.
+WAVEFORM_REFERENCE_PEAK = 1.0
+
+
+class RealTimePlaybackWaveform(Static):
+    """Conventional waveform of the segment at the current playhead.
+
+    Positive peaks extend up from the zero axis and negative peaks down,
+    each measured independently. Bars are COL_DIM; the already-played prefix
+    is redrawn in COL_DEFAULT. Silent stretches show the flat zero axis.
+    With no envelope (before the first segment) the band is just the axis.
+    The app drives `show` from its
+    fast waveform tick; the plain rendered rows are cached per (envelope,
+    width), and the widget is only updated when the played column changes.
+    """
+
+    DEFAULT_CSS = f"""
+    RealTimePlaybackWaveform {{
+        height: {2 * WAVEFORM_HALF_ROWS};
+        width: 100%;
+        padding: 0 1;
+    }}
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__("", markup=False, **kwargs)
+        self._lines_cache: tuple[tuple[bytes, int], list[str]] | None = None
+        self._rendered_key: tuple[bytes, int, int] | None = None
+
+    def show(self, envelope: bytes, progress: float) -> None:
+        columns = self.content_size.width
+        if columns <= 0:
+            return
+        cache_key = (envelope, columns)
+        cached = self._lines_cache
+        if cached is not None and cached[0] == cache_key:
+            lines = cached[1]
+        else:
+            # Both halves share the fixed reference peak, so their heights
+            # are directly comparable.
+            upper_heights, lower_heights = (
+                compute_waveform_heights(
+                    peaks,
+                    2 * columns,
+                    max_level=WAVEFORM_HALF_ROWS * WAVEFORM_LEVELS_PER_ROW,
+                    exponent=WAVEFORM_AMPLITUDE_EXPONENT,
+                    peak=WAVEFORM_REFERENCE_PEAK,
+                    # Short segments can have fewer envelope windows than bars.
+                    fill_empty_bars=True,
+                )
+                for peaks in decode_peak_envelope(envelope)
+            )
+            lines = render_centered_waveform_lines(
+                upper_heights, lower_heights, columns, WAVEFORM_HALF_ROWS
+            )
+            self._lines_cache = (cache_key, lines)
+        played_columns = round(max(0.0, min(1.0, progress)) * columns)
+        render_key = (envelope, columns, played_columns)
+        if render_key == self._rendered_key:
+            return
+        self._rendered_key = render_key
+        self.update(Text.from_ansi(color_played_columns(lines, played_columns)))
+
+
 class RealTimePlaybackSourceText(Vertical):
     """The two-line source-text band directly below the realtime header.
 
-    Shows the source text of the segment at the current playhead, dimmed
-    (the band is quiet context for the source, not a live highlight). The
-    app composes the band below the base's shared divider, and the band
+    Shows the source text of the segment at the current playhead, in
+    COL_ACCENT. The app composes the band below the base's shared divider, and the band
     closes itself with its own full-width rule (styled like the shared
     divider: same color and margin), so the two strokes frame the band
     between the header chrome and the worker log. The id selector wins the
@@ -163,6 +240,8 @@ class RealTimePlaybackSourceText(Vertical):
         height: 2;
         width: 100%;
         padding: 0 1;
+        /* One-line text sits on the lower row, against the closing rule. */
+        content-align-vertical: bottom;
     }
     #realtime-source-divider {
         color: #888888;
@@ -190,4 +269,4 @@ class RealTimePlaybackSourceText(Vertical):
         width = widget.content_size.width
         if width > 0:
             preview = _fit_two_lines(preview, width)
-        widget.update(Text.from_ansi(f"{COL_DIM}{preview}{COL_DEFAULT}"))
+        widget.update(Text.from_ansi(f"{COL_ACCENT}{preview}{COL_DEFAULT}"))

@@ -93,7 +93,7 @@ def test_source_text_wraps_to_two_lines_and_ellipsizes_overflow() -> None:
             band = pilot.app.query_one(RealTimePlaybackSourceText)
             text = band.query_one("#realtime-source-text", Static)
             # The band's text area is 78 cells wide (80 minus 1-cell padding
-            # on each side); content is dimmed (COL_DIM) so spans exist.
+            # on each side); content is colored (COL_ACCENT) so spans exist.
             assert text.content_size.width == 78
 
             band.update_playing_text("The quick brown fox")
@@ -101,6 +101,7 @@ def test_source_text_wraps_to_two_lines_and_ellipsizes_overflow() -> None:
             assert str(active) == "The quick brown fox"
             assert isinstance(active, Content)
             assert len(active.spans) > 0
+            assert str(active.spans[0].style) == "rgb(255,170,68)"  # COL_ACCENT #ffaa44
 
             # Two wrapped lines fit with no ellipsis.
             band.update_playing_text("a" * 100)
@@ -112,5 +113,26 @@ def test_source_text_wraps_to_two_lines_and_ellipsizes_overflow() -> None:
 
             band.update_playing_text("")
             assert str(text.render()) == ""
+
+    run(exercise())
+
+
+def test_source_text_single_line_is_bottom_aligned() -> None:
+    async def exercise() -> None:
+        async with SourceTextTestApp().run_test() as pilot:
+            await pilot.pause()
+            band = pilot.app.query_one(RealTimePlaybackSourceText)
+            text = band.query_one("#realtime-source-text", Static)
+
+            def rows() -> list[str]:
+                return [text.render_line(y).text.strip() for y in range(2)]
+
+            band.update_playing_text("The quick brown fox")
+            await pilot.pause()
+            assert rows() == ["", "The quick brown fox"]
+
+            band.update_playing_text("a" * 100)
+            await pilot.pause()
+            assert rows() == ["a" * 78, "a" * 22]
 
     run(exercise())

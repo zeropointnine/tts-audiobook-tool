@@ -851,6 +851,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
     - Room reverb stereo effect
     - Instructions (when applicable - eg, OmniVoice, etc.)
     - Voice preset (when applicable - eg, Pocket TTS)
+- `Realtime playback` now displays currently playing waveform
 
 **2026-10-16**
 

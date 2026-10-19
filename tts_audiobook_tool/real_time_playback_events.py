@@ -39,6 +39,12 @@ class RealTimePlaybackSegmentText:
     each event as an anchor and extrapolates the playhead forward at 1x
     device time between anchors (see
     RealTimePlaybackApp.interpolated_played_samples).
+
+    envelope is the segment's positive/negative peak envelope over the same
+    sample range
+    (waveform_util.compute_peak_envelope), for the app's waveform
+    display. It is empty for the final room-reverb tail, which the app
+    treats as a continuation of the previous segment's waveform.
     """
 
     index: int
@@ -46,6 +52,7 @@ class RealTimePlaybackSegmentText:
     start_sample: int
     end_sample: int
     played_samples: int
+    envelope: bytes = b""
 
 
 @dataclass(frozen=True)

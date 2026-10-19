@@ -49,6 +49,7 @@ from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPip
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
+from tts_audiobook_tool.sound.waveform_util import compute_peak_envelope
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
@@ -380,6 +381,11 @@ def _start_impl(
 
         RealTimePlaybackEvents.emit(RealTimePlaybackBuffer(stream.buffer_duration))
         if segment_end > segment_start:
+            # Envelope over exactly what was added for this segment (speech
+            # plus any page-turn sound), for the app's waveform display.
+            envelope = compute_peak_envelope(sound.data, sound.sr)
+            if appended_sound is not None:
+                envelope += compute_peak_envelope(appended_sound, sound.sr)
             RealTimePlaybackEvents.emit(
                 RealTimePlaybackSegmentText(
                     index=index,
@@ -387,6 +393,7 @@ def _start_impl(
                     start_sample=segment_start,
                     end_sample=segment_end,
                     played_samples=stream.played_samples,
+                    envelope=envelope,
                 )
             )
 
@@ -427,6 +434,8 @@ def _start_impl(
                 )
             RealTimePlaybackEvents.emit(RealTimePlaybackBuffer(stream.buffer_duration))
             if tail_end > tail_start:
+                # No envelope: the app keeps showing the previous segment's
+                # waveform (fully played) while the room tail decays.
                 RealTimePlaybackEvents.emit(
                     RealTimePlaybackSegmentText(
                         index=last_index,

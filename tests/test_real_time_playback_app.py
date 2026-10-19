@@ -42,7 +42,9 @@ from tts_audiobook_tool.textual.real_time_playback_app import (
     run_real_time_playback_modal,
 )
 from tts_audiobook_tool.textual.real_time_playback_header import (
+    WAVEFORM_HALF_ROWS,
     RealTimePlaybackSourceText,
+    RealTimePlaybackWaveform,
 )
 from tts_audiobook_tool.textual.worker_content import (
     WorkerLogContentArea,
@@ -82,10 +84,21 @@ def test_app_source_band_is_framed_below_the_shared_divider(monkeypatch) -> None
             band = app.query_one("#realtime-source", RealTimePlaybackSourceText)
             header_y = app.query_one("#realtime-header").region.y
             divider_y = app.query_one("#realtime-divider", Rule).region.y
+            waveform = app.query_one("#realtime-waveform", RealTimePlaybackWaveform)
             band_text_y = app.query_one("#realtime-source-text", Static).region.y
             band_rule_y = app.query_one("#realtime-source-divider", Rule).region.y
             log_y = app.query_one("#realtime-output-shell").region.y
-            assert header_y < divider_y < band_text_y < band_rule_y < log_y
+            assert header_y < divider_y < waveform.region.y < band_text_y < band_rule_y < log_y
+            # The waveform (2 * WAVEFORM_HALF_ROWS rows) sits directly above
+            # the text band, and with no segment yet shows just the dim
+            # midline, on the row above center, across its width.
+            half = WAVEFORM_HALF_ROWS
+            assert waveform.outer_size == Size(80, 2 * half)
+            assert waveform.region.bottom == band_text_y
+            rows = str(waveform.render()).split("\n")
+            assert len(rows) == 2 * half
+            assert rows[half - 1] == "▁" * 78
+            assert all(row.strip() == "" for i, row in enumerate(rows) if i != half - 1)
             # Exactly two rule widgets: the shared divider and the band's own.
             assert len(app.query(Rule)) == 2
             # 2-line text area plus the 1-line closing rule.
@@ -738,8 +751,39 @@ def test_playing_text_resets_when_stream_is_reused_mid_run(monkeypatch) -> None:
         RealTimePlaybackSegmentText(1, "Fresh start", 0, 48000, 0)
     )
 
-    assert app.spoken_segments == [("Fresh start", 0, 48000)]
+    assert app.spoken_segments == [("Fresh start", 0, 48000, b"")]
     assert app._current_playing_text() == ("Fresh start", False)
+
+
+def test_waveform_tracks_playhead_and_holds_through_envelope_less_tail(
+    monkeypatch,
+) -> None:
+    app = RealTimePlaybackApp(make_state(), [], None)
+    now = 100.0
+    monkeypatch.setattr(
+        "tts_audiobook_tool.textual.real_time_playback_app.time.monotonic",
+        lambda: now,
+    )
+    # Before any segment: no envelope, nothing played.
+    assert app._current_waveform() == (b"", 0.0)
+
+    first, second = b"\x10\x20", b"\x30\x40"
+    app._record_segment(RealTimePlaybackSegmentText(0, "A", 0, 48000, 0, first))
+    app._record_segment(RealTimePlaybackSegmentText(1, "B", 48000, 96000, 0, second))
+    assert app._current_waveform() == (first, 0.0)
+    now = 100.25  # a quarter of the way into the first 1s segment
+    assert app._current_waveform() == (first, pytest.approx(0.25))
+    now = 101.5
+    assert app._current_waveform() == (second, pytest.approx(0.5))
+
+    # The room tail carries no envelope: the second waveform stays, full.
+    app._record_segment(RealTimePlaybackSegmentText(1, "B", 96000, 120000, 72000))
+    now = 102.2
+    assert app._current_playing_text() == ("B", False)
+    assert app._current_waveform() == (second, 1.0)
+    # Past the end (underflow): still the last waveform, fully played.
+    now = 110.0
+    assert app._current_waveform() == (second, 1.0)
 
 
 @pytest.mark.parametrize("max_retries", [0, 1, 2, 3, 5])
@@ -937,6 +981,9 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
     assert "Hello." in event.text
     assert (event.start_sample, event.end_sample) == (0, 48000)
     assert event.played_samples == 0
+    # Two envelope bytes (positive, negative peak) per 10ms window of the
+    # 1s segment (silent here).
+    assert event.envelope == bytes(200)
     assert streams[0].shut_downs == 1
 
 

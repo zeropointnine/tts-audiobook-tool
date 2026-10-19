@@ -10,8 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import time
 
-import numpy as np
-
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
@@ -23,7 +21,9 @@ from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
+from tts_audiobook_tool.sound import waveform_util
 from tts_audiobook_tool.sound.sound_util import SoundUtil
+from tts_audiobook_tool.sound.waveform_util import WAVEFORM_BLOCK_CHARS, WAVEFORM_LEVELS_PER_ROW
 from tts_audiobook_tool.textual.textual_shared import can_textual
 
 __all__ = [
@@ -45,20 +45,14 @@ COARSE_STEP_S = 1.0
 PREVIEW_TICK_SECONDS = FINE_STEP_S
 # Undocumented Shift-P hotkey: preview the last TAIL seconds of the range.
 TAIL_PREVIEW_S = 1.0
-# Waveform visualization: rows at the waveform's relative max amplitude,
-# and the blank row between the visualization and the bar. Quadrant characters
-# give each row 2 vertical levels and each character 2 independent bars.
+# Waveform visualization (see sound/waveform_util.py): rows at the waveform's
+# relative max amplitude, and the blank row between the visualization and the
+# bar. Quadrant characters give each row 2 vertical levels and each character
+# 2 independent bars.
 WAVEFORM_ROWS = 6
 WAVEFORM_GAP_ROWS = 1
-WAVEFORM_LEVELS_PER_ROW = 2
 # Halfway between linear amplitude and the previous squared curve.
 WAVEFORM_AMPLITUDE_EXPONENT = 1.5
-# Indexed by quadrant mask: upper-left=8, upper-right=4, lower-left=2,
-# lower-right=1. Index 0 is blank; index 15 fills all four quadrants.
-WAVEFORM_BLOCK_CHARS = (
-    " ", "▗", "▖", "▄", "▝", "▐", "▞", "▟",
-    "▘", "▚", "▌", "▙", "▀", "▜", "▛", "█",
-)
 # Horizontal margin around the centered bar, and its maximum width.
 BAR_MARGIN_COLUMNS = 5
 BAR_MAX_WIDTH = 200
@@ -177,64 +171,32 @@ def render_crop_bar(
 
 
 def compute_waveform_heights(data, columns: int) -> list[int]:
-    """Per-virtual-bar waveform heights, normalized to the global peak.
+    """Per-virtual-bar waveform heights, normalized to the sample's peak.
 
     `columns` counts sampled bars, not terminal characters (two bars per
-    character). `data` is the mono sample array. Each bar takes the max absolute
-    amplitude over its slice of the timeline, then raises the peak-normalized
-    amplitude to 1.5 to gently suppress quieter portions and emphasize peaks.
-    Heights are rounded to the nearest sub-row level; the loudest bar is
-    exactly WAVEFORM_ROWS * WAVEFORM_LEVELS_PER_ROW (a full block to the top).
-    Silence and amplitudes that round below half a level remain blank.
+    character). `data` is the mono sample array. The loudest bar is exactly
+    WAVEFORM_ROWS * WAVEFORM_LEVELS_PER_ROW (a full block to the top); see
+    waveform_util.compute_waveform_heights for the scaling.
     """
-    if columns <= 0 or data.size == 0:
-        return [0] * max(0, columns)
-    peak = float(np.max(np.abs(data))) if data.size else 0.0
-    if peak <= 0.0:
-        return [0] * columns
-    max_level = WAVEFORM_ROWS * WAVEFORM_LEVELS_PER_ROW
-    edges = np.linspace(0, data.size, columns + 1, dtype=np.int64)
-    heights: list[int] = []
-    for i in range(columns):
-        chunk = data[edges[i]:edges[i + 1]]
-        amplitude = float(np.max(np.abs(chunk))) if chunk.size else 0.0
-        # Nonlinear scaling favors aesthetics; blank regions may still contain quiet speech.
-        level = round(max_level * (amplitude / peak) ** WAVEFORM_AMPLITUDE_EXPONENT)
-        heights.append(min(max_level, max(0, level)))
-    return heights
+    return waveform_util.compute_waveform_heights(
+        data,
+        columns,
+        max_level=WAVEFORM_ROWS * WAVEFORM_LEVELS_PER_ROW,
+        exponent=WAVEFORM_AMPLITUDE_EXPONENT,
+    )
 
 
 def render_waveform(heights: list[int], columns: int) -> str:
     """Render the top-half waveform block (COL_DIM), top row first.
 
     `columns` counts terminal characters; `heights` contains twice that many
-    virtual bars, ordered left-to-right. Each character pairs two independent
-    bottom-aligned bars, with two vertical levels per row. Missing heights are
-    zero, extra heights are ignored, and heights are clamped to the block.
-    The block is WAVEFORM_ROWS lines tall; each line is one leading space
-    (the bar's "<" column) plus `columns` characters. The caller adds the gap
-    row(s) and the bar below.
+    virtual bars (see waveform_util.render_waveform_lines). The block is
+    WAVEFORM_ROWS lines tall; each line is one leading space (the bar's "<"
+    column) plus `columns` characters. The caller adds the gap row(s) and the
+    bar below.
     """
-    columns = max(0, columns)
-    left_masks = (0, 2, 10)
-    right_masks = (0, 1, 5)
-    lines = []
-    for row_index in range(WAVEFORM_ROWS):
-        # Levels covered by the rows strictly below this one.
-        below = (WAVEFORM_ROWS - 1 - row_index) * WAVEFORM_LEVELS_PER_ROW
-        chars = []
-        for column in range(columns):
-            left_index = 2 * column
-            right_index = left_index + 1
-            left_height = heights[left_index] if left_index < len(heights) else 0
-            right_height = heights[right_index] if right_index < len(heights) else 0
-            left_level = max(0, min(WAVEFORM_LEVELS_PER_ROW, left_height - below))
-            right_level = max(0, min(WAVEFORM_LEVELS_PER_ROW, right_height - below))
-            mask = left_masks[left_level] | right_masks[right_level]
-            chars.append(WAVEFORM_BLOCK_CHARS[mask])
-        line = " " + "".join(chars)
-        lines.append(f"{COL_DIM}{line}{COL_DEFAULT}")
-    return "\n".join(lines)
+    lines = waveform_util.render_waveform_lines(heights, columns, WAVEFORM_ROWS)
+    return "\n".join(f"{COL_DIM} {line}{COL_DEFAULT}" for line in lines)
 
 
 class CropCenterContainer(Container):

@@ -30,6 +30,7 @@ from tts_audiobook_tool.textual.real_time_playback_header import (
     PromptMode,
     RealTimePlaybackHeader,
     RealTimePlaybackSourceText,
+    RealTimePlaybackWaveform,
 )
 from tts_audiobook_tool.textual.worker_app import (
     FINAL_OUTPUT_SETTLE_SECONDS,
@@ -65,8 +66,8 @@ _TERMINAL_LABELS: dict[RealTimePlaybackTerminalStatus, str] = {
 
 
 class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
-    """Full-screen realtime playback session: header, divider, dimmed
-    source-text band, live worker log."""
+    """Full-screen realtime playback session: header, divider, waveform and
+    source-text bands, live worker log."""
 
     CSS = worker_app_css("realtime-divider")
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -76,6 +77,9 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
     DIVIDER_ID: ClassVar[str] = "realtime-divider"
     OUTPUT_SHELL_ID: ClassVar[str] = "realtime-output-shell"
     HEADER_UPDATE_SECONDS: ClassVar[float] = 0.25
+    # The waveform's played fill animates faster than the header refresh;
+    # its tick only recolors cached rows.
+    WAVEFORM_UPDATE_SECONDS: ClassVar[float] = 0.05
 
     def __init__(
         self,
@@ -97,9 +101,11 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         self.buffer_seconds = 0.0
         self.is_paused = False
         self.buffer_updated_at = self.started_at
-        # (text, start_sample, end_sample) for each segment whose audio was
-        # added to the stream; used to show which source text is being played.
-        self.spoken_segments: list[tuple[str, int, int]] = []
+        # (text, start_sample, end_sample, envelope) for each segment whose
+        # audio was added to the stream; used to show which source text is
+        # being played and its waveform. The envelope is empty for the final
+        # room-reverb tail.
+        self.spoken_segments: list[tuple[str, int, int, bytes]] = []
         # (monotonic timestamp, played_samples, total_samples_added) of the
         # most recent segment-anchor event; the playhead extrapolates from it.
         self.play_anchor: tuple[float, int, int] | None = None
@@ -111,10 +117,18 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         yield RealTimePlaybackHeader(id="realtime-header")
 
     def compose_below_divider(self) -> ComposeResult:
-        # The band sits below the shared divider and closes itself with its
-        # own rule, so the two strokes frame it between the header chrome
-        # and the worker log.
+        # The waveform and source-text bands sit below the shared divider;
+        # the text band closes itself with its own rule, so the two strokes
+        # frame both between the header chrome and the worker log.
+        yield RealTimePlaybackWaveform(id="realtime-waveform")
         yield RealTimePlaybackSourceText(id="realtime-source")
+
+    def on_mount(self) -> None:
+        # No super() call: Textual dispatches on_mount to every class in
+        # the MRO, so the base's session startup already runs on its own.
+        self.set_interval(self.WAVEFORM_UPDATE_SECONDS, self._update_waveform)
+        # Band widths are not final until the first layout pass.
+        self.call_after_refresh(self._update_waveform)
 
     def submit_worker_job(self) -> str:
         return ModelWorker.submit_realtime_playback(
@@ -344,7 +358,7 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
             # backwards), so previous sample ranges are stale; start fresh.
             self.spoken_segments = []
         self.spoken_segments.append(
-            (update.text, update.start_sample, update.end_sample)
+            (update.text, update.start_sample, update.end_sample, update.envelope)
         )
         self.play_anchor = (time.monotonic(), update.played_samples, update.end_sample)
 
@@ -367,27 +381,71 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         elapsed = 0.0 if self.is_paused else max(0.0, time.monotonic() - anchor_at)
         return min(anchor_added, anchor_played + int(elapsed * APP_SAMPLE_RATE))
 
-    def _current_playing_text(self) -> tuple[str, bool]:
+    def _active_segment(self) -> tuple[int, int] | None:
         """
-        (text, finished) of the segment the estimated playhead is inside.
-        When the cursor is not inside any segment (typically frozen at the
-        end of the last one while underflowed), the last segment is returned
-        as finished.
+        (index into spoken_segments, playhead sample) for the segment the
+        estimated playhead is inside, or None when there is no playhead or
+        no segment. When the cursor is not inside any segment (typically
+        frozen at the end of the last one while underflowed), the index is
+        -1, meaning "past the last segment".
         """
         pos = self.interpolated_played_samples
         if pos is None or not self.spoken_segments:
-            return "", False
+            return None
         active_idx = next(
             (
                 i
-                for i, (_, start, end) in enumerate(self.spoken_segments)
+                for i, (_, start, end, _) in enumerate(self.spoken_segments)
                 if start <= pos < end
             ),
-            None,
+            -1,
         )
-        if active_idx is not None:
+        return active_idx, pos
+
+    def _current_playing_text(self) -> tuple[str, bool]:
+        """
+        (text, finished) of the segment the estimated playhead is inside.
+        When the cursor is not inside any segment, the last segment is
+        returned as finished.
+        """
+        active = self._active_segment()
+        if active is None:
+            return "", False
+        active_idx, _ = active
+        if active_idx >= 0:
             return self.spoken_segments[active_idx][0], False
         return self.spoken_segments[-1][0], True
+
+    def _current_waveform(self) -> tuple[bytes, float]:
+        """
+        (envelope, played fraction) for the waveform band.
+
+        A segment without an envelope (the final room-reverb tail), or a
+        playhead past the last segment, shows the most recent segment that
+        has one, fully played. Before any segment: an empty envelope.
+        """
+        active = self._active_segment()
+        if active is None:
+            return b"", 0.0
+        active_idx, pos = active
+        if active_idx >= 0:
+            _, start, end, envelope = self.spoken_segments[active_idx]
+            if envelope:
+                return envelope, (pos - start) / (end - start)
+            earlier = self.spoken_segments[:active_idx]
+        else:
+            earlier = self.spoken_segments
+        for _, _, _, envelope in reversed(earlier):
+            if envelope:
+                return envelope, 1.0
+        return b"", 0.0
+
+    def _update_waveform(self) -> None:
+        # Freezes with the header during teardown.
+        if not self.is_mounted or self.teardown_in_progress:
+            return
+        envelope, progress = self._current_waveform()
+        self.query_one(RealTimePlaybackWaveform).show(envelope, progress)
 
     def _update_header(self) -> None:
         if not self.is_mounted or self.teardown_in_progress:
@@ -405,7 +463,7 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
                 and self.terminal_result is None
             ),
         )
-        # The source-text band renders uniformly dim, so the finished flag
+        # The source-text band renders in one uniform color, so the finished flag
         # (playhead past the last segment) no longer affects rendering.
         playing_text, _ = self._current_playing_text()
         self.query_one(RealTimePlaybackSourceText).update_playing_text(playing_text)
