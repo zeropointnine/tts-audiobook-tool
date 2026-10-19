@@ -21,6 +21,15 @@ class ModelSelectMenu:
         )
 
     @staticmethod
+    def is_selection_required(state: State) -> bool:
+        """
+        True when the project has no usable model and there is a choice to make;
+        matches the main menu's red `(requires: TTS model selection)` suffix
+        """
+        return (state.project.get_tts_model_type().id == "none"
+                and len(Tts.get_available_tts_models()) >= 2)
+
+    @staticmethod
     def make_menu_label(state: State) -> str:
         """
         Menu item label, eg, `Switch TTS model (3 available) (currently: Chatterbox)`

@@ -120,6 +120,32 @@ def test_remote_model_menu_leads_with_model_picker(monkeypatch, model_id):
         assert len(items) > 1 and items[1].blank_line_before
 
 
+@pytest.mark.parametrize(("remote", "model_id", "available_count", "expected"), [
+    (True, "none", 2, "1"),
+    (True, "none", 1, ""),
+    (True, "omnivoice_audiocpp", 2, ""),
+    (False, "omnivoice_audiocpp", 2, ""),
+])
+def test_remote_model_menu_opens_picker_immediately_when_selection_required(
+        monkeypatch, remote, model_id, available_count, expected):
+    from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type=model_id)))
+    captured = {}
+    models = [TtsModelType.require_by_id("chatterbox_audiocpp"), TtsModelType.require_by_id("higgs_v3_audiocpp")]
+    monkeypatch.setattr(model_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
+    if remote:
+        monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: models[:available_count])
+
+    ModelMenuShared.menu(state)
+
+    assert captured["initial_hotkey"] == expected
+    if expected:
+        picker = captured["items"](state)[0]
+        assert get_string_from(state, picker.label).startswith("Switch TTS model")
+
+
 @pytest.mark.parametrize("qualifier", ["", "Requires batch size 1."])
 def test_rolling_continuation_subheading_preserves_paragraph_spacing(monkeypatch, qualifier):
     state = cast(State, SimpleNamespace(project=Project()))

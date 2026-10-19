@@ -42,7 +42,16 @@ class ModelMenuShared:
         if (Tts.is_remote_mode()
                 or Tts.get_audio_cpp_definition(model_type) is not None
                 or Tts.get_configured_definition(model_type) is not None):
-            ModelMenuShared.menu_wrapper(state, ModelMenuShared.make_remote_items)
+            initial_hotkey = ""
+            if Tts.is_remote_mode():
+                from tts_audiobook_tool.menus.model.model_select_menu import ModelSelectMenu
+                if ModelSelectMenu.is_selection_required(state):
+                    # Nothing else to do here until a model is chosen, so go
+                    # straight to the picker (always item "1"; see make_remote_items).
+                    initial_hotkey = "1"
+            ModelMenuShared.menu_wrapper(
+                state, ModelMenuShared.make_remote_items, initial_hotkey=initial_hotkey
+            )
             return
         # Only local models reach the legacy per-model menus; remote
         # variants are always handled by the remote menu above.
@@ -138,9 +147,12 @@ class ModelMenuShared:
             state: State,
             items: MenuItemListOrMaker,
             subheading: StringOrMaker | None = None,
+            initial_hotkey: str = "",
     ) -> None:
         """
         Simple wrapper with standardized heading, model note and exit callback
+
+        :param initial_hotkey: Item to activate on entry (see `MenuUtil.menu`)
         """
         def make_subheading(current: State) -> str:
             note = current.project.get_tts_model_type().value.ui.get("settings_note", "").strip()
@@ -154,6 +166,7 @@ class ModelMenuShared:
             subheading=make_subheading,
             on_exit=lambda: PlaySoundUtil.stop_sound_async(),
             breadcrumb="Model",
+            initial_hotkey=initial_hotkey,
         )
 
     @staticmethod

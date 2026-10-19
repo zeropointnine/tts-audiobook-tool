@@ -6,7 +6,7 @@ from typing import cast
 import pytest
 
 from tts_audiobook_tool.app_types.voice import Voice
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuFrame, MenuItem, MenuUtil
 from tts_audiobook_tool.menus.menu_status import MenuStatus
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
@@ -65,6 +65,31 @@ def test_menu_calls_on_shown_after_render(monkeypatch) -> None:
     )
 
     assert shown == [True]
+
+
+def test_menu_initial_hotkey_activates_item_once_before_first_render(monkeypatch) -> None:
+    state = make_state()
+    events: list[str] = []
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", lambda _: None)
+    monkeypatch.setattr(MenuStatus, "print_block", lambda _: None)
+    monkeypatch.setattr(MenuStatus, "prepare_tts", lambda _: None)
+    monkeypatch.setattr(MenuUtil, "print_heading",
+                        lambda *_args, **kwargs: events.append(f"render {kwargs['breadcrumb_text']}"))
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.ask.ask_hotkey", lambda: "\x1b")
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.ask.can_hotkey", True)
+    monkeypatch.setattr(MenuUtil, "menu_frames", [MenuFrame(heading="Main")])
+
+    def on_picker(_: State, __: MenuItem) -> None:
+        # The menu's frame is already pushed, so a submenu opened here reads "Main > Model >".
+        events.append("picker " + " > ".join(str(frame.breadcrumb or frame.heading) for frame in MenuUtil.menu_frames))
+
+    MenuUtil.menu(
+        state, "Model settings",
+        lambda _: [MenuItem("Switch TTS model", on_picker), MenuItem("Other", lambda *_: None)],
+        breadcrumb="Model", initial_hotkey="1",
+    )
+
+    assert events == ["picker Main > Model", "render Main >"]
 
 
 def test_blank_line_before_item_is_rendered_without_changing_superlabel_spacing(monkeypatch) -> None:

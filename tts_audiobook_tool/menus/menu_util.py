@@ -89,6 +89,7 @@ class MenuUtil:
         on_exit: Callable | None = None,
         breadcrumb: StringOrMaker | None = None,
         on_shown: Callable[[], None] | None = None,
+        initial_hotkey: StringOrMaker = "",
     ):
         """
         Prints a menu of items, waits for input, and executes mapped callback.
@@ -105,15 +106,41 @@ class MenuUtil:
 
         param on_shown
             Gets called after the menu has been rendered and before input is read.
+
+        param initial_hotkey
+            Hotkey (or maker; "" for none) of an item to activate once, on entry, as if
+            pressed. It runs before the first render, since the item's own screen would
+            immediately clear this one. The menu then continues normally.
         """
+
+        def run_item(selected_item: MenuItem) -> bool:
+            """Executes the item's callback; returns True if the menu should exit."""
+            should_return = selected_item.handler(state, selected_item)
+            if should_return is True or one_shot:
+                if on_exit:
+                    on_exit()
+                return True
+            return False
 
         MenuUtil.menu_frames.append(MenuFrame(heading=heading, breadcrumb=breadcrumb))
         try:
+            auto_hotkey = get_string_from(state, initial_hotkey) if initial_hotkey else ""
             while True:
 
                 # MainMenu.on_shown marks startup complete before footer hints run.
                 is_first_main_menu = not is_submenu and not getattr(state, "has_shown_main_menu", False)
                 MenuStatus.prepare_tts(state)
+
+                if auto_hotkey:
+                    hotkey, auto_hotkey = auto_hotkey, ""
+                    auto_item = next(
+                        (item for item in MenuUtil.make_items_list(state, items) if item.hotkey == hotkey),
+                        None
+                    )
+                    if auto_item:
+                        if run_item(auto_item):
+                            return
+                        continue
 
                 # Print heading
                 s = get_string_from(state, heading)
@@ -133,30 +160,7 @@ class MenuUtil:
 
                 # The heading's status block also reconciles model selection.
                 # Build controls afterward so they target the displayed model.
-                if isinstance(items, list):
-                    items_list: list[MenuItem] = items
-                else:
-                    items_list = items(state)
-
-                is_all_hotkeys = all(item.hotkey for item in items_list)
-                is_no_hotkeys = all(not item.hotkey for item in items_list)
-
-                if not is_all_hotkeys and not is_no_hotkeys:
-                    raise ValueError("All MenuItems must have hotkeys or no MenuItems must have hotkeys")
-
-                if is_no_hotkeys:
-                    # Assign hotkeys to items
-                    HOTKEYS_AUTO = list('123456789abcdefghijklmnopqrstuvwxyz')
-                    items_list = items_list[:len(HOTKEYS_AUTO)] # Silently clamp
-                    for i, item in enumerate(items_list):
-                        item.hotkey = HOTKEYS_AUTO[i]
-                else:
-                    # Verify no dupes
-                    hotkeys = set[str]()
-                    for item in items_list:
-                        if item.hotkey in hotkeys:
-                            raise ValueError(f"Duplicate hotkey {item.hotkey}")
-                        hotkeys.add(item.hotkey)
+                items_list = MenuUtil.make_items_list(state, items)
 
                 left_padding = "  "
 
@@ -224,18 +228,37 @@ class MenuUtil:
                             return
 
                 # Execute mapped callback function
-                should_return = selected_item.handler(state, selected_item)
-                if should_return is True:
-                    if on_exit:
-                        on_exit()
-                    return
-
-                if one_shot:
-                    if on_exit:
-                        on_exit()
+                if run_item(selected_item):
                     return
         finally:
             MenuUtil.menu_frames.pop()
+
+    @staticmethod
+    def make_items_list(state: State, items: MenuItemListOrMaker) -> list[MenuItem]:
+        """Resolves the items and validates their hotkeys, auto-assigning them when none are set."""
+        items_list = items if isinstance(items, list) else items(state)
+
+        is_all_hotkeys = all(item.hotkey for item in items_list)
+        is_no_hotkeys = all(not item.hotkey for item in items_list)
+
+        if not is_all_hotkeys and not is_no_hotkeys:
+            raise ValueError("All MenuItems must have hotkeys or no MenuItems must have hotkeys")
+
+        if is_no_hotkeys:
+            # Assign hotkeys to items
+            HOTKEYS_AUTO = list('123456789abcdefghijklmnopqrstuvwxyz')
+            items_list = items_list[:len(HOTKEYS_AUTO)] # Silently clamp
+            for i, item in enumerate(items_list):
+                item.hotkey = HOTKEYS_AUTO[i]
+        else:
+            # Verify no dupes
+            hotkeys = set[str]()
+            for item in items_list:
+                if item.hotkey in hotkeys:
+                    raise ValueError(f"Duplicate hotkey {item.hotkey}")
+                hotkeys.add(item.hotkey)
+
+        return items_list
 
     @staticmethod
     def make_breadcrumb_text(state: State) -> str:

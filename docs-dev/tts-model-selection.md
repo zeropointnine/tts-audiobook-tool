@@ -141,6 +141,8 @@ The main menu's **Model settings** label appends red **`(requires: TTS model sel
 
 In server mode, the picker is the first item of **Model settings**, followed by the selected model's controls; the menu opens even when no model is selected (local mode still requires one). Its label, **TTS model**, shows `(currently: requires selection)` when the saved selection is `"none"` and at least two distinct types are available. Only `requires selection` is red; the surrounding qualifier retains its normal color. With zero or one available type, it remains `None (unselected)`. Known model names and unknown-ID labels are unchanged.
 
+When that same condition holds on entry (`ModelSelectMenu.is_selection_required`: resolved type `"none"`, at least two available types), **Model settings** opens the picker immediately via `MenuUtil.menu(initial_hotkey="1")`. The picker is activated before Model settings first renders, so its breadcrumb is `Main > Model >`. After a choice is made, or the user backs out, Model settings renders normally.
+
 ## 6. Edge-case policies and their provenance
 
 These distinguish explicit selection requirements from choices made for previously unspecified cases:
