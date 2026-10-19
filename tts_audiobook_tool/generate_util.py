@@ -283,9 +283,14 @@ class GenerateUtil:
                     eta_seconds=eta_seconds,
                 )
             )
+            heading_voice_index = sub.voice_selection_index
+            if heading_voice_index is None and len(indices) == 1:
+                heading_voice_index = GenerateUtil.get_user_defined_voice_index(
+                    project, project.phrase_groups, indices[0]
+                )
             GenerateUtil.print_batch_heading(
                 indices=indices,
-                voice_index=sub.voice_selection_index,
+                voice_index=heading_voice_index,
                 show_divider=True,
             )
 
@@ -970,6 +975,25 @@ class GenerateUtil:
                 printt(COL_ERROR + err)
 
         return "", sound_path
+
+    @staticmethod
+    def get_user_defined_voice_index(
+        project: Project, phrase_groups: list[PhraseGroup], index: int
+    ) -> int | None:
+        """
+        The voice sample index a single line will be generated with when the
+        project uses user-defined voice selections (same clamping as
+        `generate()`), or None otherwise (disabled mode, auto-advance, or no
+        voice samples), where the voice is not a fixed per-line property.
+        """
+        if project.voice_select_mode != VoiceSelectMode.USER_DEFINED:
+            return None
+        voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
+        if not voice_values:
+            return None
+        return ProjectVoiceUtil.get_effective_voice_index(
+            phrase_groups[index].voice_index, len(voice_values)
+        )
 
     @staticmethod
     def print_batch_heading(

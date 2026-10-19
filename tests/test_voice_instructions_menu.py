@@ -140,7 +140,7 @@ def test_instruction_preview_flattens_whitespace_and_ellipsizes_at_40(monkeypatc
 
 
 @pytest.mark.parametrize("model_id,expected_label,has_override", [
-    (BREEZE, "Instructions/Breeze TTS 2", False),
+    (BREEZE, "Instructions/Breeze TTS 2", True),
     ("omnivoice_local", "Voice design/OmniVoice", True),
     ("omnivoice_audiocpp", "Voice design/OmniVoice", True),
 ])
@@ -156,7 +156,14 @@ def test_instruction_label_and_prompt_use_catalog_override_or_default(monkeypatc
 
     ui = project.get_tts_model_type().value.ui
     assert ("instructions_message" in ui) is has_override
-    assert printed == [ui.get("instructions_message", menu.DEFAULT_INSTRUCTIONS_MESSAGE)]
+    assert printed == [menu.format_instructions_message(ui.get("instructions_message", menu.DEFAULT_INSTRUCTIONS_MESSAGE))]
+
+
+def test_instructions_message_dims_only_parenthesized_lines():
+    assert menu.format_instructions_message(menu.DEFAULT_INSTRUCTIONS_MESSAGE) == menu.DEFAULT_INSTRUCTIONS_MESSAGE
+    assert menu.format_instructions_message("Enter:\n(hint one)\n(hint two)") == (
+        f"Enter:\n{menu.COL_DIM}(hint one){menu.COL_DEFAULT}\n{menu.COL_DIM}(hint two){menu.COL_DEFAULT}"
+    )
 
 
 def install_fake_omnivoice_resolver(monkeypatch):

@@ -227,7 +227,12 @@ def _start_impl(
         phrase = phrase_group.as_flattened_phrase()
 
         printt()
-        GenerateUtil.print_batch_heading(indices=[index])
+        GenerateUtil.print_batch_heading(
+            indices=[index],
+            voice_index=GenerateUtil.get_user_defined_voice_index(
+                state.project, phrase_groups, index
+            ),
+        )
         printt(f"{COL_DIM_ITALICS}{phrase_group.presentable_text}")
         printt()
 

@@ -63,6 +63,14 @@ TRANSCRIPT_PREVIEW_LENGTH = 40
 INSTRUCTIONS_MAX_LENGTH = 4000
 DEFAULT_INSTRUCTIONS_MESSAGE = "Enter instructions for this voice:"
 
+
+def format_instructions_message(message: str) -> str:
+    """Dims the parenthesized hint lines of a catalog `instructions_message`."""
+    return "\n".join(
+        f"{COL_DIM}{line}{COL_DEFAULT}" if line.lstrip().startswith("(") else line
+        for line in message.split("\n")
+    )
+
 # Minimum duration of an imported voice sample, checked before and after silence trim
 VOICE_SAMPLE_MIN_DURATION_S = 2.0
 
@@ -1047,7 +1055,7 @@ class VoiceMenuShared:
     def ask_voice_instructions(state: State, tts_type: TtsModelType, index: int) -> None:
         """Edit this voice's instructions; blank/cancel leaves them unchanged."""
         current = state.project.voice_references[index].instructions.get(tts_type.id, "")
-        printt(tts_type.value.ui.get("instructions_message", DEFAULT_INSTRUCTIONS_MESSAGE))
+        printt(format_instructions_message(tts_type.value.ui.get("instructions_message", DEFAULT_INSTRUCTIONS_MESSAGE)))
         value = ask.ask_input(lower=False, prefill=current).strip()
         if not value or value == current:
             return
