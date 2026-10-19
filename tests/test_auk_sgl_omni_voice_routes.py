@@ -32,7 +32,7 @@ from tts_audiobook_tool.tts_models.auk_duration import estimate_instruct_tts_sec
 from tts_audiobook_tool.tts_models.sgl_omni_behavior_auk import AukSglOmniBehavior
 from tts_audiobook_tool.tts_models.sgl_omni_configured import ConfiguredModelSupport, SglOmniBackendAdapter
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
-from tts_audiobook_tool.tts_models.voice_variation_warning import get_voice_variation_warning
+from tts_audiobook_tool.tts_models.voice_variation_warning import get_voice_variation_warnings
 
 AUK = "auk_sglomni"
 FLASH = "auk_flash_sglomni"
@@ -223,9 +223,9 @@ def test_sample_less_voice_passes_preflight_with_a_variation_note(install, tmp_p
     support = ConfiguredModelSupport(definition)
     assert VoiceMenuShared.get_voice_problems(state) == []
     assert [issue for issue in support.get_blocking_issues(project) if issue.short != "SGL-Omni server"] == []
-    assert get_voice_variation_warning(project, [0]) == (
-        "Note: Generated voices may vary between segments "
-        "(AuK instruction sets the kind of voice, but not a fixed speaker).")
+    assert get_voice_variation_warnings(project, [0]) == [
+        "Generated voices may vary between segments "
+        "(AuK instruction sets the kind of voice, but not a fixed speaker). (Voice 1)"]
 
 
 @pytest.mark.parametrize("model_id, name", [(AUK, "AuK"), (FLASH, "AuK-Flash")])
@@ -235,16 +235,17 @@ def test_variation_note_is_auk_specific_only_for_an_in_play_described_voice(inst
                        Voice("a.flac", "words", instructions={model_id: "Unused with a sample."}),
                        Voice(instructions={model_id: "A calm narrator."}),
                        Voice())
-    specific = (f"Note: Generated voices may vary between segments "
+    specific = (f"Generated voices may vary between segments "
                 f"({name} instruction sets the kind of voice, but not a fixed speaker).")
-    generic = "Note: Generated voices may vary because no voice reference has been configured."
-    assert get_voice_variation_warning(project, [0]) == ""  # cloned: no note
-    assert get_voice_variation_warning(project, [1]) == specific
-    assert get_voice_variation_warning(project, [2]) == generic  # server's default description
-    assert get_voice_variation_warning(project, [0, 1, 2]) == specific
+    generic = "Generated voices may vary because no voice reference has been configured."
+    assert get_voice_variation_warnings(project, [0]) == []  # cloned: no note
+    assert get_voice_variation_warnings(project, [1]) == [f"{specific} (Voice 2)"]
+    assert get_voice_variation_warnings(project, [2]) == [f"{generic} (Voice 3)"]  # server's default description
+    # A mixed run gets each note for its own voices
+    assert get_voice_variation_warnings(project, [0, 1, 2]) == [f"{specific} (Voice 2)", f"{generic} (Voice 3)"]
     # Another model's instructions on the voice do not count
     project.voice_references[2].instructions["auk_flash_sglomni" if model_id == AUK else AUK] = "Other model."
-    assert get_voice_variation_warning(project, [2]) == generic
+    assert get_voice_variation_warnings(project, [2]) == [f"{generic} (Voice 3)"]
 
 
 def test_voice_with_a_sample_still_requires_its_transcript(install, monkeypatch, tmp_path):

@@ -5,7 +5,7 @@ import random
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
-from tts_audiobook_tool.app_types import ReadinessIssue, Sound, StreamChunkCallback, StreamEndCallback, VoiceDisplayInfo
+from tts_audiobook_tool.app_types import ReadinessIssue, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import MAX_WORDS_PER_SEGMENT_RECO_RANGE
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.seed_util import get_random_seed_max
@@ -15,7 +15,7 @@ from tts_audiobook_tool.tts_models.audio_cpp_definition import (
     AudioCppTextParameter,
 )
 from tts_audiobook_tool.tts_models.audio_cpp_behavior import get_audio_cpp_behavior
-from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
+from tts_audiobook_tool.tts_models.model_support import make_max_words_exceed_warning
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 if TYPE_CHECKING:
@@ -100,15 +100,8 @@ class AudioCppModelSupport:
         return self.definition.max_words_range_reco or MAX_WORDS_PER_SEGMENT_RECO_RANGE
 
     def get_max_words_exceed_warning(self, project: Project) -> str:
-        from tts_audiobook_tool.constants import Ansi
-        reco = self.get_max_words_range_reco(project)
-        limit = reco[1]
-        count = project.book.segmentation_settings.max_words_per_segment
-        if not max_words_exceeds_recommended(count, limit):
-            return ""
-        name = reco[2] or self.INFO.ui.get("proper_name") or self.INFO.id
-        return (f"{Ansi.ITALICS}Source text's max word length ({count}) exceeds {name} recommended model limit ({limit})\n"
-                f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded")
+        return make_max_words_exceed_warning(
+            project, self.get_max_words_range_reco(project), self.INFO.ui.get("proper_name") or self.INFO.id)
 
     def get_menu_text(self, project: Project, instance: object = None) -> str:
         return self.INFO.ui.get("proper_name") or ""
@@ -122,18 +115,6 @@ class AudioCppModelSupport:
 
     def get_voice_tag_for_value(self, value: str) -> str:
         return ProjectVoiceUtil.make_voice_file_name_tag(value, self.INFO.file_tag)
-
-    def get_voice_display_info(self, project: Project, instance: object = None) -> VoiceDisplayInfo:
-        from tts_audiobook_tool.constants import COL_ERROR
-        voice = self.get_primary_voice_value(project)
-        if voice:
-            label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, self.INFO)
-            count = ProjectVoiceUtil.get_voice_sample_count(project, self.model_type)
-            if count > 1:
-                label += f", +{count - 1} more"
-        else:
-            label = COL_ERROR + ("required" if self.definition.voice_required else "none")
-        return VoiceDisplayInfo("Voice clone", "current voice clone", label)
 
     def get_blocking_issues(self, project: Project, instance: object = None) -> list[ReadinessIssue]:
         issues: list[ReadinessIssue] = []
@@ -219,6 +200,19 @@ class AudioCppModelSupport:
 
     def can_voice_clone(self, project: Project, instance: object = None) -> bool:
         return self.INFO.can_voice_clone
+
+    def has_fixed_default_voice(self, project: Project) -> bool:
+        return False
+
+    def can_voice_presets(self, project: Project, instance: object = None) -> bool:
+        return False
+
+    def requires_voice_preset(self, project: Project) -> bool:
+        return False
+
+    def get_voice_tag_for_preset(self, preset: str) -> str:
+        from tts_audiobook_tool.app_support import app_text
+        return app_text.sanitize_for_filename(preset)[:30]
 
 
 class AudioCppBackendAdapter:

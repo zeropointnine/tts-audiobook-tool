@@ -490,16 +490,14 @@ def test_voice_item_label_hints_missing_instructions_only_for_qwen_voice_design(
 
 @pytest.mark.parametrize("model_id, requirement", [
     ("glm_local", "required"),
-    ("pocket_local", "voice clone or predefined voice required"),
+    ("pocket_local", "voice sample or predefined voice required"),
 ])
-def test_voice_item_no_sample_uses_normal_color_when_required(model_id, requirement):
+def test_voice_item_no_sample_shows_requirement_when_required(model_id, requirement):
     project = Project(tts_model_type=model_id, voice_references=[Voice()])
     label, is_long = VoiceMenuShared.make_voice_sample_item_label(project, project.get_tts_model_type(), 0)
 
     assert label == (
-        f"Voice 1: no sample {voice_menu_shared.COL_DIM}("
-        f"{voice_menu_shared.COL_ERROR}{requirement}{voice_menu_shared.COL_DIM})"
-        f"{voice_menu_shared.COL_DEFAULT}"
+        f"Voice 1: {voice_menu_shared.COL_ERROR}{requirement}{voice_menu_shared.COL_DEFAULT}"
     )
     assert not is_long
 
@@ -628,9 +626,13 @@ class _ValidateCapture:
 def _validate_state(tmp_path, model_id, entries, *, preset=False):
     project = Project(dir_path=str(tmp_path), tts_model_type=model_id, voice_references=entries)
     if preset:
-        project.set_model_setting("pocket_local", "predefined_voice", "alba")
+        _set_presets(project, "pocket_local", "alba")
     prefs = SimpleNamespace(stt_variant=None, stt_config={})
     return cast(State, SimpleNamespace(project=project, prefs=prefs))
+
+
+def _set_presets(project, model_id, preset):
+    project.voice_references = [replace(voice, presets={model_id: preset}) for voice in project.voice_references]
 
 
 def _validate_entry(file_name, transcript, *, cropped):
@@ -671,9 +673,36 @@ def test_validate_voices_qwen3_non_base_checkpoint_needs_no_samples(tmp_path, mo
         {"file_name": "gone.flac", "transcript": ""} for _ in range(voice_count)
     ])
     state.project.set_model_setting("qwen3tts_local", "model_type", model_type)
+    if model_type == "custom_voice":
+        # CustomVoice needs a speaker per voice instead
+        _set_presets(state.project, "qwen3tts_local", "Ryan")
     assert VoiceMenuShared.get_voice_problems(state) == []
     assert VoiceMenuShared.validate_voices(state) is True
     assert not capture.lines and not capture.errors
+
+
+def test_validate_voices_qwen3_custom_voice_requires_a_speaker_per_voice(tmp_path, monkeypatch):
+    capture = _ValidateCapture(monkeypatch)
+    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: pytest.fail("must not load"))
+    state = _validate_state(tmp_path, "qwen3tts_local", [
+        Voice("gone.flac", presets={"qwen3tts_local": "Ryan"}), Voice("gone.flac"),
+    ])
+    state.project.set_model_setting("qwen3tts_local", "model_type", "custom_voice")
+    assert VoiceMenuShared.get_voice_problems(state) == ["Voice 2 has no speaker (select a speaker)"]
+    assert VoiceMenuShared.get_voice_problems(state, voice_indices=[0]) == []
+    assert VoiceMenuShared.validate_voices(state) is False
+    assert capture.pauses == [None]
+
+
+def test_validate_voices_pocket_checks_only_voices_without_predefined_voice(tmp_path, monkeypatch):
+    monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda *_: pytest.fail("must not load"))
+    state = _validate_state(tmp_path, "pocket_local", [
+        Voice("gone.flac", presets={"pocket_local": "alba"}), Voice("gone.flac"), Voice(),
+    ])
+    assert VoiceMenuShared.get_voice_problems(state) == [
+        "Voice file gone.flac not found",
+        "Voice 3 has no voice sample (set a sample or select a predefined voice)",
+    ]
 
 
 @pytest.mark.parametrize("model_type", ["", "base"])
@@ -762,7 +791,9 @@ def test_validate_voices_mixed_sample_less_voices_block_only_voice_requiring_mod
     # No sample anywhere: required only when the model requires a voice
     ([Voice()], "glm_local", ["required"]),
     ([Voice()], "dots_local", [""]),
-    ([Voice()], "pocket_local", ["voice clone or predefined voice required"]),
+    ([Voice()], "pocket_local", ["voice sample or predefined voice required"]),
+    # Per voice: another voice's sample doesn't change this voice's requirement
+    ([Voice("a.flac", "t"), Voice()], "pocket_local", ["", "voice sample or predefined voice required"]),
     # Mixed: sample-less voices are required only when the model requires a voice
     ([Voice("a.flac", "t"), Voice()], "glm_local", ["", "required"]),
     ([Voice("a.flac", "t"), Voice()], "dots_local", ["", ""]),
@@ -775,9 +806,11 @@ def test_voice_sample_required_label(entries, model_id, expected):
 
 
 def test_voice_sample_not_required_with_pocket_predefined_voice():
-    project = Project(tts_model_type="pocket_local")
-    project.set_model_setting("pocket_local", "predefined_voice", "alba")
+    project = Project(tts_model_type="pocket_local", voice_references=[
+        Voice(presets={"pocket_local": "alba"}), Voice(),
+    ])
     assert VoiceMenuShared.get_voice_sample_required_label(project, 0) == ""
+    assert VoiceMenuShared.get_voice_sample_required_label(project, 1) != ""
 
 
 @pytest.mark.parametrize("cropped", [False, True])

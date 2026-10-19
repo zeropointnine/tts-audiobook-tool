@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
-from tts_audiobook_tool.app_types import ReadinessIssue, Sound, StreamChunkCallback, StreamEndCallback, VoiceDisplayInfo
+from tts_audiobook_tool.app_types import ReadinessIssue, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import MAX_WORDS_PER_SEGMENT_RECO_RANGE, SEED_MAX
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.auk_duration import estimate_instruct_tts_seconds
-from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
+from tts_audiobook_tool.tts_models.model_support import make_max_words_exceed_warning
 from tts_audiobook_tool.tts_models.sgl_omni_behavior import ParameterValues, get_sgl_omni_behavior
 from tts_audiobook_tool.tts_models.sgl_omni_definition import ChoiceParameter, NumericParameter, SglOmniModelDefinition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -110,15 +110,8 @@ class ConfiguredModelSupport:
         return MAX_WORDS_PER_SEGMENT_RECO_RANGE
 
     def get_max_words_exceed_warning(self, project: Project) -> str:
-        # Higgs uses the shared recommended range; no warning when within it.
-        limit = self.get_max_words_range_reco(project)[1]
-        count = project.book.segmentation_settings.max_words_per_segment
-        if not max_words_exceeds_recommended(count, limit):
-            return ""
-        from tts_audiobook_tool.constants import Ansi
-        name = self.INFO.ui.get("proper_name") or self.INFO.id
-        return (f"{Ansi.ITALICS}Source text's max word length ({count}) exceeds {name} recommended model limit ({limit})\n"
-                f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded")
+        return make_max_words_exceed_warning(
+            project, self.get_max_words_range_reco(project), self.INFO.ui.get("proper_name") or self.INFO.id)
 
     def get_menu_text(self, project: Project, instance: object = None) -> str:
         return self.INFO.ui.get("proper_name") or ""
@@ -132,18 +125,6 @@ class ConfiguredModelSupport:
 
     def get_voice_tag_for_value(self, value: str) -> str:
         return ProjectVoiceUtil.make_voice_file_name_tag(value, self.INFO.file_tag)
-
-    def get_voice_display_info(self, project: Project, instance: object = None) -> VoiceDisplayInfo:
-        from tts_audiobook_tool.constants import COL_ERROR
-        voice = self.get_primary_voice_value(project)
-        if voice:
-            value = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, self.INFO)
-            count = ProjectVoiceUtil.get_voice_sample_count(project, self.model_type)
-            if count > 1:
-                value += f", +{count - 1} more"
-        else:
-            value = COL_ERROR + ("required" if self.INFO.requires_voice else "none")
-        return VoiceDisplayInfo("Voice clone", "current voice clone", value)
 
     def uses_reference_transcript(self, project: Project) -> bool:
         """Whether generation with this project's settings requires the voice
@@ -188,7 +169,7 @@ class ConfiguredModelSupport:
         if self.definition.language_policy == "moss":
             from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
             language = MossBaseModel.get_language_name(project.language_code)
-            return [f"Using MOSS-TTS language value: {language or 'None'}"]
+            warnings.append(f"Using MOSS-TTS language value: {language or 'None'}")
         # The "voices may vary" note: voice_variation_warning.get_run_warnings()
         warning = self.get_max_words_exceed_warning(project)
         if warning:
@@ -229,6 +210,19 @@ class ConfiguredModelSupport:
 
     def can_voice_clone(self, project: Project, instance: object = None) -> bool:
         return self.INFO.can_voice_clone
+
+    def has_fixed_default_voice(self, project: Project) -> bool:
+        return False
+
+    def can_voice_presets(self, project: Project, instance: object = None) -> bool:
+        return False
+
+    def requires_voice_preset(self, project: Project) -> bool:
+        return False
+
+    def get_voice_tag_for_preset(self, preset: str) -> str:
+        from tts_audiobook_tool.app_support import app_text
+        return app_text.sanitize_for_filename(preset)[:30]
 
 
 class SglOmniBackendAdapter:

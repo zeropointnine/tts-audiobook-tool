@@ -843,10 +843,14 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-10-17**
+**2026-10-19**
 
-- Added **stereo position** option to allow voices to be offset in the stereo field.
-- Added voice options menu. Reverb and stereo position options are now configurable on a per-voice basis.
+- The **Voices menu** has been revamped. Various global controls are now configurable on a per-voice basis:
+    - **Stereo position** (new) - voices can now be positioned within the stereo field; useful for dialog
+    - Room reverb
+    - Room reverb stereo effect
+    - Instructions (when applicable - eg, OmniVoice, etc.)
+    - Voice preset (when applicable - eg, Pocket TTS)
 
 **2026-10-16**
 

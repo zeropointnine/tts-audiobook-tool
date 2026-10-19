@@ -74,7 +74,8 @@ def test_used_voice_file_names_ignore_sample_less_voices(tmp_path):
     assert ProjectVoiceUtil.get_voice_sample_count(project, model()) == 1
     project.voice_references = [Voice(), Voice()]
     assert not ProjectVoiceUtil.has_any_voice_sample(project)
-    assert not ProjectVoiceUtil.has_voice(project)
+    assert not any(ProjectVoiceUtil.resolve_voice_source(project, voice).has_value
+                   for voice in project.voice_references)
 
 
 def test_set_sample_resets_trim_clears_transcript_and_keeps_effects(tmp_path):
@@ -102,7 +103,7 @@ def test_clear_sample_keeps_slot_settings_and_other_inputs(tmp_path, shared):
     trimmed.write_bytes(b"trim")
     voice = Voice(
         "old.flac", "old text", VoiceCrop("trim.flac", 0.0, 3.0, "trim text"),
-        room_reverb=RoomReverb.SMALL_DRR17, pan=-0.3, preset="alba",
+        room_reverb=RoomReverb.SMALL_DRR17, pan=-0.3, presets={"pocket_local": "alba"},
         instructions={"glm_local": "warm", "pocket_local": "slow"},
     )
     other = Voice("other.flac", "other text")
@@ -155,11 +156,11 @@ def test_set_sample_reuses_own_name_but_not_other_voices_names(tmp_path):
     assert [v.file_name for v in project.voice_references] == ["a.flac", "a_2.flac"]
 
 
-def test_set_sample_clears_pocket_predefined_voice(tmp_path):
-    project = make_project(tmp_path, [], model_id="pocket_local")
-    project.set_model_setting("pocket_local", "predefined_voice", "alba")
+def test_set_sample_keeps_pocket_predefined_voice(tmp_path):
+    project = make_project(tmp_path, [Voice(presets={"pocket_local": "alba"})], model_id="pocket_local")
     assert ProjectVoiceUtil.set_voice_sample_at_index_and_save(project, 0, sound(), "a", model("pocket_local")) == ""
-    assert project.get_model_setting("pocket_local", "predefined_voice") == ""
+    voice = project.voice_references[0]
+    assert voice.file_name == "a.flac" and voice.presets == {"pocket_local": "alba"}
 
 
 def test_set_sample_save_failure_restores_voice(tmp_path, monkeypatch):
@@ -249,3 +250,12 @@ def test_voice_tag_of_sample_less_voice_among_sampled_ones_is_not_the_primary(mo
     assert Tts.get_voice_tag_for_selection_index(project, 1) == "none"
     # The project itself is untouched
     assert project.voice_references == [Voice("suzie.flac", "t"), Voice()]
+
+
+@pytest.mark.parametrize("model_id, flagged", [("glm_local", True), ("moss_local", False)])
+def test_missing_transcript_is_flagged_only_when_the_model_requires_one(tmp_path, monkeypatch, model_id, flagged):
+    from tts_audiobook_tool import text_util
+    project = make_project(tmp_path, [Voice("a.flac", "")], model_id)
+    monkeypatch.setattr(VoiceMenuShared, "get_voice_sample_duration", lambda *_: None)
+    label, _ = VoiceMenuShared.make_voice_sample_item_label(project, model(model_id), 0)
+    assert ("missing transcript" in text_util.strip_ansi_codes(label)) == flagged

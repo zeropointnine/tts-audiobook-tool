@@ -297,7 +297,7 @@ def test_instruction_length_limit_rejects_without_truncating(monkeypatch, length
 def test_storage_set_and_clear_preserve_other_namespaces_fields_and_voices(monkeypatch):
     original = Voice(
         "original.flac", "Original transcript", VoiceCrop("trim.flac", 1, 5, "Trim transcript"),
-        room_reverb=RoomReverb.get_by_id("small_drr22"), pan=-0.3, preset="preset-name",
+        room_reverb=RoomReverb.get_by_id("small_drr22"), pan=-0.3, presets={"pocket_local": "preset-name"},
         instructions={BREEZE: "Original", BREEZE + "_extra": "Exact key only", "other": "Keep"},
     )
     other = Voice("other.flac", "Other transcript", instructions={BREEZE: "Other voice"})

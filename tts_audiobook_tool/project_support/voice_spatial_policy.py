@@ -24,9 +24,9 @@ class VoiceSpatialPolicy:
     voice_count: int
     voice_select_mode: VoiceSelectMode
     requested_channels: int
-    # Per voice slot; all Off while a Pocket predefined voice is in use.
+    # Per voice slot (`Voice.room_reverb`).
     voice_reverbs: tuple[RoomReverb, ...] = ()
-    # Per voice slot (`Voice.pan`); all centered while a Pocket predefined voice is in use.
+    # Per voice slot (`Voice.pan`).
     voice_pans: tuple[float, ...] = ()
     room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO
 
@@ -35,17 +35,10 @@ class VoiceSpatialPolicy:
         model_type = project.get_tts_model_type()
         voices = ProjectVoiceUtil.get_voice_values(project, model_type)
         voice_count = len(voices)
-        uses_preset = (
-            model_type.id == "pocket_local"
-            and bool(project.get_model_setting("pocket_local", "predefined_voice"))
-        )
         # Independent of the selected model's voice-clone support: existing
         # audio keeps its voices' rooms (e.g. concat with no model selected).
-        voice_reverbs = tuple(
-            RoomReverb.OFF if uses_preset else voice.room_reverb
-            for voice in project.voice_references
-        )
-        voice_pans = tuple(0.0 if uses_preset else voice.pan for voice in project.voice_references)
+        voice_reverbs = tuple(voice.room_reverb for voice in project.voice_references)
+        voice_pans = tuple(voice.pan for voice in project.voice_references)
         mode = project.voice_select_mode
         # Voices whose room can actually be heard in this project's output
         reachable = voice_reverbs if mode == VoiceSelectMode.USER_DEFINED else voice_reverbs[:1]

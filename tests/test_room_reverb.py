@@ -456,12 +456,11 @@ class TestSetting:
         project.voice_references = []
         assert project.get_voice_chat_room_reverb() is RoomReverb.OFF
 
-    def test_no_reverb_while_pocket_preset_is_used(self) -> None:
+    def test_pocket_preset_voice_keeps_its_reverb(self) -> None:
         project = Project(tts_model_type="pocket_local")
-        project.voice_references = [Voice("a.flac", room_reverb=RoomReverb.SMALL_DRR22)]
+        project.voice_references = [Voice("a.flac", room_reverb=RoomReverb.SMALL_DRR22,
+                                          presets={"pocket_local": "alba"})]
         assert project.get_voice_chat_room_reverb() is RoomReverb.SMALL_DRR22
-        project.set_model_setting("pocket_local", "predefined_voice", "alba")
-        assert project.get_voice_chat_room_reverb() is RoomReverb.OFF
 
     def test_stereo_defaults_to_mono_silently(self) -> None:
         warnings: list[str] = []

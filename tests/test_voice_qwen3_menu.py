@@ -8,7 +8,6 @@ from tts_audiobook_tool.menus.model import model_qwen3_menu
 from tts_audiobook_tool.menus.model.model_qwen3_menu import ModelQwen3Menu
 from tts_audiobook_tool.menus.voice import voice_qwen3_menu
 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
-from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.model_worker_protocol import TtsInspected
@@ -85,14 +84,14 @@ def test_model_selection_refreshes_qwen_menu_model_type(monkeypatch) -> None:
     ModelQwen3Menu.menu(state, initial_inspection)
 
     assert any("model type: custom_voice" in label for label in rendered_labels[0])
-    assert not any(label.startswith(("Set speaker", "Instructions")) for label in rendered_labels[0])
+    assert not any(label.startswith(("Speaker", "Instructions")) for label in rendered_labels[0])
     assert not any(
         label.startswith("Select voice clone sample") for label in rendered_labels[0]
     )
     assert not any(
         label.startswith("Select voice clone sample") for label in rendered_labels[1]
     )
-    assert not any(label.startswith("Set speaker") for label in rendered_labels[1])
+    assert not any(label.startswith("Speaker") for label in rendered_labels[1])
     assert any("model type: base" in label for label in rendered_labels[1])
 
 
@@ -128,14 +127,17 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
     first = f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: "
     if model_type in ("custom_voice", "voice_design"):
         # These checkpoints can't clone: sample details are hidden even when
-        # stored, and no voice has instructions here. Only VoiceDesign treats
-        # that as a (error-colored) hint; CustomVoice uses the speaker's delivery.
-        assert rendered_labels[0] == f"{first}no instructions"
-        assert (voice_qwen3_menu.COL_ERROR in raw_labels[0]) == (model_type == "voice_design")
+        # stored, and no voice has instructions here. VoiceDesign treats that
+        # as an (error-colored) hint; CustomVoice needs a speaker per voice.
+        if model_type == "voice_design":
+            assert rendered_labels[0] == f"{first}no instructions"
+        else:
+            assert rendered_labels[0] == f"{first}no speaker (required)"
+        assert voice_menu_shared.COL_ERROR in raw_labels[0]
     elif sample_count == 0:
         # The Base checkpoint uses (and requires) a voice clone sample
-        assert rendered_labels[0] == f"{first}no sample (required)"
-        assert voice_qwen3_menu.COL_ERROR in raw_labels[0]
+        assert rendered_labels[0] == f"{first}required"
+        assert voice_menu_shared.COL_ERROR in raw_labels[0]
     else:
         assert rendered_labels[0] == f"{first}voice_0.flac"
     assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in rendered_labels) == (sample_count < 9)
@@ -144,9 +146,7 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
     expected = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(max(sample_count, 1))]
     if sample_count < 9:
         expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
-    # Model-specific items precede the shared selection controls
-    if model_type == "custom_voice":
-        expected.append("Set speaker")
+    # Speakers are per voice (voice submenu), not Voices menu items
     if sample_count > 1:
         expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
@@ -157,8 +157,8 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
 @pytest.mark.parametrize("model_type", ["base", "custom_voice", "voice_design"])
 def test_qwen_model_settings_exclude_voice_controls(monkeypatch, model_type):
     project = Project(tts_model_type="qwen3tts_local")
-    project.set_model_setting("qwen3tts_local", "speaker_id", "Vivian")
-    project.voice_references = [Voice(instructions={"qwen3tts_local": "Speak warmly"})]
+    project.voice_references = [Voice(presets={"qwen3tts_local": "Vivian"},
+                                      instructions={"qwen3tts_local": "Speak warmly"})]
     state = cast(State, SimpleNamespace(project=project))
     captured = {}
     monkeypatch.setattr(model_qwen3_menu.ModelMenuShared, "menu_wrapper",
@@ -168,60 +168,77 @@ def test_qwen_model_settings_exclude_voice_controls(monkeypatch, model_type):
     ModelQwen3Menu.menu(state, inspection)
     labels = [get_string_from(state, item.label) for item in captured["items"]]
     assert labels[0].startswith("Select Qwen3-TTS model")
-    assert not any(label.startswith(("Set speaker", "Clear speaker", "Instructions", "Clear instructions"))
+    assert not any(label.startswith(("Speaker", "Clear speaker", "Instructions", "Clear instructions"))
                    for label in labels)
 
 
+def open_voice_submenu(monkeypatch, state, index=0):
+    """Open Voice N's submenu from the Voices menu; returns its item maker."""
+    captured, submenu = {}, {}
+    monkeypatch.setattr(VoiceMenuShared, "menu_wrapper", lambda state, items: captured.update(items=items))
+    VoiceQwen3Menu.menu(state)
+    monkeypatch.setattr(voice_menu_shared.MenuUtil, "menu", lambda **kwargs: submenu.update(kwargs))
+    voice_item = captured["items"](state)[index]
+    voice_item.handler(state, voice_item)
+    return lambda: submenu["items"](state)
+
+
+def find_item(state, items, prefix):
+    return next((item for item in items
+                 if strip_ansi_codes(get_string_from(state, item.label)).startswith(prefix)), None)
+
+
 @pytest.mark.parametrize("speakers", [["Vivian"], ["Vivian", "Ryan"]])
-def test_qwen_speaker_selection_inspects_on_demand_and_keeps_validation(monkeypatch, speakers):
+def test_qwen_speaker_selection_is_per_voice_and_inspects_on_demand(monkeypatch, speakers):
     project = Project(tts_model_type="qwen3tts_local", voice_references=[
-        {"file_name": "voice.flac", "transcript": "Reference."},
+        Voice("voice.flac", "Reference.", presets={"qwen3tts_local": "Invalid"}), Voice(),
     ])
     project.set_model_setting("qwen3tts_local", "model_type", "custom_voice")
-    project.set_model_setting("qwen3tts_local", "speaker_id", "Invalid")
     state = cast(State, SimpleNamespace(project=project))
-    captured, edits, inspections, saves, feedback = {}, [], [], [], []
-    monkeypatch.setattr(VoiceMenuShared, "menu_wrapper",
-                        lambda state, items: captured.update(items=items))
-    monkeypatch.setattr(voice_qwen3_menu.ask, "ask_string_and_save",
-                        lambda *args, **kwargs: edits.append((args, kwargs)))
-    monkeypatch.setattr(voice_qwen3_menu, "print_feedback", feedback.append)
-    monkeypatch.setattr(Project, "save", lambda self: saves.append(self))
+    options, inspections, saves, feedback = {}, [], [], []
+    monkeypatch.setattr(voice_menu_shared.MenuUtil, "options_menu", lambda **kwargs: options.update(kwargs))
+    monkeypatch.setattr(voice_menu_shared, "print_feedback", feedback.append)
+    monkeypatch.setattr(Project, "save", lambda self: saves.append(self) or "")
     inspection = TtsInspected(operation_id="test", tts_type_id="qwen3tts_local",
                               metadata={"model_type": "custom_voice", "supported_speakers": speakers})
     monkeypatch.setattr(voice_qwen3_menu.ModelWorker, "inspect_tts_blocking",
                         lambda current: (inspections.append(current) or inspection, ""))
-    VoiceQwen3Menu.menu(state)
-    items = captured["items"](state)
+    make_items = open_voice_submenu(monkeypatch, state)
+    speaker = find_item(state, make_items(), "Speaker")
+    assert speaker is not None and "Invalid" in strip_ansi_codes(get_string_from(state, speaker.label))
     assert inspections == []
-    speaker = next(item for item in items if get_string_from(state, item.label).startswith("Set speaker"))
-    assert speaker.blank_line_before
     speaker.handler(state, speaker)
     assert inspections == [state]
-    label = strip_ansi_codes(get_string_from(state, speaker.label))
     if len(speakers) == 1:
-        assert "Vivian" in label and "invalid" not in label
-        assert edits == []
-        assert feedback == ["Model has only one speaker id (Vivian)"]
-        # Saved, so instance-less readiness sees a speaker id
-        assert project.get_model_setting("qwen3tts_local", "speaker_id") == "Vivian"
-        assert saves == [project]
-        saves.clear()
+        assert options == {}
+        assert feedback == ["Model has only one speaker (Vivian)"]
     else:
-        assert "current id is invalid" in label
-        args, kwargs = edits[0]
-        assert args[0] is project
-        assert args[2] == SettingRef("qwen3tts_local", "speaker_id")
-        assert kwargs["validator"]("Vivian") == ""
-        assert kwargs["validator"]("Invalid") == "Invalid speaker id"
-        project.set_model_setting("qwen3tts_local", "speaker_id", "Vivian")
-        assert "invalid" not in get_string_from(state, speaker.label)
-    clear = next(item for item in captured["items"](state) if item.label == "Clear speaker")
-    clear.handler(state, clear)
-    assert project.get_model_setting("qwen3tts_local", "speaker_id") == ""
+        assert options["values"] == speakers and options["current_value"] == "Invalid"
+        options["on_select"]("Vivian")
+    # Saved to this voice only, so instance-less pre-flight sees a speaker
+    assert [voice.presets for voice in project.voice_references] == [{"qwen3tts_local": "Vivian"}, {}]
     assert saves == [project]
-    assert len(project.voice_references) == 1
-    assert not any(item.label == "Clear speaker" for item in captured["items"](state))
+    clear = find_item(state, make_items(), "Clear speaker")
+    assert clear is not None
+    clear.handler(state, clear)
+    assert [voice.presets for voice in project.voice_references] == [{}, {}]
+    assert project.voice_references[0].file_name == "voice.flac"
+    assert find_item(state, make_items(), "Clear speaker") is None
+    label = strip_ansi_codes(get_string_from(state, find_item(state, make_items(), "Speaker").label))
+    assert "required" in label
+
+
+@pytest.mark.parametrize("model_type", ["", "base", "voice_design"])
+def test_qwen_speaker_item_only_for_custom_voice(monkeypatch, model_type):
+    project = Project(tts_model_type="qwen3tts_local",
+                      voice_references=[Voice(presets={"qwen3tts_local": "Vivian"})])
+    project.set_model_setting("qwen3tts_local", "model_type", model_type)
+    state = cast(State, SimpleNamespace(project=project))
+    make_items = open_voice_submenu(monkeypatch, state)
+    assert find_item(state, make_items(), "Speaker") is None
+    row = strip_ansi_codes(VoiceMenuShared.make_voice_sample_item_label(
+        project, project.get_tts_model_type(), 0)[0])
+    assert "speaker" not in row
 
 
 @pytest.mark.parametrize("inspected_type,error", [(None, "Model worker is busy"), (None, ""), ("base", "")])
@@ -229,23 +246,20 @@ def test_qwen_speaker_edit_handles_inspection_failure_or_changed_checkpoint(monk
     project = Project(tts_model_type="qwen3tts_local")
     project.set_model_setting("qwen3tts_local", "model_type", "custom_voice")
     state = cast(State, SimpleNamespace(project=project))
-    captured, errors = {}, []
-    monkeypatch.setattr(VoiceMenuShared, "menu_wrapper",
-                        lambda state, items: captured.update(items=items))
+    errors = []
     inspection = (TtsInspected(operation_id="test", tts_type_id="qwen3tts_local",
                                metadata={"model_type": inspected_type}) if inspected_type else None)
     monkeypatch.setattr(voice_qwen3_menu.ModelWorker, "inspect_tts_blocking", lambda _: (inspection, error))
     monkeypatch.setattr(voice_qwen3_menu.ask, "ask_error", errors.append)
-    monkeypatch.setattr(voice_qwen3_menu, "ask_speaker_id", lambda *_: pytest.fail("No valid speaker inventory"))
-    VoiceQwen3Menu.menu(state)
-    speaker = next(item for item in captured["items"](state)
-                   if get_string_from(state, item.label).startswith("Set speaker"))
+    monkeypatch.setattr(voice_menu_shared.MenuUtil, "options_menu",
+                        lambda **_: pytest.fail("No valid speaker inventory"))
+    make_items = open_voice_submenu(monkeypatch, state)
+    speaker = find_item(state, make_items(), "Speaker")
+    assert speaker is not None
     speaker.handler(state, speaker)
     assert errors == [error or ("Speaker selection requires a CustomVoice checkpoint" if inspected_type
                                else "Couldn't inspect Qwen3-TTS model")]
-    if inspected_type == "base":
-        assert not any(get_string_from(state, item.label).startswith(("Set speaker", "Instructions"))
-                       for item in captured["items"](state))
+    assert project.voice_references[0].presets == {}
 
 
 @pytest.mark.parametrize("model_type", ["base", "custom_voice", "voice_design"])
@@ -273,8 +287,6 @@ def test_qwen_voice_menu_has_no_model_global_instruction_controls(monkeypatch, m
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in captured["items"]]
     assert not any(label.startswith(("Instructions", "Clear instructions")) for label in labels)
     # Shared voice rows may still preview this voice's instructions.
-    # Default voice, Add, CustomVoice's speaker, then Edit voice/line selections.
-    assert len(labels) == 3 + (model_type == "custom_voice")
-    if model_type == "custom_voice":
-        assert labels[2].startswith("Set speaker")
+    # Default voice, Add, then Edit voice/line selections (speakers are per voice).
+    assert len(labels) == 3
     assert labels[-1].startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)

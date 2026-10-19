@@ -307,8 +307,9 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
         lambda current: VoiceAudioCppMenu.make_items(current, definition(ECHO_ID)))(state)
 
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
-        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: suzie yeung hanya 1_4.flac; missing transcript",
-        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: second.flac; missing transcript",
+        # Echo does not use transcripts, so a missing one is not flagged
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: suzie yeung hanya 1_4.flac",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: second.flac",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
         f"{voice_menu_shared.LABEL_VOICE_SELECTION_MODE} (currently: user-defined)",
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
@@ -1099,7 +1100,6 @@ def test_voice_readiness_is_lazy_for_every_audio_cpp_behavior(monkeypatch, model
         return [issue for issue in support.get_blocking_issues(project) if issue.short != "audio.cpp server"]
 
     assert local_issues() == []
-    assert support.get_voice_display_info(project).value.endswith("none")
     # The "voices may vary" note now depends on the run's voices, not the model
     # (voice_variation_warning.get_run_warnings).
     assert not any("no voice reference" in warning for warning in support.get_warning_issues(project))

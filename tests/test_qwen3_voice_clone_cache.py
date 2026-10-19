@@ -246,12 +246,11 @@ def test_qwen_project_generation_routes_selected_voice_instructions_to_library(
     monkeypatch, model_type, missing_instructions
 ):
     project = Project(tts_model_type="qwen3tts_local", voice_references=[
-        Voice(instructions={"qwen3tts_local": "Speak warmly"}),
-        Voice(instructions={"qwen3tts_local": "Speak sternly"}),
-        Voice(instructions=missing_instructions),
+        Voice(presets={"qwen3tts_local": "Ryan"}, instructions={"qwen3tts_local": "Speak warmly"}),
+        Voice(presets={"qwen3tts_local": "Vivian"}, instructions={"qwen3tts_local": "Speak sternly"}),
+        Voice(presets={"qwen3tts_local": "Ryan"}, instructions=missing_instructions),
     ])
     project.set_model_setting("qwen3tts_local", "model_type", model_type)
-    project.set_model_setting("qwen3tts_local", "speaker_id", "Ryan")
     project.set_model_setting("qwen3tts_local", "seed", 7)
     model = make_model()
     wrapper = model._model
@@ -289,7 +288,37 @@ def test_qwen_project_generation_routes_selected_voice_instructions_to_library(
     assert all(call["text"] == prompts for call in calls)
     assert all(call["language"] == ["english", "english"] for call in calls)
     if model_type == "custom_voice":
-        assert all(call["speaker"] == ["Ryan", "Ryan"] for call in calls)
+        # Each voice's own speaker
+        assert [call["speaker"] for call in calls] == [
+            [speaker, speaker] for speaker in ("Ryan", "Vivian", "Ryan", "Ryan")
+        ]
+
+
+@pytest.mark.parametrize("speakers, preset, expected", [
+    (["Vivian", "Ryan"], "", "No speaker set for this voice"),
+    (["Vivian", "Ryan"], "Nobody", "Invalid speaker id for this model: Nobody"),
+    (["Vivian"], "", None),  # single-speaker checkpoints always use their only speaker
+])
+def test_qwen_custom_voice_generation_needs_a_valid_voice_speaker(speakers, preset, expected):
+    project = Project(tts_model_type="qwen3tts_local",
+                      voice_references=[Voice(presets={"qwen3tts_local": preset} if preset else {})])
+    project.set_model_setting("qwen3tts_local", "model_type", "custom_voice")
+    model = make_model()
+    wrapper = model._model
+    wrapper.model = SimpleNamespace(tts_model_type="custom_voice")
+    wrapper.get_supported_speakers = lambda: speakers
+    calls = []
+
+    def generate(**kwargs):
+        calls.append(kwargs)
+        return [np.zeros(8, dtype=np.float32) for _ in kwargs["text"]], 24_000
+
+    wrapper.generate_custom_voice = generate
+    result = model.generate_using_project(project, ["Hello."])
+    if expected is None:
+        assert not isinstance(result, str) and calls[0]["speaker"] == ["Vivian"]
+    else:
+        assert result == expected and calls == []
 
 
 def test_qwen_base_project_generation_still_routes_selected_clone_not_instructions(tmp_path, monkeypatch):

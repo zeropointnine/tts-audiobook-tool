@@ -1,4 +1,4 @@
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback, VoiceDisplayInfo
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
@@ -25,13 +25,6 @@ class NoneBaseModel(TtsBaseModel):
 
     def set_params(self, temperature: float, max_new_tokens: int) -> None:
         ...
-
-
-    @classmethod
-    def get_voice_display_info(
-            cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo | None:
-        return VoiceDisplayInfo("Voice clone", "current voice clone", "N/A")
 
     @classmethod
     def get_blocking_issues(

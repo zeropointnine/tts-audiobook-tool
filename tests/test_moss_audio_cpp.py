@@ -267,7 +267,6 @@ def test_readiness_optional_voice_and_local_only_postprocessing(monkeypatch, tmp
     local_issues = lambda: [issue for issue in support.get_blocking_issues(project)
                            if issue.short != "audio.cpp server"]
     assert local_issues() == []
-    assert support.get_voice_display_info(project).value.endswith("none")
     assert "Using MOSS-TTS language value: English" in support.get_warning_issues(project)
     assert support.can_hallucinate_music(project) is (model_id == IDS[1])
     assert support.should_trim_trailing_token_noise(project) is (model_id == IDS[1])

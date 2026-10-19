@@ -130,9 +130,11 @@ class MossBaseModel(TtsBaseModel):
         return []
 
     def get_warning_issues(self, project: Project) -> list[str]:
+        warnings = super().get_warning_issues(project)
         # This is informational more than it is a warning
         language = MossBaseModel.get_language_name(project.language_code)
-        return [f"Using MOSS-TTS language value: {language or 'None'}"]
+        warnings.append(f"Using MOSS-TTS language value: {language or 'None'}")
+        return warnings
 
     @classmethod
     def should_trim_trailing_token_noise(

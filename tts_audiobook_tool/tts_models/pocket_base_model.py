@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.app_types import ReadinessIssue, VoiceDisplayInfo
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -58,17 +58,30 @@ class PocketBaseModel(TtsBaseModel):
     gated_error_message_cache: dict[str, str] = {}
 
     @classmethod
-    def get_primary_voice_value(cls, project: Project) -> str:
-        return project.get_model_setting('pocket_local', 'predefined_voice') or ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local"))
+    def can_voice_presets(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
+        return True
 
     @classmethod
-    def get_voice_display_info(
-        cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo | None:
-        preset = project.get_model_setting('pocket_local', 'predefined_voice')
-        if preset:
-            return VoiceDisplayInfo("Predefined voice", "current predefined voice", preset)
-        return super().get_voice_display_info(project, instance)
+    def get_voice_tag_for_preset(cls, preset: str) -> str:
+        return ProjectVoiceUtil.make_voice_file_name_tag(preset, cls.INFO.file_tag)
+
+    @staticmethod
+    def get_primary_voice_preset(project: Project) -> str:
+        voices = project.voice_references
+        return voices[0].preset_for("pocket_local") if voices else ""
+
+    @classmethod
+    def get_primary_voice_value(cls, project: Project) -> str:
+        return cls.get_primary_voice_preset(project) or ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local"))
+
+    @staticmethod
+    def get_first_cloned_voice_file_name(project: Project) -> str:
+        """The sample of the first voice that clones (has a sample and no
+        predefined voice, which would take precedence), or ""."""
+        for voice in project.voice_references:
+            if voice.has_sample and not voice.preset_for("pocket_local"):
+                return voice.file_name
+        return ""
 
     @classmethod
     def get_menu_text(
@@ -100,9 +113,7 @@ class PocketBaseModel(TtsBaseModel):
 
         Rem, use "make_gated_error_message_ui" for user-facing error message with remediation info
         """
-        if project.get_model_setting('pocket_local', 'predefined_voice'):
-            return ""
-        voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local"))
+        voice_file_name = cls.get_first_cloned_voice_file_name(project)
         if not voice_file_name:
             return ""
 

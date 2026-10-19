@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
 
-from tts_audiobook_tool.app_types import VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-from tts_audiobook_tool import text_util
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -66,12 +64,11 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
                 errors.append( ReadinessIssue("valid LoRA", "Couldn't load LoRA") )
         return errors
 
-    def get_warning_issues(self, project: Project) -> list[str]:
-        warnings = super().get_warning_issues(project)
-        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("vibevoice_local")) and not project.get_model_setting('vibevoice_local', 'lora_target'):
-            warning = "Model may generate random voices because no voice sample or lora has been defined"
-            warnings.append(warning)
-        return warnings
+    @classmethod
+    def has_fixed_default_voice(cls, project: Project) -> bool:
+        # A LoRA gives sample-less voices a fixed speaker, so the "voices may vary"
+        # run note (voice_variation_warning) does not apply
+        return bool(project.get_model_setting('vibevoice_local', 'lora_target'))
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:
@@ -91,31 +88,6 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
                 return super().get_voice_tag(project)
             case (False, True):
                 return get_lora_value()
-
-    @classmethod
-    def get_voice_display_info(
-            cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo | None:
-
-        has_voice_clone = bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("vibevoice_local")))
-        has_lora = bool(project.get_model_setting('vibevoice_local', 'lora_target'))
-        match (has_voice_clone, has_lora):
-            case (True, False):
-                return super().get_voice_display_info_default(project, instance)
-            case (False, False):
-                return super().get_voice_display_info_default(project, instance)
-            case (True, True):
-                status_prefix = "Voice"
-                menu_prefix = "currently"
-                value = "voice clone + LoRA"
-            case (False, True):
-                status_prefix = "Voice LoRA"
-                menu_prefix = "current lora:"
-                value = ellipsize_path_for_menu(project.get_model_setting('vibevoice_local', 'lora_target'))
-                value = text_util.make_terminal_hyperlink(project.get_model_setting('vibevoice_local', 'lora_target'), value, is_file=True)
-                value = value
-
-        return VoiceDisplayInfo(status_prefix, menu_prefix, value)
 
 # ---
 

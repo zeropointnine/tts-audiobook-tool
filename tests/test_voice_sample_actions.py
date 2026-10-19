@@ -338,7 +338,7 @@ def test_clear_sample_keeps_voice_and_submenu_open(monkeypatch, model_id, count)
     state.project.tts_model_type = model_id
     state.project.voice_references[0] = replace(
         state.project.voice_references[0], pan=-0.3, room_reverb=RoomReverb.SMALL_DRR17,
-        preset="alba", instructions={model_id: "warm"},
+        presets={"pocket_local": "alba"}, instructions={model_id: "warm"},
     )
     original = list(state.project.voice_references)
     saved = Mock(return_value="")

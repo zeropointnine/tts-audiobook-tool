@@ -136,20 +136,28 @@ def test_transfer_collects_shared_once_plus_secondary_files(monkeypatch):
     assert names == ["a.flac", "b.flac", "c.flac", "emo.flac"]
 
 
-def test_pocket_preset_selection_retains_shared_list(monkeypatch):
+def test_pocket_voice_preset_takes_precedence_for_its_voice_only(monkeypatch):
     project = Project(tts_model_type="pocket_local", voice_references=references())
     state = cast(State, SimpleNamespace(project=project))
     captured = {}
-    monkeypatch.setattr(voice_pocket_menu.MenuUtil, "options_menu", lambda **kwargs: captured.update(kwargs))
-    voice_pocket_menu.select_predefined_voice(state)
+    monkeypatch.setattr(voice_menu_shared.MenuUtil, "options_menu", lambda **kwargs: captured.update(kwargs))
+    choices = voice_pocket_menu.get_predefined_voice_choices
+    VoiceMenuShared.ask_voice_preset(state, model("pocket_local"), 0, choices)
+    assert captured["values"] == PocketBaseModel.PREDEFINED_VOICES and captured["current_value"] is None
     captured["on_select"]("alba")
-    assert project.voice_references == as_voices(references())
-    voice_pocket_menu.select_predefined_voice(state)
+    # The sample is kept alongside the preset
+    assert [v.file_name for v in project.voice_references] == ["a.flac", "b.flac", "c.flac"]
+    assert project.voice_references[0].presets == {"pocket_local": "alba"}
+    VoiceMenuShared.ask_voice_preset(state, model("pocket_local"), 0, choices)
     assert captured["current_value"] == "alba"
     assert PocketBaseModel.get_primary_voice_value(project) == "alba"
-    assert ProjectVoiceUtil.get_voice_label(project) == "alba"
-    assert Tts.get_voice_value_count(project) == 0
-    assert Tts.get_voice_tag_for_selection_index(project, 2) == "alba"
+    assert ProjectVoiceUtil.resolve_voice_source(project, project.voice_references[0]).label == "alba"
+    assert Tts.get_voice_value_count(project) == 3
+    assert Tts.get_voice_tag_for_selection_index(project, 0) == "alba"
+    assert Tts.get_voice_tag_for_selection_index(project, 2) == "c"
+
+    validated = []
+
     class StubPocket(PocketBaseModel):
         def kill(self):
             pass
@@ -157,25 +165,42 @@ def test_pocket_preset_selection_retains_shared_list(monkeypatch):
         def generate_using_project(self, *args, **kwargs):
             raise AssertionError("not generating in readiness test")
 
+        def get_voice_clone_access_error_for_path(self, path):
+            validated.append(path)
+            return ""
+
+    PocketBaseModel.gated_error_message_cache.clear()
     instance = StubPocket()
+    # The first voice that actually clones is checked for gated access
     assert PocketBaseModel.get_gated_error_message(project, instance) == ""
-    assert not PocketBaseModel.get_blocking_issues(project, instance)
-    display = PocketBaseModel.get_voice_display_info(project)
-    assert display is not None
-    assert "alba" in str(display) and "+2" not in str(display)
-    voice_pocket_menu.clear_predefined_voice(state)
+    assert len(validated) == 1 and validated[0].endswith("b.flac")
+
+    assert ProjectVoiceUtil.set_voice_preset_at_index_and_save(project, 0, "pocket_local", "") == ""
     assert project.voice_references == as_voices(references())
     assert PocketBaseModel.get_primary_voice_value(project) == "a.flac"
-    assert Tts.get_voice_value_count(project) == 3
-    assert Tts.get_voice_tag_for_selection_index(project, 2) == "c"
+    assert Tts.get_voice_tag_for_selection_index(project, 0) == "a"
 
 
-def test_pocket_removing_shared_list_does_not_clear_preset():
-    project = Project(voice_references=references())
-    project.set_model_setting("pocket_local", "predefined_voice", "alba")
-    ProjectVoiceUtil.clear_voice_and_save(project, model("pocket_local"))
-    assert project.voice_references == [Voice()]
-    assert project.get_model_setting("pocket_local", "predefined_voice") == "alba"
+def test_pocket_preset_needs_no_clone_access_check():
+    project = Project(tts_model_type="pocket_local", voice_references=[
+        Voice("a.flac", presets={"pocket_local": "alba"}), Voice(presets={"pocket_local": "jean"}),
+    ])
+    assert PocketBaseModel.get_first_cloned_voice_file_name(project) == ""
+    assert PocketBaseModel.get_gated_error_message(project, cast(PocketBaseModel, object())) == ""
+
+
+def test_preset_is_ignored_by_models_without_presets():
+    project = Project(tts_model_type="mira_local",
+                      voice_references=[Voice("a.flac", presets={"pocket_local": "alba"})])
+    assert ProjectVoiceUtil.active_voice_preset(project, project.voice_references[0]) == ""
+    assert Tts.get_voice_tag_for_selection_index(project, 0) != "alba"
+
+
+def test_clearing_voice_sample_keeps_its_preset():
+    project = Project(tts_model_type="pocket_local",
+                      voice_references=[Voice("a.flac", "t", presets={"pocket_local": "alba"})])
+    assert ProjectVoiceUtil.clear_voice_sample_at_index_and_save(project, 0) == ""
+    assert project.voice_references == [Voice(presets={"pocket_local": "alba"})]
 
 
 def test_transcript_menu_edits_selected_pair_for_model_without_requirement(monkeypatch):
@@ -364,7 +389,6 @@ def test_static_voice_menus_keep_entire_sample_group(monkeypatch, module_name, c
     # Model-specific items sit between the voice list and the selection controls
     expected.extend({
         "indextts2_local": ["Select emotion voice sample", "Emotion vector", "Emotion alpha (strength)"],
-        "pocket_local": ["Select predefined voice"],
         "vibevoice_local": ["Select LoRA"],
     }.get(model_id, []))
     expected.extend([

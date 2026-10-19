@@ -1,4 +1,5 @@
 """A job validates its voice dependencies, not the entire shared voice library."""
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -160,20 +161,39 @@ def test_scoped_preflight_repairs_only_selected_transcript_once(tmp_path, monkey
         assert updated.transcript == "original"
 
 
-@pytest.mark.parametrize("model_id, setting", [
-    ("pocket_local", ("predefined_voice", "alba")),
-    ("qwen3tts_local", ("model_type", "custom_voice")),
-    ("qwen3tts_local", ("model_type", "voice_design")),
+@pytest.mark.parametrize("model_id, setting, preset", [
+    ("pocket_local", None, "alba"),
+    ("qwen3tts_local", ("model_type", "custom_voice"), "Ryan"),
+    ("qwen3tts_local", ("model_type", "voice_design"), ""),
 ])
-def test_scoped_preflight_preserves_model_sample_bypass(tmp_path, monkeypatch, model_id, setting):
+def test_scoped_preflight_preserves_model_sample_bypass(tmp_path, monkeypatch, model_id, setting, preset):
     project = make_project(tmp_path)
     project.tts_model_type = model_id
-    project.set_model_setting(model_id, *setting)
+    if setting:
+        project.set_model_setting(model_id, *setting)
+    if preset:
+        # A voice's preset takes precedence over its sample
+        project.voice_references = [replace(voice, presets={model_id: preset})
+                                    for voice in project.voice_references]
     state = SimpleNamespace(project=project)
     monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda _: pytest.fail("samples are not active"))
 
     assert VoiceMenuShared.get_voice_problems(state, voice_indices=[0, 1, 2, 3]) == []
     assert VoiceMenuShared.validate_voices(state, voice_indices=[0, 1, 2, 3]) is True
+
+
+def test_qwen_custom_voice_preflight_requires_speakers_of_job_voices_only(tmp_path):
+    project = make_project(tmp_path)
+    project.tts_model_type = "qwen3tts_local"
+    project.set_model_setting("qwen3tts_local", "model_type", "custom_voice")
+    voices = project.voice_references
+    project.voice_references = [replace(voices[0], presets={"qwen3tts_local": "Ryan"}), *voices[1:]]
+    state = SimpleNamespace(project=project)
+
+    assert VoiceMenuShared.get_voice_problems(state, voice_indices=[0]) == []
+    assert VoiceMenuShared.get_voice_problems(state, voice_indices=[0, 2]) == [
+        "Voice 3 has no speaker (select a speaker)"
+    ]
 
 
 def test_generation_utility_preflights_only_submitted_lines(tmp_path, monkeypatch):

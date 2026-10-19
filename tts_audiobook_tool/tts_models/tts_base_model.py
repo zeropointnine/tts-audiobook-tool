@@ -3,9 +3,9 @@ from abc import ABC, abstractmethod
 import os
 from typing import Any, Callable, TYPE_CHECKING
 
-from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback, VoiceDisplayInfo
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_types import ReadinessIssue
-from tts_audiobook_tool.tts_models.model_support import max_words_exceeds_recommended
+from tts_audiobook_tool.tts_models.model_support import make_max_words_exceed_warning
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -319,18 +319,8 @@ class TtsBaseModel(ABC):
         Returns warning text when the book's segmentation max words per segment
         exceeds the model's recommended maximum, else "".
         """
-        reco = cls.get_max_words_range_reco(project)
-        limit = reco[1]
-        max_words = project.book.segmentation_settings.max_words_per_segment
-        if not max_words_exceeds_recommended(max_words, limit):
-            return ""
-
-        name = reco[2] or cls.INFO.ui.get("proper_name") or cls.INFO.id
-        return (
-            f"{Ansi.ITALICS}Source text's max word length ({max_words})"
-            f" exceeds {name} recommended model limit ({limit})\n"
-            f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded"
-        )
+        return make_max_words_exceed_warning(
+            project, cls.get_max_words_range_reco(project), cls.INFO.ui.get("proper_name") or cls.INFO.id)
 
     @classmethod
     def get_output_sample_rate(
@@ -389,9 +379,6 @@ class TtsBaseModel(ABC):
     def get_voice_tag(cls, project: Project) -> str:
         """
         Gets "voice tag" used for sound segment filenames.
-
-        This should effectively be a condensed version of the the value string
-        returned by get_voice_display_info()
         """
 
         # Default implementation is for model whose 'salient info' consists of voice clone only
@@ -408,41 +395,6 @@ class TtsBaseModel(ABC):
     @classmethod
     def get_voice_tag_for_value(cls, voice_value: str) -> str:
         return ProjectVoiceUtil.make_voice_file_name_tag(voice_value, cls.INFO.file_tag)
-
-    @classmethod
-    def get_voice_display_info(
-            cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo | None:
-        return cls.get_voice_display_info_default(project, instance)
-
-    @classmethod
-    def get_voice_display_info_default(
-            cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo | None:
-
-        # Default implementation is for model whose 'salient' voice values
-        # consist of voice clone filenames only
-
-        tts_model_spec = cls.INFO
-        if not cls._has_voice_binding(tts_model_spec.id):
-            raise Exception("Logic error - must override this method")
-
-        status_prefix = "Voice clone"
-        menu_prefix = "current voice clone"
-
-        voice_file_name = cls.get_primary_voice_value(project)
-
-        if bool(voice_file_name):
-            value = ProjectVoiceUtil.make_voice_sample_display_label(project, voice_file_name, tts_model_spec)
-
-            num_items = ProjectVoiceUtil.get_voice_sample_count(project, TtsModelType.require_by_id(cls.INFO.id))
-            if num_items > 1:
-                value += f", +{num_items - 1} more"
-        else:
-            red_word = "required" if tts_model_spec.requires_voice else "none"
-            value = COL_ERROR + red_word
-
-        return VoiceDisplayInfo(status_prefix, menu_prefix, value)
 
     @classmethod
     def get_primary_voice_value(cls, project: Project) -> str:
@@ -527,6 +479,30 @@ class TtsBaseModel(ABC):
         return True
 
     @classmethod
+    def can_voice_presets(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
+        """
+        Whether the model uses per-voice preset voice ids (`Voice.presets`,
+        eg a Pocket predefined voice or a Qwen3-TTS CustomVoice speaker) under
+        the project's current settings. A voice's preset, when set, takes
+        precedence over its voice sample. Default False.
+        """
+        return False
+
+    @classmethod
+    def requires_voice_preset(cls, project: Project) -> bool:
+        """
+        Whether every used voice needs a preset under the project's current
+        settings (eg Qwen3-TTS CustomVoice). Default False.
+        """
+        return False
+
+    @classmethod
+    def get_voice_tag_for_preset(cls, preset: str) -> str:
+        """Sound segment filename "voice tag" for a voice that uses a preset."""
+        from tts_audiobook_tool.app_support import app_text
+        return app_text.sanitize_for_filename(preset)[:30]
+
+    @classmethod
     def can_voice_clone(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
         """
         Whether the model can clone a voice from a voice sample under the
@@ -537,6 +513,15 @@ class TtsBaseModel(ABC):
         rather than read the spec field directly.
         """
         return cls.INFO.can_voice_clone
+
+    @classmethod
+    def has_fixed_default_voice(cls, project: Project) -> bool:
+        """
+        Whether a voice without a sample still gets a fixed speaker under the
+        project's settings (eg a VibeVoice LoRA), so the "voices may vary" run
+        note does not apply.
+        """
+        return False
 
 
 _PARAMS_PRINT_BLACKLIST = [

@@ -239,13 +239,13 @@ class Qwen3Model(Qwen3BaseModel):
                     project, TtsModelType.require_by_id("qwen3tts_local"), voice_selection_index
                 )
                 instruct = voice.instructions.get(self.INFO.id, "") if voice else ""
-                speakers = self.supported_speakers
-                speaker_id = project.get_model_setting('qwen3tts_local', 'speaker_id')
-                if len(speakers) == 1:
-                    if not speaker_id and speaker_id != speakers[0]:
-                        ... # print warning maybe
-                    speaker_id = speakers[0] # force default
-                if speaker_id not in speakers:
+                # Single-speaker checkpoints always use their only speaker
+                speaker_id, is_valid = self.get_resolved_speaker_info(
+                    voice.preset_for(self.INFO.id) if voice else ""
+                )
+                if not speaker_id:
+                    result = "No speaker set for this voice"
+                elif not is_valid:
                     result = f"Invalid speaker id for this model: {speaker_id}"
                 else:
                     result = self.generate_custom_voice(

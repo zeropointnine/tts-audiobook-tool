@@ -179,12 +179,10 @@ def apply_model_and_validate(
 
     previous_target = project.get_model_setting('qwen3tts_local', 'target')
     previous_model_type = project.get_model_setting('qwen3tts_local', 'model_type')
-    previous_speaker_id = project.get_model_setting('qwen3tts_local', 'speaker_id')
 
     def revert() -> None:
         project.set_model_setting('qwen3tts_local', 'target', previous_target)
         project.set_model_setting('qwen3tts_local', 'model_type', previous_model_type)
-        project.set_model_setting('qwen3tts_local', 'speaker_id', previous_speaker_id)
         _ = ModelWorker.clear_models_if_running_blocking()
 
     project.set_model_setting('qwen3tts_local', 'target', target)
@@ -206,8 +204,8 @@ def apply_model_and_validate(
         revert()
         ask.ask_enter_to_continue()
         return
-    if project.get_model_setting('qwen3tts_local', 'speaker_id'):
-        project.set_model_setting('qwen3tts_local', 'speaker_id', "")
+    # Voices keep their speakers (`Voice.presets`); readiness flags any the
+    # new checkpoint doesn't have.
     project.set_model_setting('qwen3tts_local', 'model_type', inspected_type)
     project.save()
     if on_applied is not None:

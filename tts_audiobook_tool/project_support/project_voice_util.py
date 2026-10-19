@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import os
 from pathlib import Path
 import tempfile
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_DEFAULT, PROJECT_BATCH_SIZE_MAX
@@ -27,6 +27,37 @@ def _settings_registry():
     # so the Chatterbox base class can import this module during its startup.
     from tts_audiobook_tool.project_support.model_settings import REGISTRY
     return REGISTRY
+
+
+# Max length of instruction previews (voice list, submenu items, status block)
+INSTRUCTIONS_PREVIEW_LENGTH = 40
+
+VoiceSourceKind = Literal["preset", "sample", "instructions", "builtin", "missing"]
+
+
+@dataclass(frozen=True)
+class VoiceSource:
+    """What one voice uses to generate under the project's current TTS model
+    and settings; see `ProjectVoiceUtil.resolve_voice_source`.
+
+    `kind`:
+        "preset"        an active preset voice id (eg a Pocket predefined voice)
+        "sample"        a voice clone sample
+        "instructions"  free-text voice instructions (eg AuK's voice description)
+        "builtin"       no value; the model falls back to its built-in voice
+        "missing"       no value, but the model requires one (sample or preset)
+
+    `label` is short display text for the value ("" when there is none): the
+    preset id, the hyperlinked sample name, or the quoted, ellipsized instructions.
+    """
+
+    kind: VoiceSourceKind
+    label: str = ""
+
+    @property
+    def has_value(self) -> bool:
+        """Whether the voice has a value the model uses (is "valid")."""
+        return self.kind in ("preset", "sample", "instructions")
 
 
 class ProjectVoiceUtil:
@@ -368,9 +399,6 @@ class ProjectVoiceUtil:
             else:
                 project.voice_references = [voice]
 
-        if tts_type.id == "pocket_local":
-            project.set_model_setting('pocket_local', 'predefined_voice', "")
-
         return project.save()
 
     @staticmethod
@@ -436,15 +464,9 @@ class ProjectVoiceUtil:
         entries = list(previous_entries)
         entries[index] = replace(voice, file_name=dest_file_name, transcript="", crop=None)
         project.voice_references = entries
-        previous_predefined = ""
-        if tts_type.id == "pocket_local":
-            previous_predefined = project.get_model_setting('pocket_local', 'predefined_voice')
-            project.set_model_setting('pocket_local', 'predefined_voice', "")
         save_error = project.save()
         if save_error:
             project.voice_references = previous_entries
-            if previous_predefined:
-                project.set_model_setting('pocket_local', 'predefined_voice', previous_predefined)
             return save_error
         if old_crop_path and os.path.lexists(old_crop_path):
             try:
@@ -577,6 +599,92 @@ class ProjectVoiceUtil:
         if error:
             project.voice_references = previous
         return error
+
+    @staticmethod
+    def set_voice_preset_at_index_and_save(
+            project: Project, index: int, model_id: str, value: str,
+    ) -> str:
+        """Set one voice's model-specific preset voice id; empty removes only that key."""
+        if not 0 <= index < len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        voice = project.voice_references[index]
+        presets = dict(voice.presets)
+        value = value.strip()
+        if value:
+            presets[model_id] = value
+        else:
+            presets.pop(model_id, None)
+        if presets == voice.presets:
+            return ""
+        previous = project.voice_references
+        entries = list(previous)
+        entries[index] = replace(voice, presets=presets)
+        project.voice_references = entries
+        error = project.save()
+        if error:
+            project.voice_references = previous
+        return error
+
+    @staticmethod
+    def active_voice_preset(project: Project, voice: Voice | None) -> str:
+        """The voice's preset for the project's current model when the model
+        uses presets under the current settings, else "". An active preset
+        takes precedence over the voice's sample."""
+        if voice is None:
+            return ""
+        model_id = project.get_tts_model_type().id
+        preset = voice.preset_for(model_id)
+        if not preset:
+            return ""
+        from tts_audiobook_tool.tts import Tts
+        return preset if Tts.get_model_support(project).can_voice_presets(project) else ""
+
+    @staticmethod
+    def make_instructions_preview(instructions: str) -> str:
+        """Eg '"A calm, low male voice…"': whitespace-collapsed, ellipsized, quoted."""
+        return f"\"{ellipsize(' '.join(instructions.split()), INSTRUCTIONS_PREVIEW_LENGTH)}\""
+
+    @staticmethod
+    def resolve_voice_source(project: Project, voice: Voice) -> VoiceSource:
+        """What the voice uses to generate under the project's current model
+        and settings. Cheap and side-effect free (no file reads), so it is safe
+        on every menu redraw; file existence and transcripts are checked by the
+        voice pre-flight (`VoiceMenuShared.validate_voices`).
+
+        Precedence: an active preset, then the sample (when the model can clone
+        under the current settings), then the instructions (when the model uses
+        them and does not require a sample). A model that requires a preset
+        (eg Qwen3-TTS CustomVoice) accepts nothing else.
+
+        The catalog's `requires_voice` is model-wide; a sample is required only
+        while the model can clone under the current settings (eg not Qwen3-TTS
+        VoiceDesign, whose voices are defined by their instructions).
+        """
+        from tts_audiobook_tool.tts import Tts
+
+        preset = ProjectVoiceUtil.active_voice_preset(project, voice)
+        if preset:
+            return VoiceSource("preset", preset)
+        model_type = project.get_tts_model_type()
+        support = Tts.get_model_support(project)
+        requires_preset = support.can_voice_presets(project) and support.requires_voice_preset(project)
+        can_clone = support.can_voice_clone(project)
+        requires_sample = model_type.value.requires_voice and can_clone
+        if not requires_preset:
+            if (voice.has_sample and _settings_registry().voice_binding(model_type.id) is not None
+                    and can_clone):
+                label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice.file_name, model_type.value)
+                return VoiceSource("sample", label)
+            instructions = voice.instructions.get(model_type.id, "")
+            if instructions.strip() and not requires_sample and support.can_instructions(project):
+                return VoiceSource("instructions", ProjectVoiceUtil.make_instructions_preview(instructions))
+        if requires_preset or requires_sample:
+            return VoiceSource("missing")
+        return VoiceSource("builtin")
+
+    @staticmethod
+    def has_any_active_voice_preset(project: Project) -> bool:
+        return any(ProjectVoiceUtil.active_voice_preset(project, voice) for voice in project.voice_references)
 
     @staticmethod
     def set_voice_room_reverb_at_index_and_save(project: Project, index: int, room_reverb: RoomReverb) -> str:
@@ -787,29 +895,6 @@ class ProjectVoiceUtil:
             except OSError as e:
                 return f"Trim reset, but couldn't delete trimmed file {cropped_path}: {e}"
         return ""
-
-    @staticmethod
-    def get_voice_label(project: Project) -> str:
-        if project.get_tts_model_type().id == "pocket_local":
-            if project.get_model_setting('pocket_local', 'predefined_voice'):
-                return project.get_model_setting('pocket_local', 'predefined_voice')
-            value = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("pocket_local"))
-            if not value:
-                return "none"
-            return ellipsize_path_for_menu(value.removesuffix("_pocket.flac"))
-
-        value = ProjectVoiceUtil.get_primary_voice_value(project, project.get_tts_model_type())
-        if not value:
-            return "none"
-        value = value.removesuffix(f"_{project.get_tts_model_type().value.file_tag}.flac")
-        return ellipsize_path_for_menu(value)
-
-    @staticmethod
-    def has_voice(project: Project) -> bool:
-        """Whether any voice has a sample (or, for Pocket, a predefined voice is set)."""
-        if project.get_tts_model_type().id == "pocket_local" and project.get_model_setting('pocket_local', 'predefined_voice'):
-            return True
-        return ProjectVoiceUtil.get_voice_sample_count(project, project.get_tts_model_type()) > 0
 
     @staticmethod
     def emo_vector_to_string(project: Project) -> str:

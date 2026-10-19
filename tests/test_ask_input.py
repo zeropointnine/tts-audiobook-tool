@@ -328,7 +328,7 @@ def test_ask_string_and_save_does_not_save_unchanged_value(
     monkeypatch, submitted, normalizer
 ):
     project = Project()
-    set_setting(project, "qwen3_speaker_id", "hello")
+    set_setting(project, "qwen3_target", "hello")
     saves = []
 
     monkeypatch.setattr(
@@ -342,13 +342,13 @@ def test_ask_string_and_save_does_not_save_unchanged_value(
     saved = ask.ask_string_and_save(
         project,
         prompt_line="Enter speaker:",
-        target=SettingRef("qwen3tts_local", "speaker_id"),
+        target=SettingRef("qwen3tts_local", "target"),
         success_prefix="Speaker set:",
         normalizer=normalizer,
     )
 
     assert saved is False
-    assert get_setting(project, "qwen3_speaker_id") == "hello"
+    assert get_setting(project, "qwen3_target") == "hello"
     assert saves == []
 
 

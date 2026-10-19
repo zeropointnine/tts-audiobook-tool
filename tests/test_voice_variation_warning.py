@@ -10,10 +10,10 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.tts_models.voice_variation_warning import (
-    GENERIC_VOICE_VARIATION_NOTE, get_run_warnings, get_voice_variation_warning,
+    GENERIC_VOICE_VARIATION_NOTE, format_voice_numbers, get_run_warnings, get_voice_variation_warnings,
 )
 
-NOTE = f"Note: {GENERIC_VOICE_VARIATION_NOTE}"
+NOTE = f"{GENERIC_VOICE_VARIATION_NOTE} (Voice 2)"
 
 
 class _NoModelWarnings:
@@ -68,23 +68,43 @@ def test_rule_is_the_same_for_every_model(model_id):
     project = make_project(model_id, VoiceSelectMode.AUTO_ADVANCE)
     model = TtsModelType.require_by_id(model_id).value
     # Required samples are the voice pre-flight's job; there is no "may vary" note then.
-    expected = "" if model.requires_voice else NOTE
-    assert get_voice_variation_warning(project, [0, 1]) == expected
-    assert get_voice_variation_warning(project, [0]) == ""
+    assert get_voice_variation_warnings(project, [0, 1]) == ([] if model.requires_voice else [NOTE])
+    assert get_voice_variation_warnings(project, [0]) == []
 
 
 def test_model_without_voice_storage_never_warns():
     project = make_project("none", VoiceSelectMode.AUTO_ADVANCE)
-    assert get_voice_variation_warning(project, [0, 1]) == ""
+    assert get_voice_variation_warnings(project, [0, 1]) == []
 
 
 def test_instructions_without_a_model_specific_note_use_the_generic_note():
     # Local OmniVoice takes instructions but declares no variation note of its own
     project = Project(tts_model_type="omnivoice_local",
                       voice_references=[Voice(instructions={"omnivoice_local": "female, low pitch"})])
-    assert get_voice_variation_warning(project, [0]) == NOTE
+    assert get_voice_variation_warnings(project, [0]) == [f"{GENERIC_VOICE_VARIATION_NOTE} (Voice 1)"]
 
 
 def test_out_of_range_indices_are_ignored():
     project = make_project()
-    assert get_voice_variation_warning(project, [0, 7, -1]) == ""
+    assert get_voice_variation_warnings(project, [0, 7, -1]) == []
+
+
+def test_note_lists_every_sample_less_voice_in_play():
+    project = Project(tts_model_type="chatterbox_local",
+                      voice_references=[Voice(), Voice("a.flac", "text"), Voice(), Voice()])
+    assert get_voice_variation_warnings(project, [3, 0, 1, 2, 0]) == [
+        f"{GENERIC_VOICE_VARIATION_NOTE} (Voices 1, 3, 4)"]
+
+
+@pytest.mark.parametrize("indices, expected", [
+    ([], ""), ([0], " (Voice 1)"), ([2, 0, 2], " (Voices 1, 3)"),
+])
+def test_format_voice_numbers(indices, expected):
+    assert format_voice_numbers(indices) == expected
+
+
+def test_vibevoice_lora_suppresses_the_note():
+    project = Project(tts_model_type="vibevoice_local", voice_references=[Voice()])
+    assert get_voice_variation_warnings(project, [0]) == [f"{GENERIC_VOICE_VARIATION_NOTE} (Voice 1)"]
+    project.set_model_setting("vibevoice_local", "lora_target", "some/lora")
+    assert get_voice_variation_warnings(project, [0]) == []

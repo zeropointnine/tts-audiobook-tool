@@ -17,11 +17,9 @@ from tts_audiobook_tool.state import PendingTtsModelChange, State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
-from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
-from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
-from tts_audiobook_tool.util import COL_DIM, COL_ERROR, COL_MEDIUM
+from tts_audiobook_tool.util import COL_DIM, COL_ERROR, COL_MEDIUM, ellipsize
 
 
 def make_state(model: TtsModelType = TtsModelType.require_by_id("none")) -> State:
@@ -87,8 +85,8 @@ def test_menu_status_print_block_supports_voice_display_info(capsys, monkeypatch
     (["", "first.flac"], "first.flac, +1 more"),
     (["", "first.flac", "", "second.flac"], "first.flac, +3 more"),
     (["first.flac", "", ""], "first.flac, +2 more"),
-    ([""], "1 item"),
-    (["", ""], "2 items"),
+    ([""], None),
+    (["", ""], None),
 ])
 def test_voices_status_summarizes_all_slots(monkeypatch, capsys, model_id, names, expected):
     model = TtsModelType.require_by_id(model_id)
@@ -100,9 +98,10 @@ def test_voices_status_summarizes_all_slots(monkeypatch, capsys, model_id, names
     MenuStatus.print_block(state)
     output = capsys.readouterr().out
     voice_line = next(line for line in output.splitlines() if "Voices:" in line)
-    if not any(names) and model.value.requires_voice:
-        expected = "required"
-        assert COL_ERROR + "required" in voice_line
+    if not any(names):
+        # No voice has a value: error-colored, "required" only when the model needs one
+        expected = "required" if model.value.requires_voice else "none"
+        assert COL_ERROR + expected in voice_line
     else:
         assert COL_ERROR not in voice_line
     assert text_util.strip_ansi_codes(voice_line).split(":", 1)[1].strip() == expected
@@ -123,20 +122,91 @@ def test_voices_status_preserves_sample_hyperlink(tmp_path):
     assert _make_voices_text(state) == f"{link}, +1 more"
 
 
-@pytest.mark.parametrize("model_id, settings, label, expected", [
-    ("pocket_local", {"predefined_voice": "alba"}, "Predefined voice", "alba"),
-    ("qwen3tts_local", {"model_type": "custom_voice", "speaker_id": "Ryan"}, "Speaker", "Ryan"),
-])
-def test_status_retains_non_sample_voice_displays(monkeypatch, capsys, model_id, settings, label, expected):
+def test_status_voices_line_shows_speaker_preset(monkeypatch, capsys):
+    """The status block always uses the "Voices" label, including for presets."""
+    model_id = "qwen3tts_local"
     state = make_state(TtsModelType.require_by_id(model_id))
-    for name, value in settings.items():
-        state.project.set_model_setting(model_id, name, value)
+    state.project.set_model_setting(model_id, "model_type", "custom_voice")
+    state.project.voice_references = [Voice(presets={model_id: "Ryan"})]
     monkeypatch.setattr(MenuStatus, "prepare_tts", lambda _: None)
     MenuStatus.print_block(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    line = next(line for line in output.splitlines() if line.startswith(label + ":"))
+    line = next(line for line in output.splitlines() if line.startswith("Voices:"))
+    assert line.split(":", 1)[1].strip() == "Ryan"
+    assert "Speaker:" not in output
+
+
+@pytest.mark.parametrize("voices, expected", [
+    # A predefined voice takes precedence over its voice's sample
+    ([Voice(presets={"pocket_local": "alba"})], "alba"),
+    ([Voice("sample_pocket.flac", presets={"pocket_local": "alba"}), Voice()], "alba, +1 more"),
+    ([Voice(), Voice(presets={"pocket_local": "jean"})], "jean, +1 more"),
+    ([Voice("sample_pocket.flac"), Voice(presets={"pocket_local": "jean"})], "sample, +1 more"),
+    ([Voice()], "required"),
+])
+def test_pocket_status_always_uses_the_voices_line(monkeypatch, capsys, voices, expected):
+    state = make_state(TtsModelType.require_by_id("pocket_local"))
+    state.project.voice_references = voices
+    monkeypatch.setattr(MenuStatus, "prepare_tts", lambda _: None)
+    MenuStatus.print_block(state)
+    output = text_util.strip_ansi_codes(capsys.readouterr().out)
+    lines = output.splitlines()
+    assert not any(line.startswith("Predefined voice:") for line in lines)
+    line = next(line for line in lines if line.startswith("Voices:"))
     assert line.split(":", 1)[1].strip() == expected
-    assert "Voices:" not in output
+
+
+@pytest.mark.parametrize("voices, expected", [
+    # Instructions count when the voice has no usable sample
+    ([Voice(), Voice(instructions={"auk_sglomni": "A calm voice"})], '"A calm voice", +1 more'),
+    # A sample takes precedence over instructions
+    ([Voice("first.flac", instructions={"auk_sglomni": "A calm voice"})], "first.flac"),
+    # Blank instructions are no value
+    ([Voice(instructions={"auk_sglomni": "   "}), Voice()], "none"),
+    # Instructions for another model are no value
+    ([Voice(instructions={"omnivoice_local": "male"})], "none"),
+    ([Voice(instructions={"auk_sglomni": "word " * 20})], '"' + ellipsize("word " * 19 + "word", 40) + '"'),
+])
+def test_voices_status_counts_instructions(monkeypatch, voices, expected):
+    from tts_audiobook_tool.menus.menu_status import _make_voices_text
+
+    state = make_state(TtsModelType.require_by_id("auk_sglomni"))
+    state.project.voice_references = voices
+    text = _make_voices_text(state)
+    assert text_util.strip_ansi_codes(text) == expected
+    assert text.startswith(COL_ERROR) == (expected == "none")
+
+
+def test_voices_status_instructions_do_not_satisfy_a_required_voice():
+    from tts_audiobook_tool.menus.menu_status import _make_voices_text
+
+    model = TtsModelType.require_by_id("glm_local")
+    assert model.value.requires_voice
+    state = make_state(model)
+    state.project.voice_references = [Voice(instructions={"glm_local": "A calm voice"})]
+    assert _make_voices_text(state) == COL_ERROR + "required"
+
+
+@pytest.mark.parametrize("voices, expected", [
+    # VoiceDesign can't clone: its voices are defined by their instructions
+    ([Voice(instructions={"qwen3tts_local": "sleepy"}),
+      Voice(instructions={"qwen3tts_local": "a cute young girl"})], '"sleepy", +1 more'),
+    ([Voice(), Voice(instructions={"qwen3tts_local": "sleepy"})], '"sleepy", +1 more'),
+    # No instructions: an arbitrary voice (non-blocking), not a required sample
+    ([Voice()], "none"),
+    ([Voice("sample_qwen3.flac")], "none"),
+])
+def test_qwen_voice_design_status_counts_instructions(voices, expected):
+    from tts_audiobook_tool.menus.menu_status import _make_voices_text
+
+    model = TtsModelType.require_by_id("qwen3tts_local")
+    assert model.value.requires_voice
+    state = make_state(model)
+    state.project.set_model_setting("qwen3tts_local", "model_type", "voice_design")
+    state.project.voice_references = voices
+    text = _make_voices_text(state)
+    assert text_util.strip_ansi_codes(text) == expected
+    assert text.startswith(COL_ERROR) == (expected == "none")
 
 
 def test_audio_cpp_omnivoice_voice_line_is_optional(monkeypatch):
@@ -149,25 +219,9 @@ def test_audio_cpp_omnivoice_voice_line_is_optional(monkeypatch):
     monkeypatch.setattr(Tts, "_available_local_models", (model_type,))
     state = make_state(model_type)
 
-    display = Tts.get_model_support_for_type(model_type).get_voice_display_info(state.project)
-    assert display.value.endswith("none")
-    assert make_voice_label(state) == "Voices"
+    from tts_audiobook_tool.menus.menu_status import _make_voices_text
 
-
-def test_menus_omit_absent_voice_display_info(monkeypatch, capsys):
-    monkeypatch.setattr(Tts, "_available_local_models", (TtsModelType.require_by_id("omnivoice_local"),))
-    state = make_state(TtsModelType.require_by_id("omnivoice_local"))
-    tts_class = Tts.get_class_for_type(TtsModelType.require_by_id("omnivoice_local"))
-    monkeypatch.setattr(
-        tts_class, "get_voice_display_info",
-        classmethod(lambda cls, project, instance=None: None),
-    )
-
-    MenuStatus.print_block(state)
-
-    output = capsys.readouterr().out
-    assert "Voice clone:" not in output
-    assert "Voices:" not in output
+    assert _make_voices_text(state) == COL_ERROR + "none"
     assert make_voice_label(state) == "Voices"
 
 
@@ -958,80 +1012,52 @@ def test_loaded_status_requires_worker_model_to_match_project():
     assert "cpu, loaded" in _make_local_tts_text(state, matching)
 
 
-def test_dependent_voice_display_info_overrides_propagate_none(monkeypatch):
-    project = Project(dir_path="")
-    monkeypatch.setattr(
-        TtsBaseModel,
-        "get_voice_display_info",
-        classmethod(lambda cls, project, instance=None: None),
-    )
-
-    assert Qwen3BaseModel.get_voice_display_info(project) is None
-    assert IndexTts2BaseModel.get_voice_display_info(project) is None
-
-
-def test_qwen_custom_voice_status_uses_project_speaker_without_instance():
-    project = Project(dir_path="")
-    set_setting(project, "qwen3_model_type", "custom_voice")
-    set_setting(project, "qwen3_speaker_id", "Ryan")
-
-    display_info = Qwen3BaseModel.get_voice_display_info(project, None)
-
-    assert display_info is not None
-    assert display_info.status_prefix == "Speaker"
-    assert display_info.main_prefix == "speaker"
-    assert display_info.value == "Ryan"
-
-
-def test_qwen_custom_voice_status_does_not_include_voice_instructions():
-    project = Project(dir_path="", voice_references=[
-        Voice(instructions={"qwen3tts_local": "Speak warmly"}),
-    ])
-    set_setting(project, "qwen3_model_type", "custom_voice")
-    set_setting(project, "qwen3_speaker_id", "Ryan")
-
-    display_info = Qwen3BaseModel.get_voice_display_info(project, None)
-
-    assert display_info is not None
-    assert display_info.value == "Ryan"
-
-
-@pytest.mark.parametrize("instructions", ["", "Speak warmly"])
-def test_qwen_voice_design_status_has_no_instruction_preview(instructions):
-    project = Project(dir_path="", voice_references=[
-        Voice(instructions={"qwen3tts_local": instructions}),
-    ])
-    set_setting(project, "qwen3_model_type", "voice_design")
-
-    assert Qwen3BaseModel.get_voice_display_info(project, None) is None
-
-
-def test_qwen_custom_voice_status_requires_speaker_without_instance():
-    project = Project(dir_path="")
-    set_setting(project, "qwen3_model_type", "custom_voice")
-
-    display_info = Qwen3BaseModel.get_voice_display_info(project, None)
-
-    assert display_info is not None
-    assert display_info.status_prefix == "Speaker"
-    assert display_info.main_prefix == "speaker"
-    assert display_info.value == COL_ERROR + "required"
-
-
-@pytest.mark.parametrize("model_type, speaker_id, blocked", [
-    ("custom_voice", "", True),
-    ("custom_voice", "Ryan", False),  # validated against the checkpoint only with an instance
-    ("voice_design", "", False),
-    ("base", "", False),
-])
-def test_qwen_custom_voice_readiness_requires_speaker_without_instance(model_type, speaker_id, blocked):
-    project = Project(dir_path="")
+@pytest.mark.parametrize("model_type", ["custom_voice", "voice_design", "base"])
+@pytest.mark.parametrize("speaker_id", ["", "Ryan", "Nobody"])
+def test_qwen_readiness_does_not_require_speaker_without_instance(model_type, speaker_id):
+    # A missing speaker is a per-voice pre-flight problem, not project-wide readiness
+    project = Project(dir_path="", voice_references=[Voice(presets={"qwen3tts_local": speaker_id})])
     set_setting(project, "qwen3_model_type", model_type)
-    set_setting(project, "qwen3_speaker_id", speaker_id)
 
-    issues = Qwen3BaseModel.get_blocking_issues(project, None)
+    assert not any("speaker" in issue.short for issue in Qwen3BaseModel.get_blocking_issues(project, None))
 
-    assert any(issue.short == "speaker id" for issue in issues) is blocked
+
+class _StubQwen3(Qwen3BaseModel):
+    def __init__(self, speakers):
+        self._speakers = speakers
+
+    def kill(self):
+        pass
+
+    def generate_using_project(self, *args, **kwargs):
+        raise AssertionError("not generating in readiness test")
+
+    @property
+    def model_type(self):
+        return "custom_voice"
+
+    @property
+    def supported_speakers(self):
+        return self._speakers
+
+
+@pytest.mark.parametrize("speakers, presets, invalid", [
+    (["Ryan", "Vivian"], ["Ryan", ""], ""),
+    (["Ryan", "Vivian"], ["Ryan", "Nobody"], "Voice 2 (Nobody)"),
+    (["Ryan"], ["Nobody"], ""),  # single-speaker checkpoints always use their only speaker
+])
+def test_qwen_custom_voice_readiness_flags_speakers_the_checkpoint_lacks(speakers, presets, invalid):
+    project = Project(dir_path="", voice_references=[
+        Voice(presets={"qwen3tts_local": preset} if preset else {}) for preset in presets
+    ])
+    set_setting(project, "qwen3_model_type", "custom_voice")
+
+    issues = Qwen3BaseModel.get_blocking_issues(project, _StubQwen3(speakers))
+
+    flagged = [issue for issue in issues if issue.short == "valid speaker id"]
+    assert bool(flagged) == bool(invalid)
+    if invalid:
+        assert invalid in flagged[0].verbose
 
 
 @pytest.mark.parametrize("dir_path", ["/example/book", ""])

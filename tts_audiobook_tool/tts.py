@@ -120,9 +120,7 @@ class Tts:
     def get_voice_value_count(project: Project) -> int:
         """Number of configured voice samples for this project's selection."""
         model_type = project.get_tts_model_type()
-        if REGISTRY.voice_binding(model_type.id) is None or (
-            model_type.id == "pocket_local" and project.get_model_setting(model_type.id, "predefined_voice")
-        ):
+        if REGISTRY.voice_binding(model_type.id) is None:
             return 0
 
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -132,12 +130,16 @@ class Tts:
     def get_voice_tag_for_selection_index(project: Project, voice_selection_index: int) -> str:
         model_type = project.get_tts_model_type()
         support = Tts.get_model_support(project)
-        if REGISTRY.voice_binding(model_type.id) is None or (
-            model_type.id == "pocket_local" and project.get_model_setting(model_type.id, "predefined_voice")
-        ):
+        if REGISTRY.voice_binding(model_type.id) is None:
             return support.get_voice_tag(project)
 
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+        # A voice's preset takes precedence over its sample
+        preset = ProjectVoiceUtil.active_voice_preset(
+            project, ProjectVoiceUtil.current_voice(project, model_type, voice_selection_index)
+        )
+        if preset:
+            return support.get_voice_tag_for_preset(preset)
         voice_value = ProjectVoiceUtil.current_voice_value(project, model_type, voice_selection_index)
         if not voice_value:
             if ProjectVoiceUtil.has_any_voice_sample(project):

@@ -11,7 +11,7 @@
 # Optional `spec.ui.instructions_message` replaces the shared per-voice instructions prompt.
 # Optional `spec.ui.instructions_label` replaces "Instructions" in the per-voice menu item label.
 # Optional `spec.ui.instructions_voice_variation_note` replaces the generic "voices may vary"
-# run note when an in-play sample-less voice has instructions (shown after "Note: ").
+# run note for in-play sample-less voices that have instructions (followed by eg " (Voices 1, 3)").
 # audio.cpp `match` accepts either `task = "<token>"` or, when a family's routes are the
 # same inference path, `tasks = [...]` of the tokens a server may advertise.
 # `settings` declares persisted values separately from request defaults.
@@ -493,7 +493,6 @@ instructions_message = "Enter voice design instructions for this voice:\n(Comma-
 id = "pocket_local"
 settings = [
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
-    { name = "predefined_voice", section = "parameters", type = "str", default = "" },
     { name = "model_code", section = "parameters", type = "str", default = "" },
     { name = "temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
@@ -527,6 +526,8 @@ project_links = [
 ]
 # Special case: upstream opt-in URL
 opt_in_url = "https://github.com/kyutai-labs/pocket-tts"
+# UI name of a per-voice preset (`Voice.presets`)
+preset_label = "Predefined voice"
 
 # ------------------------------------------------------------------------
 [[models]]
@@ -537,7 +538,6 @@ settings = [
     { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "qwen3" },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "qwen3" },
     { name = "rolling_cont", section = "parameters", type = "int", default = 0 },
-    { name = "speaker_id", section = "parameters", type = "str", default = "" },
     { name = "batch_size", section = "orchestration", type = "int", default = 1 },
     { name = "temperature", section = "parameters", type = "float", default = -1.0, group = "qwen3", sentinel = -1 },
     { name = "top_k", section = "parameters", type = "int", default = -1, group = "qwen3", sentinel = -1 },
@@ -573,6 +573,8 @@ project_links = [
     "https://huggingface.co/collections/Qwen/qwen3-tts",
 ]
 instructions_message = "Enter instructions for this voice:\n(VoiceDesign: describe the voice, eg \"A warm, middle-aged male voice, speaking calmly\")\n(CustomVoice: describe the delivery, eg \"Very happy.\")"
+# UI name of a per-voice preset (`Voice.presets`; CustomVoice checkpoints)
+preset_label = "Speaker"
 
 # ------------------------------------------------------------------------
 [[models]]

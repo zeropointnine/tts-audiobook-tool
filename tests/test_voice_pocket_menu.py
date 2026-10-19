@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.voice import voice_pocket_menu as menu
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
@@ -71,7 +72,9 @@ def test_unused_clone_does_not_mark_access_validated(monkeypatch, has_clone, pre
     state = make_state()
     if not has_clone:
         state.project.voice_references = []
-    state.project.set_model_setting("pocket_local", "predefined_voice", preset)
+    elif preset:
+        # The voice's predefined voice takes precedence over its sample
+        state.project.voice_references = [Voice("voice.flac", "Reference.", presets={"pocket_local": preset})]
     monkeypatch.setattr(menu.ModelWorker, "inspect_tts_blocking",
                         lambda *_: pytest.fail("No clone access check needed"))
     menu.validate_voice_file(state)

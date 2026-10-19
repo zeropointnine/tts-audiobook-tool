@@ -50,20 +50,30 @@ LABEL_EDIT_VOICE_TRANSCRIPTION = "Transcription"
 LABEL_SET_INSTRUCTIONS = "Instructions"
 LABEL_CLEAR_INSTRUCTIONS = "Clear instructions"
 SUBLABEL_INSTRUCTIONS_UNUSED_WITH_SAMPLE = "Not used while this voice has a voice sample"
+# Per-voice preset (`Voice.presets`); the item label is the model's `preset_label`
+DEFAULT_PRESET_LABEL = "Preset"
+SUBLABEL_SAMPLE_UNUSED_WITH_PRESET = "Not used: {preset_label} takes precedence"
 LABEL_EFFECTS_SUPERLABEL = "Effects"
 LABEL_STEREO_POSITION = "Stereo position"
 LABEL_ROOM_REVERB = "Room reverb"
 
 # Max length of the transcript preview under the edit-transcription item
 TRANSCRIPT_PREVIEW_LENGTH = 40
-# Max length of instruction previews in voice list and submenu items
-INSTRUCTIONS_PREVIEW_LENGTH = 40
 # UI input guard, not a model-specific instruction vocabulary/context limit
 INSTRUCTIONS_MAX_LENGTH = 4000
 DEFAULT_INSTRUCTIONS_MESSAGE = "Enter instructions for this voice:"
 
 # Minimum duration of an imported voice sample, checked before and after silence trim
 VOICE_SAMPLE_MIN_DURATION_S = 2.0
+
+# Supplies a model's preset choices for a voice's preset item (may inspect the
+# model). None means unavailable; the provider has already told the user why.
+PresetChoices = Callable[[State], "list[str] | None"]
+
+
+def get_preset_label(tts_type: TtsModelType) -> str:
+    """Eg "Predefined voice" (Pocket), "Speaker" (Qwen3-TTS)."""
+    return tts_type.value.ui.get("preset_label", DEFAULT_PRESET_LABEL)
 
 
 class VoiceMenuShared:
@@ -169,8 +179,8 @@ class VoiceMenuShared:
     ) -> None:
         """Show sample management independently of model settings.
 
-        `items` is the voice list plus any model-specific items (eg Qwen3-TTS's
-        Set speaker); the shared selection controls are always appended last.
+        `items` is the voice list plus any model-specific items (eg VibeVoice's
+        LoRA); the shared selection controls are always appended last.
         """
         MenuUtil.menu(
             state=state,
@@ -424,8 +434,6 @@ class VoiceMenuShared:
         model_type = project.get_tts_model_type()
         if REGISTRY.voice_binding(model_type.id) is None:
             return None
-        if model_type.id == "pocket_local" and project.get_model_setting(model_type.id, "predefined_voice"):
-            return None
         # Samples are irrelevant when the model can't clone under the current
         # settings (eg Qwen3-TTS CustomVoice/VoiceDesign checkpoints).
         if not Tts.get_model_support(project).can_voice_clone(project):
@@ -441,22 +449,10 @@ class VoiceMenuShared:
             *,
             auto_transcribe: bool,
     ) -> str:
-        """Return an active-sample problem, optionally repairing its missing transcript.
-
-        A selected voice without a sample uses the model's built-in voice,
-        unless the model requires a clone sample, in which case it is a problem.
-        """
+        """Return a problem with the voice's (existing) sample, optionally
+        repairing its missing transcript."""
         project = state.project
         voice = project.voice_references[index]
-        if not voice.has_sample:
-            if not project.get_tts_model_type().value.requires_voice:
-                return ""
-            remedy = (
-                "set a sample or select a predefined voice"
-                if project.get_tts_model_type().id == "pocket_local"
-                else "set a sample or remove the voice"
-            )
-            return f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1} has no voice sample ({remedy})"
         file_name = voice.file_name
         cropped = voice.crop is not None
         if cropped:
@@ -499,15 +495,39 @@ class VoiceMenuShared:
             *,
             auto_transcribe: bool,
     ) -> list[str]:
-        requires_transcript = VoiceMenuShared._voice_check_scope_for_project(state.project)
-        if requires_transcript is None:
+        project = state.project
+        model_type = project.get_tts_model_type()
+        support = Tts.get_model_support(project)
+        uses_presets = REGISTRY.voice_binding(model_type.id) is not None and support.can_voice_presets(project)
+        requires_preset = uses_presets and support.requires_voice_preset(project)
+        requires_transcript = VoiceMenuShared._voice_check_scope_for_project(project)
+        if requires_transcript is None and not requires_preset:
             return []
         indices = (
-            range(len(state.project.voice_references))
+            range(len(project.voice_references))
             if voice_indices is None else sorted(set(voice_indices))
         )
         problems: list[str] = []
         for index in indices:
+            source = ProjectVoiceUtil.resolve_voice_source(project, project.voice_references[index])
+            if source.kind == "missing":
+                if requires_preset:
+                    preset_label = get_preset_label(model_type).lower()
+                    remedy = f"select a {preset_label}"
+                    what = preset_label
+                else:
+                    remedy = (
+                        "set a sample or select a predefined voice"
+                        if model_type.id == "pocket_local"
+                        else "set a sample or remove the voice"
+                    )
+                    what = "voice sample"
+                problems.append(f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1} has no {what} ({remedy})")
+                continue
+            # Only a voice that generates from its sample has a sample to check;
+            # otherwise it uses a preset, its instructions, or the built-in voice.
+            if source.kind != "sample" or requires_transcript is None:
+                continue
             problem = VoiceMenuShared._check_voice_sample(
                 state, index, requires_transcript, auto_transcribe=auto_transcribe,
             )
@@ -550,6 +570,7 @@ class VoiceMenuShared:
             on_before_set_callback: Callable | None = None,
             on_set_callback: Callable | None = None,
             on_clear_callback: Callable | None = None,
+            preset_choices: PresetChoices | None = None,
     ) -> list[MenuItem]:
         """Make the voice list (each opening its own submenu) and Add.
         The selection controls close the menu; `menu_wrapper` adds them.
@@ -557,13 +578,15 @@ class VoiceMenuShared:
         Built on every redraw, so labels and indices are those of the current
         list. A project always has at least one voice. The set callbacks run
         around a voice's "Set voice sample"; `on_clear_callback` runs when a
-        removal leaves no voice with a sample.
+        removal leaves no voice with a sample. `preset_choices` enables each
+        voice's preset item (while the model uses presets, `can_voice_presets`).
         """
         def open_submenu(s: State, index: int) -> None:
             VoiceMenuShared.voice_sample_submenu(
                 s, tts_type, index, on_clear_callback,
                 on_before_set_callback=on_before_set_callback,
                 on_set_callback=on_set_callback,
+                preset_choices=preset_choices,
             )
 
         def add_voice(s: State, _: MenuItem) -> None:
@@ -690,21 +713,20 @@ class VoiceMenuShared:
         A sample is required only when the model requires a voice clone
         sample: then every voice needs one (including when another voice has
         one). Otherwise a voice without a sample uses the model's built-in
-        voice. Never for a voice that has a sample, or when the model or its
-        settings use no voice samples (eg a Pocket predefined voice).
+        voice. Never for a voice that has a sample or an active preset (eg a
+        Pocket predefined voice), or when the model or its settings use no
+        voice samples.
         """
-        voice = project.voice_references[index]
-        if voice.has_sample:
-            return ""
-        scope = VoiceMenuShared._voice_check_scope_for_project(project)
-        if scope is None:
-            return ""
         model_type = project.get_tts_model_type()
-        if model_type.value.requires_voice:
-            if model_type.id == "pocket_local" and not ProjectVoiceUtil.has_any_voice_sample(project):
-                return "voice clone or predefined voice required"
-            return "required"
-        return ""
+        if not model_type.value.requires_voice:
+            return ""  # A missing required preset is labeled separately
+        source = ProjectVoiceUtil.resolve_voice_source(project, project.voice_references[index])
+        if source.kind != "missing" or VoiceMenuShared._voice_check_scope_for_project(project) is None:
+            return ""
+        if model_type.id == "pocket_local":
+            # This voice has neither a sample nor a predefined voice
+            return "voice sample or predefined voice required"
+        return "required"
 
     @staticmethod
     def is_voice_transcript_missing(project: Project, tts_type: TtsModelType, index: int) -> bool:
@@ -726,8 +748,10 @@ class VoiceMenuShared:
         Eg: 'Voice 1: some_voice.flac (15.3s*); "some instructions"',
         'Voice 1: some_voice.flac (12.3s); missing transcript', 'Voice 1: "some instructions"'
         when the voice has instructions (for the current model) but no sample file, or
-        'Voice 1: no sample (required)' (only the requirement is error-colored), or
-        'Voice 1: no instructions' (error-colored hint) when the model expects them.
+        'Voice 1: required' (error-colored) when the model requires a sample, or
+        'Voice 1: no instructions' (error-colored hint) when the model expects them, or
+        'Voice 1: anna' for an active preset (eg a Pocket predefined voice), which
+        takes precedence over (and so replaces) any sample details.
         Sample details are omitted when the model can't clone under the current
         settings (`can_voice_clone`).
         """
@@ -739,7 +763,15 @@ class VoiceMenuShared:
         # under the current settings, eg Qwen3-TTS VoiceDesign.
         can_clone = support.can_voice_clone(project)
         required_label = VoiceMenuShared.get_voice_sample_required_label(project, index)
-        if voice.has_sample and can_clone:
+        # Only the preset comes from the resolved source; samples and
+        # instructions keep their fuller list details below.
+        source = ProjectVoiceUtil.resolve_voice_source(project, voice)
+        preset = source.label if source.kind == "preset" else ""
+        preset_label = get_preset_label(tts_type).lower()
+        if preset:
+            # The preset is the voice's value; any sample it overrides is unused
+            parts.append(preset)
+        elif voice.has_sample and can_clone:
             part = ProjectVoiceUtil.make_voice_sample_display_label(project, voice.file_name, tts_type.value)
             duration = VoiceMenuShared.get_voice_sample_duration(project, voice)
             duration_text = VoiceMenuShared.make_voice_sample_duration_text(voice, duration)
@@ -751,20 +783,23 @@ class VoiceMenuShared:
             if duration_text:
                 part += f"{COL_DIM} {duration_text}{COL_DEFAULT}"
             parts.append(part)
-            if VoiceMenuShared.is_voice_transcript_missing(project, tts_type, index):
-                color = VoiceMenuShared.get_missing_transcript_color(project)
-                parts.append(f"{color}missing transcript{COL_DEFAULT}")
+            # Only when the current model (under its settings) requires a transcript
+            if (Tts.requires_reference_transcript(project)
+                    and VoiceMenuShared.is_voice_transcript_missing(project, tts_type, index)):
+                parts.append(f"{COL_ERROR}missing transcript{COL_DEFAULT}")
         elif required_label:
-            parts.append(f"no sample {COL_DIM}({COL_ERROR}{required_label}{COL_DIM}){COL_DEFAULT}")
+            parts.append(f"{COL_ERROR}{required_label}{COL_DEFAULT}")
+        if not preset and source.kind == "missing" and support.requires_voice_preset(project):
+            parts.append(f"no {preset_label} {COL_DIM}({COL_ERROR}required{COL_DIM}){COL_DEFAULT}")
         # Same runtime gate as the submenu's Instructions item (eg CosyVoice3's Mode)
-        instructions = " ".join(voice.instructions.get(tts_type.value.id, "").split())
+        instructions = voice.instructions.get(tts_type.value.id, "")
         can_instructions = support.can_instructions(project)
         # Eg AuK: a voice sample takes precedence, so its instructions are unused
         instructions_unused = (voice.has_sample and can_clone
                                and not support.uses_instructions_with_sample(project))
         if can_instructions and not instructions_unused:
-            if instructions:
-                parts.append(f"\"{ellipsize(instructions, INSTRUCTIONS_PREVIEW_LENGTH)}\"")
+            if instructions.strip():
+                parts.append(ProjectVoiceUtil.make_instructions_preview(instructions))
             elif support.expects_voice_instructions(project):
                 # Non-blocking hint, eg Qwen3-TTS VoiceDesign would get an arbitrary voice
                 parts.append(f"{COL_ERROR}no instructions{COL_DEFAULT}")
@@ -802,8 +837,10 @@ class VoiceMenuShared:
             on_clear_callback: Callable | None = None,
             on_before_set_callback: Callable | None = None,
             on_set_callback: Callable | None = None,
+            preset_choices: PresetChoices | None = None,
     ) -> None:
-        """Options for one voice. Follows the voice when it is moved; exits when it is removed."""
+        """Options for one voice. Follows the voice when it is moved; exits when it is removed.
+        `preset_choices` enables the voice's preset item (see make_voice_sample_items)."""
         current = [index]  # Updated on move
 
         def get_voice(s: State) -> Voice | None:
@@ -844,6 +881,17 @@ class VoiceMenuShared:
             else:
                 print_feedback("Instructions cleared")
 
+        def on_set_preset(s: State, _: MenuItem) -> None:
+            if preset_choices is not None:
+                VoiceMenuShared.ask_voice_preset(s, tts_type, current[0], preset_choices)
+
+        def on_clear_preset(s: State, _: MenuItem) -> None:
+            error = ProjectVoiceUtil.set_voice_preset_at_index_and_save(s.project, current[0], tts_type.id, "")
+            if error:
+                ask.ask_error(error)
+            else:
+                print_feedback(f"{get_preset_label(tts_type)} cleared")
+
         def on_remove(s: State, _: MenuItem) -> bool:
             voice = get_voice(s)
             had_sample = voice is not None and voice.has_sample
@@ -867,10 +915,17 @@ class VoiceMenuShared:
             # Sample items are hidden (the sample is kept) when the model can't
             # clone under the current settings, eg Qwen3-TTS VoiceDesign.
             can_clone = support.can_voice_clone(s.project)
+            uses_presets = preset_choices is not None and support.can_voice_presets(s.project)
+            preset = voice.preset_for(tts_type.id) if uses_presets else ""
+            preset_label = get_preset_label(tts_type)
             if can_clone:
                 items.append(MenuItem(
                     VoiceMenuShared.make_set_voice_sample_label(s.project, tts_type, i),
                     on_set_sample,
+                    sublabel=(
+                        SUBLABEL_SAMPLE_UNUSED_WITH_PRESET.format(preset_label=preset_label.lower())
+                        if preset and voice.has_sample else None
+                    ),
                 ))
             if can_clone and voice.has_sample:
                 items.append(MenuItem(LABEL_CLEAR_VOICE_SAMPLE, on_clear_sample))
@@ -896,10 +951,21 @@ class VoiceMenuShared:
                     make_menu_label(LABEL_EDIT_VOICE_TRANSCRIPTION, transcript_preview, color_code=transcript_color),
                     lambda s2, _: VoiceMenuShared.edit_voice_sample_transcript(s2, i),
                 ))
+            if uses_presets:
+                required = support.requires_voice_preset(s.project)
+                items.append(MenuItem(
+                    make_menu_label(
+                        preset_label, preset or ("required" if required else "none"),
+                        color_code=COL_ERROR if required and not preset else COL_ACCENT,
+                    ),
+                    on_set_preset,
+                ))
+                if preset:
+                    items.append(MenuItem(f"Clear {preset_label.lower()}", on_clear_preset))
             if support.can_instructions(s.project):
                 instructions = voice.instructions.get(tts_type.id, "")
                 preview = " ".join(instructions.split())
-                value = f'"{ellipsize(preview, INSTRUCTIONS_PREVIEW_LENGTH)}"' if preview else "none"
+                value = ProjectVoiceUtil.make_instructions_preview(preview) if preview else "none"
                 label_text = tts_type.value.ui.get("instructions_label", LABEL_SET_INSTRUCTIONS)
                 label = f"{label_text}/{tts_type.value.ui['short_name']}"
                 # Still editable (eg to prepare a voice before clearing its sample);
@@ -940,6 +1006,40 @@ class VoiceMenuShared:
             items=make_items,
             on_exit=lambda: PlaySoundUtil.stop_sound_async(),
             breadcrumb=lambda _: f"{LABEL_VOICE_SAMPLE_ITEM} {current[0] + 1}",
+        )
+
+    @staticmethod
+    def ask_voice_preset(state: State, tts_type: TtsModelType, index: int, preset_choices: PresetChoices) -> None:
+        """Choose this voice's preset from the model's choices. A model with a
+        single choice gets it saved directly (so readiness, which can't see the
+        model's inventory, finds it set)."""
+        choices = preset_choices(state)
+        if choices is None:
+            return
+        preset_label = get_preset_label(tts_type)
+
+        def save(value: str) -> None:
+            error = ProjectVoiceUtil.set_voice_preset_at_index_and_save(state.project, index, tts_type.id, value)
+            if error:
+                ask.ask_error(error)
+
+        if not choices:
+            ask.ask_error(f"Model has no {preset_label.lower()} choices")
+            return
+        if len(choices) == 1:
+            save(choices[0])
+            print_feedback(f"Model has only one {preset_label.lower()} ({choices[0]})")
+            return
+        current = state.project.voice_references[index].preset_for(tts_type.id)
+        MenuUtil.options_menu(
+            state=state,
+            heading_text=f"{preset_label} for {LABEL_VOICE_SAMPLE_ITEM} {index + 1}",
+            labels=choices,
+            values=choices,
+            current_value=current or None,
+            default_value=None,
+            on_select=save,
+            breadcrumb=preset_label,
         )
 
     @staticmethod

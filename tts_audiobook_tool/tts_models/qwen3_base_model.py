@@ -1,8 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 
-from tts_audiobook_tool.app_types import ReadinessIssue, VoiceDisplayInfo
-from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -55,16 +54,22 @@ class Qwen3BaseModel(TtsBaseModel):
     def supported_speakers(self) -> list[str]:
         ...
 
-    def get_resolved_speaker_info(self, project: Project) -> tuple[str, bool]:
+    def get_resolved_speaker_info(self, speaker_id: str) -> tuple[str, bool]:
         """
-        Returns resolved speaker id based on Project value,
-        and if it is valid for the currently loaded model.
+        Returns the resolved speaker id for a voice's stored speaker id
+        (`Voice.presets`), and if it is valid for the currently loaded model.
+        A single-speaker checkpoint always uses its only speaker.
         """
         if self.model_type != "custom_voice":
             return "", False
         if len(self.supported_speakers) == 1:
             return self.supported_speakers[0], True
-        return project.get_model_setting('qwen3tts_local', 'speaker_id'), project.get_model_setting('qwen3tts_local', 'speaker_id') in self.supported_speakers
+        return speaker_id, speaker_id in self.supported_speakers
+
+    @staticmethod
+    def get_voice_speaker_ids(project: Project) -> list[str]:
+        """Each voice's stored speaker id ("" when unset), by voice slot."""
+        return [voice.preset_for("qwen3tts_local") for voice in project.voice_references]
 
     @property
     def generate_defaults(self) -> dict[str, Any]:
@@ -97,18 +102,15 @@ class Qwen3BaseModel(TtsBaseModel):
             'es': 'spanish'
         }
 
-        language_code = language_code.lower()
-        qwen_language = MAP.get(language_code, "")
+        language_code = (language_code or "").lower()
 
         if language_code.startswith("zh"):
             result = "chinese", ""
         elif language_code in MAP:
             result = MAP[language_code], ""
-        elif qwen_language and not qwen_language in self.supported_languages:
-            # Probably can't happen with the current qwen3tts models
-            result = "auto", f"Warning: Language `{qwen_language}` is not part of the currently loaded Qwen3-TTS model's \"supported languages\" list; will use 'auto'"
         else:
-            result = "auto", f"Warning: Project language code {language_code} doesn't map to a known Qwen3-TTS language value; will use 'auto'"
+            shown = language_code or "(none)"
+            result = "auto", f"Warning: Project language code {shown} doesn't map to a known Qwen3-TTS language value; will use 'auto'"
 
         return result
 
@@ -122,6 +124,22 @@ class Qwen3BaseModel(TtsBaseModel):
         else:
             model_type = project.get_model_setting('qwen3tts_local', 'model_type')
         return model_type in ("custom_voice", "voice_design")
+
+    @classmethod
+    def can_voice_presets(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
+        # CustomVoice checkpoints have built-in speakers, chosen per voice
+        if instance is not None:
+            assert isinstance(instance, Qwen3BaseModel)
+            model_type = instance.model_type
+        else:
+            model_type = project.get_model_setting('qwen3tts_local', 'model_type')
+        return model_type == "custom_voice"
+
+    @classmethod
+    def requires_voice_preset(cls, project: Project) -> bool:
+        # Can't tell a single-speaker checkpoint without an instance; Set
+        # speaker saves its only speaker to the voice.
+        return project.get_model_setting('qwen3tts_local', 'model_type') == "custom_voice"
 
     @classmethod
     def can_voice_clone(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
@@ -176,16 +194,19 @@ class Qwen3BaseModel(TtsBaseModel):
 
         match project.get_model_setting('qwen3tts_local', 'model_type'):
             case "custom_voice":
-                if not instance:
-                    # Can't validate the id against the checkpoint's speakers
-                    # without an instance, but an empty one never works
-                    # (single-speaker checkpoints get theirs saved by Set speaker).
-                    if not project.get_model_setting('qwen3tts_local', 'speaker_id'):
-                        items.append( ReadinessIssue("speaker id", "A speaker id is required (see Voices menu > Set speaker)") )
-                else:
-                    is_valid = instance.get_resolved_speaker_info(project)[1]
-                    if not is_valid:
-                        items.append( ReadinessIssue("valid speaker id", "A valid speaker id is required") )
+                # A missing speaker is checked per used voice (voice pre-flight).
+                # Validating a set one needs the checkpoint's speaker inventory.
+                if instance and instance.model_type == "custom_voice":
+                    invalid = [
+                        f"Voice {index + 1} ({speaker_id})"
+                        for index, speaker_id in enumerate(cls.get_voice_speaker_ids(project))
+                        if speaker_id and not instance.get_resolved_speaker_info(speaker_id)[1]
+                    ]
+                    if invalid:
+                        items.append( ReadinessIssue(
+                            "valid speaker id",
+                            "Invalid speaker for this model: " + ", ".join(invalid) + " (see Voices menu)",
+                        ) )
             case "voice_design":
                 ... # per-voice instructions do not add model-global requirements
             case "base" | _:
@@ -195,7 +216,7 @@ class Qwen3BaseModel(TtsBaseModel):
 
     def get_warning_issues(self, project: Project) -> list[str]:
 
-        warnings = []
+        warnings = super().get_warning_issues(project)
 
         _, warning = self.resolve_language_code_and_warning(project.language_code)
         if warning:
@@ -216,49 +237,18 @@ class Qwen3BaseModel(TtsBaseModel):
         return s
 
     @classmethod
-    def get_voice_display_info(
-            cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo | None:
-
-        if instance:
-            assert(isinstance(instance, Qwen3BaseModel))
-
-        match project.get_model_setting('qwen3tts_local', 'model_type'):
-
-            case "custom_voice":
-                status_prefix = "Speaker"
-                main_prefix = "speaker"
-                if instance:
-                    resolved_speaker_id, is_valid = instance.get_resolved_speaker_info(project)
-                    if not resolved_speaker_id:
-                        resolved_speaker_id = "required"
-                    value = ("" if is_valid else COL_ERROR) + resolved_speaker_id
-                else:
-                    value = project.get_model_setting('qwen3tts_local', 'speaker_id') or (COL_ERROR + "required")
-
-            case "voice_design":
-                return None
-
-            case "base " | _:
-                display_info = super().get_voice_display_info(project, instance)
-                if display_info is None:
-                    return None
-                status_prefix, main_prefix, value = display_info
-
-        return VoiceDisplayInfo(status_prefix, main_prefix, value)
-
-    @classmethod
     def get_voice_tag(cls, project: Project) -> str:
 
         match project.get_model_setting('qwen3tts_local', 'model_type'):
             case "custom_voice":
-                if project.get_model_setting('qwen3tts_local', 'speaker_id'):
-                    return app_text.sanitize_for_filename(project.get_model_setting('qwen3tts_local', 'speaker_id'))[:30]
+                speaker_ids = cls.get_voice_speaker_ids(project)
+                if speaker_ids and speaker_ids[0]:
+                    return cls.get_voice_tag_for_preset(speaker_ids[0])
                 else:
                     return "speaker" # good enough
             case "voice_design":
                 return "voice_design"
-            case "base " | _:
+            case "base" | _:
                 return super().get_voice_tag(project)
 
 # ---

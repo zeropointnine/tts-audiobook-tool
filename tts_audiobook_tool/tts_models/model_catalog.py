@@ -28,7 +28,7 @@ _LOCAL_SPEC_KEYS = {
 _SERVER_SPEC_KEYS = {"file_tag", "default_output_sample_rate", "un_all_caps", "requirements_file_name", "ui", "substitutions", "max_random_seed"}
 _UI_KEYS = {"proper_name", "short_name", "voice_path_console", "voice_path_requestor", "project_links", "settings_note",
             "voice_sample_max_duration_s", "instructions_message", "instructions_label",
-            "instructions_voice_variation_note"}
+            "instructions_voice_variation_note", "preset_label"}
 
 
 def _fail(where: str, reason: str) -> NoReturn:
@@ -380,7 +380,8 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
         _fail(f"{where}.spec.ui.project_links", "expected strings")
     if "opt_in_url" in ui:
         _field(ui, "opt_in_url", f"{where}.spec.ui", str)
-    for key in ("settings_note", "instructions_message", "instructions_label", "instructions_voice_variation_note"):
+    for key in ("settings_note", "instructions_message", "instructions_label", "instructions_voice_variation_note",
+                "preset_label"):
         if key in ui:
             _field(ui, key, f"{where}.spec.ui", str)
     if "voice_sample_max_duration_s" in ui:

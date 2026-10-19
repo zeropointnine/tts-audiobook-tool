@@ -120,12 +120,8 @@ def test_all_local_voice_menus_keep_sample_selection_group(
         assert emotion_labels[2].startswith("Emotion alpha (strength)")
         assert "0.65" in emotion_labels[2] and "default" in emotion_labels[2]
         items, labels = items[:-3], labels[:-3]
-    elif model_id in ("pocket_local", "vibevoice_local"):
-        expected_label = {
-            "pocket_local": "Select predefined voice",
-            "vibevoice_local": "Select LoRA",
-        }[model_id]
-        assert labels[-1].startswith(expected_label)
+    elif model_id == "vibevoice_local":
+        assert labels[-1].startswith("Select LoRA")
         assert items[-1].blank_line_before
         items, labels = items[:-1], labels[:-1]
     # No samples still lists the project's one (sample-less) voice
@@ -134,7 +130,9 @@ def test_all_local_voice_menus_keep_sample_selection_group(
     assert not any(label.startswith("Add/remove voice samples") for label in labels)
     assert not any(item.blank_line_before for item in items)
     if voice_count == 0:
-        assert labels[0].startswith(f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: no sample")
+        # The requirement replaces "no sample" when the model requires a voice
+        required = VoiceMenuShared.get_voice_sample_required_label(state.project, 0)
+        assert labels[0].startswith(f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: {required or 'no sample'}")
     assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in labels) == (voice_count < 9)
     expected = sample_group_prefixes(max(voice_count, 1))
     assert len(labels) == len(expected)
@@ -175,67 +173,75 @@ def test_all_local_models_route_settings_without_sample_controls(monkeypatch, mo
         assert labels[0].startswith("Select model")
 
 
-@pytest.mark.parametrize("voice_count", [0, 1, 2])
-@pytest.mark.parametrize("predefined_voice", ["", "alba"])
-def test_local_pocket_label_notes_when_preset_overrides_clones(monkeypatch, voice_count, predefined_voice):
-    from tts_audiobook_tool.menus.voice import voice_pocket_menu as menu
-
-    state = make_state("pocket_local", voice_count=voice_count)
-    state.project.set_model_setting("pocket_local", "predefined_voice", predefined_voice)
-    captured = {}
-    monkeypatch.setattr(VoiceMenuShared, "menu_wrapper",
-                        lambda state, items, **kwargs: captured.update(items=items(state)))
+def open_voice_submenu(monkeypatch, state, index=0):
+    """Open Voice N's submenu from the Voices menu; returns its item maker."""
+    captured, submenu = {}, {}
+    monkeypatch.setattr(VoiceMenuShared, "menu_wrapper", capture_voices_items(captured))
     VoiceMenuShared.menu(state)
-    select = captured["items"][-2 if predefined_voice else -1]
-    label = get_string_from(state, select.label)
-    suffix = f" {menu.COL_DIM}(supercedes voice clone sample)"
-    assert label.endswith(suffix) == bool(predefined_voice and voice_count)
-    # This label is rebuilt dynamically after clone samples are removed.
-    state.project.voice_references = []
-    assert "supercedes" not in get_string_from(state, select.label)
+    monkeypatch.setattr(voice_menu_shared.MenuUtil, "menu", lambda **kwargs: submenu.update(kwargs))
+    voice_item = captured["items"](state)[index]
+    voice_item.handler(state, voice_item)
+    return lambda: submenu["items"](state)
 
 
-@pytest.mark.parametrize("predefined_voice", ["", "alba"])
-def test_local_pocket_predefined_voice_follows_samples_with_blank_line(monkeypatch, predefined_voice):
+def item_labels(state, items):
+    return [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+
+
+@pytest.mark.parametrize("has_sample", [False, True])
+@pytest.mark.parametrize("preset", ["", "alba"])
+def test_local_pocket_notes_when_voice_preset_overrides_its_sample(monkeypatch, has_sample, preset):
+    state = make_state("pocket_local", voice_count=2)
+    voices = state.project.voice_references
+    first = replace(voices[0], file_name=voices[0].file_name if has_sample else "",
+                    presets={"pocket_local": preset} if preset else {})
+    state.project.voice_references = [first, voices[1]]
+    row = strip_ansi_codes(VoiceMenuShared.make_voice_sample_item_label(
+        state.project, state.project.get_tts_model_type(), 0)[0])
+    # A preset is simply the voice's value, replacing any (unused) sample details
+    if preset:
+        assert row == f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: alba"
+    else:
+        assert "alba" not in row and ("voice-0" in row) == has_sample
+    # The other voice is unaffected
+    other = strip_ansi_codes(VoiceMenuShared.make_voice_sample_item_label(
+        state.project, state.project.get_tts_model_type(), 1)[0])
+    assert other.startswith(f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: voice-1")
+    items = open_voice_submenu(monkeypatch, state)()
+    sample_item = next(item for item in items if strip_ansi_codes(
+        get_string_from(state, item.label)).startswith(voice_menu_shared.LABEL_SET_VOICE_SAMPLE))
+    assert (sample_item.sublabel is not None and "takes precedence" in sample_item.sublabel) == bool(
+        preset and has_sample)
+
+
+def test_local_pocket_predefined_voice_is_set_per_voice_without_loading_model(monkeypatch):
     from tts_audiobook_tool.menus.voice import voice_pocket_menu as menu
 
     state = make_state("pocket_local", voice_count=2)
-    state.project.set_model_setting("pocket_local", "predefined_voice", predefined_voice)
-    captured, options, saved = {}, {}, []
-    monkeypatch.setattr(VoiceMenuShared, "menu_wrapper", capture_voices_items(captured))
-    monkeypatch.setattr(menu.MenuUtil, "options_menu", lambda **kwargs: options.update(kwargs))
-    monkeypatch.setattr(Project, "save", lambda self: saved.append(self))
+    options, saved = {}, []
+    monkeypatch.setattr(voice_menu_shared.MenuUtil, "options_menu", lambda **kwargs: options.update(kwargs))
+    monkeypatch.setattr(Project, "save", lambda self: saved.append(self) or "")
     monkeypatch.setattr(ModelWorker, "inspect_tts_blocking",
                         lambda *_: pytest.fail("Predefined voice selection must not load the model"))
-    VoiceMenuShared.menu(state)
-    items = captured["items"](state)
-    # Voice 1, Voice 2, Add, Select predefined voice, [Clear predefined voice],
-    # then the closing selection group (selection mode, edit selections)
-    select = items[3]
-    selection_mode = items[-2]
-    assert get_string_from(state, items[2].label) == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
-    assert get_string_from(state, items[-1].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
-    label = strip_ansi_codes(get_string_from(state, select.label))
-    assert label.startswith("Select predefined voice")
-    assert ("alba" in label) == bool(predefined_voice)
-    assert select.blank_line_before
-    assert selection_mode.blank_line_before
-    assert all(not item.blank_line_before for item in items if item is not select and item is not selection_mode)
-    assert all(not item.superlabel for item in items[1:])
-    assert len(items) == (7 if predefined_voice else 6)
+    make_items = open_voice_submenu(monkeypatch, state, index=1)
+    labels = item_labels(state, make_items())
+    select = next(item for item, label in zip(make_items(), labels) if label.startswith("Predefined voice"))
+    assert "none" in strip_ansi_codes(get_string_from(state, select.label))
+    assert "Clear predefined voice" not in labels
     select.handler(state, select)
-    assert options["heading_text"] == "Select predefined voice"
     assert options["labels"] == options["values"] == menu.PocketBaseModel.PREDEFINED_VOICES
-    assert options["current_value"] == (predefined_voice or None)
+    assert options["current_value"] is None
     options["on_select"]("alba")
-    assert state.project.get_model_setting("pocket_local", "predefined_voice") == "alba"
-    clear = captured["items"](state)[4]
-    assert clear.label == "Clear predefined voice"
-    assert not clear.blank_line_before
+    assert [voice.presets for voice in state.project.voice_references] == [{}, {"pocket_local": "alba"}]
+    # The sample is kept
+    assert state.project.voice_references[1].file_name == "voice-1.flac"
+    items = make_items()
+    labels = item_labels(state, items)
+    assert any(label.startswith("Predefined voice") and "alba" in label for label in labels)
+    clear = items[labels.index("Clear predefined voice")]
     clear.handler(state, clear)
-    assert state.project.get_model_setting("pocket_local", "predefined_voice") == ""
-    assert len(captured["items"](state)) == 6
-    assert len(state.project.voice_references) == 2
+    assert [voice.presets for voice in state.project.voice_references] == [{}, {}]
+    assert "Clear predefined voice" not in item_labels(state, make_items())
     assert saved == [state.project, state.project]
 
 

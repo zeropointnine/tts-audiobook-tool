@@ -1,11 +1,10 @@
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-from tts_audiobook_tool.util import COL_DIM, COL_DIM_ITALICS, COL_ERROR, ellipsize_path_for_menu, make_currently_string, print_feedback, printt
+from tts_audiobook_tool.util import COL_DIM_ITALICS, print_feedback, printt
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 
 
@@ -13,70 +12,28 @@ class VoicePocketMenu:
 
     @staticmethod
     def menu(state: State) -> None:
-        def make_predefined_voice_label(_: State) -> str:
-            name = state.project.get_model_setting('pocket_local', 'predefined_voice')
-            currently = make_currently_string(name) if name else ""
-            label = f"Select predefined voice {currently}".strip()
-            if name and ProjectVoiceUtil.has_any_voice_sample(state.project):
-                label += f" {COL_DIM}(supercedes voice clone sample)"
-            return label
-
         def make_items(_: State) -> list[MenuItem]:
-            items = VoiceMenuShared.make_voice_sample_items(
+            return VoiceMenuShared.make_voice_sample_items(
                 state,
                 TtsModelType.require_by_id("pocket_local"),
                 on_set_callback=lambda: validate_voice_file(state),
+                preset_choices=get_predefined_voice_choices,
             )
-            items.append(
-                MenuItem(
-                    make_predefined_voice_label,
-                    lambda _, __: select_predefined_voice(state),
-                    blank_line_before=True,
-                )
-            )
-            if state.project.get_model_setting('pocket_local', 'predefined_voice'):
-                items.append(
-                    MenuItem(
-                        "Clear predefined voice",
-                        lambda _, __: clear_predefined_voice(state),
-                    )
-                )
-            return items
 
         VoiceMenuShared.menu_wrapper(state, make_items)
 
 
-def select_predefined_voice(state: State) -> None:
-    voices = PocketBaseModel.PREDEFINED_VOICES
+def get_predefined_voice_choices(_: State) -> list[str]:
+    return list(PocketBaseModel.PREDEFINED_VOICES)
 
-    current = state.project.get_model_setting('pocket_local', 'predefined_voice') or None
-
-    def on_select(voice: str) -> None:
-        state.project.set_model_setting('pocket_local', 'predefined_voice', voice)
-        state.project.save()
-
-    MenuUtil.options_menu(
-        state=state,
-        heading_text="Select predefined voice",
-        labels=voices,
-        values=voices,
-        current_value=current,
-        default_value=None,
-        on_select=on_select,
-    )
-
-
-def clear_predefined_voice(state: State) -> None:
-    state.project.set_model_setting('pocket_local', 'predefined_voice', "")
-    state.project.save()
-    print_feedback("Cleared")
 
 def validate_voice_file(state: State) -> None:
 
     if state.pocket_voice_clone_access_validated:
         return
 
-    if ProjectVoiceUtil.has_any_voice_sample(state.project) and not state.project.get_model_setting('pocket_local', 'predefined_voice'):
+    # Only a voice that clones (no predefined voice taking precedence) needs access
+    if PocketBaseModel.get_first_cloned_voice_file_name(state.project):
 
         printt(f"{COL_DIM_ITALICS}Validating Pocket voice cloning access...")
         printt()

@@ -120,13 +120,10 @@ class Project(BaseModel):
 
         Chat lines have no assigned voice (and auto-advance rotates per
         chunk), so chat uses one room. Off with no voices (not normally
-        possible), or while a Pocket
-        predefined voice is in use. Concat and realtime playback instead use
+        possible). Concat and realtime playback instead use
         each segment's voice (`VoiceSpatialPolicy.room_reverb_for_voice_index`).
         """
         if not self.voice_references:
-            return RoomReverb.OFF
-        if self.tts_model_type == "pocket_local" and self.get_model_setting("pocket_local", "predefined_voice"):
             return RoomReverb.OFF
         return self.voice_references[0].room_reverb
 
@@ -233,8 +230,6 @@ class Project(BaseModel):
 
         from tts_audiobook_tool.project_support.project_sound_segments import ProjectSoundSegments
         self._sound_segments = ProjectSoundSegments(self)
-
-        # A Pocket preset can coexist with shared samples and takes precedence.
 
     @property
     def markers(self) -> set[int]:

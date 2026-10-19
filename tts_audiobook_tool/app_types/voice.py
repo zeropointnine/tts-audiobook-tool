@@ -14,7 +14,9 @@ On disk an entry is a flat JSON object:
         "room_reverb": "off",               # RoomReverb id, always written
         "pan": -0.3,                        # optional stereo position, -1 (left) to 1 (right);
                                             # written only when not centered
-        "preset": "alba",                   # optional model preset voice id; written only when non-empty
+        "presets": {"<model id>": "alba"},  # optional per-TTS-model preset voice ids (eg a Pocket
+                                            # predefined voice, a Qwen3-TTS CustomVoice speaker);
+                                            # written only when non-empty
         "instructions": {"<model id>": "..."}  # optional per-TTS-model voice instructions for
                                             # "instruct" models; written only when non-empty
     }
@@ -40,7 +42,7 @@ CROP_TRANSCRIPT_FIELD = "crop_transcript"
 CROP_FIELDS = (CROP_FILE_NAME_FIELD, CROP_START_FIELD, CROP_END_FIELD, CROP_TRANSCRIPT_FIELD)
 ROOM_REVERB_FIELD = "room_reverb"
 PAN_FIELD = "pan"
-PRESET_FIELD = "preset"
+PRESETS_FIELD = "presets"
 INSTRUCTIONS_FIELD = "instructions"
 
 
@@ -97,17 +99,18 @@ class VoiceCrop:
 class Voice:
     """A project voice: reference sample, its transcript, optional crop, room reverb,
     stereo position (`pan`, -1 full left to 1 full right, 0 centered), model
-    preset voice id (`preset`, for models with built-in voices), and voice
-    `instructions` keyed by TTS model id (for "instruct" models). Empty
-    strings / an empty map mean unused; an empty `file_name` means the voice
-    has no sample. `Voice()` is the default voice."""
+    preset voice ids (`presets`, keyed by TTS model id, for models with
+    built-in voices), and voice `instructions` keyed by TTS model id (for
+    "instruct" models). Empty strings / empty maps mean unused; an empty
+    `file_name` means the voice has no sample. `Voice()` is the default voice."""
 
     file_name: str = ""
     transcript: str = ""
     crop: VoiceCrop | None = None
     room_reverb: RoomReverb = RoomReverb.OFF
     pan: float = 0.0
-    preset: str = ""
+    # TTS model id -> preset voice id. Treat as read-only; excluded from hashing.
+    presets: dict[str, str] = field(default_factory=dict, hash=False)
     # TTS model id -> instructions. Treat as read-only; excluded from hashing.
     instructions: dict[str, str] = field(default_factory=dict, hash=False)
 
@@ -116,13 +119,13 @@ class Voice:
         if not (math.isfinite(pan) and -1.0 <= pan <= 1.0):
             raise ValueError("pan must be finite and between -1 and 1")
         object.__setattr__(self, "pan", pan)
-        if not isinstance(self.preset, str):
-            raise ValueError("preset must be a string")
-        if not isinstance(self.instructions, dict) or not all(
-                isinstance(key, str) and isinstance(value, str) for key, value in self.instructions.items()):
-            raise ValueError("instructions must be a dict of model id to string")
-        # Own a copy so the caller's dict cannot mutate this instance.
-        object.__setattr__(self, "instructions", dict(self.instructions))
+        for name in ("presets", "instructions"):
+            value = getattr(self, name)
+            if not isinstance(value, dict) or not all(
+                    isinstance(key, str) and isinstance(item, str) for key, item in value.items()):
+                raise ValueError(f"{name} must be a dict of model id to string")
+            # Own a copy so the caller's dict cannot mutate this instance.
+            object.__setattr__(self, name, dict(value))
 
     @property
     def has_sample(self) -> bool:
@@ -133,13 +136,17 @@ class Voice:
         """Whether every value is the default (a fresh `Voice()`)."""
         return self == Voice()
 
+    def preset_for(self, model_id: str) -> str:
+        """This voice's preset voice id for a TTS model, or ""."""
+        return self.presets.get(model_id, "")
+
     @property
     def crop_range(self) -> tuple[float, float] | None:
         return (self.crop.start, self.crop.end) if self.crop is not None else None
 
     def to_dict(self) -> dict[str, Any]:
         """The on-disk form. `room_reverb` is always written; `pan` only when nonzero;
-        `preset` and `instructions` only when non-empty."""
+        `presets` and `instructions` only when non-empty."""
         result: dict[str, Any] = {"file_name": self.file_name, "transcript": self.transcript}
         if self.crop is not None:
             result[CROP_FILE_NAME_FIELD] = self.crop.file_name
@@ -149,8 +156,8 @@ class Voice:
         result[ROOM_REVERB_FIELD] = self.room_reverb.id
         if self.pan != 0:
             result[PAN_FIELD] = self.pan
-        if self.preset:
-            result[PRESET_FIELD] = self.preset
+        if self.presets:
+            result[PRESETS_FIELD] = dict(self.presets)
         if self.instructions:
             result[INSTRUCTIONS_FIELD] = dict(self.instructions)
         return result
@@ -172,8 +179,8 @@ class Voice:
         `room_reverb` id loads as Off. A missing `room_reverb` key (all
         pre-v5 data) takes `default_room_reverb`. A missing or non-numeric
         `pan` loads as centered; an out-of-range one is clamped. A missing or
-        non-string `preset` loads as "". A missing or non-object
-        `instructions` (including a legacy plain string) loads as an empty map.
+        non-object `presets` / `instructions` (including a legacy plain string)
+        loads as an empty map.
         """
         from tts_audiobook_tool.app_support import path_norm
         from tts_audiobook_tool.l import L
@@ -201,8 +208,8 @@ class Voice:
             crop=_parse_crop(raw, where, index),
             room_reverb=room_reverb,
             pan=_parse_pan(raw, where, index),
-            preset=_parse_optional_str(raw, PRESET_FIELD, where, index),
-            instructions=_parse_instructions(raw, where, index),
+            presets=_parse_str_map(raw, PRESETS_FIELD, where, index),
+            instructions=_parse_str_map(raw, INSTRUCTIONS_FIELD, where, index),
         )
 
 
@@ -211,28 +218,17 @@ def ensure_voice_slot(voices: list[Voice]) -> list[Voice]:
     return voices if voices else [Voice()]
 
 
-def _parse_instructions(raw: dict, where: str, index: int) -> dict[str, str]:
-    """Empty when absent or not a map (the latter with a warning; a legacy
-    string value is not migrated). Entries with a non-string key or value
-    are dropped."""
+def _parse_str_map(raw: dict, field: str, where: str, index: int) -> dict[str, str]:
+    """A model id -> string map. Empty when absent or not a map (the latter
+    with a warning; a legacy string value is not migrated). Entries with a
+    non-string key or value are dropped."""
     from tts_audiobook_tool.l import L
 
-    value = raw.get(INSTRUCTIONS_FIELD, {})
+    value = raw.get(field, {})
     if not isinstance(value, dict):
-        L.w(f"{where}[{index}]: invalid {INSTRUCTIONS_FIELD} ({value!r}); using empty")
+        L.w(f"{where}[{index}]: invalid {field} ({value!r}); using empty")
         return {}
     return {key: item for key, item in value.items() if isinstance(key, str) and isinstance(item, str)}
-
-
-def _parse_optional_str(raw: dict, field: str, where: str, index: int) -> str:
-    """"" when absent or not a string (the latter with a warning)."""
-    from tts_audiobook_tool.l import L
-
-    value = raw.get(field, "")
-    if not isinstance(value, str):
-        L.w(f"{where}[{index}]: invalid {field} ({value!r}); using empty")
-        return ""
-    return value
 
 
 def _parse_pan(raw: dict, where: str, index: int) -> float:

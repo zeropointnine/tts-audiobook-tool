@@ -1,3 +1,4 @@
+from dataclasses import replace
 import pytest
 
 from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo, VoiceSelectMode
@@ -68,12 +69,13 @@ def test_positions_do_not_depend_on_the_selected_models_clone_support():
     assert policy.requested_channels == 2
 
 
-def test_pocket_preset_centers_every_voice():
+def test_pocket_preset_voices_keep_their_positions():
     project = pans_project([.5, -.5], model="pocket_local")
-    project.set_model_setting("pocket_local", "predefined_voice", "alba")
+    project.voice_references = [replace(voice, presets={"pocket_local": "alba"})
+                                for voice in project.voice_references]
     policy = VoiceSpatialPolicy.from_project(project)
-    assert [policy.pan_for_voice_index(i) for i in (0, 1)] == [0, 0]
-    assert policy.requested_channels == 1
+    assert [policy.pan_for_voice_index(i) for i in (0, 1)] == [.5, -.5]
+    assert policy.requested_channels == 2
 
 
 @pytest.mark.parametrize("mode,pans,summary", [
@@ -124,14 +126,14 @@ def test_other_modes_use_voice_zeros_room(mode):
     assert [policy.room_reverb_for_voice_index(i) for i in (-1, 0, 1)] == [MEDIUM] * 3
 
 
-def test_no_voices_or_pocket_preset_means_no_room():
+def test_no_voices_means_no_room_but_pocket_preset_voices_keep_theirs():
     assert VoiceSpatialPolicy.from_project(voices_project([])).room_reverb_for_voice_index(0) is OFF
     project = voices_project([MEDIUM, SMALL], spread=RoomReverbStereo.ALL_W100, model="pocket_local")
-    assert VoiceSpatialPolicy.from_project(project).room_reverb_for_voice_index(1) is SMALL
-    project.set_model_setting("pocket_local", "predefined_voice", "alba")
+    project.voice_references = [replace(voice, presets={"pocket_local": "alba"})
+                                for voice in project.voice_references]
     policy = VoiceSpatialPolicy.from_project(project)
-    assert [policy.room_reverb_for_voice_index(i) for i in (0, 1)] == [OFF, OFF]
-    assert policy.requested_channels == 1
+    assert [policy.room_reverb_for_voice_index(i) for i in (0, 1)] == [MEDIUM, SMALL]
+    assert policy.requested_channels == 2
 
 
 def test_rooms_do_not_depend_on_the_selected_models_clone_support():

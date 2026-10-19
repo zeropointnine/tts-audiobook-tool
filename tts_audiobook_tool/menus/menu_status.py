@@ -151,6 +151,9 @@ class MenuStatus:
         project_text = _make_project_text(state)
         lines.append(("Project", project_text))
 
+        text_text = _make_text_text(state)
+        lines.append(("Text", text_text))
+
         if Tts.is_remote_mode():
             server_tts_text = _make_server_tts_text(state)
             lines.append(("TTS model", server_tts_text))
@@ -158,17 +161,7 @@ class MenuStatus:
             local_tts_text = _make_local_tts_text(state, worker_models)
             lines.append(("TTS model", local_tts_text))
 
-        voice_display_info = Tts.get_model_support(state.project).get_voice_display_info(
-            state.project, None
-        )
-        if voice_display_info is not None:
-            if voice_display_info.status_prefix == "Voice clone":
-                lines.append(("Voices", _make_voices_text(state)))
-            else:
-                lines.append((voice_display_info.status_prefix, voice_display_info.value))
-
-        text_text = _make_text_text(state)
-        lines.append(("Text", text_text))
+        lines.append(("Voices", _make_voices_text(state)))
 
         stt_text = _make_stt_text(state, worker_models)
         lines.append(("STT model", stt_text))
@@ -298,19 +291,33 @@ def _make_server_tts_text(state: State) -> str:
     return text
 
 def _make_voices_text(state: State) -> str:
-    """Summarize voice slots, leading with the first sample when there is one."""
-    voices = state.project.voice_references
-    model = state.project.get_tts_model_type().value
-    first_sample = next((voice for voice in voices if voice.has_sample), None)
-    if first_sample is not None:
-        value = ProjectVoiceUtil.make_voice_sample_display_label(state.project, first_sample.file_name, model)
-        if len(voices) > 1:
-            value += f", +{len(voices) - 1} more"
-        return value
-    if model.requires_voice:
-        return COL_ERROR + "required"
-    count = len(voices)
-    return f"{count} item" if count == 1 else f"{count} items"
+    """The first voice that has a value (preset, sample, or instructions; see
+    `ProjectVoiceUtil.resolve_voice_source`), then "+N more" counting every
+    other voice. With no such voice, error-colored "required" when the model
+    requires a value, else "none". For VibeVoice with a LoRA set, ", +LoRA"
+    is appended last, or with no voice, just "LoRA"."""
+    project = state.project
+    has_lora = (
+        project.tts_model_type == "vibevoice_local"
+        and bool(project.get_model_setting('vibevoice_local', 'lora_target'))
+    )
+    lora_suffix = ", +LoRA" if has_lora else ""
+    voices = project.voice_references
+    sources = [ProjectVoiceUtil.resolve_voice_source(project, voice) for voice in voices]
+    first = next((source for source in sources if source.has_value), None)
+    if first is None:
+        missing = any(source.kind == "missing" for source in sources)
+        if has_lora and not missing:
+            # The LoRA supplies a fixed speaker, so no voice is not a problem
+            return "LoRA"
+        text = COL_ERROR + ("required" if missing else "none")
+        if lora_suffix:
+            text += VALUE_COLOR + lora_suffix
+        return text
+    value = first.label
+    if len(voices) > 1:
+        value += f", +{len(voices) - 1} more"
+    return value + lora_suffix
 
 
 def _make_text_text(state: State) -> str:
