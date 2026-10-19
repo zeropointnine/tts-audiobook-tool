@@ -683,6 +683,18 @@ class ProjectVoiceUtil:
         return VoiceSource("builtin")
 
     @staticmethod
+    def make_no_voice_value_text(project: Project) -> str:
+        """What a voice with no value lacks under the current model and settings
+        (non-blocking: the model falls back to its built-in voice): "no sample set",
+        or "no instructions set" when the model can't clone but uses instructions."""
+        from tts_audiobook_tool.tts import Tts
+
+        support = Tts.get_model_support(project)
+        if support.can_voice_clone(project) or not support.can_instructions(project):
+            return "no sample set"
+        return "no instructions set"
+
+    @staticmethod
     def has_any_active_voice_preset(project: Project) -> bool:
         return any(ProjectVoiceUtil.active_voice_preset(project, voice) for voice in project.voice_references)
 

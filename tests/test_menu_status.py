@@ -98,10 +98,14 @@ def test_voices_status_summarizes_all_slots(monkeypatch, capsys, model_id, names
     MenuStatus.print_block(state)
     output = capsys.readouterr().out
     voice_line = next(line for line in output.splitlines() if "Voices:" in line)
-    if not any(names):
-        # No voice has a value: error-colored, "required" only when the model needs one
-        expected = "required" if model.value.requires_voice else "none"
+    if not any(names) and model.value.requires_voice:
+        # No voice has a value and the model needs one: blocking, so error-colored
+        expected = "required"
         assert COL_ERROR + expected in voice_line
+    elif not any(names):
+        # Non-blocking: the model falls back to its built-in voice
+        expected = "no sample set"
+        assert COL_ERROR not in voice_line
     else:
         assert COL_ERROR not in voice_line
     assert text_util.strip_ansi_codes(voice_line).split(":", 1)[1].strip() == expected
@@ -162,9 +166,9 @@ def test_pocket_status_always_uses_the_voices_line(monkeypatch, capsys, voices, 
     # A sample takes precedence over instructions
     ([Voice("first.flac", instructions={"auk_sglomni": "A calm voice"})], "first.flac"),
     # Blank instructions are no value
-    ([Voice(instructions={"auk_sglomni": "   "}), Voice()], "none"),
+    ([Voice(instructions={"auk_sglomni": "   "}), Voice()], "no sample set"),
     # Instructions for another model are no value
-    ([Voice(instructions={"omnivoice_local": "male"})], "none"),
+    ([Voice(instructions={"omnivoice_local": "male"})], "no sample set"),
     ([Voice(instructions={"auk_sglomni": "word " * 20})], '"' + ellipsize("word " * 19 + "word", 40) + '"'),
 ])
 def test_voices_status_counts_instructions(monkeypatch, voices, expected):
@@ -174,7 +178,7 @@ def test_voices_status_counts_instructions(monkeypatch, voices, expected):
     state.project.voice_references = voices
     text = _make_voices_text(state)
     assert text_util.strip_ansi_codes(text) == expected
-    assert text.startswith(COL_ERROR) == (expected == "none")
+    assert COL_ERROR not in text
 
 
 def test_voices_status_instructions_do_not_satisfy_a_required_voice():
@@ -193,8 +197,8 @@ def test_voices_status_instructions_do_not_satisfy_a_required_voice():
       Voice(instructions={"qwen3tts_local": "a cute young girl"})], '"sleepy", +1 more'),
     ([Voice(), Voice(instructions={"qwen3tts_local": "sleepy"})], '"sleepy", +1 more'),
     # No instructions: an arbitrary voice (non-blocking), not a required sample
-    ([Voice()], "none"),
-    ([Voice("sample_qwen3.flac")], "none"),
+    ([Voice()], "no instructions set"),
+    ([Voice("sample_qwen3.flac")], "no instructions set"),
 ])
 def test_qwen_voice_design_status_counts_instructions(voices, expected):
     from tts_audiobook_tool.menus.menu_status import _make_voices_text
@@ -206,7 +210,7 @@ def test_qwen_voice_design_status_counts_instructions(voices, expected):
     state.project.voice_references = voices
     text = _make_voices_text(state)
     assert text_util.strip_ansi_codes(text) == expected
-    assert text.startswith(COL_ERROR) == (expected == "none")
+    assert COL_ERROR not in text
 
 
 def test_audio_cpp_omnivoice_voice_line_is_optional(monkeypatch):
@@ -221,7 +225,7 @@ def test_audio_cpp_omnivoice_voice_line_is_optional(monkeypatch):
 
     from tts_audiobook_tool.menus.menu_status import _make_voices_text
 
-    assert _make_voices_text(state) == COL_ERROR + "none"
+    assert _make_voices_text(state) == "no sample set"
     assert make_voice_label(state) == "Voices"
 
 

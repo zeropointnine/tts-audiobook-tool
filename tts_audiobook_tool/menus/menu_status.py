@@ -294,8 +294,10 @@ def _make_voices_text(state: State) -> str:
     """The first voice that has a value (preset, sample, or instructions; see
     `ProjectVoiceUtil.resolve_voice_source`), then "+N more" counting every
     other voice. With no such voice, error-colored "required" when the model
-    requires a value, else "none". For VibeVoice with a LoRA set, ", +LoRA"
-    is appended last, or with no voice, just "LoRA"."""
+    requires a value, else (non-blocking, so not error-colored) what the voices
+    lack, eg "no sample set"; see `ProjectVoiceUtil.make_no_voice_value_text`.
+    For VibeVoice with a LoRA set, ", +LoRA" is appended last, or with no
+    voice, just "LoRA"."""
     project = state.project
     has_lora = (
         project.tts_model_type == "vibevoice_local"
@@ -310,10 +312,12 @@ def _make_voices_text(state: State) -> str:
         if has_lora and not missing:
             # The LoRA supplies a fixed speaker, so no voice is not a problem
             return "LoRA"
-        text = COL_ERROR + ("required" if missing else "none")
-        if lora_suffix:
-            text += VALUE_COLOR + lora_suffix
-        return text
+        if missing:
+            text = COL_ERROR + "required"
+            if lora_suffix:
+                text += VALUE_COLOR + lora_suffix
+            return text
+        return ProjectVoiceUtil.make_no_voice_value_text(project)
     value = first.label
     if len(voices) > 1:
         value += f", +{len(voices) - 1} more"

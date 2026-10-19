@@ -130,9 +130,9 @@ def test_all_local_voice_menus_keep_sample_selection_group(
     assert not any(label.startswith("Add/remove voice samples") for label in labels)
     assert not any(item.blank_line_before for item in items)
     if voice_count == 0:
-        # The requirement replaces "no sample" when the model requires a voice
+        # The requirement replaces "no sample set" when the model requires a voice
         required = VoiceMenuShared.get_voice_sample_required_label(state.project, 0)
-        assert labels[0].startswith(f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: {required or 'no sample'}")
+        assert labels[0].startswith(f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: {required or 'no sample set'}")
     assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in labels) == (voice_count < 9)
     expected = sample_group_prefixes(max(voice_count, 1))
     assert len(labels) == len(expected)

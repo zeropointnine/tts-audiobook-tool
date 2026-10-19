@@ -128,12 +128,13 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
     if model_type in ("custom_voice", "voice_design"):
         # These checkpoints can't clone: sample details are hidden even when
         # stored, and no voice has instructions here. VoiceDesign treats that
-        # as an (error-colored) hint; CustomVoice needs a speaker per voice.
+        # as a non-blocking hint; CustomVoice needs (error-colored) a speaker per voice.
         if model_type == "voice_design":
-            assert rendered_labels[0] == f"{first}no instructions"
+            assert rendered_labels[0] == f"{first}no instructions set"
+            assert voice_menu_shared.COL_ERROR not in raw_labels[0]
         else:
             assert rendered_labels[0] == f"{first}no speaker (required)"
-        assert voice_menu_shared.COL_ERROR in raw_labels[0]
+            assert voice_menu_shared.COL_ERROR in raw_labels[0]
     elif sample_count == 0:
         # The Base checkpoint uses (and requires) a voice clone sample
         assert rendered_labels[0] == f"{first}required"

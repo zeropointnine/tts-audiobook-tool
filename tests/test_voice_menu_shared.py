@@ -444,9 +444,9 @@ def test_voice_item_label_includes_current_model_instructions(monkeypatch):
     assert plain(1) == 'Voice 2: "only instructions"'
     # Neither a sample file nor instructions for the current model
     project.voice_references.append(Voice("", instructions={"other_model": "ignored"}))
-    assert plain(2) == "Voice 3: no sample"
+    assert plain(2) == "Voice 3: no sample set"
     label, _ = VoiceMenuShared.make_voice_sample_item_label(project, tts_type, 2)
-    assert label == "Voice 3: no sample"  # Inherit the menu item's normal colour
+    assert label == "Voice 3: no sample set"  # Inherit the menu item's normal colour
 
 
 def test_voice_item_label_hides_instructions_when_mode_does_not_use_them(monkeypatch):
@@ -481,10 +481,11 @@ def test_voice_item_label_hints_missing_instructions_only_for_qwen_voice_design(
     def label(index: int) -> str:
         return VoiceMenuShared.make_voice_sample_item_label(project, tts_type, index)[0]
 
-    hint = f"{voice_menu_shared.COL_ERROR}no instructions{voice_menu_shared.COL_DEFAULT}"
-    assert (hint in label(0)) is hinted
+    assert ("no instructions set" in label(0)) is hinted
     if hinted:
-        assert re.sub(r"\x1b\[[0-9;]*m", "", label(0)) == "Voice 1: no instructions"
+        assert re.sub(r"\x1b\[[0-9;]*m", "", label(0)) == "Voice 1: no instructions set"
+        # Non-blocking, so not error-colored
+        assert voice_menu_shared.COL_ERROR not in label(0)
     assert "no instructions" not in label(1)  # has instructions (previewed when supported)
 
 

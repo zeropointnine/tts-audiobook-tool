@@ -465,7 +465,7 @@ class TtsBaseModel(ABC):
         """
         Whether a voice without instructions likely gets an arbitrary voice
         under the project's current settings (eg Qwen3-TTS VoiceDesign).
-        Drives a non-blocking "no instructions" hint only. Default False.
+        Drives a non-blocking "no instructions set" hint only. Default False.
         """
         return False
 

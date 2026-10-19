@@ -297,4 +297,4 @@ def test_voice_list_previews_instructions_only_when_used(install, tmp_path):
         for index in range(3))
     assert "a.flac" in cloned and "Unused description." not in cloned
     assert described == 'Voice 2: "Used description."'
-    assert default == "Voice 3: no sample"  # not "(required)"
+    assert default == "Voice 3: no sample set"  # not "(required)"

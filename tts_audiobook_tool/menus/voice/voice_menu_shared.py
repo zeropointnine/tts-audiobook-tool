@@ -749,7 +749,7 @@ class VoiceMenuShared:
         'Voice 1: some_voice.flac (12.3s); missing transcript', 'Voice 1: "some instructions"'
         when the voice has instructions (for the current model) but no sample file, or
         'Voice 1: required' (error-colored) when the model requires a sample, or
-        'Voice 1: no instructions' (error-colored hint) when the model expects them, or
+        'Voice 1: no instructions set' (non-blocking hint) when the model expects them, or
         'Voice 1: anna' for an active preset (eg a Pocket predefined voice), which
         takes precedence over (and so replaces) any sample details.
         Sample details are omitted when the model can't clone under the current
@@ -801,11 +801,12 @@ class VoiceMenuShared:
             if instructions.strip():
                 parts.append(ProjectVoiceUtil.make_instructions_preview(instructions))
             elif support.expects_voice_instructions(project):
-                # Non-blocking hint, eg Qwen3-TTS VoiceDesign would get an arbitrary voice
-                parts.append(f"{COL_ERROR}no instructions{COL_DEFAULT}")
+                # Non-blocking hint (so not error-colored), eg Qwen3-TTS VoiceDesign
+                # would get an arbitrary voice
+                parts.append("no instructions set")
         if not parts:
             # Eg Qwen3-TTS CustomVoice without instructions: the speaker's default delivery
-            parts.append("no sample" if can_clone or not can_instructions else "no instructions")
+            parts.append(ProjectVoiceUtil.make_no_voice_value_text(project))
         label = f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1}: " + f"{COL_DIM};{COL_DEFAULT} ".join(parts)
         return label, is_long
 
