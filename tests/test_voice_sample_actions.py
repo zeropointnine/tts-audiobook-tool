@@ -209,11 +209,11 @@ def test_remove_requires_confirmation(monkeypatch, confirmed):
     assert menu.VoiceMenuShared.remove_voice_sample_from_menu(
         state, state.project.get_tts_model_type(), 1,
     ) is confirmed
-    assert prompts == ["Remove Voice 2 (1.flac)?"]
+    assert prompts == ["Remove Voice 2 (1)?"]
     assert not errors
     if confirmed:
         assert state.project.voice_references == [original[0], original[2]]
-        assert feedback == ["Removed Voice 2 (1.flac)"]
+        assert feedback == ["Removed Voice 2 (1)"]
         saved.assert_called_once()
     else:
         assert state.project.voice_references == original
@@ -231,7 +231,7 @@ def test_submenu_items_for_one_and_multiple_samples(monkeypatch, count):
     assert get_string_from(state, captured["breadcrumb"]) == "Voice 1"
     items = captured["items"](state)
     expected = [
-        menu.make_menu_label(menu.LABEL_SET_VOICE_SAMPLE, "0.flac"),
+        menu.make_menu_label(menu.LABEL_SET_VOICE_SAMPLE, "0"),
         menu.LABEL_CLEAR_VOICE_SAMPLE,
         menu.make_menu_label(menu.LABEL_CROP_VOICE_SAMPLE, "4.0s"),
         menu.make_menu_label(menu.LABEL_EDIT_VOICE_TRANSCRIPTION, '"text 0"'),

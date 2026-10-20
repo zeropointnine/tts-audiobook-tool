@@ -140,7 +140,7 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
         assert rendered_labels[0] == f"{first}required"
         assert voice_menu_shared.COL_ERROR in raw_labels[0]
     else:
-        assert rendered_labels[0] == f"{first}voice_0.flac"
+        assert rendered_labels[0] == f"{first}voice_0"
     assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in rendered_labels) == (sample_count < 9)
     assert not any(label.startswith(("Select Qwen3-TTS model", "Temperature", "Seed",
                                      "Add/remove voice samples")) for label in rendered_labels)

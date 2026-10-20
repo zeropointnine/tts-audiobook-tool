@@ -99,13 +99,81 @@ def test_set_voice_and_save_cross_model_reimport_replaces_shared_list(tmp_path):
     assert not (tmp_path / PROJECT_VOICE_SUBDIR / "myvoice_2.flac").exists()
 
 
-def test_set_voice_and_save_append_same_stem_gets_distinct_name(tmp_path):
+def test_set_voice_and_save_append_same_stem_different_audio_gets_distinct_name(tmp_path):
     project = make_project(tmp_path)
     ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.require_by_id("dots_local"))
     ProjectVoiceUtil.set_voice_and_save(
-        project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.require_by_id("dots_local"), append=True
+        project, make_sound(APP_SAMPLE_RATE, amplitude=0.3), "myvoice", "", TtsModelType.require_by_id("dots_local"), append=True
     )
     assert get_setting(project, "dots_voice_file_name") == ["myvoice.flac", "myvoice_2.flac"]
+
+
+def test_set_voice_and_save_append_identical_audio_shares_file(tmp_path):
+    project = make_project(tmp_path)
+    dots = TtsModelType.require_by_id("dots_local")
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "one", dots)
+    err = ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "two", dots, append=True)
+    assert not err
+    assert get_setting(project, "dots_voice_file_name") == ["myvoice.flac", "myvoice.flac"]
+    assert get_setting(project, "dots_voice_transcript") == ["one", "two"]
+    voice_dir = tmp_path / PROJECT_VOICE_SUBDIR
+    assert sorted(p.name for p in voice_dir.iterdir()) == ["myvoice.flac"]
+
+
+def test_set_voice_and_save_name_clash_is_case_insensitive(tmp_path):
+    project = make_project(tmp_path)
+    dots = TtsModelType.require_by_id("dots_local")
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "MyVoice", "", dots)
+    # Identical audio under a differently cased stem shares the existing file
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "myvoice", "", dots, append=True)
+    # Different audio under a differently cased stem is disambiguated
+    ProjectVoiceUtil.set_voice_and_save(
+        project, make_sound(APP_SAMPLE_RATE, amplitude=0.3), "MYVOICE", "", dots, append=True
+    )
+    assert get_setting(project, "dots_voice_file_name") == ["MyVoice.flac", "MyVoice.flac", "MYVOICE_2.flac"]
+
+
+def test_set_voice_and_save_adopts_spelling_of_unreferenced_case_variant(tmp_path):
+    project = make_project(tmp_path)
+    voice_dir = tmp_path / PROJECT_VOICE_SUBDIR
+    voice_dir.mkdir()
+    stale = voice_dir / "MyVoice.flac"
+    stale.write_bytes(b"stale, unreferenced")
+
+    err = ProjectVoiceUtil.set_voice_and_save(
+        project, make_sound(APP_SAMPLE_RATE), "myvoice", "", TtsModelType.require_by_id("dots_local")
+    )
+    assert not err
+    assert get_setting(project, "dots_voice_file_name") == ["MyVoice.flac"]
+    assert [p.name for p in voice_dir.iterdir()] == ["MyVoice.flac"]
+    assert stale.read_bytes() != b"stale, unreferenced"
+
+
+def test_set_voice_sample_at_index_shares_identical_sibling_file(tmp_path):
+    project = make_project(tmp_path)
+    dots = TtsModelType.require_by_id("dots_local")
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "a", "", dots)
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE, amplitude=0.3), "b", "", dots, append=True)
+
+    err = ProjectVoiceUtil.set_voice_sample_at_index_and_save(project, 1, make_sound(APP_SAMPLE_RATE), "A", dots)
+    assert not err
+    assert get_setting(project, "dots_voice_file_name") == ["a.flac", "a.flac"]
+
+
+def test_set_voice_sample_at_index_does_not_clobber_sibling_with_different_audio(tmp_path):
+    project = make_project(tmp_path)
+    dots = TtsModelType.require_by_id("dots_local")
+    ProjectVoiceUtil.set_voice_and_save(project, make_sound(APP_SAMPLE_RATE), "a", "", dots)
+    index, err = ProjectVoiceUtil.add_voice_and_save(project)
+    assert not err
+    original = (tmp_path / PROJECT_VOICE_SUBDIR / "a.flac").read_bytes()
+
+    err = ProjectVoiceUtil.set_voice_sample_at_index_and_save(
+        project, index, make_sound(APP_SAMPLE_RATE, amplitude=0.3), "a", dots
+    )
+    assert not err
+    assert get_setting(project, "dots_voice_file_name") == ["a.flac", "a_2.flac"]
+    assert (tmp_path / PROJECT_VOICE_SUBDIR / "a.flac").read_bytes() == original
 
 
 def test_set_voice_and_save_indextts2_emo_voice_untagged(tmp_path):

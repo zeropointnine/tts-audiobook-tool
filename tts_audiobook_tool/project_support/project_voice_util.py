@@ -283,8 +283,11 @@ class ProjectVoiceUtil:
         Standard UI treatment for a Project's voice clone file name
         Strips model type qualifier and file suffix, ellipsizes, and makes it a terminal hyperlink
         """
-        suffix = f"_{tts_model_spec.file_tag}.flac"
-        value = file_name.removesuffix(suffix)
+        tagged_suffix = f"_{tts_model_spec.file_tag}.flac"
+        if file_name.endswith(tagged_suffix):
+            value = file_name.removesuffix(tagged_suffix)
+        else:
+            value = os.path.splitext(file_name)[0] or file_name
         value = ellipsize(value, 40)
         path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
         if os.path.exists(path):
@@ -340,6 +343,99 @@ class ProjectVoiceUtil:
         return used
 
     @staticmethod
+    def _same_audio(path_a: str, path_b: str) -> bool:
+        """Whether two sound files decode to identical 16-bit PCM at the same rate."""
+        import numpy as np
+        import soundfile
+        try:
+            data_a, sr_a = soundfile.read(path_a, dtype="int16", always_2d=True)
+            data_b, sr_b = soundfile.read(path_b, dtype="int16", always_2d=True)
+        except Exception:
+            return False
+        return sr_a == sr_b and np.array_equal(data_a, data_b)
+
+    @staticmethod
+    def _existing_case_variant(parent: Path, file_name: str) -> str:
+        """`file_name` re-spelled to match an existing file in `parent` that
+        differs from it only in case; unchanged when there is none (or an
+        exact match exists)."""
+        prefix, _, base_name = file_name.replace("\\", "/").rpartition("/")
+        try:
+            entries = sorted(os.listdir(parent))
+        except OSError:
+            return file_name
+        if base_name in entries:
+            return file_name
+        key = base_name.casefold()
+        for entry in entries:
+            if entry.casefold() == key and os.path.isfile(parent / entry):
+                return f"{prefix}/{entry}" if prefix else entry
+        return file_name
+
+    @staticmethod
+    def _save_voice_sample_file(
+            project: Project, sound: Sound, voice_file_stem: str, used: set[str],
+    ) -> tuple[str, str]:
+        """Write an imported voice sample into the voice subdir.
+
+        `used` holds names owned by other references (compared case
+        insensitively). When `<stem>.flac` clashes with one of them whose
+        audio is identical to what is about to be saved, that existing file
+        is shared rather than duplicated. Otherwise a clash is disambiguated
+        with a numeric suffix. An unreferenced file on disk whose name
+        differs only in case is overwritten under its existing spelling.
+        Returns (file name, error string or "").
+        """
+        used_by_key = {name.casefold(): name for name in used}
+        stem = voice_file_stem
+        dest_file_name = f"{stem}.flac"
+        voice_dir = Path(ProjectVoiceUtil.get_voice_dir_path(project))
+        crop_dir = voice_dir / VOICE_CROP_SUBDIR
+        if (voice_dir / dest_file_name).resolve().is_relative_to(crop_dir.resolve()):
+            return "", "Voice samples cannot be imported into the managed trim directory"
+        dest_parent = (voice_dir / dest_file_name).parent
+        dest_parent.mkdir(parents=True, exist_ok=True)
+
+        # Encode first, so the comparison is against exactly what would be saved.
+        fd, temp_path = tempfile.mkstemp(suffix=".flac", dir=dest_parent)
+        os.close(fd)
+        try:
+            err = SoundFileUtil.save_flac(sound, temp_path)
+            if err:
+                return "", err
+
+            clashing_name = used_by_key.get(dest_file_name.casefold())
+            if clashing_name is not None:
+                clashing_path = ProjectVoiceUtil.resolve_voice_file_path(project, clashing_name)
+                if os.path.isfile(clashing_path) and ProjectVoiceUtil._same_audio(temp_path, clashing_path):
+                    return clashing_name, ""
+                count = 2
+                while dest_file_name.casefold() in used_by_key:
+                    dest_file_name = f"{stem}_{count}.flac"
+                    count += 1
+
+            # An unreferenced file whose name differs only in case is
+            # overwritten under its on-disk spelling (as an exact-name one
+            # always was), so the stored name always matches the disk and
+            # case-only variants never accumulate side by side.
+            dest_file_name = ProjectVoiceUtil._existing_case_variant(dest_parent, dest_file_name)
+            dest_path = voice_dir / dest_file_name
+            if dest_path.resolve().is_relative_to(crop_dir.resolve()):
+                return "", "Voice samples cannot be imported into the managed trim directory"
+            try:
+                os.replace(temp_path, dest_path)
+            except OSError as e:
+                return "", f"Error saving sound file {dest_path}: {e}"
+            temp_path = ""
+            return dest_file_name, ""
+        finally:
+            if temp_path:
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+
+    @staticmethod
     def set_voice_and_save(
             project: Project,
             sound: Sound,
@@ -367,23 +463,11 @@ class ProjectVoiceUtil:
         )
         if append and not replaces_placeholder:
             # When appending, a same-stem sample should not clobber an
-            # existing entry; give it a distinct name.
+            # existing entry; give it a distinct name (or share it, when
+            # its audio is identical).
             used.update(value for value in ProjectVoiceUtil.get_voice_values(project, tts_type) if value)
-        stem = voice_file_stem
-        dest_file_name = f"{stem}.flac"
-        count = 2
-        while dest_file_name in used:
-            dest_file_name = f"{stem}_{count}.flac"
-            count += 1
 
-        voice_dir = Path(ProjectVoiceUtil.get_voice_dir_path(project))
-        dest_path = voice_dir / dest_file_name
-        crop_dir = voice_dir / VOICE_CROP_SUBDIR
-        if dest_path.resolve().is_relative_to(crop_dir.resolve()):
-            return "Voice samples cannot be imported into the managed trim directory"
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-
-        err = SoundFileUtil.save_flac(sound, str(dest_path))
+        dest_file_name, err = ProjectVoiceUtil._save_voice_sample_file(project, sound, voice_file_stem, used)
         if err:
             return err
 
@@ -428,24 +512,14 @@ class ProjectVoiceUtil:
 
         voice = project.voice_references[index]
         used = ProjectVoiceUtil.get_used_voice_file_names(project, exclude_owner=None)
-        shared_elsewhere = voice.file_name == project.get_model_setting("indextts2_local", "emo_voice") or any(
-            other.file_name == voice.file_name
+        own_name = voice.file_name.casefold()
+        emo_voice = project.get_model_setting("indextts2_local", "emo_voice") or ""
+        shared_elsewhere = bool(own_name) and (emo_voice.casefold() == own_name or any(
+            other.file_name.casefold() == own_name
             for other_index, other in enumerate(project.voice_references) if other_index != index
-        )
+        ))
         if not shared_elsewhere:
-            used.discard(voice.file_name)
-        stem = voice_file_stem
-        dest_file_name = f"{stem}.flac"
-        count = 2
-        while dest_file_name in used:
-            dest_file_name = f"{stem}_{count}.flac"
-            count += 1
-
-        voice_dir = Path(ProjectVoiceUtil.get_voice_dir_path(project))
-        dest_path = voice_dir / dest_file_name
-        crop_dir = voice_dir / VOICE_CROP_SUBDIR
-        if dest_path.resolve().is_relative_to(crop_dir.resolve()):
-            return "Voice samples cannot be imported into the managed trim directory"
+            used = {name for name in used if name.casefold() != own_name}
 
         # Decided before the change: never delete a trim file that is also
         # another input.
@@ -455,8 +529,7 @@ class ProjectVoiceUtil:
             if not ProjectVoiceUtil._crop_path_is_shared(project, index, candidate):
                 old_crop_path = candidate
 
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-        err = SoundFileUtil.save_flac(sound, str(dest_path))
+        dest_file_name, err = ProjectVoiceUtil._save_voice_sample_file(project, sound, voice_file_stem, used)
         if err:
             return err
 

@@ -60,13 +60,13 @@ def test_remote_voice_menu_tracks_selection_on_redraw_and_edit(monkeypatch):
     monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
     VoiceMenuShared.menu(state)
     assert captured["subheading"] is None
-    assert "old.flac" in get_string_from(state, captured["items"](state)[0].label)
+    assert "old" in get_string_from(state, captured["items"](state)[0].label)
 
     state.project.tts_model_type = "breeze_tts_2_audiocpp"
     state.project.set_model_setting("breeze_tts_2_audiocpp", "file_name", ["new.flac"])
     items = captured["items"](state)
     label = get_string_from(state, items[0].label)
-    assert "new.flac" in label and "old.flac" not in label
+    assert "new" in label and "old" not in label
     calls = []
     monkeypatch.setattr(voice_menu_shared.Project, "save", lambda _: "")
     monkeypatch.setattr(VoiceMenuShared, "voice_sample_submenu",
@@ -169,7 +169,7 @@ def test_voice_menu_direct_actions_refresh_samples_and_preserve_callbacks(monkey
     assert events == ["before", "set 0", "after"]
     items = main["items"](state)
     label = get_string_from(state, items[0].label)
-    assert "Voice 1:" in label and "new.flac" in label and "(1.2s)" in label
+    assert "Voice 1:" in label and "new" in label and "(1.2s)" in label
     assert items[0].data == 0
     # The trim and transcript items appear once a sample is set.
     labels = [get_string_from(state, item.label) for item in menus[-1]["items"](state)]
@@ -438,7 +438,7 @@ def test_voice_item_label_includes_current_model_instructions(monkeypatch):
         "voice.flac", "text",
         instructions={"omnivoice_local": "some  voice\ninstruction", "other_model": "ignored"},
     ))
-    assert plain(0) == 'Voice 1: voice.flac (15.3s*); "some voice instruction"'
+    assert plain(0) == 'Voice 1: voice (15.3s*); "some voice instruction"'
     # OmniVoice does not require a voice clone sample, so a voice without
     # one is fine even when another voice has one
     assert plain(1) == 'Voice 2: "only instructions"'
@@ -461,9 +461,9 @@ def test_voice_item_label_hides_instructions_when_mode_does_not_use_them(monkeyp
         label, _ = VoiceMenuShared.make_voice_sample_item_label(project, tts_type, 0)
         return re.sub(r"\x1b\[[0-9;]*m|\x1b\]8;[^\x1b]*\x1b\\", "", label)
 
-    assert plain() == "Voice 1: voice.flac (5.0s)"  # zero_shot default
+    assert plain() == "Voice 1: voice (5.0s)"  # zero_shot default
     project.set_model_setting(model_id, "template_name", "instruct")
-    assert plain() == 'Voice 1: voice.flac (5.0s); "Speak warmly"'
+    assert plain() == 'Voice 1: voice (5.0s); "Speak warmly"'
 
 
 @pytest.mark.parametrize("model_type, hinted", [
