@@ -381,9 +381,9 @@ def test_static_voice_menus_keep_entire_sample_group(monkeypatch, module_name, c
     getattr(module, f"Voice{class_name}Menu").menu(state)
 
     expected = [
-        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: a.flac",
-        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: b.flac",
-        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 3: c.flac",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: a",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: b",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 3: c",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
     ]
     # Model-specific items sit between the voice list and the selection controls

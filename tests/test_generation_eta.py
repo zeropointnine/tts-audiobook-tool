@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool import generate_util
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.generate_util import (
@@ -50,6 +51,7 @@ def make_generate_state(num_groups: int, max_retries: int) -> State:
         phrase_groups=phrase_groups,
         sound_segments=sound_segments,
         generate_range_string="all",
+        voice_select_mode=VoiceSelectMode.DISABLED,
         save=MagicMock(return_value=""),
     )
     return cast(

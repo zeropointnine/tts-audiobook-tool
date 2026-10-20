@@ -104,7 +104,7 @@ def test_options_refresh_item_is_remote_only_and_uses_latest_snapshot(monkeypatc
         candidates=((model, "server-id"),),
     ))
     assert strip_ansi_codes(refresh_item.label(state)) == (
-        "Refresh server info (currently: 1 compatible model available)"
+        "Refresh server info (currently: 1 supported model available)"
     )
 
 
@@ -148,7 +148,7 @@ def test_remote_options_refreshes_before_rendering_on_each_entry(monkeypatch, se
         assert callable(controls[0].superlabel)
         if fresh.backend_kind is TtsBackendKind.AUDIO_CPP:
             assert controls[0].superlabel(current) == "Remote TTS server (audio.cpp)"
-            assert labels[1] == "Refresh server info (currently: 1 compatible model available)"
+            assert labels[1] == "Refresh server info (currently: 1 supported model available)"
         else:
             assert controls[0].superlabel(current) == "Remote TTS server"
             assert labels[1] == "Refresh server info"

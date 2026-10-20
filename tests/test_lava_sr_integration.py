@@ -85,19 +85,13 @@ def test_concat_reports_worker_model_unload_failure() -> None:
 
 
 def _make_minimal_concat_state() -> State:
-    project = SimpleNamespace(
-        export_type=ExportType.FLAC,
-        normalization_type=NormalizationType.DEFAULT,
-        use_upsampler=True,
-        use_break_sound_effect=False,
-        high_shelf="disabled",
-        reason_pauses=SimpleNamespace(),
-        phrase_groups=[],
-        markers=set(),
-        limit_silence_gaps=False,
-        limit_silence_gaps_duration=1.0,
-        has_multiple_book_sections=lambda: False,
-    )
+    # A real (unsaved) Project, so the fake stays in step with the fields concat reads
+    project = Project.model_validate({})
+    project.export_type = ExportType.FLAC
+    project.normalization_type = NormalizationType.DEFAULT
+    project.use_upsampler = True
+    project.use_break_sound_effect = False
+    project.limit_silence_gaps = False
     return cast(
         State,
         SimpleNamespace(

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Callable, ClassVar
 
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
+from textual.css.query import NoMatches
 
 from tts_audiobook_tool import ask, util
 from tts_audiobook_tool.app_support.system_sleep import SystemSleepLock
@@ -444,8 +445,14 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         # Freezes with the header during teardown.
         if not self.is_mounted or self.teardown_in_progress:
             return
+        try:
+            waveform = self.query_one(RealTimePlaybackWaveform)
+        except NoMatches:
+            # The interval or post-mount refresh can fire after the screen is
+            # gone while the app is still shutting down
+            return
         envelope, progress = self._current_waveform()
-        self.query_one(RealTimePlaybackWaveform).show(envelope, progress)
+        waveform.show(envelope, progress)
 
     def _update_header(self) -> None:
         if not self.is_mounted or self.teardown_in_progress:

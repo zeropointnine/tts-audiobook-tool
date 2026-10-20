@@ -179,7 +179,7 @@ def test_validation_findings_separates_facts_from_legacy_filename_score() -> Non
     assert findings.legacy_filename_score == 99
 
 
-def test_segment_sidecar_writes_v3_validation_and_loads_it_directly() -> None:
+def test_segment_sidecar_writes_validation_findings_and_loads_them_directly() -> None:
     words = make_words("hello")
     result = MusicFailResult(make_sound(1.0), words)
     project = Project.model_validate({"language_code": "en"})
@@ -189,7 +189,7 @@ def test_segment_sidecar_writes_v3_validation_and_loads_it_directly() -> None:
     payload = SegmentTranscriptUtil.to_dict(info)
     loaded = SegmentTranscriptUtil.from_dict(payload)
 
-    assert info.version == 3
+    assert info.version == SegmentTranscriptUtil.VERSION
     assert "exception" not in payload
     assert "generation_word_error_count" not in payload
     assert "possible_truncation" not in payload

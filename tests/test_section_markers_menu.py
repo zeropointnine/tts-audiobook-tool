@@ -48,8 +48,8 @@ def test_output_files_subheading_has_only_internal_newlines() -> None:
     state.project.markers = {2}
 
     assert strip_ansi_codes(make_output_files_subheading(state)) == (
-        "File 1: lines 1 to 2 (0/2 generated)\n"
-        "File 2: lines 3 to 6 (0/4 generated)"
+        "▸ File 1: lines 1 to 2 (0/2 generated)\n"
+        "▸ File 2: lines 3 to 6 (0/4 generated)"
     )
 
 
@@ -61,8 +61,8 @@ def test_split_points_subheading_lists_output_file_ranges() -> None:
 
     assert not subheading.endswith("\n")
     assert subheading == (
-        "File 1: lines 1 to 2 (0/2 generated)\n"
-        "File 2: lines 3 to 6 (0/4 generated)\n"
+        "▸ File 1: lines 1 to 2 (0/2 generated)\n"
+        "▸ File 2: lines 3 to 6 (0/4 generated)\n"
         + strip_ansi_codes(LIMITED_SUBLABEL)
     )
 

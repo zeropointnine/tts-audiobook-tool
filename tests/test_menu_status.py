@@ -80,11 +80,11 @@ def test_menu_status_print_block_supports_voice_display_info(capsys, monkeypatch
 
 @pytest.mark.parametrize("model_id", ["omnivoice_local", "breeze_tts_2_audiocpp", "glm_local", "higgs_v3_sglomni"])
 @pytest.mark.parametrize("names, expected", [
-    (["first.flac"], "first.flac"),
-    (["first.flac", "second.flac"], "first.flac, +1 more"),
-    (["", "first.flac"], "first.flac, +1 more"),
-    (["", "first.flac", "", "second.flac"], "first.flac, +3 more"),
-    (["first.flac", "", ""], "first.flac, +2 more"),
+    (["first.flac"], "first"),
+    (["first.flac", "second.flac"], "first, +1 more"),
+    (["", "first.flac"], "first, +1 more"),
+    (["", "first.flac", "", "second.flac"], "first, +3 more"),
+    (["first.flac", "", ""], "first, +2 more"),
     ([""], None),
     (["", ""], None),
 ])
@@ -164,7 +164,7 @@ def test_pocket_status_always_uses_the_voices_line(monkeypatch, capsys, voices, 
     # Instructions count when the voice has no usable sample
     ([Voice(), Voice(instructions={"auk_sglomni": "A calm voice"})], '"A calm voice", +1 more'),
     # A sample takes precedence over instructions
-    ([Voice("first.flac", instructions={"auk_sglomni": "A calm voice"})], "first.flac"),
+    ([Voice("first.flac", instructions={"auk_sglomni": "A calm voice"})], "first"),
     # Blank instructions are no value
     ([Voice(instructions={"auk_sglomni": "   "}), Voice()], "no sample set"),
     # Instructions for another model are no value

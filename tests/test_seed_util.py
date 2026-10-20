@@ -63,4 +63,4 @@ def test_every_generation_wrapper_accepts_the_optional_limit():
             assert ast.unparse(args[-1].annotation) == "int", path.name
             assert ast.literal_eval(node.args.defaults[-1]) == -1, path.name
             checked += 1
-    assert checked == 18  # dispatcher, base, 13 local models, placeholder, 2 remotes
+    assert checked == 19  # dispatcher, base, 14 local models, placeholder, 2 remotes

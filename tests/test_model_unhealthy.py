@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import patch
 
+from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool import real_time_playback
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.generate_util import GenerateUtil, TtsModelError
@@ -29,6 +30,7 @@ def make_generate_state(num_groups: int = 2, max_retries: int = 2) -> State:
         phrase_groups=phrase_groups,
         sound_segments=sound_segments,
         generate_range_string="all",
+        voice_select_mode=VoiceSelectMode.DISABLED,
         save=MagicMock(return_value=""),
     )
     return cast(

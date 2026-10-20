@@ -308,8 +308,8 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
 
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
         # Echo does not use transcripts, so a missing one is not flagged
-        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: suzie yeung hanya 1_4.flac",
-        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: second.flac",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: suzie yeung hanya 1_4",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: second",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
         f"{voice_menu_shared.LABEL_VOICE_SELECTION_MODE} (currently: user-defined)",
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,

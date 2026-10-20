@@ -280,7 +280,7 @@ def test_indextts2_emotion_controls_keep_secondary_reference_and_setting_targets
     emotion_items = items[-4:]
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in emotion_items]
     assert [item.superlabel for item in emotion_items] == ["Emotion", "", "", ""]
-    assert "emotion.flac" in labels[0]
+    assert "(currently: emotion)" in labels[0]
     assert labels[1] == "Clear emotion voice sample"
     assert "0.80" in labels[3]
 

@@ -37,12 +37,14 @@ def test_voice_select_mode_ids_and_project_default() -> None:
     assert VoiceSelectMode.AUTO_ADVANCE.id == "auto_advance"
     assert VoiceSelectMode.USER_DEFINED.id == "custom"
     assert VoiceSelectMode.DISABLED.description == (
-        "Uses voice sample 1 for every generation"
+        "Uses voice sample 1 for every TTS generation\n"
+        "      Uses the reverb settings of voice sample 1"
     )
     assert VoiceSelectMode.AUTO_ADVANCE.current_label == "auto-advance"
     assert VoiceSelectMode.AUTO_ADVANCE.label == "Auto-advance"
     assert VoiceSelectMode.AUTO_ADVANCE.description == (
-        "Cycles through voice samples in order, on each batch generation"
+        "On each TTS batch generation, cycles through voices in order\n"
+        "      Uses the reverb settings of voice sample 1"
     )
     assert VoiceSelectMode.get_default() == VoiceSelectMode.DISABLED
     assert VoiceSelectMode.get_by_id("disabled") == VoiceSelectMode.DISABLED

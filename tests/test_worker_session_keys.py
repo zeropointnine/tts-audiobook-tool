@@ -92,7 +92,7 @@ def test_cancellation_notice_leaves_one_blank_before_worker_summary(
             assert cancellations == ["job"]
             assert resets == []
             log = app.query_one(WorkerLogContentArea).worker_log
-            notice_lines = ["", "Cancellation requested, please wait"]
+            notice_lines = ["", "Cancellation requested, please wait..."]
             if backend_mode is TtsRuntimeMode.LOCAL:
                 notice_lines.append("Or press [ESC] again to hard-reset")
             assert log.line_texts() == ["request details", *notice_lines, ""]

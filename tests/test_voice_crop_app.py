@@ -283,7 +283,7 @@ class TestVoiceCropApp:
         # Bar spans the full container width minus the 5-column margins.
         assert len(bar_lines[-1]) == 80 - 10
         assert "Original duration: 10.00s" in str(durations)
-        assert "trimmed, 10.00s" in str(durations)
+        assert "Trimmed duration: 10.00s" in str(durations)
 
 
 ANSI_RE = __import__("re").compile(r"\x1b\[[0-9;]*m")
