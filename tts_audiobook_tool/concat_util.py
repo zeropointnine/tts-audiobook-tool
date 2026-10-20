@@ -132,7 +132,9 @@ class ConcatUtil:
     # adjacent segments is reduced by the combined duration of this "pseudo-
     # silence" present at the end of the previous segment and the start of the
     # next. If the combined pseudo-silence meets or exceeds the hardcoded pause
-    # duration, no silence is inserted. Break sound effects are not affected.
+    # duration, no silence is inserted. Break sound effects are compensated the
+    # same way: only the silence padding around the effect shrinks (the effect
+    # itself is never trimmed), keeping it centered in the whole gap.
     PSEUDO_SILENCE_COMPENSATION_ENABLED = True
     PSEUDO_SILENCE_MAX_SECONDS = 1.0
     PSEUDO_SILENCE_THRESHOLD_DB = -20.0 # very permissive
@@ -674,10 +676,10 @@ class ConcatUtil:
                 is_final=is_final_segment,
             )
 
-            override: float | None = None
-            if (break_effect is None
-                    and ConcatUtil.PSEUDO_SILENCE_COMPENSATION_ENABLED
-                    and next_sound is not None):
+            # Pseudo-silence at the boundary counts toward the pause or break
+            # effect gap (see PSEUDO_SILENCE_COMPENSATION_ENABLED)
+            end_pseudo = start_pseudo = 0.0
+            if ConcatUtil.PSEUDO_SILENCE_COMPENSATION_ENABLED and next_sound is not None:
                 # FYI, start/end silence measurements not idempotent wrt upsampling vs not
                 end_silence_start = SilenceUtil.get_end_silence(
                     sound,
@@ -691,18 +693,18 @@ class ConcatUtil:
                     max_seconds=ConcatUtil.PSEUDO_SILENCE_MAX_SECONDS,
                     threshold_db_relative_to_peak=ConcatUtil.PSEUDO_SILENCE_THRESHOLD_DB,
                 ) or 0.0
-                base = reason_pauses.get_pause_for(phrase.reason)
-                override = max(0.0, base - end_pseudo - start_pseudo)
 
-                if override < base:
-                    L.d(f"\n\npseudosilence - base={base:.3f} end={end_pseudo:.3f} start={start_pseudo:.3f} override={override:.3f} AMOUNT={end_pseudo + start_pseudo}\n")
+                if end_pseudo + start_pseudo > 0:
+                    base = reason_pauses.get_pause_for(break_effect if break_effect is not None else phrase.reason)
+                    L.d(f"\n\npseudosilence - effect={break_effect} base={base:.3f} end={end_pseudo:.3f} start={start_pseudo:.3f} AMOUNT={end_pseudo + start_pseudo}\n")
 
             sound = SoundPipeline.append_pause_or_section_effect(
                 sound,
                 reason=phrase.reason,
                 reason_pauses=reason_pauses,
                 break_effect=break_effect,
-                pause_duration_override=override,
+                preceding_silence=end_pseudo,
+                following_silence=start_pseudo,
             )
 
             # Pan only direct narration; room sound stays independent of voice

@@ -57,8 +57,11 @@ Notes on the rules' semantics:
   configured pause for its reason. If the effect is longer than that pause, it
   keeps its own length with no padding. `SoundPipeline.make_break_effect_sound`
   builds it, and concat and realtime playback both call it. Concat's pseudo-silence
-  compensation does not shorten effects. If the asset fails to load, the plain
-  pause is inserted.
+  compensation applies to effects as to plain pauses: pseudo-silence at the end of
+  the preceding segment and the start of the following one counts toward the
+  total, so only the padding shrinks (never below zero) and the effect stays
+  centered in the whole gap. The effect itself is never trimmed. If the asset
+  fails to load, the plain (likewise compensated) pause is inserted.
 - Section starts come from `ProjectBookUtil.get_section_start_indices`: Book
   sections for structurally sectioned books (eg EPUB), user-configured section
   markers for single-section books (eg plain text).

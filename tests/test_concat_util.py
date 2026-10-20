@@ -173,7 +173,8 @@ def test_concatenate_does_not_append_break_effect_to_final_segment(reason: Reaso
         reason=reason,
         reason_pauses=ReasonPauseTypes.NORMAL.value,
         break_effect=None,
-        pause_duration_override=None,
+        preceding_silence=0.0,
+        following_silence=0.0,
     )
 
 
@@ -185,7 +186,7 @@ def concatenate_with_mocks(phrases: list[Phrase]) -> list[Reason | None]:
     sound = Sound(np.zeros(48000, dtype=np.float32), 48000)
     decisions: list[Reason | None] = []
 
-    def fake_append(sound_in, reason, reason_pauses, break_effect, pause_duration_override):
+    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence):
         decisions.append(break_effect)
         return sound_in
 
@@ -224,6 +225,46 @@ def test_concatenate_collapses_consecutive_space_break_runs() -> None:
     assert decisions == [None, Reason.SPACE_BREAK, None, None]
 
 
+def test_concatenate_passes_edge_pseudo_silence_to_break_effects() -> None:
+    from tts_audiobook_tool.sound.silence_util import SilenceUtil
+
+    sound = Sound(np.zeros(48000, dtype=np.float32), 48000)  # 1.0s
+    phrases = [Phrase("One", Reason.SENTENCE), Phrase("Two", Reason.SPACE_BREAK), Phrase("Three", Reason.SENTENCE)]
+    calls: list[tuple[Reason | None, float, float]] = []
+
+    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence):
+        calls.append((break_effect, preceding_silence, following_silence))
+        return sound_in
+
+    with patch.object(ConcatUtil, "init_ffmpeg_stream", return_value=MagicMock()), \
+         patch.object(ConcatUtil, "close_ffmpeg_stream"), \
+         patch.object(ConcatUtil, "add_audio_to_ffmpeg_stream"), \
+         patch.object(SilenceUtil, "get_end_silence", return_value=0.75), \
+         patch.object(SilenceUtil, "get_start_silence", return_value=0.125), \
+         patch.object(
+             SoundPipeline,
+             "make_concat_rendered_sound_segment",
+             side_effect=lambda phrase, path, high_shelf, **kwargs: sound,
+         ), \
+         patch.object(SoundPipeline, "append_pause_or_section_effect", side_effect=fake_append):
+        ConcatUtil.concatenate_sound_segments(
+            dest_path="output.flac",
+            phrases_and_paths=[(phrase, f"segment{i}.flac") for i, phrase in enumerate(phrases)],
+            use_break_sound_effect=True,
+            high_shelf=HighShelfEq.DISABLED,
+            reason_pauses=ReasonPauseTypes.NORMAL.value,
+            print_progress=False,
+        )
+
+    # Plain pause and break effect alike get the measured edge silence;
+    # the final segment has no following segment, so none
+    assert calls == [
+        (None, 0.25, 0.125),
+        (Reason.SPACE_BREAK, 0.25, 0.125),
+        (None, 0.0, 0.0),
+    ]
+
+
 def test_concatenate_applies_rule1_per_section_and_missing_leading_audio() -> None:
     sound = Sound(np.zeros(48000, dtype=np.float32), 48000)
     phrases = [
@@ -234,7 +275,7 @@ def test_concatenate_applies_rule1_per_section_and_missing_leading_audio() -> No
     ]
     decisions: list[Reason | None] = []
 
-    def fake_append(sound_in, reason, reason_pauses, break_effect, pause_duration_override):
+    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence):
         decisions.append(break_effect)
         return sound_in
 

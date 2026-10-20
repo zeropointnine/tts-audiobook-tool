@@ -127,18 +127,34 @@ class SoundUtil:
         return np.stack([data, data], axis=1) if data.ndim == 1 else data
 
     @staticmethod
-    def center_in_silence(sound: Sound, total_duration: float) -> Sound:
+    def center_in_silence(
+        sound: Sound,
+        total_duration: float,
+        preceding_silence: float = 0.0,
+        following_silence: float = 0.0,
+    ) -> Sound:
         """
-        Pads mono `sound` with equal leading and trailing silence so that its
-        total length is `int(sr * total_duration)` samples (an odd remainder
-        sample goes to the end). A sound already that long or longer is
-        returned unchanged (never truncated).
+        Pads mono `sound` with leading and trailing silence so that its total
+        length is `int(sr * total_duration)` samples, with the sound centered
+        (an odd remainder sample goes to the end).
+
+        `preceding_silence` / `following_silence` are seconds of silence already
+        adjacent to the result on either side (eg pseudo-silence at the ends of
+        neighboring segments). They count toward the total, so the padding is
+        reduced by their sum and split to keep the sound centered in the whole
+        gap, as far as non-negative padding allows.
+
+        When no padding remains, the sound is returned unchanged (never
+        truncated).
         """
-        total = int(sound.sr * total_duration)
-        pad = total - len(sound.data)
+        sr = sound.sr
+        preceding = int(sr * max(0.0, preceding_silence))
+        following = int(sr * max(0.0, following_silence))
+        pad = int(sr * total_duration) - len(sound.data) - preceding - following
         if pad <= 0:
             return sound
-        lead = pad // 2
+        # Centered in the whole gap: preceding + lead == following + trail
+        lead = min(max((pad + following - preceding) // 2, 0), pad)
         new_data = np.concatenate([
             np.zeros(lead, dtype=sound.data.dtype),
             sound.data,

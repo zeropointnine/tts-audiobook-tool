@@ -133,7 +133,7 @@ def run_concat(
     streamed: list[np.ndarray] = []
     effect = np.full(round(EFFECT_S * SR), effect_level, dtype=np.float32)
 
-    def fake_append(sound_in, reason, reason_pauses, break_effect, pause_duration_override):
+    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence):
         if break_effect is not None:
             return Sound(np.concatenate([sound_in.data, effect]), SR)
         return Sound(np.concatenate([sound_in.data, np.zeros(round(PAUSE_S * SR), dtype=np.float32)]), SR)

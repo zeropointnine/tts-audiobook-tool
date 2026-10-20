@@ -162,7 +162,6 @@ class TestAppendPauseOrSectionEffect:
                     reason=Reason.SPACE_BREAK,
                     reason_pauses=reason_pauses,
                     break_effect=break_effect,
-                    pause_duration_override=0.0,  # ignored for effects
                 )
                 assert mock.call_args.args[0] == path
                 assert mock.call_args.args[1] == sr
@@ -189,11 +188,81 @@ class TestAppendPauseOrSectionEffect:
                 reason=Reason.SECTION_BREAK,
                 reason_pauses=reason_pauses,
                 break_effect=Reason.SECTION_BREAK,
-                pause_duration_override=0.1,
+                preceding_silence=0.25,
+                following_silence=0.25,
             )
 
-        expected = int(sr * reason_pauses.get_pause_for(Reason.SECTION_BREAK))
+        # The fallback pause is compensated like any plain pause
+        expected = int(sr * (reason_pauses.get_pause_for(Reason.SECTION_BREAK) - 0.5))
         assert len(result.data) == len(sound.data) + expected
+
+    def test_plain_pause_is_reduced_by_edge_silence_but_not_below_zero(self) -> None:
+        sr = 48000
+        sound = Sound(np.zeros(sr, dtype=np.float32), sr)
+        reason_pauses = ReasonPauseTypes.NORMAL.value
+        base = reason_pauses.get_pause_for(Reason.SENTENCE)
+
+        result = SoundPipeline.append_pause_or_section_effect(
+            sound, reason=Reason.SENTENCE, reason_pauses=reason_pauses, break_effect=None,
+            preceding_silence=0.2, following_silence=0.1,
+        )
+        assert len(result.data) == len(sound.data) + int(sr * (base - 0.3))
+
+        result = SoundPipeline.append_pause_or_section_effect(
+            sound, reason=Reason.SENTENCE, reason_pauses=reason_pauses, break_effect=None,
+            preceding_silence=base, following_silence=0.5,
+        )
+        assert result is sound
+
+    def test_break_effect_padding_is_reduced_by_edge_silence(self) -> None:
+        from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+
+        sr = 48000
+        sound = Sound(np.full(sr, 0.5, dtype=np.float32), sr)
+        effect_len = sr // 2
+        effect = Sound(np.ones(effect_len, dtype=np.float32), sr)
+        reason_pauses = ReasonPauseTypes.NORMAL.value
+        total = int(sr * reason_pauses.get_pause_for(Reason.SPACE_BREAK))  # 2.0s
+        preceding, following = int(sr * 0.3), int(sr * 0.1)
+
+        with patch.object(SoundFileUtil, "load", return_value=effect):
+            result = SoundPipeline.append_pause_or_section_effect(
+                sound,
+                reason=Reason.SPACE_BREAK,
+                reason_pauses=reason_pauses,
+                break_effect=Reason.SPACE_BREAK,
+                preceding_silence=0.3,
+                following_silence=0.1,
+            )
+
+        appended = result.data[len(sound.data):]
+        # The whole gap, counting the edge silences, totals the configured pause
+        assert preceding + len(appended) + following == total
+        # The effect itself is intact, and centered in the whole gap
+        nonzero = np.flatnonzero(appended)
+        assert len(nonzero) == effect_len
+        lead = nonzero[0]
+        trail = len(appended) - 1 - nonzero[-1]
+        assert abs((preceding + lead) - (following + trail)) <= 1
+
+    def test_break_effect_is_never_trimmed_by_edge_silence(self) -> None:
+        from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+
+        sr = 48000
+        sound = Sound(np.full(sr, 0.5, dtype=np.float32), sr)
+        effect = Sound(np.ones(sr // 2, dtype=np.float32), sr)
+
+        with patch.object(SoundFileUtil, "load", return_value=effect):
+            result = SoundPipeline.append_pause_or_section_effect(
+                sound,
+                reason=Reason.SPACE_BREAK,
+                reason_pauses=ReasonPauseTypes.NORMAL.value,
+                break_effect=Reason.SPACE_BREAK,
+                preceding_silence=1.0,
+                following_silence=1.0,
+            )
+
+        assert result.data[len(sound.data):].tolist() == effect.data.tolist()
 
 
 class TestCenterInSilence:
@@ -206,3 +275,16 @@ class TestCenterInSilence:
     def test_longer_sound_is_unchanged(self) -> None:
         sound = Sound(np.ones(20, dtype=np.float32), 10)
         assert SoundUtil.center_in_silence(sound, 1.0) is sound
+
+    def test_adjacent_silence_reduces_padding_and_shifts_center(self) -> None:
+        sound = Sound(np.ones(2, dtype=np.float32), 10)
+        # 2.0s = 20 samples; 6 preceding + 2 following adjacent -> pad 10,
+        # split so 6 + lead == 2 + trail
+        result = SoundUtil.center_in_silence(sound, 2.0, preceding_silence=0.6, following_silence=0.2)
+        assert result.data.tolist() == [0] * 3 + [1, 1] + [0] * 7
+
+    def test_lopsided_adjacent_silence_clamps_lead_at_zero(self) -> None:
+        sound = Sound(np.ones(2, dtype=np.float32), 10)
+        # pad 4, centering would need a negative lead
+        result = SoundUtil.center_in_silence(sound, 1.5, preceding_silence=0.9, following_silence=0.0)
+        assert result.data.tolist() == [1, 1] + [0] * 4

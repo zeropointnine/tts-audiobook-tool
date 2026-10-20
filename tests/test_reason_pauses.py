@@ -15,8 +15,8 @@ EXPECTED_PAUSES = {
         Reason.SENTENCE: 0.9,
         Reason.PARAGRAPH: 1.2,
         Reason.HEADING_END: 2.0,
-        Reason.SPACE_BREAK: 2.0,
-        Reason.SECTION_BREAK: 2.5,
+        Reason.SPACE_BREAK: 2.5,
+        Reason.SECTION_BREAK: 3.0,
     },
     ReasonPauseTypes.SHORTER: {
         Reason.UNDEFINED: 1.0,
@@ -26,8 +26,8 @@ EXPECTED_PAUSES = {
         Reason.SENTENCE: 0.6,
         Reason.PARAGRAPH: 0.9,
         Reason.HEADING_END: 1.5,
-        Reason.SPACE_BREAK: 1.5,
-        Reason.SECTION_BREAK: 2.0,
+        Reason.SPACE_BREAK: 2.0,
+        Reason.SECTION_BREAK: 2.5,
     },
 }
 

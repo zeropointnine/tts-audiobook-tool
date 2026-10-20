@@ -119,7 +119,7 @@ def run_concat(phrases: list[Phrase], sounds: list[np.ndarray], room_tone_db: fl
     streamed: list[np.ndarray] = []
     effect = np.full(round(0.2 * SR), EFFECT_LEVEL, dtype=np.float32)
 
-    def fake_append(sound_in, reason, reason_pauses, break_effect, pause_duration_override):
+    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence):
         if break_effect is not None:
             return Sound(np.concatenate([sound_in.data, effect]), SR)
         return Sound(with_pause(sound_in.data, 0.4), SR)

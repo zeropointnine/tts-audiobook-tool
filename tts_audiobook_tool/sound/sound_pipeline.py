@@ -249,12 +249,19 @@ class SoundPipeline:
         break_effect: Reason,
         reason_pauses: ReasonPauses,
         sr: int,
+        preceding_silence: float = 0.0,
+        following_silence: float = 0.0,
     ) -> Sound | str:
         """
         Builds the inserted audio for a break sound effect (SPACE_BREAK or
-        SECTION_BREAK): the effect asset, resampled to `sr`, centered in equal
-        leading and trailing silence so the whole thing lasts the configured
+        SECTION_BREAK): the effect asset, resampled to `sr`, centered in
+        leading and trailing silence so the whole gap lasts the configured
         pause for that reason (or the effect's own length, if longer).
+
+        `preceding_silence` / `following_silence`: seconds of pseudo-silence
+        already at the end of the preceding segment and the start of the
+        following one. They count toward the gap, so only the padding shrinks;
+        the effect itself is never trimmed. See `SoundUtil.center_in_silence`.
 
         Shared by concat and realtime playback. Returns an error string if the
         reason has no effect or the asset can't be loaded.
@@ -269,7 +276,12 @@ class SoundPipeline:
         result = SoundFileUtil.load(path, sr)
         if isinstance(result, str):
             return f"{path}: {result}"
-        return SoundUtil.center_in_silence(result, reason_pauses.get_pause_for(break_effect))
+        return SoundUtil.center_in_silence(
+            result,
+            reason_pauses.get_pause_for(break_effect),
+            preceding_silence=preceding_silence,
+            following_silence=following_silence,
+        )
 
     @staticmethod
     def append_pause_or_section_effect(
@@ -277,7 +289,8 @@ class SoundPipeline:
         reason: Reason,
         reason_pauses: ReasonPauses,
         break_effect: Reason | None,
-        pause_duration_override: float | None = None,
+        preceding_silence: float = 0.0,
+        following_silence: float = 0.0,
     ) -> Sound:
         """
         Appends the trailing break effect or pause for a segment.
@@ -289,26 +302,31 @@ class SoundPipeline:
             built by `make_break_effect_sound` (centered in silence, totalling
             the configured pause). If the effect can't be loaded, the plain
             pause for ``reason`` is appended instead.
-        :param pause_duration_override:
-            When not None, uses this duration (in seconds) instead of
-            the configured pause for ``reason``. Only affects the pure-silence
-            branch; break sound effects ignore it. Used by the concat flow to
-            compensate for pseudo-silence already present at segment boundaries.
+        :param preceding_silence, following_silence:
+            Seconds of pseudo-silence already present at the end of `sound`
+            and at the start of the following segment. They count toward the
+            gap between the two segments, so the inserted silence is reduced by
+            their sum (never below zero) and the gap totals the configured
+            pause. For a break effect only its padding shrinks; the effect
+            itself is never trimmed. Used by the concat flow's pseudo-silence
+            compensation.
         """
 
         if break_effect is not None:
-            result = SoundPipeline.make_break_effect_sound(break_effect, reason_pauses, sound.sr)
+            result = SoundPipeline.make_break_effect_sound(
+                break_effect, reason_pauses, sound.sr,
+                preceding_silence=preceding_silence,
+                following_silence=following_silence,
+            )
             if isinstance(result, str):
                 printt(f"{COL_ERROR}Couldn't load break sound effect: {result}")
             else:
                 new_data = np.concatenate([sound.data, result.data.astype(sound.data.dtype)])
                 return Sound(new_data, sound.sr)
-            pause_duration_override = None
 
-        pause_duration = (
-            pause_duration_override
-            if pause_duration_override is not None
-            else reason_pauses.get_pause_for(reason)
+        pause_duration = max(
+            0.0,
+            reason_pauses.get_pause_for(reason) - preceding_silence - following_silence,
         )
         if pause_duration > 0:
             return SoundUtil.add_silence(sound, pause_duration)
