@@ -35,10 +35,18 @@ def get_chat_input_mode_label(mode: ChatInputMode) -> str:
 def get_system_prompt_preset_label(preset: str) -> str:
     if not preset:
         return "none"
-    for file_name, label in CHAT_SYSTEM_PROMPTS:
+    for file_name, label, _ in CHAT_SYSTEM_PROMPTS:
         if file_name == preset:
             return label
     return preset
+
+
+def get_associated_system_prompt_preset(model_id: str) -> str | None:
+    """Returns the file name of the system prompt preset associated with the model, if any"""
+    for file_name, _, model_ids in CHAT_SYSTEM_PROMPTS:
+        if model_id in model_ids:
+            return file_name
+    return None
 
 
 def get_system_prompt_label(state: State) -> str:

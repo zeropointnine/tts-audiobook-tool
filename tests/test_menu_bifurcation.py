@@ -19,7 +19,7 @@ from tts_audiobook_tool.tts import Tts
 
 
 LOCAL_MODELS = [
-    "chatterbox_local", "dots_local", "fish_s1_local", "fish_s2_local",
+    "breeze_tts_2_local", "chatterbox_local", "dots_local", "fish_s1_local", "fish_s2_local",
     "glm_local", "higgs_v2_local", "indextts2_local", "mira_local",
     "moss_local", "omnivoice_local", "pocket_local", "qwen3tts_local",
     "vibevoice_local",

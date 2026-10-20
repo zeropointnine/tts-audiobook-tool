@@ -68,4 +68,7 @@ class TtsModelSpec(NamedTuple):
     can_instructions: bool = False
     # Whether the model can clone a voice from a voice sample
     can_voice_clone: bool = True
+    # Probes (same forms as `local_module_test`) that veto a positive `local_module_test` match when any is present.
+    # Used when another model's venv also contains this model's library (eg Breeze TTS 2 depends on `qwen_tts`)
+    local_module_exclude: list[str] = []
 

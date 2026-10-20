@@ -192,6 +192,41 @@ def test_output_filters_discard_worker_lines_only_when_committed() -> None:
     run(exercise())
 
 
+def test_output_filters_drop_blank_lines_trailing_a_filtered_line() -> None:
+    """A multi-line warning leaves no blank-line residue: blank and
+    whitespace-only lines right after a filtered line belong to the filtered
+    block, even across chunks. Other blank lines, and blank lines after app
+    output, are kept."""
+
+    async def exercise() -> None:
+        app = _HostApp(output_filters=["SoX could not be found", "have SoX"])
+        async with app.run_test(size=(100, 24)) as pilot:
+            area = app.query_one(WorkerLogContentArea)
+            log = area.worker_log
+            await pilot.pause()
+
+            area.feed(["loaded", ""], "")
+            area.feed(["SoX could not be found!", ""], "")
+            area.feed(["    If you do not have SoX, proceed here:", "    "], "")
+            area.feed(["\033[0m", "next"], "")
+            assert doc_lines(log) == ["loaded", "", "next", ""]
+
+            # App output ends the filtered block, so a following blank line
+            # is ordinary output again.
+            area.feed(["SoX could not be found!"], "")
+            area.append_lines(["notice"])
+            area.feed([""], "")
+            assert doc_lines(log) == ["loaded", "", "next", "notice", "", ""]
+
+            # A whitespace-only live line trailing a filtered line is not
+            # committed by finalization either.
+            area.feed(["SoX could not be found!"], "    ")
+            area.finalize()
+            assert doc_lines(log) == ["loaded", "", "next", "notice", "", ""]
+
+    run(exercise())
+
+
 def test_live_line_lifecycle_never_resizes_the_log_area() -> None:
     """A live line appearing, ticking, committing, and being interrupted
     must not change the log area's height: the current line is part of

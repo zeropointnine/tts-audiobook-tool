@@ -117,7 +117,7 @@ def test_start_configures_dots_windows_compile_workaround(monkeypatch):
     monkeypatch.delitem(start_module.sys.modules, "torch", raising=False)
     monkeypatch.delenv("TORCHINDUCTOR_USE_STATIC_CUDA_LAUNCHER", raising=False)
 
-    object.__new__(start_module.Start).init_tts_or_exit(is_server=False)
+    object.__new__(start_module.Start).init_tts_or_exit()
 
     assert start_module.os.environ["TORCHINDUCTOR_USE_STATIC_CUDA_LAUNCHER"] == "0"
 
@@ -134,7 +134,7 @@ def test_start_rejects_dots_workaround_after_torch_import(monkeypatch):
     monkeypatch.setitem(start_module.sys.modules, "torch", types.ModuleType("torch"))
 
     with pytest.raises(RuntimeError, match="torch was already imported"):
-        object.__new__(start_module.Start).init_tts_or_exit(is_server=False)
+        object.__new__(start_module.Start).init_tts_or_exit()
 
 
 def test_get_requirements_file_name_is_mode_aware():
@@ -283,8 +283,15 @@ def test_moss_output_sample_rate_follows_architecture(monkeypatch) -> None:
 
 def test_worker_output_filters_defined_only_where_expected() -> None:
     # MIRA leaks "smem_size" setup info; QWEN3TTS leaks an "open-end generation"
-    # pad-token warning. Every other model variant must keep a clean worker log.
+    # pad-token warning; Breeze leaks load-time init/SoX/flash-attn notices and CFG graph capture.
+    # Every other model variant must keep a clean worker log.
     expected = {
+        TtsModelType.require_by_id("breeze_tts_2_local"): [
+            "Text encoder projection type", "sox: not found", "SoX could not be found",
+            "If you do not have SoX", "sox.sourceforge.net", "have SoX, double-check your",
+            "path variables.", "flash-attn is not installed", "********",
+            "Capturing depth decoder graphs", "Depth decoder CUDA graph",
+        ],
         TtsModelType.require_by_id("mira_local"): ["smem_size"],
         TtsModelType.require_by_id("qwen3tts_local"): ["for open-end generation"],
     }
@@ -314,3 +321,37 @@ def test_sgl_detector_ties_keep_catalog_order(monkeypatch):
     assert sgl_omni_detection.detect_sgl_omni_models([{"id": "repo/zzzshared"}]) == [
         (first, "repo/zzzshared")
     ]
+
+
+def test_wrong_torch_flavor_check_exits_without_prompt_for_cuda_only_model(monkeypatch, capsys):
+    """CPU-only torch on an NVIDIA Windows system with a cuda-only model: the
+    torch-flavor diagnosis is shown, and "run anyway" is not offered."""
+    from tts_audiobook_tool import start as start_module
+
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.LOCAL)
+    monkeypatch.setattr(Tts, "_available_local_models", (TtsModelType.require_by_id("breeze_tts_2_local"),))
+    monkeypatch.setattr(start_module, "_is_cpu_only_torch_on_windows_nvidia_system", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("must not prompt"))
+    start = object.__new__(start_module.Start)
+    start.is_server = False
+
+    with pytest.raises(SystemExit):
+        start.exit_on_wrong_torch_flavor_windows()
+
+    assert "does not include CUDA support" in capsys.readouterr().out
+
+
+def test_start_runs_torch_flavor_check_before_cuda_only_check(monkeypatch):
+    from tts_audiobook_tool import start as start_module
+
+    calls = []
+    start = object.__new__(start_module.Start)
+    start.is_server = True
+    monkeypatch.setattr(start, "init_tts_or_exit", lambda: calls.append("init"))
+    monkeypatch.setattr(start, "exit_on_wrong_torch_flavor_windows", lambda: calls.append("flavor"))
+    monkeypatch.setattr(start, "exit_on_cuda_unavailable_for_cuda_only_model", lambda: (calls.append("cuda_only"), exit(1)))
+
+    with pytest.raises(SystemExit):
+        start.start()
+
+    assert calls == ["init", "flavor", "cuda_only"]

@@ -50,6 +50,8 @@ from tts_audiobook_tool.textual.textual_shared import (
     can_textual,
 )
 from tts_audiobook_tool.textual.worker_app import ConsoleLineAssembler
+from tts_audiobook_tool.textual.worker_content import ConsoleOutputFilter
+from tts_audiobook_tool.tts import Tts
 
 
 class ConversationPhase(str, Enum):
@@ -190,6 +192,11 @@ class ConversationTextualApp(App[ConversationAppResult]):
         self.active_llm_entry: ConversationEntry | None = None
         self._cleanup_started = False
         self._console_assembler = ConsoleLineAssembler()
+        # Per-model filter for worker console lines, as in the generation and
+        # realtime worker logs.
+        self._console_filter = ConsoleOutputFilter(
+            Tts.get_info(state.project).output_filters
+        )
         self._initialization_lines: list[str] = []
         self._initialization_entry: ConversationEntry | None = None
         self._turn_started_at: float | None = None
@@ -347,6 +354,15 @@ class ConversationTextualApp(App[ConversationAppResult]):
         entry.set_content(content, parse_ansi=True)
         return True
 
+    def _unfiltered_console_lines(self, lines: list[str]) -> list[str]:
+        """Drop committed worker console lines rejected by the output filter.
+
+        Same rule as ``WorkerLog``: only committed lines are filtered (matching
+        lines plus the blank lines trailing them); the live line is still
+        shown while in progress.
+        """
+        return [line for line in lines if self._console_filter.keep(line)]
+
     def on_worker_console_message(self, message: WorkerConsoleMessage) -> None:
         if (
             message.session_id != self.runtime.session_id
@@ -357,7 +373,7 @@ class ConversationTextualApp(App[ConversationAppResult]):
         if isinstance(event, ConsoleFlush):
             return
         complete, live = self._console_assembler.feed(event.text)
-        self._initialization_lines.extend(complete)
+        self._initialization_lines.extend(self._unfiltered_console_lines(complete))
         if self._update_initialization_content(
             "\n".join((*self._initialization_lines, live))
         ):
@@ -370,7 +386,9 @@ class ConversationTextualApp(App[ConversationAppResult]):
         ):
             return
         self.query_one("#input-divider", ConversationInputDivider).show_stroke()
-        self._initialization_lines.extend(self._console_assembler.finish())
+        self._initialization_lines.extend(
+            self._unfiltered_console_lines(self._console_assembler.finish())
+        )
         if self._update_initialization_content("\n".join(self._initialization_lines)):
             self.transcript._follow_after_update()
         if message.error:

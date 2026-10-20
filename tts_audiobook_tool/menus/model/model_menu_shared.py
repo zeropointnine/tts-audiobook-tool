@@ -56,6 +56,9 @@ class ModelMenuShared:
         # Only local models reach the legacy per-model menus; remote
         # variants are always handled by the remote menu above.
         match state.project.get_tts_model_type().id:
+            case "breeze_tts_2_local":
+                from tts_audiobook_tool.menus.model.model_breeze_menu import ModelBreezeMenu
+                ModelBreezeMenu.menu(state)
             case "chatterbox_local":
                 from tts_audiobook_tool.menus.model.model_chatterbox_menu import ModelChatterboxMenu
                 ModelChatterboxMenu.menu(state)
@@ -245,7 +248,7 @@ class ModelMenuShared:
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=0,
-            prompt=f"Enter Top-K {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
+            prompt=f"Enter Top-K",
             min_value=min_value,
             max_value=max_value
         )
@@ -267,7 +270,7 @@ class ModelMenuShared:
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=2,
-            prompt=f"Enter Top-P {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
+            prompt=f"Enter Top-P",
             min_value=min_value,
             max_value=max_value
         )
@@ -288,7 +291,7 @@ class ModelMenuShared:
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=2,
-            prompt=f"Enter repetition penalty {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
+            prompt=f"Enter repetition penalty",
             min_value=min_value,
             max_value=max_value
         )

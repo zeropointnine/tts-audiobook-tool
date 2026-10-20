@@ -73,11 +73,17 @@ SEED_MAX = 2**32 - 1
 
 CTRANSLATE_REQUIRED_CUDNN_VERSION = 91002
 
-CHAT_SYSTEM_PROMPTS = [
-    ("chat_system_prompt_default.txt", "Default system prompt"),
-    ("chat_system_prompt_higgs_v3.txt", "System prompt showcasing Higgs V3 \"control tokens\" feature"),
-    ("chat_system_prompt_fish_s2.txt", "System prompt showcasing Fish S2 \"tags\" feature"),
-    ("chat_system_prompt_fish_drama3.txt", "System prompt showcasing Fish Drama 3 point tags, paired tags"),
+# (file name, label, associated TTS model ids)
+CHAT_SYSTEM_PROMPTS: list[tuple[str, str, list[str]]] = [
+    ("chat_system_prompt_default.txt", "Default", []),
+    ("chat_system_prompt_higgs_v3.txt", "Higgs V3 \"control tokens\"",
+        ["higgs_v3_sglomni", "higgs_v3_audiocpp"]),
+    ("chat_system_prompt_fish_s2.txt", "Fish S2 \"tags\"",
+        ["fish_s2_local", "fish_s2_sglomni", "fish_s2_audiocpp"]),
+    ("chat_system_prompt_fish_drama3.txt", "Fish Drama 3 point tags, paired tags",
+        ["fish_drama3_audiocpp"]),
+    ("chat_system_prompt_breeze_tts2.txt", "Breeze TTS 2 \"audio tags\"",
+        ["breeze_tts_2_local", "breeze_tts_2_audiocpp"]),
 ]
 
 # Value used for normalization after any sound transform post-processing steps (eg, after high-shelf EQ)

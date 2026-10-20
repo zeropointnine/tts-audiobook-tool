@@ -208,7 +208,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         if print_params:
             self._print_params(locals_snapshot, generation_config)
 
-        printt("Generating...", dont_reset=True)
+        # Print something here b/c model library code does not
+        printt(f"{COL_DIM_ITALICS}Generating...")
 
         app_support.set_seed(seed)
 
@@ -250,7 +251,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         if print_params:
             self._print_params(locals(), generation_config)
 
-        printt("Generating...", dont_reset=True)
+        # Print something here b/c model library code does not
+        printt(f"{COL_DIM_ITALICS}Generating...")
 
         app_support.set_seed(seed)
 
@@ -287,7 +289,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         if print_params:
             self._print_params(locals(), generation_config)
 
-        printt("Generating...", dont_reset=True)
+        # Print something here b/c model library code does not
+        printt(f"{COL_DIM_ITALICS}Generating...")
 
         app_support.set_seed(seed)
 

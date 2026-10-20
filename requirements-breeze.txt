@@ -1,0 +1,47 @@
+#################
+# Use Python 3.12
+#################
+
+# Breeze TTS 2 dependencies
+# Packaging fork of breezeblue-ai/breeze-tts (adds pyproject.toml, `breeze_tts` namespace, Windows temp-path fix)
+breeze-tts-packaged @ git+https://github.com/zeropointnine/breeze-tts-packaged@b4507be16521797f8da78ab0f7d0e4ff0a6aa98b
+# Provides the Qwen3-TTS 12Hz codec; same pin as requirements-qwen3tts.txt
+git+https://github.com/QwenLM/Qwen3-TTS.git@022e286b98fbec7e1e916cb940cdf532cd9f488e
+
+# App dependencies
+faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+ctranslate2==4.7.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'
+git+https://github.com/ysharma3501/LavaSR.git@33ac040892519c1bb4aed7eb32e79af51cc29e2a
+
+torch==2.8.0
+torchaudio==2.8.0
+
+audiotsm==0.1.2
+chardet==5.2.0
+beautifulsoup4==4.12.3
+EbookLib==0.18
+ffmpeg-python==0.2.0
+httpx==0.28.1
+librosa==0.11.0
+loguru==0.7.3
+metaphone==0.6
+mutagen==1.48.1
+natsort==8.4.0
+num2words==0.5.14
+nvidia-ml-py
+pyloudnorm==0.1.1
+psutil
+pydantic>=2.9.2,<3
+pysbd==0.3.4
+pywin32; sys_platform == 'win32'
+requests
+sounddevice==0.5.2
+soundfile==0.13.1
+textual==8.2.8
+prompt-toolkit==3.0.52
+wakepy
+watchdog==6.0.0
+whisper_normalizer==0.1.12
+text2num==3.0.1
+xxhash==3.5.0

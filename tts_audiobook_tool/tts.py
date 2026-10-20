@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 from tts_audiobook_tool.app_types import DeviceType, ReadinessIssue, StreamChunkCallback, StreamEndCallback, VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Reason
 
+from tts_audiobook_tool.tts_models.breeze_base_model import BreezeBaseModel
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.dots_base_model import DotsBaseModel
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
@@ -67,6 +68,7 @@ class Tts:
     _type: TtsModelType
 
     _chatterbox: ChatterboxBaseModel | None = None
+    _breeze: BreezeBaseModel | None = None
     _dots: DotsBaseModel | None = None
     _fish_s1: FishS1BaseModel | None = None
     _fish_s2: FishS2BaseModel | None = None
@@ -229,28 +231,29 @@ class Tts:
             Tts._type = TtsModelType.require_by_id("none")
             return Tts._type, 0
 
+        def check(module_test: str) -> bool:
+            try:
+                if module_test.startswith("dist:"):
+                    dist_test = module_test.removeprefix("dist:").strip()
+                    if "==" in dist_test:
+                        dist_name, expected_version = [part.strip() for part in dist_test.split("==", 1)]
+                        return metadata.version(dist_name) == expected_version
+                    metadata.version(dist_test)
+                    return True
+                return util.find_spec(module_test) is not None
+            except:
+                return False
+
         def get_matches() -> list[TtsModelType]:
             model_infos = []
             for model_info in TtsModelType.all():
-                exists = False
-                try:
-                    module_test = model_info.value.local_module_test
-                    if not module_test:
-                        continue
-                    if module_test.startswith("dist:"):
-                        dist_test = module_test.removeprefix("dist:").strip()
-                        if "==" in dist_test:
-                            dist_name, expected_version = [part.strip() for part in dist_test.split("==", 1)]
-                            exists = metadata.version(dist_name) == expected_version
-                        else:
-                            metadata.version(dist_test)
-                            exists = True
-                    else:
-                        exists = util.find_spec(module_test) is not None
-                except:
-                    ...
-                if exists:
-                    model_infos.append(model_info)
+                module_test = model_info.value.local_module_test
+                if not module_test or not check(module_test):
+                    continue
+                # Another model's venv can also contain this model's library
+                if any(check(excluded) for excluded in model_info.value.local_module_exclude):
+                    continue
+                model_infos.append(model_info)
             return model_infos
 
         matches = get_matches()
@@ -484,6 +487,7 @@ class Tts:
     def instance_exists() -> bool:
         require_model_owner("TTS")
         items = [
+            Tts._breeze,
             Tts._chatterbox,
             Tts._dots,
             Tts._fish_s1,
@@ -761,6 +765,16 @@ class Tts:
         return Tts._indextts2
 
     @staticmethod
+    def get_breeze() -> BreezeBaseModel:
+        require_model_owner("TTS")
+        if not Tts._breeze:
+            device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("breeze_tts_2_local"))
+            from tts_audiobook_tool.tts_models.breeze_model import BreezeModel
+            Tts._breeze = BreezeModel(device_type)
+            printt()
+        return Tts._breeze
+
+    @staticmethod
     def get_mira() -> MiraBaseModel:
         require_model_owner("TTS")
         if not Tts._mira:
@@ -985,6 +999,7 @@ class InstanceDisplayInfo:
 #    name of the Tts class attribute holding the live instance)
 # Built after the class body so the factory static methods are available.
 Tts._MODEL_REGISTRY = {
+    TtsModelType.require_by_id("breeze_tts_2_local"): (BreezeBaseModel, Tts.get_breeze, "_breeze"),
     TtsModelType.require_by_id("chatterbox_local"): (ChatterboxBaseModel, Tts.get_chatterbox, "_chatterbox"),
     TtsModelType.require_by_id("dots_local"): (DotsBaseModel, Tts.get_dots, "_dots"),
     TtsModelType.require_by_id("fish_s1_local"): (FishS1BaseModel, Tts.get_fish_s1, "_fish_s1"),

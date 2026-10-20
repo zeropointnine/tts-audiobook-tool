@@ -87,8 +87,13 @@ class FakeRuntime:
         self.release.set()
 
 
-def make_state():
-    return SimpleNamespace()
+def make_state(output_filters: list[str] | None = None):
+    # Just enough project for ``Tts.get_info(project).output_filters``.
+    spec = SimpleNamespace(output_filters=list(output_filters or ()))
+    model_type = SimpleNamespace(value=spec)
+    return SimpleNamespace(
+        project=SimpleNamespace(get_tts_model_type=lambda: model_type)
+    )
 
 
 def test_app_initializes_after_mount_and_has_fixed_shell() -> None:
@@ -442,6 +447,43 @@ def test_initialization_entry_mirrors_worker_console_and_styling() -> None:
                 "Initializing..." in entry.raw_content
                 for entry in app.transcript.entries
             )
+
+    run(exercise())
+
+
+class FakeFilteredInitConsoleRuntime(FakeRuntime):
+    def initialize(self, console_handler=None) -> ConversationInitialization:
+        assert console_handler is not None
+        # A blank line not trailing a filtered line is kept. A multi-line
+        # warning whose text lines are filtered drops its interior and
+        # trailing blank/whitespace-only lines too, then a filtered line is
+        # left as the live line until initialization finishes.
+        console_handler(
+            ConsoleOutput(
+                "op-init",
+                "stderr",
+                "Warming up models...\n\nsmem_size warning spam\n\n"
+                "  smem_size detail\n    \n\033[0m\nkept line\n",
+            )
+        )
+        console_handler(ConsoleOutput("op-init", "stderr", "trailing smem_size"))
+        return ConversationInitialization((), "")
+
+
+def test_initialization_entry_omits_model_output_filter_lines() -> None:
+    async def exercise() -> None:
+        runtime = FakeFilteredInitConsoleRuntime()
+        app = ConversationTextualApp(
+            make_state(["smem_size"]), runtime=runtime  # type: ignore[arg-type]
+        )
+        async with app.run_test(size=(80, 24)) as pilot:
+            for _ in range(100):
+                await pilot.pause()
+                if app.phase == ConversationPhase.AWAITING_INPUT:
+                    break
+            assert app.phase == ConversationPhase.AWAITING_INPUT
+            init_entry = app.query_one("#initialization-output")
+            assert init_entry.raw_content == "Warming up models...\n\nkept line"
 
     run(exercise())
 

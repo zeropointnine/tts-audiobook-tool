@@ -15,7 +15,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | TTS model | Local | SGL-Omni | audio.cpp |
 | --- | :---: | :---: | :---: |
 | [AuK (Base, Flash)](https://github.com/Tencent-Hunyuan/AuK) | | ✅ | |
-| [Breeze TTS 2](https://github.com/breezeblue-ai/breeze-tts) | | | ✅ |
+| [Breeze TTS 2](https://github.com/breezeblue-ai/breeze-tts) | ✅ | | ✅ |
 | [Chatterbox (Multilingual V3, Turbo)](https://github.com/resemble-ai/chatterbox) | ✅ | ✅ | ✅ |
 | [dots.tts](https://github.com/studio-dots-ai/dots.tts) | ✅ | | ✅ |
 | [Echo-TTS](https://github.com/jordandare/echo-tts) | | | ✅ |
@@ -73,7 +73,7 @@ All examples use the same source text, same 15-second voice clone sample, and de
 
 | | | |
 | --- | --- | --- |
-| [AuK](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-auk.abr.m4a) | [Breeze TTS 2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-breeze2.abr.m4a) (audio.cpp bf16) | [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a) |
+| [AuK](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-auk.abr.m4a) | [Breeze TTS 2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-breeze2.abr.m4a) | [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a) |
 | [CosyVoice3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-cosyvoice3.abr.m4a) | [dots.tts](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-dots-soar.abr.m4a) | [Echo-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-echo.abr.m4a) (audio.cpp q8) |
 | [FireRedTTS3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-fireredtts3.abr.m4a) | [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a) | [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a) |
 | [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a) | [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a) | [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (alt voice, high temp.) |
@@ -136,6 +136,35 @@ Or, if you have multiple virtual environments installed, you can use `launch.py`
     python launch.py path/to/venvs-parent-dir # searches for venv subdirectories from the given path
 
 For how the app chooses a project's TTS model and exposes model-specific settings, refer to [TTS model selection rules](<docs-dev/tts-model-selection.md>). Project storage and migration are documented in [Project Spec v5](<docs-dev/project-spec-v5.md>).
+
+<details>
+
+<summary>
+
+### Virtual environment for Breeze TTS 2 (local inference)
+
+</summary>
+
+> **ℹ️ Requires CUDA**
+
+Initialize a **Python v3.12** virtual environment named `venv-breeze`:
+
+    python -m venv venv-breeze # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-breeze # windows
+
+Activate the virtual environment:
+
+    source venv-breeze/bin/activate # linux/mac
+    venv-breeze\Scripts\activate.bat # windows
+
+Install dependencies:
+
+    pip install -r requirements-breeze.txt
+
+Note that the above requirements file draws from a fork of the breeze-tts library, [zeropointnine/breeze-tts-packaged](https://github.com/zeropointnine/breeze-tts-packaged), refactored for use as an installable package.
+
+</details>
+
 
 <details>
 
@@ -614,6 +643,12 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 ### Locally generated using dedicated venv
 
+**Breeze TTS 2**
+- Voice clone, voice direction (voice sample + instructions) and voice design (instructions only)
+- Batch processing support
+- Audio tags
+- Temperature, top_p, top_k, repetition_penalty, CFG, seed
+
 **Chatterbox**
 - Multilingual V2, Multilingual V3, and Turbo model variants
 - Exaggeration, CFG, temperature, top_p, top_k, repetition_penalty, seed
@@ -728,6 +763,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **Breeze TTS 2**
 - Voice design
+- Audio tags
 - Temperature, top_p, top_k, guidance scale, seed
 
 **Chatterbox**
@@ -808,6 +844,8 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 | TTS Model               | Setup                | Speed           | Notes                       |
 | ----------------------- | -------------------- | --------------- | --------------------------- |
+| Breeze TTS 2            | GTX 3080 Ti, Linux   | ~100% realtime  | batch size=1
+| Breeze TTS 2            | GTX 3080 Ti, Linux   | 600% realtime   | batch size=10
 | Chatterbox Multilingual | RTX 4090, Windows    | 200% realtime   |
 | Chatterbox Multilingual | GTX 3080 Ti, Linux   | 250% realtime (yes really) |
 | Chatterbox Multilingual | Macbook Pro M1 (MPS) | 20-35% realtime |
@@ -842,6 +880,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 
 # Update highlights
+
+**2026-10-20**
+
+- Added support for **Breeze TTS 2 (local)**. Supports batch mode.
 
 **2026-10-19**
 

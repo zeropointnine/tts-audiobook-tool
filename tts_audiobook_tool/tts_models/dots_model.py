@@ -13,6 +13,7 @@ from tts_audiobook_tool.app_types import (
     StreamChunkCallback,
     StreamEndCallback,
 )
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -161,7 +162,9 @@ class DotsModel(DotsBaseModel):
         )
         is_streaming = on_stream_chunk is not None or on_stream_end is not None
 
-        printt("Generating...", dont_reset=True)
+        # Print something here b/c model library code does not
+        printt(f"{COL_DIM_ITALICS}Generating...")
+
         sounds: list[Sound] = []
         try:
             for prompt in prompts:

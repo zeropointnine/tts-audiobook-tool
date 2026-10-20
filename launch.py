@@ -80,12 +80,14 @@ sys.path.insert(0, SCRIPT_DIR)
 from tts_audiobook_tool.launcher_marker import REMOTE_CLIENT_MARKER_MODULES
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
-# Build the list of (module_test, proper_name) from the catalog, skipping none.
-QUALIFIED_MODELS: list[tuple[str, str]] = []
+# Build the list of (module_test, proper_name, module_excludes) from the catalog, skipping none.
+QUALIFIED_MODELS: list[tuple[str, str, list[str]]] = []
 for member in TtsModelType.all():
     if member.id == "none":
         continue
-    QUALIFIED_MODELS.append((member.value.local_module_test, member.value.ui["proper_name"]))
+    QUALIFIED_MODELS.append(
+        (member.value.local_module_test, member.value.ui["proper_name"], list(member.value.local_module_exclude))
+    )
 
 REMOTE_CLIENT_DISPLAY_MODEL = "Remote TTS client (SGL-Omni / audio.cpp)"
 
@@ -142,9 +144,10 @@ def probe_venv(venv_path: str) -> tuple[list[str], int]:
         "        return importlib.util.find_spec(mod) is not None\n"
         "    except Exception:\n"
         "        return False\n"
-        "matched = [i for i, (mod, _) in enumerate(tests) if check(mod)]\n"
+        "matched = [i for i, (mod, _, excludes) in enumerate(tests)\n"
+        "           if check(mod) and not any(check(x) for x in excludes)]\n"
         "infos = [tests[i] for i in matched]\n"
-        "names = [n for _, n in infos]\n"
+        "names = [n for _, n, _ in infos]\n"
         "match_count = len(infos)\n"
         "print(json.dumps({'names': names, 'match_count': match_count}))\n"
     )

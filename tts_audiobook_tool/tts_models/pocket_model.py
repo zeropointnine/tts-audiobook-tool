@@ -166,7 +166,7 @@ class PocketModel(PocketBaseModel):
             from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
             TtsBaseModel.print_params(locals())
 
-        # Print something to stay consistent w/ other model behavior b/c model lib does not
+        # Print something here b/c model library code does not
         printt(f"{COL_DIM_ITALICS}Generating...")
 
         try:

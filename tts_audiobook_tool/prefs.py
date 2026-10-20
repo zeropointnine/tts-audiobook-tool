@@ -315,7 +315,7 @@ class Prefs(Saveable):
             dirty = True
 
         system_prompt_preset_default = CHAT_SYSTEM_PROMPTS[0][0]
-        system_prompt_preset_files = [file_name for file_name, _ in CHAT_SYSTEM_PROMPTS]
+        system_prompt_preset_files = [file_name for file_name, _, _ in CHAT_SYSTEM_PROMPTS]
         system_prompt_preset = prefs_dict.get("system_prompt_preset", system_prompt_preset_default)
         if not isinstance(system_prompt_preset, str):
             system_prompt_preset = system_prompt_preset_default

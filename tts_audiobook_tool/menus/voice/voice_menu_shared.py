@@ -104,6 +104,9 @@ class VoiceMenuShared:
         # Only local models reach the legacy per-model menus; SGL-Omni
         # variants are always handled by the configured menu above.
         match state.project.get_tts_model_type().id:
+            case "breeze_tts_2_local":
+                from tts_audiobook_tool.menus.voice import VoiceBreezeMenu
+                VoiceBreezeMenu.menu(state)
             case "chatterbox_local":
                 from tts_audiobook_tool.menus.voice import VoiceChatterboxMenu
                 VoiceChatterboxMenu.menu(state)

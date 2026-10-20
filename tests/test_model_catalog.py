@@ -132,12 +132,13 @@ def test_catalog_random_seed_cap_defaults_and_int32_limits():
 
 def test_model_spec_preserves_legacy_positional_constructor():
     spec = TtsModelType.require_by_id("echo_tts_audiocpp").value
-    assert TtsModelSpec._fields[-3:] == ("max_random_seed", "can_instructions", "can_voice_clone")
-    legacy = TtsModelSpec(*spec[:-3])
-    assert legacy[:-3] == spec[:-3]
+    assert TtsModelSpec._fields[-4:] == ("max_random_seed", "can_instructions", "can_voice_clone", "local_module_exclude")
+    legacy = TtsModelSpec(*spec[:-4])
+    assert legacy[:-4] == spec[:-4]
     assert legacy.max_random_seed == -1
     assert legacy.can_instructions is False
     assert legacy.can_voice_clone is True
+    assert legacy.local_module_exclude == []
 
 
 def test_shipped_can_voice_clone_is_true_for_every_real_model():
@@ -181,9 +182,32 @@ def test_can_voice_clone_is_not_yet_accepted_for_server_models(model_id):
         parse_spec(entry)
 
 
-def test_shipped_can_instructions_is_only_local_omnivoice():
+def test_shipped_local_module_exclude():
     specs, _, _ = load_catalog()
-    assert [spec.id for spec in specs if spec.can_instructions] == ["omnivoice_local"]
+    assert {spec.id: spec.local_module_exclude for spec in specs if spec.local_module_exclude} == {
+        "qwen3tts_local": ["breeze_tts"],
+    }
+
+
+@pytest.mark.parametrize("value", ["breeze_tts", [1], [""], None])
+def test_local_module_exclude_must_be_a_list_of_nonempty_strings(value):
+    entry = _entry(read_catalog(CATALOG_PATH), "qwen3tts_local")
+    entry["spec"]["local_module_exclude"] = value
+    with pytest.raises(ValueError, match=r"model qwen3tts_local\.spec\.local_module_exclude"):
+        parse_spec(entry)
+
+
+def test_local_module_exclude_is_not_accepted_for_server_models():
+    entry = _entry(read_catalog(CATALOG_PATH), "echo_tts_audiocpp")
+    entry["spec"]["local_module_exclude"] = ["x"]
+    with pytest.raises(ValueError, match="local_module_exclude"):
+        parse_spec(entry)
+
+
+def test_shipped_can_instructions_is_only_local_breeze_and_omnivoice():
+    specs, _, _ = load_catalog()
+    assert [spec.id for spec in specs if spec.can_instructions] == ["breeze_tts_2_local", "omnivoice_local"]
+    assert TtsModelType.require_by_id("breeze_tts_2_local").value.can_instructions is True
     assert TtsModelType.require_by_id("omnivoice_local").value.can_instructions is True
 
 
@@ -268,7 +292,7 @@ def test_complete_catalog_order_and_backend_suffix_ids():
     raw = read_catalog(CATALOG_PATH)
     expected_ids = [
         "none",
-        "chatterbox_local", "dots_local", "fish_s1_local", "fish_s2_local",
+        "breeze_tts_2_local", "chatterbox_local", "dots_local", "fish_s1_local", "fish_s2_local",
         "glm_local", "higgs_v2_local", "indextts2_local", "mira_local",
         "moss_local", "omnivoice_local", "pocket_local", "qwen3tts_local",
         "vibevoice_local",
@@ -302,7 +326,7 @@ def test_catalog_provides_canonical_lookup_handles_in_order():
     assert [spec.id for spec in specs] == ids
     assert list(TtsModelType._initial_specs) == ids
     assert [handle.id for handle in TtsModelType.all()] == ids
-    assert len(specs) == 37
+    assert len(specs) == 38
     assert len(servers) == 23  # nine SGL entries plus the fourteen audio.cpp entries
     assert len(fingerprint) == 64
     for spec in specs:
@@ -452,7 +476,7 @@ def test_installing_data_only_spec_uses_lookup_without_attributes_and_reset_remo
 
 def test_catalog_is_available_at_import_before_model_classes(tmp_path):
     code = """from tts_audiobook_tool.tts_models.model_catalog import load_catalog
-assert len(load_catalog()[0]) == 37
+assert len(load_catalog()[0]) == 38
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 assert FishS2BaseModel.INFO is TtsModelType.require_by_id("fish_s2_local").value

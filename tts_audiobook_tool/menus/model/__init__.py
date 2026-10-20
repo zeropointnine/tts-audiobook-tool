@@ -1,4 +1,5 @@
 from .model_menu_shared import ModelMenuShared
+from .model_breeze_menu import ModelBreezeMenu
 from .model_chatterbox_menu import ModelChatterboxMenu
 from .model_dots_menu import ModelDotsMenu
 from .model_fish_s1_menu import ModelFishS1Menu
@@ -15,6 +16,7 @@ from .model_omnivoice_menu import ModelOmniVoiceMenu
 
 __all__ = [
     "ModelMenuShared",
+    "ModelBreezeMenu",
     "ModelChatterboxMenu",
     "ModelDotsMenu",
     "ModelFishS1Menu",

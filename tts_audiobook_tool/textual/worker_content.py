@@ -42,6 +42,52 @@ from .textual_shared import STYLE_DIM
 VISIBLE_HISTORY_LINES = 50_000
 
 
+class ConsoleOutputFilter:
+    """Decides which committed worker console lines are omitted from history.
+
+    A line containing any of the model's ``output_filters`` substrings is
+    dropped. Multi-line warnings (e.g. pysox's missing-SoX notice) also
+    contain blank or whitespace-only lines that no substring can match, so
+    blank lines immediately following a dropped line are treated as part of
+    the same filtered block and dropped too. Any other kept line, or
+    app-generated output (``reset``), ends the block.
+
+    "Blank" is judged on the ANSI-stripped text, so a line holding only
+    style codes counts as blank.
+    """
+
+    def __init__(self, substrings: list[str] | tuple[str, ...] | None = None) -> None:
+        self.substrings = tuple(substrings or ())
+        self._in_filtered_block = False
+
+    def matches(self, text: str) -> bool:
+        """Whether a line contains one of the filter substrings."""
+        return any(substring in text for substring in self.substrings)
+
+    def would_keep(self, text: str) -> bool:
+        """Whether committing ``text`` now would keep it, without
+        changing the filter state."""
+        if self.matches(text):
+            return False
+        if self._in_filtered_block and not Text.from_ansi(text).plain.strip():
+            return False
+        return True
+
+    def keep(self, text: str) -> bool:
+        """Commit ``text`` and return whether it is kept in history."""
+        if self.matches(text):
+            self._in_filtered_block = True
+            return False
+        if self._in_filtered_block and not Text.from_ansi(text).plain.strip():
+            return False
+        self._in_filtered_block = False
+        return True
+
+    def reset(self) -> None:
+        """End any filtered block (app output now separates the lines)."""
+        self._in_filtered_block = False
+
+
 class _SeparatorLine(_Line):
     """One semantic rule row in the otherwise text-based log document.
 
@@ -115,6 +161,7 @@ class WorkerLog(ReflowLog):
         )
         self.follow_tail = True
         self.output_filters = tuple(output_filters or ())
+        self._console_filter = ConsoleOutputFilter(self.output_filters)
         # The document starts with its (empty) current line, like a
         # freshly cleared terminal.
         self._lines.append(_Line(Text("")))
@@ -156,7 +203,7 @@ class WorkerLog(ReflowLog):
         """
         current = self._lines[-1] if self._lines else None
         current_text = current.text.plain if current is not None else ""
-        keep_current = bool(current_text) and not self._is_filtered_console_line(
+        keep_current = bool(current_text) and self._console_filter.would_keep(
             current_text
         )
         has_visible_output = any(
@@ -167,6 +214,7 @@ class WorkerLog(ReflowLog):
         # Inserting a rule now supersedes any pending promotion: a stale
         # expectation must not later swallow an unrelated dash line.
         self._separator_expected = False
+        self._console_filter.reset()
         self._mutate_tail(
             keep_current=keep_current,
             new_tail=[_SeparatorLine(Text("")), ""],
@@ -218,10 +266,6 @@ class WorkerLog(ReflowLog):
             line_text.expand_tabs(tab_size)
         return _Line(line_text)
 
-    def _is_filtered_console_line(self, text: str) -> bool:
-        """Whether a worker console line should be omitted from history."""
-        return any(substring in text for substring in self.output_filters)
-
     def feed_console(self, completed: list[str], live: str) -> None:
         """Apply one console chunk to the document.
 
@@ -229,9 +273,11 @@ class WorkerLog(ReflowLog):
         by a newline) and `live` is the assembler's current line
         afterwards. Together they are exactly the document tail a
         terminal would hold after the same bytes, except completed lines
-        matching an output filter are omitted from history. `live` is
-        always the new current line, even when it matches a filter. A
-        chunk without a newline only updates the current line in place.
+        rejected by the output filter (matching lines and the blank lines
+        trailing them; see `ConsoleOutputFilter`) are omitted from history.
+        `live` is always the new current line, even when it matches a
+        filter. A chunk without a newline only updates the current line in
+        place.
         """
         if not completed:
             current = self._lines[-1].text.plain if self._lines else ""
@@ -247,7 +293,7 @@ class WorkerLog(ReflowLog):
             line.text.plain.strip() for line in self._lines[:-1]
         )
         for text in completed:
-            if self._is_filtered_console_line(text):
+            if not self._console_filter.keep(text):
                 continue
             line = self._make_line(text)
             if self._separator_expected:
@@ -272,26 +318,27 @@ class WorkerLog(ReflowLog):
         """Present lines produced by the app (notices, terminal summary).
 
         A current line that still holds content (e.g. a bar interrupted
-        by the notice) becomes committed history first unless it matches
-        an output filter; an empty current line is only a placeholder and
-        is dropped. App-generated lines are never filtered. A fresh empty
-        current line ends up last.
+        by the notice) becomes committed history first unless the output
+        filter rejects it; an empty current line is only a placeholder and
+        is dropped. App-generated lines are never filtered, and they end
+        any filtered block. A fresh empty current line ends up last.
         """
         # Each stored line is one logical row; an embedded newline would be
         # rendered as a garbled single line, so split into separate lines.
         lines = [part for line in lines for part in line.split("\n")]
         current = self._lines[-1] if self._lines else None
         current_text = current.text.plain if current is not None else ""
-        keep_current = bool(current_text) and not self._is_filtered_console_line(
+        keep_current = bool(current_text) and self._console_filter.would_keep(
             current_text
         )
+        self._console_filter.reset()
         self._mutate_tail(keep_current=keep_current, new_tail=[*lines, ""])
 
     def finalize(self) -> None:
         """Commit the current line at session end.
 
-        The in-progress line (a bar, a status) becomes history unless it
-        matches an output filter, and a fresh empty current line begins
+        The in-progress line (a bar, a status) becomes history unless the
+        output filter rejects it, and a fresh empty current line begins
         below it — exactly like a newline commit. The document mirrors
         the assembler's current
         line at all times (the one exception, an app line interrupting
@@ -303,13 +350,14 @@ class WorkerLog(ReflowLog):
         current_text = current.text.plain if current is not None else ""
         if current_text:
             self._mutate_tail(
-                keep_current=not self._is_filtered_console_line(current_text),
+                keep_current=self._console_filter.keep(current_text),
                 new_tail=[""],
             )
 
     def clear(self) -> Self:
         """Clear the document, leaving a fresh empty current line."""
         self._separator_expected = False
+        self._console_filter.reset()
         super().clear()
         self._lines.append(_Line(Text("")))
         if self._size_known:

@@ -98,8 +98,11 @@ class Start:
         print()
         if not self.is_server:
             self.exit_on_unsupported_terminal()
-        self.init_tts_or_exit(self.is_server)
+        self.init_tts_or_exit()
+        # Must precede the cuda-only model check, which would otherwise
+        # pre-empt the more informative wrong-torch-flavor message
         self.exit_on_wrong_torch_flavor_windows()
+        self.exit_on_cuda_unavailable_for_cuda_only_model()
         if not self.is_server:
             self.exit_on_missing_ffmpeg_exe()
         self.exit_on_missing_ffmpeg_libs()
@@ -132,7 +135,7 @@ class Start:
         )
         exit(1)
 
-    def init_tts_or_exit(self, is_server: bool) -> None:
+    def init_tts_or_exit(self) -> None:
         """ Inits TTS else prompt to continue anyway.
 
         Also fixes the process-level backend mode (probed from the
@@ -158,33 +161,6 @@ class Start:
                 )
             os.environ.setdefault("TORCHINDUCTOR_USE_STATIC_CUDA_LAUNCHER", "0")
 
-        # Local cuda-only model guard:
-        #
-        # Some local models only support the 'cuda' torch device (no cpu
-        # fallback, see `local_torch_devices`). In app mode on the local
-        # backend, such a model cannot run at all without CUDA, so fail fast
-        # with a clear error instead of an obscure crash later on. Server
-        # mode and SGL-Omni mode are exempt: local torch is not used there.
-        # Note: torch is imported only here, after the dots.tts win32 env
-        # var workaround above has run.
-        if (
-            not is_server
-            and not Tts.is_remote_mode()
-            and tts_model_type.value.local_torch_devices
-            and set(tts_model_type.value.local_torch_devices) == {DeviceType.CUDA}
-        ):
-            try:
-                import torch
-                has_cuda = torch.cuda.is_available()
-            except Exception:
-                has_cuda = False
-
-            if not has_cuda:
-                model_name = tts_model_type.value.ui.get("proper_name") or tts_model_type.value.id
-                printt(f"{COL_ERROR}{model_name} requires an NVIDIA GPU for inference ('cuda' is its only supported torch device).")
-                printt(f"{COL_ERROR}torch.cuda.is_available() returned False. Exiting.")
-                exit(1)
-
         if num_matches > 1:
             error = "\nMore than one of the supported TTS models' core libraries is currently installed.\n"
             error += "This is not recommended. Please re-install your virtual environment, \n"
@@ -203,11 +179,60 @@ class Start:
         printt(f"{COL_DEFAULT}Reinstall torch using the CUDA wheel appropriate for your model requirements.")
         printt()
 
+        if self._is_cuda_only_local_model():
+            # Running anyway is not an option
+            model_name = self._get_model_name()
+            printt(f"{COL_ERROR}{model_name} requires CUDA ('cuda' is its only supported torch device). Exiting.")
+            exit(1)
+
         prompt = f"Or press {make_hotkey_string('Y')} to run anyway without CUDA support: "
         from tts_audiobook_tool import ask
         hotkey = ask.ask_hotkey(prompt)
         if hotkey != "y":
             exit(1)
+
+    def exit_on_cuda_unavailable_for_cuda_only_model(self) -> None:
+        """
+        Local cuda-only model guard:
+
+        Some local models only support the 'cuda' torch device (no cpu
+        fallback, see `local_torch_devices`). In app mode on the local
+        backend, such a model cannot run at all without CUDA, so fail fast
+        with a clear error instead of an obscure crash later on.
+
+        Must run after `init_tts_or_exit()` (dots.tts win32 env var workaround
+        must precede torch import) and after `exit_on_wrong_torch_flavor_windows()`
+        (which gives the more specific diagnosis when applicable).
+        """
+        if not self._is_cuda_only_local_model():
+            return
+
+        try:
+            import torch
+            has_cuda = torch.cuda.is_available()
+        except Exception:
+            has_cuda = False
+
+        if not has_cuda:
+            model_name = self._get_model_name()
+            printt(f"{COL_ERROR}{model_name} requires an NVIDIA GPU for inference ('cuda' is its only supported torch device).")
+            printt(f"{COL_ERROR}torch.cuda.is_available() returned False. Exiting.")
+            exit(1)
+
+    def _is_cuda_only_local_model(self) -> bool:
+        """
+        True if the active local model supports only the 'cuda' torch device and
+        local torch will actually be used (ie, app mode, not remote mode).
+        Server mode and SGL-Omni/remote mode are exempt: local torch is not used there.
+        """
+        if self.is_server or Tts.is_remote_mode():
+            return False
+        devices = Tts.get_local_model_type().value.local_torch_devices
+        return bool(devices) and set(devices) == {DeviceType.CUDA}
+
+    def _get_model_name(self) -> str:
+        model_type = Tts.get_local_model_type()
+        return model_type.value.ui.get("proper_name") or model_type.value.id
 
     def exit_on_missing_ffmpeg_exe(self) -> None:
         from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil

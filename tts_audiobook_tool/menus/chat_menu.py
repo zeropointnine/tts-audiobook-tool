@@ -1,6 +1,7 @@
 import os
 
 from tts_audiobook_tool.conversation.chat_config import (
+    get_associated_system_prompt_preset,
     get_chat_input_mode_label,
     get_resolved_system_prompt,
     get_system_prompt_label,
@@ -55,10 +56,7 @@ class ChatMenu:
                     lambda _, __: ChatMenu.input_mode_menu(state)
                 ),
                 MenuItem(
-                    lambda _: make_menu_label(
-                        "LLM system prompt",
-                        ChatMenu.get_system_prompt_label_value(state),
-                    ),
+                    lambda _: ChatMenu.make_system_prompt_menu_label(state),
                     lambda _, __: ChatMenu.system_prompt_menu(state),
                     superlabel="Options",
                 ),
@@ -312,7 +310,10 @@ class ChatMenu:
 
             return items
 
-        MenuUtil.menu(state, "System prompt", item_maker)
+        MenuUtil.menu(
+            state, "System prompt", item_maker,
+            subheading=ChatMenu.make_system_prompt_menu_subheading,
+        )
 
     @staticmethod
     def system_prompt_preset_menu(state: State) -> None:
@@ -325,8 +326,8 @@ class ChatMenu:
                 ChatMenu.get_system_prompt_preset_label_value(state),
             )
 
-        labels = ["None"] + [label for _, label in CHAT_SYSTEM_PROMPTS]
-        values = [""] + [file_name for file_name, _ in CHAT_SYSTEM_PROMPTS]
+        labels = ["None"] + [label for _, label, _ in CHAT_SYSTEM_PROMPTS]
+        values = [""] + [file_name for file_name, _, _ in CHAT_SYSTEM_PROMPTS]
 
         MenuUtil.options_menu(
             state=state,
@@ -358,6 +359,28 @@ class ChatMenu:
     @staticmethod
     def get_system_prompt_label_value(state: State) -> str:
         return get_system_prompt_label(state)
+
+    @staticmethod
+    def is_associated_preset_unused(state: State) -> bool:
+        """True when the current TTS model has an associated system prompt preset that isn't in use"""
+        associated = get_associated_system_prompt_preset(state.project.tts_model_type)
+        return bool(associated) and state.prefs.system_prompt_preset != associated
+
+    @staticmethod
+    def make_system_prompt_menu_label(state: State) -> str:
+        label = make_menu_label(
+            "LLM system prompt", ChatMenu.get_system_prompt_label_value(state)
+        )
+        if ChatMenu.is_associated_preset_unused(state):
+            label += f"{COL_OK}*{COL_DEFAULT}"
+        return label
+
+    @staticmethod
+    def make_system_prompt_menu_subheading(state: State) -> str:
+        if not ChatMenu.is_associated_preset_unused(state):
+            return ""
+        model_name = state.project.get_tts_model_type().value.ui["short_name"]
+        return f"{COL_OK}*{COL_DEFAULT} A custom system prompt preset exists for {model_name}"
 
     @staticmethod
     def get_chat_input_mode_label_value(state: State) -> str:

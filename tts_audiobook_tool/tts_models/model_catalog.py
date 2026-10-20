@@ -23,7 +23,7 @@ _LOCAL_SPEC_KEYS = {
     "local_module_test", "local_torch_devices", "file_tag", "default_output_sample_rate",
     "requires_voice", "can_stream", "requires_ffmpeg_libs", "un_all_caps",
     "requirements_file_name", "ui", "output_filters", "substitutions", "max_random_seed",
-    "can_instructions", "can_voice_clone",
+    "can_instructions", "can_voice_clone", "local_module_exclude",
 }
 _SERVER_SPEC_KEYS = {"file_tag", "default_output_sample_rate", "un_all_caps", "requirements_file_name", "ui", "substitutions", "max_random_seed"}
 _UI_KEYS = {"proper_name", "short_name", "voice_path_console", "voice_path_requestor", "project_links", "settings_note",
@@ -397,6 +397,7 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
     requires_ffmpeg = False
     can_instructions = False
     can_voice_clone = True
+    module_exclude: list[str] = []
     filters: list[str] = []
     if backend == TtsBackendKind.SGL_OMNI.value:
         if "audio_cpp" in entry:
@@ -450,9 +451,13 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
             can_instructions = _field(meta, "can_instructions", f"{where}.spec", bool)
         if "can_voice_clone" in meta:
             can_voice_clone = _field(meta, "can_voice_clone", f"{where}.spec", bool)
+        if "local_module_exclude" in meta:
+            module_exclude = _field(meta, "local_module_exclude", f"{where}.spec", list)
+            if not all(isinstance(s, str) and s.strip() for s in module_exclude):
+                _fail(f"{where}.spec.local_module_exclude", "expected nonempty strings")
         if id == "none":
             if (module or devices or voice_required or streaming or requires_ffmpeg
-                    or can_instructions or can_voice_clone):
+                    or can_instructions or can_voice_clone or module_exclude):
                 _fail(f"{where}.spec", "the none placeholder cannot have local inference settings")
         elif not module.strip():
             _fail(f"{where}.spec.local_module_test", "local models require a module probe")
@@ -460,7 +465,7 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
                         module, devices, file_tag, rate, voice_required, streaming,
                         requires_ffmpeg, caps, requirements, ui, filters,
                         [tuple(pair) for pair in replacements], max_random_seed, can_instructions,
-                        can_voice_clone)
+                        can_voice_clone, list(module_exclude))
 
 
 def _load_catalog(path: Path) -> tuple[dict[str, Any], list[TtsModelSpec], list[dict[str, Any]], str]:

@@ -256,4 +256,4 @@ def test_startup_checks_duplicate_local_libraries_before_success(monkeypatch):
     from tts_audiobook_tool.start import Start
     monkeypatch.setattr(Tts, "init_local_model_type", staticmethod(lambda: (TtsModelType.require_by_id("vibevoice_local"), 2)))
     with pytest.raises(SystemExit):
-        object.__new__(Start).init_tts_or_exit(is_server=True)
+        object.__new__(Start).init_tts_or_exit()

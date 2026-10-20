@@ -1,4 +1,5 @@
 from .voice_menu_shared import VoiceMenuShared
+from .voice_breeze_menu import VoiceBreezeMenu
 from .voice_chatterbox_menu import VoiceChatterboxMenu
 from .voice_dots_menu import VoiceDotsMenu
 from .voice_fish_s1_menu import VoiceFishS1Menu
@@ -15,6 +16,7 @@ from .voice_omnivoice_menu import VoiceOmniVoiceMenu
 
 __all__ = [
     "VoiceMenuShared",
+    "VoiceBreezeMenu",
     "VoiceChatterboxMenu",
     "VoiceDotsMenu",
     "VoiceFishS1Menu",

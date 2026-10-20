@@ -72,6 +72,66 @@ project_links = [
 # Local
 # ------------------------------------------------------------------------
 [[models]]
+id = "breeze_tts_2_local"
+# Settings are independent of breeze_tts_2_audiocpp (no setting group).
+settings = [
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+    { name = "batch_size", section = "orchestration", type = "int", default = 1 },
+    { name = "temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "repetition_penalty", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "cfg", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+]
+backend_kind = "local"
+
+[models.spec]
+local_module_test = "breeze_tts"
+local_torch_devices = ["cuda"]
+# Shared with breeze_tts_2_audiocpp.
+file_tag = "breeze2"
+default_output_sample_rate = 24000
+# Sample-less voices are allowed (as upstream and the audio.cpp entry): with instructions they use voice design
+# (`tts_instruction`); without, upstream's `tts_plain` picks an arbitrary voice per generation.
+requires_voice = false
+can_stream = false
+requires_ffmpeg_libs = false
+un_all_caps = false
+requirements_file_name = "requirements-breeze.txt"
+# Load-time noise: Breeze model init, SoX check and flash-attn warning (both from qwen_tts).
+# CFG: upstream's depth-decoder CUDA graph capture (once per batch-size bucket).
+output_filters = [
+    "Text encoder projection type",
+    "sox: not found",
+    "SoX could not be found",
+    "If you do not have SoX",
+    "sox.sourceforge.net",
+    "have SoX, double-check your",
+    "path variables.",
+    "flash-attn is not installed",
+    "********",
+    "Capturing depth decoder graphs",
+    "Depth decoder CUDA graph",
+]
+# Per-voice instructions: voice direction with a sample (`ref_edit_tata`), voice design without (`tts_instruction`).
+can_instructions = true
+substitutions = []
+
+[models.spec.ui]
+proper_name = "Breeze TTS 2"
+short_name = "Breeze TTS 2"
+instructions_message = "Enter instructions for this voice:\n(With voice sample: describe the delivery, eg \"Calm, measured narration at an unhurried pace\")\n(Without voice sample: describe the voice, eg \"A warm, middle-aged male narrator with a clear voice\")\n(Instructions can make output sound less like the voice sample; leave blank for the closest match)"
+voice_path_console = "Enter voice clone audio clip file path (transcript required): "
+voice_path_requestor = "Select voice clone audio clip (transcript required)"
+project_links = [
+    "https://github.com/breezeblue-ai/breeze-tts",
+    "https://huggingface.co/BreezeBlue/Breeze-TTS-2",
+]
+
+# ------------------------------------------------------------------------
+[[models]]
 id = "chatterbox_local"
 settings = [
     { name = "type", section = "parameters", type = "enum:chatterbox", default = "multilingual-v3" },
@@ -549,6 +609,8 @@ backend_kind = "local"
 
 [models.spec]
 local_module_test = "qwen_tts"
+# Breeze TTS 2 venvs also contain qwen_tts (its audio codec).
+local_module_exclude = ["breeze_tts"]
 local_torch_devices = ["cuda", "mps", "cpu"]
 file_tag = "qwen3"
 default_output_sample_rate = 24000

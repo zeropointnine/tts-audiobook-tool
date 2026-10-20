@@ -15,7 +15,7 @@ def test_launcher_uses_registry_handles_without_enum_name():
     import launch
 
     assert launch.QUALIFIED_MODELS == [
-        (member.value.local_module_test, member.value.ui["proper_name"])
+        (member.value.local_module_test, member.value.ui["proper_name"], member.value.local_module_exclude)
         for member in TtsModelType.all()
         if member.id != "none"
     ]
