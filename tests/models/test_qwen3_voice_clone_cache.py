@@ -363,8 +363,8 @@ def test_qwen_voice_design_warnings_do_not_read_model_global_instructions(monkey
         return original_get(self, model_id, name)
 
     monkeypatch.setattr(Project, "get_model_setting", get_setting)
-    assert model.get_warning_issues(project) == []
+    assert model.get_warning_issues(project) == [
+        'Language value passed to model: english (project language code = "en")']
     project.language_code = "xx"
-    warnings = model.get_warning_issues(project)
-    assert len(warnings) == 1
-    assert "doesn't map to a known Qwen3-TTS language" in warnings[0]
+    assert model.get_warning_issues(project) == [
+        'Language value passed to model: auto (project language code = "xx"; no matching Qwen3-TTS language)']

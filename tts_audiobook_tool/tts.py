@@ -93,7 +93,7 @@ class Tts:
     _remote_issue: str = ""
     _binding_issue: ReadinessIssue | None = None
     _bound_project_type_id: str = ""
-    _bound_project_server_model_id: str = ""
+    _bound_project_audio_cpp_model_id: str = ""
 
     # Process-level client-vs-local mode, independent of catalog backend.
     _backend_mode: TtsRuntimeMode | None = None
@@ -326,7 +326,7 @@ class Tts:
         available = Tts.get_available_tts_models()
         if Tts.is_remote_mode():
             # An explicit entry is a durable choice, even while missing/offline.
-            if project.tts_server_model_id or not available:
+            if project.audio_cpp_model_id or not available:
                 return None
             selected = project.get_tts_model_type()
             model = (selected if selected in available else
@@ -343,10 +343,10 @@ class Tts:
         else:
             model = available[0] if len(available) == 1 else TtsModelType.require_by_id("none")
             server_id = ""
-        if (project.tts_model_type, project.tts_server_model_id) == (model.id, server_id):
+        if (project.tts_model_type, project.audio_cpp_model_id) == (model.id, server_id):
             return None
         project.tts_model_type = model.id
-        project.tts_server_model_id = server_id
+        project.audio_cpp_model_id = server_id
         return model
 
     @staticmethod
@@ -363,8 +363,8 @@ class Tts:
         snapshot = RemoteTtsDiscovery.get_snapshot()
         if snapshot.issue is not None:
             return False
-        if project.tts_server_model_id:
-            return (selected, project.tts_server_model_id) not in snapshot.candidates
+        if project.audio_cpp_model_id:
+            return (selected, project.audio_cpp_model_id) not in snapshot.candidates
         candidates = [pair for pair in snapshot.candidates
                       if selected.id == "none" or pair[0] == selected]
         return len(candidates) > 1
@@ -604,7 +604,7 @@ class Tts:
         written to the debug log.
         """
         if (project.get_tts_model_type().id == "none" or Tts.get_active_type() != project.get_tts_model_type()
-                or (project.tts_server_model_id and project.tts_server_model_id != Tts._selected_server_model_id)):
+                or (project.audio_cpp_model_id and project.audio_cpp_model_id != Tts._selected_server_model_id)):
             return Tts._binding_issue.verbose if Tts._binding_issue else "Project TTS model is not bound"
         try:
             max_random_seed = resolve_max_random_seed(Tts._type.value.max_random_seed, max_random_seed)
@@ -959,12 +959,12 @@ class Tts:
                 issue = ReadinessIssue("Remote TTS server", snapshot.issue.message)
             else:
                 candidates = [pair for pair in snapshot.candidates if pair[0] == selected]
-                if selected.value.backend_kind is TtsBackendKind.AUDIO_CPP and project.tts_server_model_id:
-                    if (selected, project.tts_server_model_id) in candidates:
-                        new_id = project.tts_server_model_id
+                if selected.value.backend_kind is TtsBackendKind.AUDIO_CPP and project.audio_cpp_model_id:
+                    if (selected, project.audio_cpp_model_id) in candidates:
+                        new_id = project.audio_cpp_model_id
                     else:
                         issue = ReadinessIssue("TTS model", (
-                            f"Saved server model ID {project.tts_server_model_id!r} is unavailable or no longer "
+                            f"Saved audio.cpp model ID {project.audio_cpp_model_id!r} is unavailable or no longer "
                             "matches the selected TTS model. Select an entry in Model settings > TTS model."))
                 elif len(candidates) == 1:
                     new_id = candidates[0][1]
@@ -983,7 +983,7 @@ class Tts:
             Tts._selected_server_model_id = new_id
         Tts._binding_issue = issue
         Tts._bound_project_type_id = project.tts_model_type
-        Tts._bound_project_server_model_id = project.tts_server_model_id
+        Tts._bound_project_audio_cpp_model_id = project.audio_cpp_model_id
         Tts._remote_issue = issue.verbose if issue is not None and Tts.is_remote_mode() else ""
         SglOmniUtil._model_id = new_id if selected.value.backend_kind is TtsBackendKind.SGL_OMNI else ""
         Tts.set_model_params_using_project(project)

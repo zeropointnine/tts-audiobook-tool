@@ -32,7 +32,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [MOSS-TTS v1.5 (Delay, Local)](https://github.com/OpenMOSS/MOSS-TTS) | ✅ | ✅ | ✅ |
 | [OmniVoice](https://github.com/k2-fsa/OmniVoice) | ✅ | | ✅ |
 | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) | ✅ | | |
-| [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) | ✅ | ✅ | |
+| [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) | ✅ | ✅ | ✅ |
 | [VibeVoice](https://github.com/microsoft/VibeVoice) | ✅ | | |
 | [ZONOS2](https://github.com/Zyphra/ZONOS2) | | ✅ | |
 
@@ -810,6 +810,11 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 **OmniVoice**
 - Voice design
 - Steps, speed, CFG, seed
+
+**Qwen3-TTS**
+- Base, CustomVoice and VoiceDesign model types
+- Temperature, top_p, top_k; repetition penalty, max tokens, seed
+- See [Qwen3-TTS setup notes](<docs/tips-audio-cpp.md#qwen3-tts>)
 
 
 # Usage notes

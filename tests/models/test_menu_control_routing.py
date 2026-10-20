@@ -156,12 +156,13 @@ def test_voice_numeric_and_seed_edit_definition_owner_not_selected_model(backend
     assert project.get_model_setting(unrelated_id, "temperature") == 0.8
     assert project.get_model_setting(unrelated_id, "seed") == 22
     if model_id == "qwen3tts_sglomni":
-        # Shared Qwen3 settings still belong to the registry's shared group.
-        assert project.get_model_setting("qwen3tts_local", "temperature") == 0.7
-        assert project.get_model_setting("qwen3tts_local", "seed") == 123
-        shared = project.model_dump(exclude={"reason_pauses"})["model_settings"]["shared"]["qwen3"]["parameters"]
-        assert shared["temperature"] == 0.7
-        assert shared["seed"] == 123
+        # Server Qwen3 edits are private; local Qwen3 keeps its own values.
+        assert project.get_model_setting("qwen3tts_local", "temperature") == -1
+        assert project.get_model_setting("qwen3tts_local", "seed") == -1
+        saved = project.model_dump(exclude={"reason_pauses"})["model_settings"]
+        assert "qwen3" not in saved["shared"]
+        assert saved["models"][model_id]["parameters"]["temperature"] == 0.7
+        assert saved["models"][model_id]["parameters"]["seed"] == 123
 
 
 @pytest.mark.parametrize("model_id,setting_count", [

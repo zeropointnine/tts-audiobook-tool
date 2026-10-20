@@ -173,10 +173,15 @@ class ModelMenuShared:
         )
 
     @staticmethod
+    def with_prompt_suffix(prompt: str, suffix: str) -> str | list[str]:
+        """Give a dimmed proviso its own prompt line, matching catalog `input_prompt_suffix`."""
+        return [prompt, f"{COL_DIM}{suffix}{COL_DEFAULT}"] if suffix else prompt
+
+    @staticmethod
     def ask_temperature(
             state: State,
             target: str | SettingRef,
-            prompt: str,
+            prompt: str | list[str],
             min_value: float,
             max_value: float,
             default_value: float,
@@ -205,10 +210,11 @@ class ModelMenuShared:
             min_value: float,
             max_value: float,
             base_label: str="Temperature",
-            hint: Hint | None = None
+            hint: Hint | None = None,
+            prompt_suffix: str = ""
     ) -> MenuItem:
 
-        prompt = "Enter temperature"
+        prompt = ModelMenuShared.with_prompt_suffix("Enter temperature", prompt_suffix)
 
         def on_item(_: State, __: MenuItem) -> None:
             ModelMenuShared.ask_temperature(
@@ -238,7 +244,8 @@ class ModelMenuShared:
             target: str | SettingRef,
             default_value: int,
             min_value: int=TOP_K_MIN_DEFAULT,
-            max_value: int=TOP_K_MAX_DEFAULT
+            max_value: int=TOP_K_MAX_DEFAULT,
+            prompt_suffix: str = ""
     ) -> MenuItem:
 
         return MenuUtil.make_number_item(
@@ -248,7 +255,7 @@ class ModelMenuShared:
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=0,
-            prompt=f"Enter Top-K",
+            prompt=ModelMenuShared.with_prompt_suffix("Enter Top-K", prompt_suffix),
             min_value=min_value,
             max_value=max_value
         )
@@ -257,7 +264,8 @@ class ModelMenuShared:
     def make_top_p_item(
             state: State,
             target: str | SettingRef,
-            default_value: float
+            default_value: float,
+            prompt_suffix: str = ""
     ) -> MenuItem:
 
         min_value = TOP_P_MIN_DEFAULT
@@ -270,7 +278,7 @@ class ModelMenuShared:
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=2,
-            prompt=f"Enter Top-P",
+            prompt=ModelMenuShared.with_prompt_suffix("Enter Top-P", prompt_suffix),
             min_value=min_value,
             max_value=max_value
         )
@@ -303,6 +311,7 @@ class ModelMenuShared:
             label: str,
             get_value: Callable[[Project], object],
             set_value: Callable[[Project, str], str],
+            *, subheading: str = "",
     ) -> MenuItem:
         """A fixed-choice string setting, edited through a one-shot option submenu.
 
@@ -349,6 +358,7 @@ class ModelMenuShared:
                 sublabels=([choice.description for choice in parameter.choices]
                            if any(choice.description for choice in parameter.choices) else None),
                 breadcrumb=label,
+                subheading=subheading,
             )
 
         return MenuItem(display, edit)

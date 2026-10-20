@@ -419,6 +419,32 @@ def test_audio_cpp_status_uses_exact_cached_model_residency(monkeypatch, models,
     assert f"{COL_DIM}({link}{suffix})" in output
 
 
+# The loaded qualifier names the resident model file (Windows or POSIX server path),
+# ellipsized to 30 chars.
+@pytest.mark.parametrize("path, expected", [
+    ("/models/qwen3-tts-base.gguf", "loaded, qwen3-tts-base.gguf"),
+    ("C:\\models\\qwen3-tts-base.gguf", "loaded, qwen3-tts-base.gguf"),
+    ("/m/qwen3-tts-12hz-1.7b-customvoice-q8_0.gguf", "loaded, qwen3-tts-12hz-1.7b-customv..."),
+    (None, "loaded"),
+])
+def test_audio_cpp_status_shows_loaded_model_filename(monkeypatch, path, expected):
+    from tts_audiobook_tool.menus.menu_status import _make_server_tts_text
+
+    selected = TtsModelType.require_by_id("qwen3tts_audiocpp")
+    monkeypatch.setattr(Tts, "_type", selected)
+    monkeypatch.setattr(Tts, "_selected_server_model_id", "bound-server")
+    entry = {"id": "bound-server", "loaded": True}
+    if path is not None:
+        entry["path"] = path
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+        backend_kind=TtsBackendKind.AUDIO_CPP, models=(entry,),
+        candidates=((selected, "bound-server"),)))
+
+    output = text_util.strip_ansi_codes(_make_server_tts_text(make_state(selected)))
+
+    assert output == f"Qwen3-TTS (audio.cpp, {expected})"
+
+
 @pytest.mark.parametrize("failure", [
     "snapshot_issue", "binding_issue", "different_active_model", "unselected",
     "unknown_selection", "missing_server_id", "unknown_backend", "sgl_omni",

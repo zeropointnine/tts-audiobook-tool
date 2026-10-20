@@ -291,7 +291,7 @@ def test_audio_cpp_picker_persists_exact_entry_and_clears_for_other_backends(mon
                 {"id": "entry-b", "path": "/srv/shared.gguf"}),
         candidates=((model, "entry-b"), (model, "entry-a"), (model, "entry-a")),
     )
-    project = Project(tts_model_type=model.id, tts_server_model_id=saved_id)
+    project = Project(tts_model_type=model.id, audio_cpp_model_id=saved_id)
     state = cast(State, SimpleNamespace(project=project, pending_tts_model_change=object(),
                                        pending_project_load_checks=False))
     captured = {}
@@ -300,15 +300,15 @@ def test_audio_cpp_picker_persists_exact_entry_and_clears_for_other_backends(mon
     monkeypatch.setattr(select_menu_module.RemoteTtsDiscovery, "get_snapshot", lambda: snapshot)
     monkeypatch.setattr(select_menu_module.Tts, "get_available_tts_models", lambda **kwargs: [model, sgl, model])
     monkeypatch.setattr(select_menu_module.MenuUtil, "options_menu", lambda **kwargs: captured.update(kwargs))
-    monkeypatch.setattr(Project, "save", lambda current: saved.append((current.tts_model_type, current.tts_server_model_id)) or "")
-    monkeypatch.setattr(select_menu_module.Tts, "bind_project", lambda current: bound.append((current.tts_model_type, current.tts_server_model_id)))
+    monkeypatch.setattr(Project, "save", lambda current: saved.append((current.tts_model_type, current.audio_cpp_model_id)) or "")
+    monkeypatch.setattr(select_menu_module.Tts, "bind_project", lambda current: bound.append((current.tts_model_type, current.audio_cpp_model_id)))
     monkeypatch.setattr(select_menu_module, "print_feedback", lambda *args: None)
 
     ModelSelectMenu.menu(state)
 
     assert captured["current_value"] == (model, saved_id)
     assert ((model, saved_id) in captured["values"]) is (saved_id == "entry-b")
-    assert (project.tts_model_type, project.tts_server_model_id) == (model.id, saved_id)
+    assert (project.tts_model_type, project.audio_cpp_model_id) == (model.id, saved_id)
     label = strip_ansi_codes(ModelSelectMenu.make_menu_label(state))
     assert "(3 available)" in label
     if saved_id:

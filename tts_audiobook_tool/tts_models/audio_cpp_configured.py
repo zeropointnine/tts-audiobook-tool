@@ -147,18 +147,34 @@ class AudioCppModelSupport:
                 issues.append(ReadinessIssue("audio.cpp server", Tts._remote_issue or "Selected audio.cpp model is unavailable"))
         return issues
 
+    def resolve_request_language(self, language_code: str) -> str | None:
+        """The language value a request sends for this project code, or None when
+        the request omits the field. Shared by the payload and the pre-flight note."""
+        policy = self.definition.language_policy
+        if policy == "omit":
+            return None  # The family auto-detects and never receives a language field.
+        language = language_code or ""
+        if policy == "moss":
+            from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
+            language = MossBaseModel.get_language_name(language)
+        if policy == "normalized":
+            # Base lowercase code ("en-US"/"English" -> "en"); empty is omitted below.
+            from tts_audiobook_tool.text_ops.language_util import normalize_language_code
+            language = normalize_language_code(language)
+        language = self.behavior.resolve_language(language)
+        # Keep other families' existing empty/ISO language fields, but omit an
+        # unknown MOSS hint instead of inserting a tag the model wasn't trained on.
+        if language or policy == "project_code":
+            return language
+        return None
+
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = []
-        if self.definition.language_policy == "moss":
-            from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
-            language = MossBaseModel.get_language_name(project.language_code)
-            warnings.append(f"Using MOSS-TTS language value: {language or 'None'}")
-        if self.definition.language_policy == "normalized":
-            # Mirrors build_payload: an empty code is omitted, so the server auto-detects.
-            from tts_audiobook_tool.text_ops.language_util import normalize_language_code
-            language = normalize_language_code(project.language_code or "")
-            note = f" ({self.definition.language_hint_note})" if self.definition.language_hint_note else ""
-            warnings.append(f"Passing language hint to model: {language or 'auto'}{note}")
+        if self.definition.language_policy != "omit":
+            from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+            warnings.append(make_language_value_note(
+                self.resolve_request_language(project.language_code), project.language_code,
+                self.definition.language_hint_note))
         # The "voices may vary" note: voice_variation_warning.get_run_warnings()
         try:
             values = self.get_values(project)
@@ -199,16 +215,28 @@ class AudioCppModelSupport:
         return True
 
     def can_voice_clone(self, project: Project, instance: object = None) -> bool:
-        return self.INFO.can_voice_clone
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            return self.INFO.can_voice_clone
+        return self.behavior.can_voice_clone(values)
 
     def has_fixed_default_voice(self, project: Project) -> bool:
         return False
 
     def can_voice_presets(self, project: Project, instance: object = None) -> bool:
-        return False
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            return False
+        return self.behavior.can_voice_presets(values)
 
     def requires_voice_preset(self, project: Project) -> bool:
-        return False
+        try:
+            values = self.get_values(project)
+        except ValueError:
+            return False
+        return self.behavior.requires_voice_preset(values)
 
     def get_voice_tag_for_preset(self, preset: str) -> str:
         from tts_audiobook_tool.app_support import app_text
@@ -284,10 +312,15 @@ class AudioCppBackendAdapter:
             instruction = (selected_voice.instructions.get(self.INFO.id, "")
                            if selected_voice is not None and self.support.behavior.uses_voice_instructions(values)
                            else "")
-            voice, transcript = ProjectVoiceUtil.current_voice_reference_pair(
-                project, self.support.model_type, voice_selection_index)
-            if not voice and self.definition.voice_required:
+            can_clone = self.support.behavior.can_voice_clone(values)
+            voice, transcript = (ProjectVoiceUtil.current_voice_reference_pair(
+                project, self.support.model_type, voice_selection_index) if can_clone else ("", ""))
+            if not voice and can_clone and self.definition.voice_required:
                 return "A voice clone sample is required"
+            preset = (selected_voice.preset_for(self.INFO.id).strip()
+                      if selected_voice is not None and self.support.behavior.can_voice_presets(values) else "")
+            if not preset and self.support.behavior.requires_voice_preset(values):
+                return "A speaker preset is required"
             # A model can ignore the transcript under some settings (eg
             # CosyVoice3's cross-lingual mode); then it is neither checked nor
             # sent, so the printed request shows only what the model reads.
@@ -303,7 +336,7 @@ class AudioCppBackendAdapter:
         except (ValueError, OSError) as exc:
             return str(exc)
         payloads = [self._make_payload(prompt, values, voice_ref, seed, project.language_code,
-                                       transcript if uses_transcript else "", instruction)
+                                       transcript if uses_transcript else "", instruction, preset)
                     for prompt in prompts]
         # One request at a time: the audio.cpp server serializes requests per model,
         # so fanning out would only queue them behind its model lock.
@@ -317,7 +350,7 @@ class AudioCppBackendAdapter:
         return sounds
 
     def _make_payload(self, prompt: str, values: dict[str, int | float | str], voice_ref: dict[str, str] | None,
-                      seed: int, language: str, transcript: str, instruction: str = "") -> dict:
+                      seed: int, language: str, transcript: str, instruction: str = "", preset: str = "") -> dict:
         """Place each declared control where this family's server reads it.
 
         audio.cpp forwards a fixed set of top-level request fields
@@ -336,22 +369,12 @@ class AudioCppBackendAdapter:
         # Family-pinned constants first, then the user's declared controls; a
         # parameter targeting the same key wins over a pinned one.
         options: dict[str, int | float | str] = dict(self.definition.request_options)
-        if self.definition.language_policy == "moss":
-            from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
-            language = MossBaseModel.get_language_name(language)
-        if self.definition.language_policy == "normalized":
-            # Base lowercase code ("en-US"/"English" -> "en"); empty is omitted below.
-            from tts_audiobook_tool.text_ops.language_util import normalize_language_code
-            language = normalize_language_code(language)
-        # Keep other families' existing empty/ISO language fields, but omit an
-        # unknown MOSS hint instead of inserting a tag the model wasn't trained on.
-        # An "omit" family auto-detects and never receives a language field.
-        if self.definition.language_policy != "omit" and (
-                language or self.definition.language_policy == "project_code"):
+        request_language = self.support.resolve_request_language(language)
+        if request_language is not None:
             if self.definition.language_target == "options":
-                options["language"] = language
+                options["language"] = request_language
             else:
-                payload["language"] = language
+                payload["language"] = request_language
         ignored = self.support.behavior.get_ignored_parameters(values)
         for name, parameter in self.definition.parameters.items():
             if name in ignored:
@@ -363,6 +386,8 @@ class AudioCppBackendAdapter:
                 payload[parameter.request_key] = value
         if instruction:
             options["instruction"] = instruction
+        if preset:
+            options["voice_id"] = preset
         if options:
             payload["options"] = options
         if transcript:

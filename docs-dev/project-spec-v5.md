@@ -23,7 +23,7 @@ The canonical project directory has:
 
 See [`Project`](../tts_audiobook_tool/project.py), [`ProjectSerializationUtil`](../tts_audiobook_tool/project_support/project_serialization_util.py), and [`ProjectTextIOUtil`](../tts_audiobook_tool/project_support/project_text_io_util.py) for the respective in-memory, settings-file, and text-file boundaries.
 
-The selected catalog model is `Project.tts_model_type`. The additive `tts_server_model_id` string stores an exact audio.cpp entry alongside it (default `""` for older projects and other backends); save/export/import/copy preserve opaque values, even when unavailable. It is not a model-setting owner or checkpoint fingerprint, and no endpoint identity is stored. For startup, reconciliation and binding policy, refer to [TTS model selection rules](<tts-model-selection.md>).
+The selected catalog model is `Project.tts_model_type`. The additive `audio_cpp_model_id` string stores an exact audio.cpp entry alongside it (default `""` for older projects and other backends); save/export/import/copy preserve opaque values, even when unavailable. It is not a model-setting owner or checkpoint fingerprint, and no endpoint identity is stored. For startup, reconciliation and binding policy, refer to [TTS model selection rules](<tts-model-selection.md>).
 
 ## Canonical settings shape
 
@@ -56,9 +56,9 @@ The following is illustrative: absent override keys are normal, and these object
       }
     },
     "shared": {
-      "qwen3": {
-        "model_ids": ["qwen3tts_local", "qwen3tts_sglomni"],
-        "parameters": {"temperature": 0.8}
+      "auk": {
+        "model_ids": ["auk_sglomni", "auk_flash_sglomni"],
+        "parameters": {"speed": 1.2}
       }
     }
   }
@@ -109,9 +109,9 @@ Pocket's selected predefined voice takes precedence during generation without cl
 
 [`model_settings_declarations.py`](../tts_audiobook_tool/project_support/model_settings_declarations.py) and [`model_settings_compat.py`](../tts_audiobook_tool/project_support/model_settings_compat.py) freeze pre-v3 input fields, defaults and storage mappings solely for migration. They do not initialize current settings.
 
-The built-in shared groups are `auk` (AuK/Flash servers) and `qwen3` (local/server); their non-voice ownership is unchanged. Sharing of those settings is **per field**, not per model family: for example Qwen3's sampling parameters are shared, its local-only options are private, and server concurrency is private. Primary voice references are now shared across all models in the project, independently of these groups. A model switch never copies or clamps a shared override. A server variant may resolve a different effective default, cap an outgoing value, omit a request field, or warn about a shared value without modifying what the local variant will see.
+The only built-in shared group is `auk` (AuK/Flash servers); its non-voice ownership is unchanged. Sharing is **per field**, not per model family: a group owns only the settings whose declarations carry its `group` key, and every other setting of a member stays private. Primary voice references are now shared across all models in the project, independently of these groups. A model switch never copies or clamps a shared override. A server variant may resolve a different effective default, cap an outgoing value, omit a request field, or warn about a shared value without modifying what the local variant will see.
 
-Retired groups are listed in `RETIRED_GROUPS` in [`model_settings_compat.py`](../tts_audiobook_tool/project_support/model_settings_compat.py): currently `moss` and `fish_s2`. Fish S2's local (`fish_s2_local`) and server (`fish_s2_sglomni`) types each privately own `temperature`, `top_p` and `top_k`; only the local type owns `seed`, since the server never sends one. Server Fish S2 still caps outgoing top-k at 30 without rewriting its stored value. To retire another group, remove it from the catalog's `setting_groups` and its settings' `group` keys, append it to `RETIRED_GROUPS`, and, if a local member has no catalog parameter bounds of its own, map its server counterpart in `BORROWED_PARAMETER_BOUNDS` ([`model_settings.py`](../tts_audiobook_tool/project_support/model_settings.py)) so saved values keep being validated.
+Retired groups are listed in `RETIRED_GROUPS` in [`model_settings_compat.py`](../tts_audiobook_tool/project_support/model_settings_compat.py): currently `moss`, `fish_s2` and `qwen3`. Fish S2's local (`fish_s2_local`) and server (`fish_s2_sglomni`) types each privately own `temperature`, `top_p` and `top_k`; only the local type owns `seed`, since the server never sends one. Server Fish S2 still caps outgoing top-k at 30 without rewriting its stored value. Qwen3's local (`qwen3tts_local`) and server (`qwen3tts_sglomni`) types each privately own `temperature`, `top_k`, `top_p`, `repetition_penalty` and `seed`, so the old shared values, seed included, are copied to both. Server Qwen3 sends its seed as SGL-Omni's request-scoped `seed`. To retire another group, remove it from the catalog's `setting_groups` and its settings' `group` keys, append it to `RETIRED_GROUPS`, and, if a local member has no catalog parameter bounds of its own, map its server counterpart in `BORROWED_PARAMETER_BOUNDS` ([`model_settings.py`](../tts_audiobook_tool/project_support/model_settings.py)) so saved values keep being validated.
 
 MOSS has no current shared model-setting group. The unchanged IDs `moss_local`, `moss_delay_sglomni`, and `moss_local_sglomni` each privately own seed and batch size, but use the same project-wide voice references as every other model. Local MOSS owns both Delay and Local Transformer sampling sets plus local-only target/rolling continuation; each remote type owns only its architecture's sampling set. Common controls/adapters reuse code, not private generation state. Historically, the MOSS-only ownership fork happened within project v3 without changing catalog schema 1, defaults, request semantics or backends; v4 separately changes primary voice storage. See [MOSS architecture](<moss-model-architecture.md>).
 
@@ -172,7 +172,7 @@ Clone/transfer, worker project transfer, and settings snapshots use the same cur
 
 ## Maintenance rules and executable references
 
-- Keep stable model IDs, group membership, owner bindings, stored types, and the semantics of persisted values stable. Renames, regrouping, or reinterpretation require explicit compatibility migration, not a JSON edit or silent reconciliation. The historical MOSS ownership fork used load compatibility within v3 without a schema/version bump, and the Fish S2 fork did the same within v4; project-wide clone storage is the separate v4 change.
+- Keep stable model IDs, group membership, owner bindings, stored types, and the semantics of persisted values stable. Renames, regrouping, or reinterpretation require explicit compatibility migration, not a JSON edit or silent reconciliation. The historical MOSS ownership fork used load compatibility within v3 without a schema/version bump, the Fish S2 fork did the same within v4, and the Qwen3 fork within v5; project-wide clone storage is the separate v4 change.
 - A new configured model gets private settings by default; same-name parameters do not imply sharing. Extend the validated adapter vocabulary when genuinely new server behavior is required.
 - Route primary voice consumers through the shared project ordered pairs; compatibility voice accessors must not recreate authoritative model-scoped lists. Use `get_model_setting`/`set_model_setting` and registry-derived bindings for non-voice model settings. Do not reintroduce flat model fields or duplicate storage names in `TtsModelSpec`.
 - Preserve unknown whole objects when a definition is unavailable, while keeping recognized ownership and paths validated. Maintain text/book-format migrations independently of the model-settings schema.

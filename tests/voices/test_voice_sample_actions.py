@@ -242,8 +242,8 @@ def test_submenu_items_for_one_and_multiple_samples(monkeypatch, count):
     else:
         expected.append(menu.LABEL_RESET_VOICE_SAMPLE)
     expected.extend([
-        menu.make_menu_label(menu.LABEL_STEREO_POSITION, "Center"),
-        menu.make_menu_label(menu.LABEL_ROOM_REVERB, RoomReverb.OFF.label),
+        menu.make_menu_label(menu.LABEL_STEREO_POSITION, "Center", "Center"),
+        menu.make_menu_label(menu.LABEL_ROOM_REVERB, RoomReverb.OFF.label, RoomReverb.OFF.label),
     ])
     assert [get_string_from(state, item.label) for item in items] == expected
     assert items[2].sublabel is None
@@ -326,8 +326,8 @@ def test_submenu_for_sample_less_voice_hides_sample_items(monkeypatch):
     assert labels[1:] == [
         menu.make_menu_label("Voice design/OmniVoice", "none"),
         menu.LABEL_RESET_VOICE_SAMPLE,
-        menu.make_menu_label(menu.LABEL_STEREO_POSITION, "Center"),
-        menu.make_menu_label(menu.LABEL_ROOM_REVERB, RoomReverb.OFF.label),
+        menu.make_menu_label(menu.LABEL_STEREO_POSITION, "Center", "Center"),
+        menu.make_menu_label(menu.LABEL_ROOM_REVERB, RoomReverb.OFF.label, RoomReverb.OFF.label),
     ]
 
 
@@ -455,7 +455,7 @@ def test_room_reverb_submenu_saves_selected_preset(monkeypatch, save_error):
         assert not errors
         assert feedback == [f"{menu.LABEL_ROOM_REVERB} set to: {RoomReverb.SMALL_DRR17.label}"]
         assert get_string_from(state, make_items(state)[-1].label) == menu.make_menu_label(
-            menu.LABEL_ROOM_REVERB, RoomReverb.SMALL_DRR17.label,
+            menu.LABEL_ROOM_REVERB, RoomReverb.SMALL_DRR17.label, RoomReverb.OFF.label,
         )
 
 
@@ -496,7 +496,7 @@ def test_stereo_position_prompt_saves_value(monkeypatch, save_error):
         assert not errors
         assert feedback == [f"{menu.LABEL_STEREO_POSITION} set to: Left 30"]
         assert get_string_from(state, make_items(state)[-2].label) == menu.make_menu_label(
-            menu.LABEL_STEREO_POSITION, "Left 30",
+            menu.LABEL_STEREO_POSITION, "Left 30", "Center",
         )
 
 

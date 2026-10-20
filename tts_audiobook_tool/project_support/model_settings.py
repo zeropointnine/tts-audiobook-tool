@@ -72,6 +72,7 @@ BORROWED_PARAMETER_BOUNDS: dict[str, str] = {
     "moss_delay_sglomni": "moss_local",
     "moss_local_sglomni": "moss_local",
     "fish_s2_sglomni": "fish_s2_local",
+    "qwen3tts_sglomni": "qwen3tts_local",
 }
 # Names used in the old file which differ from the actual Python field names.
 LEGACY_ALIASES = {

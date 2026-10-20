@@ -29,7 +29,6 @@ schema_version = 1
 
 [setting_groups]
 auk = ["auk_sglomni", "auk_flash_sglomni"]
-qwen3 = ["qwen3tts_local", "qwen3tts_sglomni"]
 
 # ------------------------------------------------------------------------
 # none: This handle is a placeholder, not an inference backend. TOML has no null; only this entry
@@ -595,15 +594,15 @@ id = "qwen3tts_local"
 settings = [
     { name = "target", section = "parameters", type = "str", default = "" },
     { name = "model_type", section = "parameters", type = "str", default = "" },
-    { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "qwen3" },
-    { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "qwen3" },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
     { name = "rolling_cont", section = "parameters", type = "int", default = 0 },
     { name = "batch_size", section = "orchestration", type = "int", default = 1 },
-    { name = "temperature", section = "parameters", type = "float", default = -1.0, group = "qwen3", sentinel = -1 },
-    { name = "top_k", section = "parameters", type = "int", default = -1, group = "qwen3", sentinel = -1 },
-    { name = "top_p", section = "parameters", type = "float", default = -1.0, group = "qwen3", sentinel = -1 },
-    { name = "repetition_penalty", section = "parameters", type = "float", default = -1.0, group = "qwen3", sentinel = -1 },
-    { name = "seed", section = "parameters", type = "int", default = -1, group = "qwen3", preserve_default = true },
+    { name = "temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "repetition_penalty", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
 ]
 backend_kind = "local"
 
@@ -1344,13 +1343,13 @@ target_menu = "model"
 [[models]]
 id = "qwen3tts_sglomni"
 settings = [
-    { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "qwen3" },
-    { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "qwen3" },
-    { name = "temperature", section = "parameters", type = "float", default = -1.0, group = "qwen3", sentinel = -1 },
-    { name = "top_k", section = "parameters", type = "int", default = -1, group = "qwen3", sentinel = -1 },
-    { name = "top_p", section = "parameters", type = "float", default = -1.0, group = "qwen3", sentinel = -1 },
-    { name = "repetition_penalty", section = "parameters", type = "float", default = -1.0, group = "qwen3", sentinel = -1 },
-    { name = "seed", section = "parameters", type = "int", default = -1, group = "qwen3", preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+    { name = "temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "repetition_penalty", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
     { name = "concurrent_requests", section = "orchestration", type = "int", default = 1 },
 ]
 backend_kind = "sgl_omni"
@@ -1381,7 +1380,9 @@ project_links = [
 orchestration = "concurrent_requests"
 # Does NOT stream in practice, despite the SGL-Omni Qwen3-TTS docs claiming otherwise (as of 2026-06)
 streaming = false
-seed = "unsupported"
+# Request-scoped `seed` (any non-negative int). Byte-identical repeats under
+# concurrency additionally need the server's `enable_deterministic_inference`.
+seed = "resolved"
 # Historical note said this diverged from the local version. Both current
 # catalog entries require voice; keep this policy explicit.
 voice_required = true
@@ -1447,6 +1448,10 @@ label = "Top-K"
 parameter = "repetition_penalty"
 target_menu = "model"
 label = "Repetition penalty"
+
+[[models.sgl_omni.menu]]
+kind = "seed"
+target_menu = "model"
 
 # ------------------------------------------------------------------------
 [[models]]
@@ -2049,7 +2054,6 @@ reference_transcript = true
 # blocks projects whose language has no tag.
 language_policy = "normalized"
 language_target = "options"
-language_hint_note = "mapped to a FireRedTTS3 language tag"
 
 [models.audio_cpp.request_options]
 text_chunk_size = 100000
@@ -2814,3 +2818,102 @@ label = "Guidance scale"
 [[models.audio_cpp.menu]]
 kind = "seed"
 target_menu = "model"
+
+# ------------------------------------------------------------------------
+[[models]]
+id = "qwen3tts_audiocpp"
+# Private settings: native defaults differ from the shared local/SGL Qwen group.
+settings = [
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+    { name = "model_type", section = "parameters", type = "str", default = "base" },
+    { name = "temperature", section = "parameters", type = "float", default = 0.9 },
+    { name = "top_k", section = "parameters", type = "int", default = 50 },
+    { name = "top_p", section = "parameters", type = "float", default = 1.0 },
+    { name = "repetition_penalty", section = "parameters", type = "float", default = 1.05 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+]
+backend_kind = "audio_cpp"
+
+[models.spec]
+file_tag = "qwen3"
+default_output_sample_rate = 24000
+# Server specs default can_voice_clone to true; voice_required is declared below.
+un_all_caps = true
+requirements_file_name = "requirements-remote.txt"
+substitutions = []
+
+[models.spec.ui]
+proper_name = "Qwen3-TTS"
+short_name = "Qwen3-TTS"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/QwenLM/Qwen3-TTS",
+    "https://huggingface.co/collections/Qwen/qwen3-tts",
+]
+instructions_message = "Enter instructions for this voice:\n(VoiceDesign: describe the voice, eg \"A warm, middle-aged male voice, speaking calmly\")\n(CustomVoice: describe the delivery, eg \"Very happy.\")"
+preset_label = "Speaker"
+
+[models.audio_cpp]
+voice_required = true
+reference_transcript = true
+voice_instructions = true
+language_policy = "normalized"
+menu = [
+    { kind = "voice_samples" },
+    { kind = "choice", parameter = "model_type", label = "Model type", target_menu = "model", subheading = "Model type must match that of the audio.cpp's loaded checkpoint" },
+    { parameter = "temperature", label = "Temperature", target_menu = "model" },
+    { parameter = "top_k", label = "Top-K", target_menu = "model" },
+    { parameter = "top_p", label = "Top-P", target_menu = "model" },
+    { parameter = "repetition_penalty", label = "Repetition penalty", target_menu = "model" },
+    { kind = "seed", target_menu = "model" },
+]
+
+# The app owns segmentation, rather than audio.cpp's internal text splitter.
+[models.audio_cpp.request_options]
+text_chunk_size = 100000
+
+[models.audio_cpp.match]
+family = "qwen3_tts"
+tasks = ["tts", "clon", "vdes"]
+mode = "offline"
+
+# App-only selector: behavior omits model_type from the request.
+# String choices require the options target in the catalog.
+[models.audio_cpp.parameters.model_type]
+type = "str"
+default = "base"
+target = "options"
+choices = [
+    { value = "base", label = "Base", description = "Voice cloning" },
+    { value = "custom_voice", label = "CustomVoice", description = "Built-in speakers, configurable delivery instructions" },
+    { value = "voice_design", label = "VoiceDesign", description = "Configurable voice description instructions" },
+]
+
+[models.audio_cpp.parameters.temperature]
+type = "float"
+default = 0.9
+min = 0.01
+max = 3.0
+input_prompt_suffix = "(applies to both talker and subtalker)"
+
+[models.audio_cpp.parameters.top_k]
+type = "int"
+default = 50
+min = 1
+max = 1000
+input_prompt_suffix = "(applies to both talker and subtalker)"
+
+[models.audio_cpp.parameters.top_p]
+type = "float"
+default = 1.0
+min = 0.01
+max = 1.0
+input_prompt_suffix = "(applies to both talker and subtalker)"
+
+[models.audio_cpp.parameters.repetition_penalty]
+type = "float"
+default = 1.05
+min = 1.0
+max = 2.0

@@ -9,6 +9,7 @@ from prompt_toolkit.output import DummyOutput
 
 from tts_audiobook_tool import ask, ask_advanced
 from tts_audiobook_tool.ask_advanced import AskAdvanced
+from tts_audiobook_tool.constants import COL_DIM
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from project_settings_test_support import get_setting, set_setting
@@ -318,6 +319,25 @@ def test_numeric_prefill_override_preserves_storage_without_enabling_reset_input
     # Entering the already-stored value is the shared helper's ordinary no-op,
     # not a reset; changing a custom value to -1 remains out of range.
     assert errors == []
+
+
+@pytest.mark.parametrize(("prompt", "expected"), [
+    ("  Enter value  ", "Enter value {range}"),
+    (["Enter value ", " (some proviso)"], "Enter value\n(some proviso)\n{range}"),
+])
+def test_ask_number_and_save_prompt_layout(monkeypatch, prompt, expected):
+    # A string prompt keeps the range info inline; a list prompt puts each
+    # string, then the range info, on its own line.
+    project = Project()
+    printed = []
+    monkeypatch.setattr(ask, "ask_input", lambda *, prefill: "")
+    monkeypatch.setattr(ask, "printt", lambda text="": printed.append(text))
+    ask.ask_number_and_save(
+        project, SettingRef("chatterbox_local", "exaggeration"), prompt,
+        0.25, 2.0, 0.5, "Value set:",
+    )
+    range_info = f"{COL_DIM}(valid range: 0.25-2.0; default: 0.5)"
+    assert printed == [expected.format(range=range_info)]
 
 
 @pytest.mark.parametrize(

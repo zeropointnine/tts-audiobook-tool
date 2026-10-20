@@ -255,7 +255,7 @@ def _has_saveable_attr(saveable: Saveable, target: str | SettingRef) -> bool:
 def ask_number_and_save(
     saveable: Saveable,
     target: str | SettingRef,
-    prompt: str,
+    prompt: str | list[str],
     min_value: float,
     max_value: float,
     default_value: float,
@@ -266,6 +266,9 @@ def ask_number_and_save(
     prefill_value: float | None=None,
 ) -> None:
     """Ask and save a bounded number using the standard prompt format.
+
+    A list prompt prints each string on its own line, with the range info on a
+    further line of its own; a string prompt has the range info appended inline.
 
     An optional prefill_value displays an effective value without changing the
     stored setting or enabling special reset inputs.
@@ -291,11 +294,16 @@ def ask_number_and_save(
         prefill = int(prefill) # for good measure
     prefill = str(prefill)
 
-    prompt = prompt.strip()
-    if not prompt.endswith(":"):
-        prompt += ":"
-    if print_range_info:
-        prompt += " " + f"{COL_DIM}(valid range: {min_value}-{max_value}; default: {default_value})"
+    range_info = f"{COL_DIM}(valid range: {min_value}-{max_value}; default: {default_value})"
+    if isinstance(prompt, list):
+        lines = [line.strip() for line in prompt]
+        if print_range_info:
+            lines.append(range_info)
+        prompt = "\n".join(lines)
+    else:
+        prompt = prompt.strip()
+        if print_range_info:
+            prompt += " " + range_info
     printt(prompt)
 
     value = ask_input(prefill=prefill)

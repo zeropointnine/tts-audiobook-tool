@@ -79,6 +79,21 @@ class AudioCppModelBehavior:
         """Whether empty instructions deserve a (non-blocking) voice-list hint."""
         return False
 
+    def can_voice_clone(self, values: ParameterValues) -> bool:
+        """Whether the selected configuration consumes reference audio."""
+        return self.definition.spec.can_voice_clone
+
+    def can_voice_presets(self, values: ParameterValues) -> bool:
+        """Whether a per-voice preset selects a built-in speaker."""
+        return False
+
+    def requires_voice_preset(self, values: ParameterValues) -> bool:
+        return False
+
+    def resolve_language(self, language: str) -> str:
+        """Translate the catalog-normalized project language into a model hint."""
+        return language
+
     def get_ignored_parameters(self, values: ParameterValues) -> frozenset[str]:
         """Catalog parameters the server does not read under these values;
         they are left out of the request (their stored values are kept)."""
@@ -110,8 +125,11 @@ def get_audio_cpp_behavior(definition: AudioCppModelDefinition) -> AudioCppModel
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_cosyvoice3 import CosyVoice3Behavior
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_fireredtts3 import FireRedTts3Behavior
 
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_qwen3 import Qwen3Behavior
+
     registry: dict[str, type[AudioCppModelBehavior]] = {
         "cosyvoice3_audiocpp": CosyVoice3Behavior,
         "fireredtts3_audiocpp": FireRedTts3Behavior,
+        "qwen3tts_audiocpp": Qwen3Behavior,
     }
     return registry.get(definition.spec.id, AudioCppModelBehavior)(definition)

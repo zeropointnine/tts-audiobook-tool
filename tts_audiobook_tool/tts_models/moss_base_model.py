@@ -131,9 +131,10 @@ class MossBaseModel(TtsBaseModel):
 
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = super().get_warning_issues(project)
-        # This is informational more than it is a warning
+        # Informational more than a warning. An unknown name is not sent.
+        from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
         language = MossBaseModel.get_language_name(project.language_code)
-        warnings.append(f"Using MOSS-TTS language value: {language or 'None'}")
+        warnings.append(make_language_value_note(language, project.language_code))
         return warnings
 
     @classmethod

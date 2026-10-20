@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ntpath
+
 from tts_audiobook_tool import app_support, ask, text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
@@ -269,10 +271,18 @@ def _make_server_tts_text(state: State) -> str:
         and selected.id != "none"
         and Tts.get_active_type() == selected
         and Tts._selected_server_model_id
-        and any(entry.get("id") == Tts._selected_server_model_id
-                and entry.get("loaded") is True for entry in snapshot.models)
     ):
-        qualifiers.append("loaded")
+        loaded_entry = next((entry for entry in snapshot.models
+                             if entry.get("id") == Tts._selected_server_model_id
+                             and entry.get("loaded") is True), None)
+        if loaded_entry is not None:
+            qualifiers.append("loaded")
+            path = loaded_entry.get("path")
+            if isinstance(path, str):
+                # Server path style is independent of the client's OS.
+                filename = ntpath.basename(path.strip())
+                if filename and filename not in (".", ".."):
+                    qualifiers.append(ellipsize(filename, 30))
     text = model
     if qualifiers:
         text += f" {QUALIFIER_COLOR}({', '.join(qualifiers)})"

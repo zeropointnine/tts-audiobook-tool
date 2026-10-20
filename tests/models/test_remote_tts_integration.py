@@ -21,7 +21,7 @@ MODEL = TtsModelType.require_by_id("chatterbox_audiocpp")
 def remote_mode(monkeypatch):
     fields = ("_backend_mode", "_type", "_configured_runtime", "_config_fingerprint", "_catalog_initialized",
               "_configured_definitions", "_audio_cpp_definitions", "_selected_server_model_id", "_remote_issue",
-              "_available_local_models", "_binding_issue", "_bound_project_type_id", "_bound_project_server_model_id", "_model_params")
+              "_available_local_models", "_binding_issue", "_bound_project_type_id", "_bound_project_audio_cpp_model_id", "_model_params")
     saved = {name: getattr(Tts, name) for name in fields}
     registry = (dict(REGISTRY.bindings), dict(REGISTRY.legacy), dict(REGISTRY.members))
     catalog = (dict(TtsModelType._catalog), dict(TtsModelType._specs))
@@ -111,7 +111,7 @@ def test_same_type_entries_bind_saved_id_in_any_response_order(remote_mode, matc
     other = TtsModelType.require_by_id("higgs_v3_audiocpp")
     first, second = matching_ids
     # The explicitly selected entry wins even when it is second and unloaded.
-    project.tts_server_model_id = second
+    project.audio_cpp_model_id = second
     RemoteTtsDiscovery._store(RemoteTtsSnapshot(
         backend_kind=TtsBackendKind.AUDIO_CPP,
         models=({"id": "unrelated", "loaded": True},
@@ -135,7 +135,7 @@ def test_same_type_entries_bind_saved_id_in_any_response_order(remote_mode, matc
 def test_reordered_entries_keep_saved_entry_until_explicit_selection(remote_mode):
     # Refresh/rebind must not silently change checkpoints; an explicit edit does.
     project = selected_project()
-    project.tts_server_model_id = "first"
+    project.audio_cpp_model_id = "first"
     RemoteTtsDiscovery._store(snapshot("first", "second"), URL)
     assert Tts.bind_project(project) is None
     adapter = Tts.get_instance()
@@ -148,7 +148,7 @@ def test_reordered_entries_keep_saved_entry_until_explicit_selection(remote_mode
     assert adapter.server_model_id == "first"
     assert Tts.bind_project(project) is None
     assert Tts.get_instance() is adapter
-    project.tts_server_model_id = "second"
+    project.audio_cpp_model_id = "second"
     assert Tts.bind_project(project) is None
     replacement = Tts.get_instance()
     assert isinstance(replacement, AudioCppBackendAdapter)
@@ -226,7 +226,7 @@ def test_moss_tts_and_clone_entries_bind_saved_match(remote_mode, model_id, fami
     model = TtsModelType.require_by_id(model_id)
     assert Tts.get_available_tts_models() == [model]
     # Task aliases still expose separate exact server choices for one catalog type.
-    project = Project(tts_model_type=model_id, tts_server_model_id=f"operator-{tasks[0]}")
+    project = Project(tts_model_type=model_id, audio_cpp_model_id=f"operator-{tasks[0]}")
     assert Tts.bind_project(project) is None
     assert project.tts_model_type == model_id
     assert Tts.get_active_type() is model
@@ -244,7 +244,7 @@ def test_legacy_ambiguous_entry_requires_selection_without_mutation(remote_mode)
     assert Tts.is_project_model_selection_required(project)
     issue = Tts.bind_project(project)
     assert issue is not None and "Multiple server entries" in issue.verbose
-    assert project.tts_server_model_id == ""
+    assert project.audio_cpp_model_id == ""
     assert Tts.get_active_type().id == "none"
 
 
@@ -261,7 +261,7 @@ def test_legacy_unique_entry_is_saved_by_interactive_reconciliation(remote_mode,
     MenuStatus.prepare_tts(state)
     payload = json.loads((tmp_path / "project.json").read_text())
     restored = Project.model_validate(payload)
-    assert restored.tts_server_model_id == "only"
+    assert restored.audio_cpp_model_id == "only"
     assert state.pending_tts_model_change is None
     RemoteTtsDiscovery._store(snapshot("new-first", "only"), URL)
     assert Tts.bind_project(restored) is None
@@ -271,7 +271,7 @@ def test_legacy_unique_entry_is_saved_by_interactive_reconciliation(remote_mode,
 @pytest.mark.parametrize("failure", ["missing", "incompatible", "offline"])
 def test_saved_entry_failure_never_substitutes_or_discards_selection(remote_mode, failure):
     # A sole alternative, a reused incompatible ID, or outage cannot rewrite intent.
-    project = Project(tts_model_type=MODEL.id, tts_server_model_id="saved")
+    project = Project(tts_model_type=MODEL.id, audio_cpp_model_id="saved")
     if failure == "offline":
         current = RemoteTtsSnapshot(issue=RemoteTtsIssue("unavailable", "offline"))
     elif failure == "incompatible":
@@ -282,7 +282,7 @@ def test_saved_entry_failure_never_substitutes_or_discards_selection(remote_mode
     RemoteTtsDiscovery._store(current, URL)
     assert Tts.reconcile_project_model(project) is None
     assert Tts.bind_project(project) is not None
-    assert (project.tts_model_type, project.tts_server_model_id) == (MODEL.id, "saved")
+    assert (project.tts_model_type, project.audio_cpp_model_id) == (MODEL.id, "saved")
     assert Tts.get_active_type().id == "none"
     assert Tts._selected_server_model_id == ""
 
@@ -295,4 +295,4 @@ def test_new_project_persists_unique_server_entry(remote_mode, tmp_path):
     RemoteTtsDiscovery._store(snapshot("only"), URL)
     state = State.for_worker(Prefs(remote_tts_url=URL))
     assert state.make_and_set_new_project(str(tmp_path / "new")) == ""
-    assert state.project.tts_server_model_id == "only"
+    assert state.project.audio_cpp_model_id == "only"

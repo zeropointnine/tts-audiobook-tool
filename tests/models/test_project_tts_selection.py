@@ -21,7 +21,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsMode
 def metadata_catalog(monkeypatch):
     fields = ("_backend_mode", "_type", "_configured_runtime", "_config_fingerprint", "_catalog_initialized",
               "_configured_definitions", "_audio_cpp_definitions", "_available_local_models", "_binding_issue",
-              "_bound_project_type_id", "_bound_project_server_model_id", "_selected_server_model_id", "_remote_issue", "_model_params")
+              "_bound_project_type_id", "_bound_project_audio_cpp_model_id", "_selected_server_model_id", "_remote_issue", "_model_params")
     saved = {name: getattr(Tts, name) for name in fields}
     registry = (dict(REGISTRY.bindings), dict(REGISTRY.legacy), dict(REGISTRY.members))
     catalog = (dict(TtsModelType._catalog), dict(TtsModelType._specs))

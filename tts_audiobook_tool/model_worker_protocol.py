@@ -59,7 +59,7 @@ class GenerationSettings:
     tts_model_type_id: str
     remote_tts_url: str
     save_debug_files: bool
-    tts_server_model_id: str = ""
+    audio_cpp_model_id: str = ""
 
 
 @dataclass(frozen=True)

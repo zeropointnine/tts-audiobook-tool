@@ -177,7 +177,9 @@ def _parse_audio_cpp_menu(value: Any, parameters: dict[str, dict[str, Any]], whe
         if kind == "seed":
             control = _object(item, item_where, {"kind", "target_menu"})
         elif kind == "choice":
-            control = _object(item, item_where, {"kind", "parameter", "label", "target_menu"})
+            control = _object(item, item_where, {"kind", "parameter", "label", "target_menu", "subheading"})
+            if "subheading" in control:
+                _field(control, "subheading", item_where, str)
         elif "kind" not in item:
             control = _object(item, item_where, {"parameter", "label", "target_menu"})
         else:
@@ -201,6 +203,8 @@ def _parse_audio_cpp_menu(value: Any, parameters: dict[str, dict[str, Any]], whe
             _fail(f"{item_where}.{name}.label", "must not be empty")
         menu.append({"kind": "choice" if kind == "choice" else "parameter", "parameter": name, "label": label,
                      "target_menu": target_menu})
+        if kind == "choice":
+            menu[-1]["subheading"] = control.get("subheading", "")
     if (sorted(item["parameter"] for item in menu if item["kind"] in ("parameter", "choice"))
             != sorted(parameters)):
         _fail(where, "expected each parameter exactly once")

@@ -176,6 +176,14 @@ Behavior varies sharply by model:
 So for inference, the code is a hint for some models, a contract for one, and
 irrelevant to the rest.
 
+Every model that passes a language reports it in the pre-flight warnings through
+`tts_models/language_value_note.make_language_value_note`, which names the value
+actually sent and the project code it came from, eg
+`Language value passed to model: English (project language code = "en")`
+("none" when no language reaches the model). Compute the shown value with the same
+code path as the request (eg `AudioCppModelSupport.resolve_request_language`) so the
+two cannot drift.
+
 ### 7. Voice-clone reference transcription
 
 Voice-clone flows that transcribe a reference audio sample (e.g.

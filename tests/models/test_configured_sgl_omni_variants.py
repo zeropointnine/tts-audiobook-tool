@@ -67,7 +67,7 @@ GOLDEN_NONSTREAMING = {
     ],
     "qwen3tts_sglomni": [
         {"input": prompt, "stream": False, "temperature": 0.9, "top_p": 1.0, "top_k": 50,
-         "repetition_penalty": 1.3,
+         "repetition_penalty": 1.3, "seed": 12345,
          "references": [{"audio_path": "data:{second}", "text": "éclair"}]}
         for prompt in ("One word", "Different words here")
     ],
@@ -86,7 +86,7 @@ GOLDEN_STREAMING = {
                         "top_k": 100, "max_tokens": 1536,
                         "references": [{"audio_path": "data:{sample}", "text": "spoken"}]},
     "qwen3tts_sglomni": {"input": "hello", "stream": True, "temperature": 0.9, "top_p": 1.0,
-                        "top_k": 50, "response_format": "pcm",
+                        "top_k": 50, "seed": 12345, "response_format": "pcm",
                         "references": [{"audio_path": "data:{sample}"}]},
     "zonos2_sglomni": {"input": "hello", "stream": True, "max_new_tokens": 240, "top_k": 100,
                       "temperature": 1.15, "repetition_penalty": 1.2,
@@ -222,7 +222,7 @@ def test_configured_payload_matches_recorded_legacy_payload(model_id, server_mod
     assert capture[0]["references"][0]["audio_path"].endswith("second.flac")
     assert project.get_model_setting(model_id, "file_name") == ["first.flac", "second.flac"]
     assert voice_binding.group == REGISTRY.get(model_id, "file_name").group
-    if model_id in ("auk_sglomni", "auk_flash_sglomni", "moss_delay_sglomni", "moss_local_sglomni"):
+    if model_id in ("auk_sglomni", "auk_flash_sglomni", "moss_delay_sglomni", "moss_local_sglomni", "qwen3tts_sglomni"):
         assert capture[0]["seed"] == 12345
     else:
         assert "seed" not in capture[0]
@@ -331,15 +331,23 @@ def test_seed_omitting_sgl_backend_ignores_random_cap(server_mode, capture, monk
 
 
 def test_qwen_optional_penalty_and_optional_reference_text(server_mode, capture, tmp_path):
+    # Server Qwen3 sends only its own private settings, including its seed;
+    # local Qwen3 edits no longer reach it now that the group is retired.
     (tmp_path / "sample.flac").write_bytes(b"audio")
     instance = server_mode("qwen3tts_sglomni")
     project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": Tts.get_active_type().id})
     project.set_model_setting("qwen3tts_sglomni", "file_name", ["sample.flac"])
+    project.set_model_setting("qwen3tts_sglomni", "seed", 77)
+    project.set_model_setting("qwen3tts_local", "seed", 5)
     instance.generate_using_project(project, ["hello"])
     assert "repetition_penalty" not in capture[0]
     assert "text" not in capture[0]["references"][0]
-    assert "seed" not in capture[0] and "response_format" not in capture[0]
-    project.set_model_setting("qwen3tts_local", "repetition_penalty", 1.05)
+    assert capture[0]["seed"] == 77 and "response_format" not in capture[0]
+    project.set_model_setting("qwen3tts_local", "repetition_penalty", 1.2)
+    capture.clear()
+    instance.generate_using_project(project, ["hello"])
+    assert "repetition_penalty" not in capture[0]
+    project.set_model_setting("qwen3tts_sglomni", "repetition_penalty", 1.05)
     capture.clear()
     instance.generate_using_project(project, ["hello"])
     assert capture[0]["repetition_penalty"] == 1.05
@@ -361,7 +369,8 @@ def test_moss_variants_language_music_and_no_rolling_block(server_mode, capture)
         project.set_model_setting("moss_local", "rolling_cont", 2)
         support = Tts.get_model_support(project)
         assert support.get_blocking_issues(project, None) == []
-        assert support.get_warning_issues(project) == ["Using MOSS-TTS language value: French"]
+        assert support.get_warning_issues(project) == [
+            'Language value passed to model: French (project language code = "fr")']
         assert support.get_output_sample_rate(project) == rate
         assert support.can_hallucinate_music(project) is local
         assert support.should_trim_trailing_token_noise(project) is local

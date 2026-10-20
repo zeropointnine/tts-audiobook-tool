@@ -165,8 +165,8 @@ class DotsBaseModel(TtsBaseModel):
 
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = super().get_warning_issues(project)
+        from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+        # Mirrors generation: the stripped code, or None (auto-detect) when empty.
         language = project.language_code.strip() if project.language_code else ""
-        warnings.append(
-            f"Using dots.tts language hint: {language or 'auto'}"
-        )
+        warnings.append(make_language_value_note(language, project.language_code))
         return warnings

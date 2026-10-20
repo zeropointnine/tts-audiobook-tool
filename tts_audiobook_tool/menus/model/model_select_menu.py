@@ -6,6 +6,7 @@ from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscove
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.audio_cpp_behavior_qwen3 import infer_qwen3_model_type_from_path
 from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -60,8 +61,8 @@ class ModelSelectMenu:
                 return f"{COL_ERROR}requires selection"
             return "None (unselected)"
         label = model.value.ui["proper_name"]
-        if model.value.backend_kind is TtsBackendKind.AUDIO_CPP and state.project.tts_server_model_id:
-            label += f" {COL_DIM}({state.project.tts_server_model_id}){COL_DEFAULT}"
+        if model.value.backend_kind is TtsBackendKind.AUDIO_CPP and state.project.audio_cpp_model_id:
+            label += f" {COL_DIM}({state.project.audio_cpp_model_id}){COL_DEFAULT}"
         return label
 
     @staticmethod
@@ -92,7 +93,17 @@ class ModelSelectMenu:
             model, server_id = choice
             state.pending_tts_model_change = None
             state.project.tts_model_type = model.id
-            state.project.tts_server_model_id = server_id
+            state.project.audio_cpp_model_id = server_id
+            inferred_type = None
+            if (model.id == "qwen3tts_audiocpp"
+                    and snapshot.backend_kind is TtsBackendKind.AUDIO_CPP
+                    and (model, server_id) in snapshot.candidates):
+                entries = [entry for entry in snapshot.models if entry.get("id") == server_id]
+                if len(entries) == 1:
+                    inferred_type = infer_qwen3_model_type_from_path(entries[0].get("path"))
+                if inferred_type is not None:
+                    # Save the convenience setting together with this explicit selection.
+                    state.project.set_model_setting(model.id, "model_type", inferred_type)
             error = state.project.save()
             if error:
                 ask.ask_error(error)
@@ -100,9 +111,15 @@ class ModelSelectMenu:
             # Re-arm model-dependent project FYIs after an explicit selection.
             state.pending_project_load_checks = True
             print_feedback("Project TTS model:", ModelSelectMenu.make_model_label(state))
+            if inferred_type is not None and not error:
+                type_label = {"base": "Base", "custom_voice": "CustomVoice", "voice_design": "VoiceDesign"}[inferred_type]
+                ask.ask_enter_to_continue(
+                    f"🔔 Qwen3-TTS model type has been automatically set to {COL_ACCENT}{type_label}{COL_DEFAULT}\n"
+                    "   based on the model filename.\n"
+                )
 
         model = state.project.get_tts_model_type()
-        current = ((model, state.project.tts_server_model_id
+        current = ((model, state.project.audio_cpp_model_id
                     if model.value.backend_kind is TtsBackendKind.AUDIO_CPP else "")
                    if state.project.tts_model_type == model.id else None)
         MenuUtil.options_menu(

@@ -10,7 +10,7 @@ from tts_audiobook_tool import ask
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, get_string_from
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
     EditorSaveFailed,
@@ -582,6 +582,7 @@ class VoiceMenuShared:
             on_set_callback: Callable | None = None,
             on_clear_callback: Callable | None = None,
             preset_choices: PresetChoices | None = None,
+            allow_custom_preset: bool = False,
     ) -> list[MenuItem]:
         """Make the voice list (each opening its own submenu) and Add.
         The selection controls close the menu; `menu_wrapper` adds them.
@@ -591,6 +592,7 @@ class VoiceMenuShared:
         around a voice's "Set voice sample"; `on_clear_callback` runs when a
         removal leaves no voice with a sample. `preset_choices` enables each
         voice's preset item (while the model uses presets, `can_voice_presets`).
+        `allow_custom_preset` additionally offers free-form preset names.
         """
         def open_submenu(s: State, index: int) -> None:
             VoiceMenuShared.voice_sample_submenu(
@@ -598,6 +600,7 @@ class VoiceMenuShared:
                 on_before_set_callback=on_before_set_callback,
                 on_set_callback=on_set_callback,
                 preset_choices=preset_choices,
+                allow_custom_preset=allow_custom_preset,
             )
 
         def add_voice(s: State, _: MenuItem) -> None:
@@ -850,6 +853,7 @@ class VoiceMenuShared:
             on_before_set_callback: Callable | None = None,
             on_set_callback: Callable | None = None,
             preset_choices: PresetChoices | None = None,
+            allow_custom_preset: bool = False,
     ) -> None:
         """Options for one voice. Follows the voice when it is moved; exits when it is removed.
         `preset_choices` enables the voice's preset item (see make_voice_sample_items)."""
@@ -895,7 +899,9 @@ class VoiceMenuShared:
 
         def on_set_preset(s: State, _: MenuItem) -> None:
             if preset_choices is not None:
-                VoiceMenuShared.ask_voice_preset(s, tts_type, current[0], preset_choices)
+                VoiceMenuShared.ask_voice_preset(
+                    s, tts_type, current[0], preset_choices, allow_custom_preset=allow_custom_preset,
+                )
 
         def on_clear_preset(s: State, _: MenuItem) -> None:
             error = ProjectVoiceUtil.set_voice_preset_at_index_and_save(s.project, current[0], tts_type.id, "")
@@ -997,7 +1003,9 @@ class VoiceMenuShared:
                 # Removing the only voice leaves a fresh default voice.
                 items.append(MenuItem(LABEL_RESET_VOICE_SAMPLE, on_remove))
             items.append(MenuItem(
-                make_menu_label(LABEL_STEREO_POSITION, stereo_position_label(voice.pan)),
+                make_menu_label(
+                    LABEL_STEREO_POSITION, stereo_position_label(voice.pan), stereo_position_label(0.0)
+                ),
                 lambda s2, _: VoiceMenuShared.ask_stereo_position(s2, i),
                 superlabel=LABEL_EFFECTS_SUPERLABEL,
                 # Auto-advance doesn't record which voice spoke a line, so output stays centered
@@ -1007,7 +1015,7 @@ class VoiceMenuShared:
                 ),
             ))
             items.append(MenuItem(
-                make_menu_label(LABEL_ROOM_REVERB, voice.room_reverb.label),
+                make_menu_label(LABEL_ROOM_REVERB, voice.room_reverb.label, RoomReverb.get_default().label),
                 lambda s2, _: VoiceMenuShared.room_reverb_submenu(s2, i),
             ))
             return items
@@ -1021,10 +1029,13 @@ class VoiceMenuShared:
         )
 
     @staticmethod
-    def ask_voice_preset(state: State, tts_type: TtsModelType, index: int, preset_choices: PresetChoices) -> None:
-        """Choose this voice's preset from the model's choices. A model with a
-        single choice gets it saved directly (so readiness, which can't see the
-        model's inventory, finds it set)."""
+    def ask_voice_preset(
+            state: State, tts_type: TtsModelType, index: int, preset_choices: PresetChoices,
+            allow_custom_preset: bool = False,
+    ) -> None:
+        """Choose this voice's preset, optionally accepting a custom speaker id.
+        Without custom input, a single choice is saved directly (so readiness,
+        which can't see the model's inventory, finds it set)."""
         choices = preset_choices(state)
         if choices is None:
             return
@@ -1035,22 +1046,31 @@ class VoiceMenuShared:
             if error:
                 ask.ask_error(error)
 
-        if not choices:
+        if not choices and not allow_custom_preset:
             ask.ask_error(f"Model has no {preset_label.lower()} choices")
             return
-        if len(choices) == 1:
+        if len(choices) == 1 and not allow_custom_preset:
             save(choices[0])
             print_feedback(f"Model has only one {preset_label.lower()} ({choices[0]})")
             return
         current = state.project.voice_references[index].preset_for(tts_type.id)
+
+        def on_select(value: str) -> None:
+            if allow_custom_preset and not value:
+                printt(f"Enter a custom {preset_label.lower()} name:")
+                value = ask.ask_input(lower=False, prefill=current).strip()
+                if not value:
+                    return  # Blank/cancel preserves the current preset.
+            save(value)
+
         MenuUtil.options_menu(
             state=state,
             heading_text=f"{preset_label} for {LABEL_VOICE_SAMPLE_ITEM} {index + 1}",
-            labels=choices,
-            values=choices,
+            labels=[*choices, f"Custom {preset_label.lower()}..."] if allow_custom_preset else choices,
+            values=[*choices, ""] if allow_custom_preset else choices,
             current_value=current or None,
             default_value=None,
-            on_select=save,
+            on_select=on_select,
             breadcrumb=preset_label,
         )
 

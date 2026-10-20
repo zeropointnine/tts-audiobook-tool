@@ -105,8 +105,9 @@ class Project(BaseModel):
     version: int = PROJECT_SPEC_VERSION
     # Persist the opaque catalog ID, including IDs unknown to this installation.
     tts_model_type: str = "none"
-    # Exact remote-server identity; opaque and independent of the catalog ID.
-    tts_server_model_id: str = ""
+    # Exact audio.cpp server entry ID; opaque and independent of the catalog ID.
+    # Always empty for other backends.
+    audio_cpp_model_id: str = ""
     model_settings: ModelSettings = Field(default_factory=ModelSettings)
     # Never empty: a project always has at least one (possibly sample-less) voice.
     voice_references: list[Voice] = Field(default_factory=lambda: [Voice()])

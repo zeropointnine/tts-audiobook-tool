@@ -424,9 +424,9 @@ def test_dots_get_warning_issues_reports_language_hint():
     warnings = model.get_warning_issues(
         Project.model_validate({"language_code": "ja"})
     )
-    assert any("language hint: ja" in warning for warning in warnings)
+    assert 'Language value passed to model: ja (project language code = "ja")' in warnings
 
     warnings = model.get_warning_issues(
         Project.model_validate({"language_code": ""})
     )
-    assert any("language hint: auto" in warning for warning in warnings)
+    assert "Language value passed to model: none (project language code not set)" in warnings

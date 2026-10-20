@@ -170,8 +170,6 @@ def do_start(state: State) -> None:
     )
 
 REAL_TIME_SUBHEADING = (
-    'Uses the same quality checks as the normal audiobook creation workflow,\n'
-    'except for loudness normalization and generative upsampling.\n\n'
     'Uninterrupted playback requires inference to be faster-than-realtime.\n'
     'Validation/retry activates when there is 60 seconds of buffered audio.'
 )

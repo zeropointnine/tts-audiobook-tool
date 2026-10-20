@@ -6,9 +6,9 @@ from tts_audiobook_tool.project_support.model_settings_declarations import BUILT
 if TYPE_CHECKING:
     from tts_audiobook_tool.project_support.model_settings import Binding
 
-# Historical ownership, including the now-retired MOSS and Fish S2 groups. Do
-# not edit these mappings to match current catalog ownership: old projects
-# still need them.
+# Historical ownership, including the now-retired MOSS, Fish S2 and Qwen3
+# groups. Do not edit these mappings to match current catalog ownership: old
+# projects still need them.
 SHARED_MEMBERS: dict[str, tuple[str, ...]] = {
     "auk": ("auk_sglomni", "auk_flash_sglomni"),
     "fish_s2": ("fish_s2_local", "fish_s2_sglomni"),
@@ -35,7 +35,7 @@ PRIVATE_FIELDS: dict[str, set[str]] = {
 # catalog's `setting_groups` and its settings' `group` keys, then append it here.
 # A local member without catalog parameter bounds should also borrow its server
 # counterpart's (`BORROWED_PARAMETER_BOUNDS` in model_settings.py).
-RETIRED_GROUPS: tuple[str, ...] = ("moss", "fish_s2")
+RETIRED_GROUPS: tuple[str, ...] = ("moss", "fish_s2", "qwen3")
 
 # moss_local retired its shared `seed` parameter in favor of one seed per
 # preset. Historical values migrate to all three, following the same

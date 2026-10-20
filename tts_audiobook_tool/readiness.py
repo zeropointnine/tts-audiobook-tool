@@ -41,7 +41,7 @@ def get_tts_blockers(project: Project, instance: object | None = None) -> list[R
     issues = Tts.get_model_support(project).get_blocking_issues(project, instance)
     binding_issue = (Tts._binding_issue if (
         Tts._bound_project_type_id == project.tts_model_type
-        and Tts._bound_project_server_model_id == project.tts_server_model_id
+        and Tts._bound_project_audio_cpp_model_id == project.audio_cpp_model_id
     ) else None)
     if binding_issue is not None and all(issue.verbose != binding_issue.verbose for issue in issues):
         issues.append(binding_issue)

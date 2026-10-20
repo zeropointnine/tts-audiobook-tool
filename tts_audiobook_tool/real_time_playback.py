@@ -145,8 +145,12 @@ def _start_impl(
     played_indices = range(max(line_range[0] - 1, 0), line_range[1])
     warnings = get_run_warnings(state.project, Tts.get_instance(), played_indices)
     if warnings:
-        warnings_string = "\n".join(warnings)
-        print_feedback(Ansi.ITALICS + warnings_string, no_preformat=True)
+        # The TUI parses each console line independently, so style every line.
+        warnings_string = "\n\n".join(
+            "\n".join(Ansi.ITALICS + line for line in warning.split("\n"))
+            for warning in warnings
+        )
+        print_feedback(warnings_string + "\n", no_preformat=True, extra_line=False)
     showed_vram_warning = app_memory.show_vram_memory_warning_if_necessary()
 
     # Realtime playback is a top-level generation run. If the previous run ended

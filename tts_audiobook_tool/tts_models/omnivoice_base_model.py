@@ -38,6 +38,14 @@ class OmniVoiceBaseModel(TtsBaseModel):
             s += f" {COL_DIM}({target})"
         return s
 
+    def get_warning_issues(self, project: Project) -> list[str]:
+        warnings = super().get_warning_issues(project)
+        # The project code goes to the library verbatim; it resolves it (or falls
+        # back to language-agnostic mode) itself.
+        from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+        warnings.append(make_language_value_note(project.language_code, project.language_code))
+        return warnings
+
     @classmethod
     def validate_instructions(cls, value: str) -> str:
         # Lazy: imports OmniVoice (not the model) on first use

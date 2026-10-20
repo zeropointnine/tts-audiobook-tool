@@ -3,8 +3,8 @@
 The session builds its prompt from an exact language tag ("English",
 "Chinese", ...), rejects anything else, and defaults to Chinese when none is
 sent. The project stores a free-form language code, so this behavior maps its
-normalized base code onto the tag list and sends the result as
-``options.language``. A project language with no mapping blocks generation
+normalized base code onto the tag list (``resolve_language``) and sends the
+result as ``options.language``. A project language with no mapping blocks generation
 rather than silently generating under the wrong frontend.
 
 The tag is a Base-model feature (it goes into Base's prompt). If the server
@@ -67,12 +67,11 @@ class FireRedTts3Behavior(AudioCppModelBehavior):
         """FireRedTTS3 language tag for a project language code, or None."""
         return _TAG_BY_CODE.get(normalize_language_code(language_code or ""))
 
-    def adjust_payload(self, payload: dict, values: ParameterValues) -> None:
-        # The catalog's "normalized" policy put the base code in
-        # `options.language`; swap it for the exact tag the session requires.
-        # Readiness blocks unmapped codes first, so a miss here is a bug.
-        options = payload["options"]
-        options["language"] = _TAG_BY_CODE[options["language"]]
+    def resolve_language(self, language: str) -> str:
+        # The catalog's "normalized" policy hands over the base code; send the
+        # exact tag the session requires. Readiness blocks unmapped codes first;
+        # "" would omit the field rather than send an unknown tag.
+        return _TAG_BY_CODE.get(language, "")
 
     def get_blocking_issues(self, project: Project, values: ParameterValues) -> list[ReadinessIssue]:
         if self.get_language_tag(project.language_code) is None:

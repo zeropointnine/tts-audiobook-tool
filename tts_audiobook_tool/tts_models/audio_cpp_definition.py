@@ -68,6 +68,7 @@ class AudioCppMenuControl:
     target_menu: str | None
     parameter: str = ""
     label: str = ""
+    subheading: str = ""
 
 
 @dataclass(frozen=True)
@@ -138,7 +139,8 @@ def load_audio_cpp_definitions(path: Path = CATALOG_PATH) -> AudioCppDefinitions
                     raw["default_sentinel"], raw["request_key"], raw["target"], raw["input_prompt_suffix"],
                 )
         menu = tuple(
-            AudioCppMenuControl(item["kind"], item.get("target_menu"), item.get("parameter", ""), item.get("label", ""))
+            AudioCppMenuControl(item["kind"], item.get("target_menu"), item.get("parameter", ""), item.get("label", ""),
+                                subheading=item.get("subheading", ""))
             for item in declaration["menu"]
         )
         models[spec.id] = AudioCppModelDefinition(

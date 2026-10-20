@@ -49,8 +49,8 @@ def test_qwen3tts_server_is_sgl_omni_and_non_streaming():
     assert detect_sgl_omni_models([{"id": "Qwen/Qwen3-TTS"}]) == [
         (TtsModelType.require_by_id("qwen3tts_sglomni"), "Qwen/Qwen3-TTS")
     ]
-    assert REGISTRY.voice_binding(info.id).group == "qwen3"
-    assert REGISTRY.transcript_binding(info.id).group == "qwen3"
+    assert REGISTRY.voice_binding(info.id).group == ""
+    assert REGISTRY.transcript_binding(info.id).group == ""
     assert REGISTRY.orchestration_binding(info.id).name == "concurrent_requests"
     assert not info.can_stream
 

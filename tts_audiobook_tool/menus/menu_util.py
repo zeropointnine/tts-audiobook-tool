@@ -427,7 +427,7 @@ class MenuUtil:
         default_value: int | float,
         is_minus_one_default: bool,
         num_decimals: int,
-        prompt: str,
+        prompt: str | list[str],
         min_value: int | float,
         max_value: int | float,
         value_suffix: str = "",
@@ -435,6 +435,7 @@ class MenuUtil:
         """
         Makes "self-contained" MenuItem that displays a number value,
         and does stock "ask_number()" action on select.
+        `prompt` is passed through to `ask.ask_number_and_save` (a list prints one line per item).
         `value_suffix` is a unit (eg, "s") shown after the number.
         """
 

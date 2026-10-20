@@ -29,7 +29,7 @@ def test_breeze_top_k_has_prompt_only_disabled_hint(monkeypatch):
     assert strip_ansi_codes(get_string_from(state, item.label)) == "Top-K (currently: 50 default)"
     item.handler(state, item)
     assert [strip_ansi_codes(prompt) for prompt in prompts] == [
-        "Enter Top-K (0=disabled): (valid range: 0-100; default: 50)"]
+        "Enter Top-K\n(0=disabled)\n(valid range: 0-100; default: 50)"]
     saved = ProjectSerializationUtil.to_project_json_dict(state.project)
     assert "input_prompt_suffix" not in saved["model_settings"]["models"][parameter.model_id]["parameters"]
 
@@ -65,7 +65,9 @@ def test_optional_suffix_is_loaded_and_inserted_only_in_edit_prompt(tmp_path, mo
     item.handler(state, item)
     hint = f" {suffix}" if suffix else ""
     if backend == "audio_cpp":
-        expected = f"Enter Top k{hint}: (valid range: 0-100; default: 50)"
+        # audio.cpp puts the suffix and the range info on lines of their own.
+        expected = ("Enter Top k\n(sampling hint)\n(valid range: 0-100; default: 50)" if suffix
+                    else "Enter Top k (valid range: 0-100; default: 50)")
     else:
         expected = f"Enter Top k (valid range: 1-200; -1 resets to default 100){hint}:"
     assert [strip_ansi_codes(prompt) for prompt in prompts] == [expected]

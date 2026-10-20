@@ -19,6 +19,10 @@ class ModelQwen3Menu:
     (unlike the other static model menus, which do not require this)
     """
 
+    # Temperature/top-p/top-k are mirrored to the subtalker (see Qwen3Model);
+    # same wording as the audio.cpp catalog's input_prompt_suffix.
+    SAMPLING_PROMPT_SUFFIX = "(applies to both talker and subtalker)"
+
     @staticmethod
     def menu(state: State, inspection: TtsInspected) -> None:
         metadata = inspection.metadata or {}
@@ -91,7 +95,8 @@ class ModelQwen3Menu:
                 target=SettingRef("qwen3tts_local", "temperature"),
                 default_value=default_temp,
                 min_value=Qwen3BaseModel.TEMPERATURE_MIN,
-                max_value=Qwen3BaseModel.TEMPERATURE_MAX
+                max_value=Qwen3BaseModel.TEMPERATURE_MAX,
+                prompt_suffix=ModelQwen3Menu.SAMPLING_PROMPT_SUFFIX
             )
             items.append(item)
 
@@ -101,7 +106,8 @@ class ModelQwen3Menu:
             item = ModelMenuShared.make_top_p_item(
                 state=state,
                 target=SettingRef("qwen3tts_local", "top_p"),
-                default_value=default_top_p
+                default_value=default_top_p,
+                prompt_suffix=ModelQwen3Menu.SAMPLING_PROMPT_SUFFIX
             )
             items.append(item)
 
@@ -111,7 +117,8 @@ class ModelQwen3Menu:
             item = ModelMenuShared.make_top_k_item(
                 state=state,
                 target=SettingRef("qwen3tts_local", "top_k"),
-                default_value=default_top_k
+                default_value=default_top_k,
+                prompt_suffix=ModelQwen3Menu.SAMPLING_PROMPT_SUFFIX
             )
             items.append(item)
 

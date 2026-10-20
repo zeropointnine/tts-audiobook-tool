@@ -77,15 +77,14 @@ def test_null_is_unset_for_every_parameter_type_without_warning(caplog):
 def test_old_unset_sentinels_serialize_as_null_but_random_seed_stays_minus_one(caplog):
     project = Project.model_validate({"version": 3, "model_settings": {"models": {"zonos2_sglomni": {
         "parameters": {"temperature": -1.0},
-    }}, "shared": {"qwen3": {
-        "model_ids": list(REGISTRY.members["qwen3"]),
+    }, "qwen3tts_local": {
         "parameters": {"top_k": -1, "seed": -1, "temperature": 0.7},
     }}}})
     saved = ProjectSerializationUtil.to_project_json_dict(project)["model_settings"]
     assert saved["models"]["zonos2_sglomni"]["parameters"]["temperature"] is None
-    assert saved["shared"]["qwen3"]["parameters"]["top_k"] is None
-    assert saved["shared"]["qwen3"]["parameters"]["seed"] == -1
-    assert saved["shared"]["qwen3"]["parameters"]["temperature"] == 0.7
+    assert saved["models"]["qwen3tts_local"]["parameters"]["top_k"] is None
+    assert saved["models"]["qwen3tts_local"]["parameters"]["seed"] == -1
+    assert saved["models"]["qwen3tts_local"]["parameters"]["temperature"] == 0.7
     restored = Project.model_validate({"version": 3, "model_settings": saved})
     assert restored.get_model_setting("zonos2_sglomni", "temperature") == -1.0
     assert restored.get_model_setting("qwen3tts_local", "top_k") == -1

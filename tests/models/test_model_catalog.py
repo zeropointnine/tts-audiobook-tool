@@ -27,6 +27,35 @@ def _entry(data, entry_id):
     return next(model for model in data["models"] if model["id"] == entry_id)
 
 
+@pytest.mark.parametrize("subheading", ["", "Match the loaded checkpoint.\nRestart after changing it."])
+def test_audio_cpp_choice_subheading_roundtrips(tmp_path, subheading):
+    # A choice control can supply plain guidance independently of its parameter.
+    from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
+
+    path = _copy_catalog(tmp_path, lambda data: _entry(data, "cosyvoice3_audiocpp")["audio_cpp"]["menu"][1].update(
+        subheading=subheading))
+    definition = load_audio_cpp_definitions(path).models["cosyvoice3_audiocpp"]
+    assert definition.menu[1].subheading == subheading
+
+
+@pytest.mark.parametrize("subheading", [None, 123, []])
+def test_audio_cpp_choice_subheading_requires_string(subheading):
+    # Present-but-invalid guidance must fail validation rather than disappear.
+    from tts_audiobook_tool.tts_models.model_catalog import parse_audio_cpp_declaration
+
+    entry = _entry(read_catalog(CATALOG_PATH), "cosyvoice3_audiocpp")
+    entry["audio_cpp"]["menu"][1]["subheading"] = subheading
+    with pytest.raises(ValueError, match=r"subheading: expected str"):
+        parse_audio_cpp_declaration(entry, "test")
+
+
+def test_audio_cpp_choice_subheading_defaults_to_empty():
+    from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
+
+    definition = load_audio_cpp_definitions().models["cosyvoice3_audiocpp"]
+    assert definition.menu[1].subheading == ""
+
+
 def test_catalog_fixture_writer_roundtrips_shipped_catalog():
     catalog = read_catalog(CATALOG_PATH)
     assert tomllib.loads(catalog_to_toml(catalog)) == catalog
@@ -305,7 +334,7 @@ def test_complete_catalog_order_and_backend_suffix_ids():
         "dots_audiocpp", "echo_tts_audiocpp", "fireredtts3_audiocpp", "fish_drama3_audiocpp", "fish_s2_audiocpp",
         "glm_tts_audiocpp",
         "higgs_v3_audiocpp", "indextts2_audiocpp",
-        "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp",
+        "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp", "qwen3tts_audiocpp",
     ]
     assert raw["schema_version"] == 1
     assert [entry["id"] for entry in raw["models"]] == expected_ids
@@ -327,8 +356,8 @@ def test_catalog_provides_canonical_lookup_handles_in_order():
     assert [spec.id for spec in specs] == ids
     assert list(TtsModelType._initial_specs) == ids
     assert [handle.id for handle in TtsModelType.all()] == ids
-    assert len(specs) == 38
-    assert len(servers) == 23  # nine SGL entries plus the fourteen audio.cpp entries
+    assert len(specs) == 39
+    assert len(servers) == 24  # nine SGL entries plus the fifteen audio.cpp entries
     assert len(fingerprint) == 64
     for spec in specs:
         handle = TtsModelType.require_by_id(spec.id)
@@ -477,7 +506,7 @@ def test_installing_data_only_spec_uses_lookup_without_attributes_and_reset_remo
 
 def test_catalog_is_available_at_import_before_model_classes(tmp_path):
     code = """from tts_audiobook_tool.tts_models.model_catalog import load_catalog
-assert len(load_catalog()[0]) == 38
+assert len(load_catalog()[0]) == 39
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 assert FishS2BaseModel.INFO is TtsModelType.require_by_id("fish_s2_local").value
@@ -627,7 +656,7 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
         "dots_audiocpp", "echo_tts_audiocpp", "fireredtts3_audiocpp", "fish_drama3_audiocpp", "fish_s2_audiocpp",
         "glm_tts_audiocpp",
         "higgs_v3_audiocpp", "indextts2_audiocpp",
-        "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp",
+        "moss_delay_audiocpp", "moss_local_audiocpp", "omnivoice_audiocpp", "qwen3tts_audiocpp",
     }
 
     chatterbox = audio["chatterbox_audiocpp"]
@@ -875,7 +904,6 @@ def test_moss_settings_are_private_and_architecture_scoped(model_id, prefixes, l
     raw = read_catalog(CATALOG_PATH)
     assert raw["setting_groups"] == {
         "auk": ["auk_sglomni", "auk_flash_sglomni"],
-        "qwen3": ["qwen3tts_local", "qwen3tts_sglomni"],
     }
     expected = [
         {"name": "file_name", "section": "voice_references", "type": "list[str]", "default": []},
@@ -909,7 +937,7 @@ def test_moss_settings_are_private_and_architecture_scoped(model_id, prefixes, l
         _entry(data, "higgs_v3_sglomni")["settings"][0]), "unique nonempty setting names"),
     (lambda data: _entry(data, "higgs_v3_sglomni")["settings"][0].update(extra=True), "unsupported setting declaration"),
     (lambda data: _entry(data, "higgs_v3_sglomni")["settings"][0].update(default="wrong"), "default.*expected"),
-    (lambda data: data["setting_groups"]["qwen3"].append("missing"), "setting_groups.qwen3"),
+    (lambda data: data["setting_groups"]["auk"].append("missing"), "setting_groups.auk"),
     (lambda data: next(s for s in _entry(data, "qwen3tts_sglomni")["settings"]
                        if s["name"] == "temperature").update(group="unauthorized"), "unauthorized shared group"),
 ])
@@ -939,7 +967,7 @@ def test_backend_storage_defaults_and_sentinels_match_parameter_contracts(tmp_pa
 @pytest.mark.parametrize("name", ["file_name", "transcript"])
 def test_voice_and_transcript_cannot_have_different_storage_owners(tmp_path, name):
     data = read_catalog(CATALOG_PATH)
-    setting = next(s for s in _entry(data, "qwen3tts_sglomni")["settings"] if s["name"] == name)
+    setting = next(s for s in _entry(data, "auk_flash_sglomni")["settings"] if s["name"] == name)
     setting.pop("group")
     with pytest.raises(ValueError, match="settings.transcript.*file_name storage owner"):
         load_catalog(write_catalog(tmp_path / "split-voice-owner.toml", data))
@@ -1017,7 +1045,7 @@ def test_audio_cpp_voice_instructions_default_to_false(tmp_path):
     from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
     definitions = load_audio_cpp_definitions().models
     assert {model_id for model_id, definition in definitions.items() if definition.voice_instructions} == {
-        "breeze_tts_2_audiocpp", "cosyvoice3_audiocpp", "omnivoice_audiocpp",
+        "breeze_tts_2_audiocpp", "cosyvoice3_audiocpp", "omnivoice_audiocpp", "qwen3tts_audiocpp",
     }
     path = _copy_catalog(tmp_path, lambda data: _entry(data, "omnivoice_audiocpp")["audio_cpp"].pop("voice_instructions"))
     assert not load_audio_cpp_definitions(path).models["omnivoice_audiocpp"].voice_instructions

@@ -142,8 +142,12 @@ class GenerateUtil:
         # Print warnings if any, including the voice-variation note for this run's voices
         warnings = get_run_warnings(state.project, Tts.get_instance(), indices_set)
         if warnings:
-            message = "\n".join(warnings)
-            print_feedback(Ansi.ITALICS + message, no_preformat=True)
+            # The TUI parses each console line independently, so style every line.
+            message = "\n\n".join(
+                "\n".join(Ansi.ITALICS + line for line in warning.split("\n"))
+                for warning in warnings
+            )
+            print_feedback(message + "\n", no_preformat=True, extra_line=False)
 
         showed_vram_warning = app_memory.show_vram_memory_warning_if_necessary()
 

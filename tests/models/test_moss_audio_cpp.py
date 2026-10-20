@@ -22,6 +22,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
 from tts_audiobook_tool.tts_models.audio_cpp_configured import (
     AudioCppBackendAdapter, AudioCppModelSupport, AudioCppSettings,
 )
@@ -174,7 +175,7 @@ def test_unknown_language_is_omitted_from_both_payload_locations(capture, model_
         assert capture[0]["options"] == {"max_tokens": 1024, "text_chunk_size": 100000}
     else:
         assert capture[0]["options"] == {"text_chunk_size": 100000}
-    assert "Using MOSS-TTS language value: None" in AudioCppModelSupport(
+    assert make_language_value_note(None, language) in AudioCppModelSupport(
         definition(model_id)).get_warning_issues(project)
 
 
@@ -268,7 +269,7 @@ def test_readiness_optional_voice_and_local_only_postprocessing(monkeypatch, tmp
     local_issues = lambda: [issue for issue in support.get_blocking_issues(project)
                            if issue.short != "audio.cpp server"]
     assert local_issues() == []
-    assert "Using MOSS-TTS language value: English" in support.get_warning_issues(project)
+    assert 'Language value passed to model: English (project language code = "en")' in support.get_warning_issues(project)
     assert support.can_hallucinate_music(project) is (model_id == IDS[1])
     assert support.should_trim_trailing_token_noise(project) is (model_id == IDS[1])
     # Voice/file/transcript state is not a readiness concern any more; it is

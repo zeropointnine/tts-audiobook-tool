@@ -39,7 +39,7 @@ class ModelAudioCppMenu:
         if control.kind == "choice":
             if not isinstance(parameter, AudioCppTextParameter) or not parameter.choices:
                 raise ValueError(f"{definition.spec.id}.{control.parameter} is not a choice parameter")
-            return [ModelAudioCppMenu.make_choice_item(state, parameter, control.label)]
+            return [ModelAudioCppMenu.make_choice_item(state, parameter, control.label, subheading=control.subheading)]
         if isinstance(parameter, AudioCppTextParameter):
             # String settings are expanded by the `choice` control above.
             raise ValueError(f"{definition.spec.id}.{control.parameter} is not a numeric parameter")
@@ -65,13 +65,16 @@ class ModelAudioCppMenu:
             except ValueError as exc:
                 ask.ask_error(str(exc))
                 effective = parameter.default
-            suffix = f" {COL_DIM}{parameter.input_prompt_suffix}{COL_DEFAULT}" if parameter.input_prompt_suffix else ""
+            # A catalog proviso gets its own line rather than being appended to the prompt.
+            prompt: str | list[str] = f"Enter {label}"
+            if parameter.input_prompt_suffix:
+                prompt = [prompt, f"{COL_DIM}{parameter.input_prompt_suffix}{COL_DEFAULT}"]
             if show_hint:
                 hints.show_hint_if_necessary(current.prefs, HINT_MOSS_TEMPERATURE)
             ask.ask_number_and_save(
                 saveable=current.project,
                 target=SettingRef(parameter.model_id, parameter.name),
-                prompt=f"Enter {label}{suffix}",
+                prompt=prompt,
                 min_value=parameter.min,
                 max_value=parameter.max,
                 default_value=parameter.default,
@@ -83,10 +86,13 @@ class ModelAudioCppMenu:
         return MenuItem(display, edit)
 
     @staticmethod
-    def make_choice_item(state: State, parameter: AudioCppTextParameter, label: str) -> MenuItem:
+    def make_choice_item(
+            state: State, parameter: AudioCppTextParameter, label: str, *, subheading: str = "",
+    ) -> MenuItem:
         """A fixed-choice string setting, edited through a one-shot option submenu."""
         return ModelMenuShared.make_choice_item(
             state, parameter, label,
+            subheading=subheading,
             get_value=lambda project: AudioCppSettings.get(project, parameter),
             set_value=lambda project, value: AudioCppSettings.set(project, parameter, value),
         )

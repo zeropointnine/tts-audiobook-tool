@@ -9,6 +9,17 @@ from tts_audiobook_tool.tts_models.audio_cpp_definition import AudioCppModelDefi
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
+# audio.cpp exposes no checkpoint speaker discovery. These are Qwen's official
+# ids; custom GGUF checkpoints may accept additional speaker names.
+QWEN_SPEAKERS = (
+    "aiden", "dylan", "eric", "ono_anna", "ryan", "serena", "sohee", "uncle_fu", "vivian",
+)
+
+
+def get_qwen_speaker_choices(_: State) -> list[str]:
+    return list(QWEN_SPEAKERS)
+
+
 class VoiceAudioCppMenu:
     @staticmethod
     def make_items(state: State, definition: AudioCppModelDefinition) -> list[MenuItem]:
@@ -17,7 +28,12 @@ class VoiceAudioCppMenu:
         model_type = TtsModelType.require_by_id(definition.spec.id)
         for control in definition.menu:
             if control.kind == "voice_samples":
-                items.extend(VoiceMenuShared.make_voice_sample_items(state, model_type))
+                qwen = model_type.id == "qwen3tts_audiocpp"
+                items.extend(VoiceMenuShared.make_voice_sample_items(
+                    state, model_type,
+                    preset_choices=get_qwen_speaker_choices if qwen else None,
+                    allow_custom_preset=qwen,
+                ))
             elif control.target_menu == "voice":
                 control_items = ModelAudioCppMenu.make_control_items(state, definition, control)
                 if control_items and not added_config_items:

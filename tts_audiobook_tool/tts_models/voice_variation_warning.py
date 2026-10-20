@@ -4,8 +4,9 @@ One model-agnostic check, so every model gets the same rule: a note applies to
 each voice in play for the run (`ProjectVoiceUtil.get_job_voice_indices`) that
 generates without a fixed speaker, ie without a sample or preset
 (`ProjectVoiceUtil.resolve_voice_source` kind "instructions" or "builtin"),
-when the model can generate without one and has no fixed default voice
-(`has_fixed_default_voice`, eg a VibeVoice LoRA).
+when the current settings can generate without one and have no fixed default
+voice (`has_fixed_default_voice`, eg a VibeVoice LoRA). Instruction-defined voices
+(eg Qwen3-TTS VoiceDesign) are eligible even when sample cloning is inactive.
 
 A model may declare `[models.spec.ui].instructions_voice_variation_note` for
 sample-less voices that do have instructions (eg AuK, whose voice description
@@ -45,11 +46,14 @@ def get_voice_variation_warnings(project: Project, voice_indices: Iterable[int])
     from tts_audiobook_tool.tts import Tts
 
     model_type = project.get_tts_model_type()
-    if model_type.value.requires_voice or REGISTRY.voice_binding(model_type.id) is None:
+    if REGISTRY.voice_binding(model_type.id) is None:
         return []
     support = Tts.get_model_support(project)
-    # Samples are irrelevant under these settings (eg Qwen3-TTS CustomVoice/VoiceDesign)
-    if not support.can_voice_clone(project) or support.has_fixed_default_voice(project):
+    # VoiceDesign uses instructions without a fixed speaker, even though its
+    # family requires samples in Base mode. Resolve active sources below: missing
+    # required samples/presets belong to validation, not a variation warning.
+    if (not (support.can_voice_clone(project) or support.expects_voice_instructions(project))
+            or support.has_fixed_default_voice(project)):
         return []
     voices = project.voice_references
     instructions_note = model_type.value.ui.get("instructions_voice_variation_note") or ""

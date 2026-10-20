@@ -193,7 +193,7 @@ class Qwen3Model(Qwen3BaseModel):
             max_random_seed: int = -1,
     ) -> list[Sound] | str:
 
-        language = self.resolve_language_code_and_warning(project.language_code)[0]
+        language = self.resolve_language_value(project.language_code)[0]
         seed = -1 if force_random_seed else project.get_model_setting('qwen3tts_local', 'seed')
         if seed == -1:
             seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)

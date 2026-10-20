@@ -982,12 +982,13 @@ def test_indextts2_requires_a_voice_sample_before_network(monkeypatch):
 
 
 @pytest.mark.parametrize("project_language, expected", [
-    ("es-MX", "Passing language hint to model: es (applies to IndexTTS2.5 only)"),
-    ("", "Passing language hint to model: auto (applies to IndexTTS2.5 only)"),
+    ("es-MX", 'Language value passed to model: es (project language code = "es-MX"; applies to IndexTTS2.5 only)'),
+    ("", "Language value passed to model: none (project language code not set; applies to IndexTTS2.5 only)"),
 ])
 def test_indextts2_preflight_reports_language_hint_with_variant_note(project_language, expected):
-    # The warning shows the code actually sent and qualifies it, since IndexTTS2
-    # ignores the hint and the server does not reveal which variant is loaded.
+    # The note shows the code actually sent ("none": an empty code is omitted) and
+    # qualifies it, since IndexTTS2 ignores the hint and the server does not reveal
+    # which variant is loaded.
     item = definition(INDEXTTS2_ID)
     project = FakeProject(model_id=INDEXTTS2_ID)
     project.language_code = project_language
@@ -1072,6 +1073,30 @@ def test_fireredtts3_warns_only_for_less_supported_languages(project_language, w
     project.language_code = project_language
     warnings = AudioCppModelSupport(definition(FIREREDTTS3_ID)).get_warning_issues(project)
     assert any("may be weaker" in warning for warning in warnings) is weaker_note
+
+
+def test_fireredtts3_language_note_shows_the_tag_sent():
+    # The note reports the mapped tag the session receives, not the base code.
+    project = FakeProject(model_id=FIREREDTTS3_ID)
+    project.language_code = "de_DE"
+    warnings = AudioCppModelSupport(definition(FIREREDTTS3_ID)).get_warning_issues(project)
+    assert 'Language value passed to model: German (project language code = "de_DE")' in warnings
+
+
+@pytest.mark.parametrize("project_language, expected", [
+    ("en-US", 'Language value passed to model: en-US (project language code = "en-US")'),
+    ("", "Language value passed to model: none (project language code not set)"),
+])
+def test_project_code_family_language_note_shows_raw_code(project_language, expected):
+    # A default ("project_code") family sends the project code verbatim, so the
+    # note does too; "omit" families send none and print no note.
+    project = FakeProject(model_id=OMNIVOICE_ID)
+    project.language_code = project_language
+    assert expected in AudioCppModelSupport(definition(OMNIVOICE_ID)).get_warning_issues(project)
+    fish = FakeProject(model_id=FISH_S2_ID)
+    fish.language_code = project_language
+    assert not any(warning.startswith("Language value passed to model:")
+                   for warning in AudioCppModelSupport(definition(FISH_S2_ID)).get_warning_issues(fish))
 
 
 @pytest.mark.parametrize("model_id", [BREEZE_ID, OMNIVOICE_ID, FISH_S2_ID, DOTS_ID])
@@ -1317,7 +1342,9 @@ def test_models_default_to_catalog_driven_behavior():
     from tts_audiobook_tool.tts_models.audio_cpp_behavior import AudioCppModelBehavior
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_cosyvoice3 import CosyVoice3Behavior
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_fireredtts3 import FireRedTts3Behavior
-    registered = {COSYVOICE3_ID: CosyVoice3Behavior, FIREREDTTS3_ID: FireRedTts3Behavior}
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_qwen3 import Qwen3Behavior
+    registered = {COSYVOICE3_ID: CosyVoice3Behavior, FIREREDTTS3_ID: FireRedTts3Behavior,
+                  "qwen3tts_audiocpp": Qwen3Behavior}
     for model_id, item in load_audio_cpp_definitions().models.items():
         behavior = AudioCppModelSupport(item).behavior
         expected = registered.get(model_id, AudioCppModelBehavior)
@@ -1441,8 +1468,10 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
                    for label in ("samples", "selection mode", "selections")]
     voice_calls = []
 
-    def make_voice_items(current, model_type):
+    def make_voice_items(current, model_type, **kwargs):
         assert current is state and model_type.id == model_id
+        # Qwen adds per-voice speakers without changing the shared control order.
+        assert kwargs.get("allow_custom_preset", False) is (model_id == "qwen3tts_audiocpp")
         voice_calls.append(model_type)
         return voice_items
 
@@ -1450,7 +1479,7 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
     monkeypatch.setattr(ModelAudioCppMenu, "make_parameter_item",
                         lambda _state, parameter, _label, *_, **__: MenuItem(parameter.name, lambda *_: None))
     monkeypatch.setattr(ModelAudioCppMenu, "make_choice_item",
-                        lambda _state, parameter, _label: MenuItem(parameter.name, lambda *_: None))
+                        lambda _state, parameter, _label, **__: MenuItem(parameter.name, lambda *_: None))
     monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("seed", lambda *_: None))
 

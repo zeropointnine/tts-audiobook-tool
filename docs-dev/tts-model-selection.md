@@ -8,7 +8,7 @@ This is the canonical reference for choosing `Project.tts_model_type`, reconcili
 - **Available models:** the distinct supported catalog types discovered in that process mode, independent of the project's selection.
 - **Project selection:** `Project.tts_model_type`, a persisted string catalog ID. The placeholder ID is the string `"none"`, not Python `None`.
 - **Active runtime:** the model successfully bound for generation. It can be the `"none"` placeholder even while the project retains a real model ID.
-- **Exact server entry:** `Project.tts_server_model_id`, a persisted opaque audio.cpp inference ID (default `""` for legacy/unselected projects). Together with `tts_model_type` it selects one configured entry. Other backends leave it empty. IDs are scoped to the currently configured server, not checkpoint fingerprints or persisted endpoint identities.
+- **Exact server entry:** `Project.audio_cpp_model_id`, a persisted opaque audio.cpp inference ID (default `""` for legacy/unselected projects). Together with `tts_model_type` it selects one configured entry. Other backends leave it empty. IDs are scoped to the currently configured server, not checkpoint fingerprints or persisted endpoint identities.
 
 A model's backend kind (`LOCAL`, `SGL_OMNI`, or `AUDIO_CPP`) is not another process mode. A server-mode process can discover either supported server backend without becoming a local-mode process.
 
@@ -52,7 +52,7 @@ For projects without a saved server ID, compare the raw saved catalog ID with av
 | More than one | Matches one of the available types | Keep it; do not prompt or choose a different type. |
 | More than one | Does not match any available type | Immediately assign `"none"`; require selection from **Model settings > TTS model**. If the previous selection was an audio.cpp model, queue a nonblocking unavailable-model FYI for the end of the next complete menu; other previous types stay silent. |
 
-After resolving the catalog type, a unique matching audio.cpp entry is assigned to `tts_server_model_id` and saved, including on startup/load of an older project. Multiple matching entries retain the catalog type but leave the server ID empty: binding is blocked until the user selects an entry. Filling in only the server ID does not trigger a model-change FYI. Local reconciliation clears any server ID.
+After resolving the catalog type, a unique matching audio.cpp entry is assigned to `audio_cpp_model_id` and saved, including on startup/load of an older project. Multiple matching entries retain the catalog type but leave the server ID empty: binding is blocked until the user selects an entry. Filling in only the server ID does not trigger a model-change FYI. Local reconciliation clears any server ID.
 
 A sole-model mismatch queues this notice using the standard hint formatting only when replacing a saved ID other than `"none"`: in server mode whenever reconciliation changes that selection, and in local mode before the first main menu or while checks for a newly loaded project are pending. A matching saved selection or an initially unselected project does not trigger a model-change notice in either mode.
 

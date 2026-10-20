@@ -9,6 +9,7 @@ from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import ModelSettingsRegistry, REGISTRY
+from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.audio_cpp_configured import AudioCppSettings
@@ -48,19 +49,22 @@ def test_valid_audio_cpp_saved_parameter_is_preserved(value, caplog):
 
 
 @pytest.mark.parametrize("value", [0, 101, 30.0, False, "30"])
-def test_invalid_shared_sgl_parameter_resets_for_both_members(value, caplog):
+def test_invalid_retired_shared_sgl_parameter_resets_for_both_members(value, caplog):
+    # A bad historical shared Qwen3 value is forked to both private objects and
+    # then reset in each; local Qwen3 is validated with the server's bounds.
     parameter = load_definitions().models["qwen3tts_sglomni"].parameters["top_k"]
     project = Project.model_validate({"version": 3, "model_settings": {"shared": {"qwen3": {
-        "model_ids": list(REGISTRY.members["qwen3"]),
+        "model_ids": list(SHARED_MEMBERS["qwen3"]),
         "parameters": {"top_k": value, "temperature": 0.7},
         "voice_references": [{"file_name": "voice.flac", "transcript": "Hello."}],
     }}}})
     assert project.get_model_setting("qwen3tts_local", "top_k") == parameter.default_sentinel
     assert ConfiguredSettings.get(project, parameter) == parameter.default
-    assert project.model_settings.shared["qwen3"]["parameters"] == {"temperature": 0.7}
+    assert "qwen3" not in project.model_settings.shared
+    for model_id in SHARED_MEMBERS["qwen3"]:
+        assert project.model_settings.models[model_id]["parameters"] == {"temperature": 0.7}
+        assert f"models.{model_id}.parameters.top_k" in caplog.text
     assert project.voice_references == [Voice(file_name="voice.flac", transcript="Hello.")]
-    assert "voice_references" not in project.model_settings.shared["qwen3"]
-    assert "shared.qwen3.parameters.top_k" in caplog.text
 
 
 def test_saved_sentinels_and_missing_parameters_do_not_warn(caplog):

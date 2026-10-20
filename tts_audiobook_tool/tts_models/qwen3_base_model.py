@@ -79,9 +79,9 @@ class Qwen3BaseModel(TtsBaseModel):
     def is_model_type_supported(self) -> bool:
         return self.model_type in ["base", "custom_voice", "voice_design"] # ie, all current types
 
-    def resolve_language_code_and_warning(self, language_code: str) -> tuple[str, str]:
+    def resolve_language_value(self, language_code: str) -> tuple[str, str]:
         """
-        Returns qwen model's language value and warning if any.
+        Returns qwen model's language value, and a note detail ("" when the code maps).
         Project language code is expected to be a 2-letter ISO-mumblemumble language code, but
         Qwen uses english names for language value.
         """
@@ -108,9 +108,10 @@ class Qwen3BaseModel(TtsBaseModel):
             result = "chinese", ""
         elif language_code in MAP:
             result = MAP[language_code], ""
+        elif language_code:
+            result = "auto", "no matching Qwen3-TTS language"
         else:
-            shown = language_code or "(none)"
-            result = "auto", f"Warning: Project language code {shown} doesn't map to a known Qwen3-TTS language value; will use 'auto'"
+            result = "auto", ""
 
         return result
 
@@ -218,9 +219,9 @@ class Qwen3BaseModel(TtsBaseModel):
 
         warnings = super().get_warning_issues(project)
 
-        _, warning = self.resolve_language_code_and_warning(project.language_code)
-        if warning:
-            warnings.append(warning)
+        from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+        language, detail = self.resolve_language_value(project.language_code)
+        warnings.append(make_language_value_note(language, project.language_code, detail))
 
         return warnings
 

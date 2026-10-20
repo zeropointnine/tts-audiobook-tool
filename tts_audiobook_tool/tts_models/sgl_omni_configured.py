@@ -168,8 +168,10 @@ class ConfiguredModelSupport:
         warnings = []
         if self.definition.language_policy == "moss":
             from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
+            from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+            # Mirrors the payload: an unknown name omits the field.
             language = MossBaseModel.get_language_name(project.language_code)
-            warnings.append(f"Using MOSS-TTS language value: {language or 'None'}")
+            warnings.append(make_language_value_note(language, project.language_code))
         # The "voices may vary" note: voice_variation_warning.get_run_warnings()
         warning = self.get_max_words_exceed_warning(project)
         if warning:
