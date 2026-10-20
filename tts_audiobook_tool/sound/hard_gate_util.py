@@ -39,7 +39,7 @@ THINGS TO KNOW BEFORE CHANGING IT
       are enough of them, otherwise pink. Gated clips often have no ungated
       quiet frames, so pink is common in practice.
     - Gate tails (-100..-70 dBFS) next to a zero run are deliberately left alone.
-    - Tests: tests/test_silence_hard_gating.py.
+    - Tests: tests/audio/test_silence_hard_gating.py.
 """
 
 from dataclasses import dataclass

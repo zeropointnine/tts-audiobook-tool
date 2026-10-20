@@ -1,0 +1,1114 @@
+import asyncio
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
+
+from textual.widgets import Input, Static
+
+from tts_audiobook_tool import util
+from tts_audiobook_tool.constants import COL_ERROR
+from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.model_worker_protocol import (
+    ConsoleOutput,
+    GenerationFinished,
+    GenerationTerminalStatus,
+    GenerationUpdate,
+    WorkerExited,
+)
+from tts_audiobook_tool.generation_events import (
+    GenerationProgress,
+    GenerationRunEnded,
+    GenerationStarted,
+    GenerationTimedOut,
+)
+from tts_audiobook_tool.state import State
+from tts_audiobook_tool.textual import generation_app as generation_app_module
+from tts_audiobook_tool.textual import worker_app as worker_app_module
+from tts_audiobook_tool.textual.worker_content import (
+    WorkerLogContentArea,
+    _SeparatorLine,
+)
+from tts_audiobook_tool.textual.generation_app import (
+    ConsoleLineAssembler,
+    GenerationApp,
+    GenerationModalResult,
+    GenerationTranscript,
+    _read_persisted_range_string,
+    _reconcile_generation_result,
+    run_generation_app,
+)
+from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.worker_reset import HardResetCause
+from textual_editor_stubs import run
+
+
+def make_project(**attrs) -> SimpleNamespace:
+    """A duck-typed Project with the model lookup the shared compose performs."""
+    return SimpleNamespace(
+        get_tts_model_type=lambda: TtsModelType.require_by_id("none"), **attrs
+    )
+
+
+def make_state() -> State:
+    project = make_project(generate_range_string="all", gen_auto_concat=False)
+    return cast(State, SimpleNamespace(project=project))
+
+
+def make_saving_state(tmp_path) -> State:
+    project_file = tmp_path / "project.json"
+    project = make_project(
+        dir_path=str(tmp_path),
+        generate_range_string="all",
+        gen_auto_concat=False,
+    )
+
+    def save() -> str:
+        project_file.write_text(
+            json.dumps({
+                "generate_range_string": project.generate_range_string,
+                "gen_auto_concat": project.gen_auto_concat,
+            }),
+            encoding="utf-8",
+        )
+        return ""
+
+    project.save = save
+    project.save()
+    return cast(State, SimpleNamespace(
+        project=project,
+        prefs=SimpleNamespace(save_gen_log=False),
+    ))
+
+
+def test_generation_toggle_saves_and_refreshes_header(fake_worker, tmp_path) -> None:
+    state = make_saving_state(tmp_path)
+    app = GenerationApp(state, {0}, 1, GenerationTranscript("", enabled=False))
+    completed = GenerationModalResult(GenerationTerminalStatus.COMPLETED, "", "")
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            setting = app.query_one("#generation-auto-concat", Static)
+            assert str(setting.render()) == "[C] Concatenate when finished: False"
+            assert not app.should_auto_exit(completed)
+
+            await pilot.press("c")
+            assert state.project.gen_auto_concat is True
+            assert str(setting.render()) == "[C] Concatenate when finished: True"
+            assert json.loads((tmp_path / "project.json").read_text())["gen_auto_concat"] is True
+            assert app.should_auto_exit(completed)
+
+            await pilot.press("c")
+            assert state.project.gen_auto_concat is False
+            assert str(setting.render()) == "[C] Concatenate when finished: False"
+            assert json.loads((tmp_path / "project.json").read_text())["gen_auto_concat"] is False
+            assert not app.should_auto_exit(completed)
+
+    run(exercise())
+
+
+def test_generation_toggle_does_not_fire_in_find_or_on_save_failure(
+    fake_worker, tmp_path
+) -> None:
+    state = make_saving_state(tmp_path)
+    app = GenerationApp(state, {0}, 1, GenerationTranscript("", enabled=False))
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            await pilot.press("ctrl+f")
+            await pilot.press("c")
+            assert app.query_one("#find-input", Input).value == "c"
+            assert state.project.gen_auto_concat is False
+            await pilot.press("escape")
+
+            state.project.save = lambda: "disk full"
+            await pilot.press("c")
+            assert state.project.gen_auto_concat is False
+            assert not app._auto_concat_changed
+            assert str(app.query_one("#generation-auto-concat", Static).render()) == (
+                "[C] Concatenate when finished: False"
+            )
+            assert json.loads((tmp_path / "project.json").read_text())["gen_auto_concat"] is False
+            assert any("disk full" in notice.message for notice in app._notifications)
+
+    run(exercise())
+
+
+def test_worker_end_resaves_toggled_setting_after_range_reconciliation(
+    monkeypatch, tmp_path
+) -> None:
+    state = make_saving_state(tmp_path)
+    project_file = tmp_path / "project.json"
+    result = GenerationModalResult(GenerationTerminalStatus.COMPLETED, "none", "")
+
+    def run_worker(app, **_kwargs):
+        # This test replaces Textual's run method, so there is no mounted UI.
+        app._update_header = lambda: None
+        app.action_toggle_auto_concat()
+        assert json.loads(project_file.read_text())["gen_auto_concat"] is True
+        # The worker's separate, earlier-loaded project copy overwrites the
+        # setting while saving its updated generation range.
+        project_file.write_text(json.dumps({
+            "generate_range_string": "none", "gen_auto_concat": False,
+        }), encoding="utf-8")
+        app.terminal_result = result
+        return result
+
+    def reconcile(worker_state, worker_result):
+        assert worker_result is result
+        worker_state.project.generate_range_string = worker_result.remaining_range_string
+
+    monkeypatch.setattr(ModelWorker, "start", staticmethod(lambda: ""))
+    monkeypatch.setattr(GenerationApp, "run", run_worker)
+    monkeypatch.setattr(generation_app_module, "_reconcile_generation_result", reconcile)
+
+    assert run_generation_app(state, {0}, 1) is result
+    assert json.loads(project_file.read_text()) == {
+        "generate_range_string": "none", "gen_auto_concat": True,
+    }
+
+
+def test_console_line_assembler_handles_partial_lines_and_carriage_replacement() -> None:
+    assembler = ConsoleLineAssembler()
+
+    lines, live = assembler.feed("loading 1")
+    assert lines == []
+    assert live == "loading 1"
+
+    lines, live = assembler.feed("\rloading 2\x1b[K\x1b[")
+    assert lines == []
+    assert live == "loading 2"
+
+    # CSI controls may be split across worker queue chunks.
+    lines, live = assembler.feed("1Gdone\nnext")
+    assert lines == ["done"]
+    assert live == "next"
+    assert assembler.finish() == ["next"]
+
+
+def test_transcript_strips_ansi_but_keeps_all_lines(tmp_path) -> None:
+    path = tmp_path / "generation.log"
+    transcript = GenerationTranscript(str(path))
+    transcript.write_lines([f"{COL_ERROR}failed", "plain"])
+    transcript.write_chunk("progress 1\rprogress 2\n")
+    transcript.write_chunk("\x1b[")
+    transcript.write_chunk("31mred\x1b[0m\n")
+    transcript.close()
+
+    assert path.read_text(encoding="utf-8") == (
+        "failed\nplain\nprogress 1\nprogress 2\nred\n"
+    )
+
+
+def test_console_line_assembler_strips_non_hyperlink_osc_and_holds_split_osc() -> None:
+    assembler = ConsoleLineAssembler()
+
+    # A complete OSC sequence (terminal title, BEL-terminated) is discarded.
+    lines, live = assembler.feed("\x1b]2;job title\x07done\n")
+    assert lines == ["done"]
+    assert live == ""
+
+    # A complete OSC sequence terminated by ST (ESC \).
+    lines, live = assembler.feed("\x1b]0;name\x1b\\ok\n")
+    assert lines == ["ok"]
+    assert live == ""
+
+    # An OSC split across chunks is held until its terminator arrives.
+    assembler = ConsoleLineAssembler()
+    lines, live = assembler.feed("\x1b]2;titl")
+    assert lines == []
+    assert live == ""
+    lines, live = assembler.feed("e\x07after\n")
+    assert lines == ["after"]
+    assert live == ""
+
+    # Even a split ST terminator must not leak the OSC into the live line.
+    lines, live = assembler.feed("\x1b]2;x\x1b")
+    assert lines == []
+    assert live == ""
+    lines, live = assembler.feed("\\next\n")
+    assert lines == ["next"]
+    assert live == ""
+
+
+def test_console_line_assembler_preserves_complete_and_split_osc_8_links() -> None:
+    link = "\x1b]8;;file:///tmp/book.flac\x1b\\book.flac\x1b]8;;\x1b\\"
+    assembler = ConsoleLineAssembler()
+
+    lines, live = assembler.feed(f"Saved: {link}\n")
+    assert lines == [f"Saved: {link}"]
+    assert live == ""
+
+    assembler = ConsoleLineAssembler()
+    split_at = len("\x1b]8;;file:///tmp/bo")
+    lines, live = assembler.feed("Saved: " + link[:split_at])
+    assert lines == []
+    assert live == "Saved: "
+    lines, live = assembler.feed(link[split_at:] + "\n")
+    assert lines == [f"Saved: {link}"]
+    assert live == ""
+
+
+def test_transcript_strips_osc_and_holds_split_osc(tmp_path) -> None:
+    path = tmp_path / "generation.log"
+    transcript = GenerationTranscript(str(path))
+    transcript.write_chunk("\x1b]2;title\x07hello\n")
+    transcript.write_chunk("\x1b]0;name\x1b\\world\n")
+    # An OSC split across chunks must not leak into the transcript.
+    transcript.write_chunk("\x1b]2;sp")
+    transcript.write_chunk("lit\x07tail\n")
+    transcript.close()
+
+    assert path.read_text(encoding="utf-8") == "hello\nworld\ntail\n"
+
+
+def test_disabled_transcript_creates_no_file_and_writes_nothing(tmp_path) -> None:
+    path = tmp_path / "gen_logs" / "generation.log"
+    transcript = GenerationTranscript(str(path), enabled=False)
+
+    assert transcript.path == ""
+    transcript.write_lines(["hello"])
+    transcript.write_chunk("world\n")
+    transcript.close()
+
+    assert not path.exists()
+
+
+def test_generation_result_reconciles_range_and_sound_catalog(tmp_path) -> None:
+    project_file = tmp_path / "project.json"
+    project_file.write_text('{"generate_range_string": "4-6"}', encoding="utf-8")
+    invalidations: list[bool] = []
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=SimpleNamespace(
+                dir_path=str(tmp_path),
+                generate_range_string="all",
+                phrase_groups=[],
+                sound_segments=SimpleNamespace(
+                    force_invalidate=lambda: invalidations.append(True),
+                    sound_segments_map={},
+                ),
+                save=lambda: "",
+            )
+        ),
+    )
+    assert _read_persisted_range_string(state) == "4-6"
+    result = GenerationModalResult(
+        GenerationTerminalStatus.WORKER_RESET,
+        "4-6",
+        str(tmp_path / "generation.log"),
+    )
+
+    _reconcile_generation_result(state, result)
+
+    assert state.project.generate_range_string == "4-6"
+    assert invalidations == [True]
+
+
+def test_reconcile_rederives_range_string_from_segment_catalog(tmp_path) -> None:
+    saved: list[str] = []
+    project = SimpleNamespace(
+        dir_path=str(tmp_path),
+        generate_range_string="all",
+        phrase_groups=[0, 1, 2],
+        sound_segments=SimpleNamespace(
+            force_invalidate=lambda: None,
+            sound_segments_map={0: "00001.flac", 1: "00002.flac"},
+        ),
+        save=lambda: (saved.append(project.generate_range_string) or ""),
+    )
+    state = cast(State, SimpleNamespace(project=project))
+    # The (killed) worker never persisted its own range update, so the
+    # copy-back value still says "all" even though segments 1-2 were written.
+    result = GenerationModalResult(
+        GenerationTerminalStatus.WORKER_RESET,
+        "all",
+        str(tmp_path / "generation.log"),
+    )
+
+    _reconcile_generation_result(state, result)
+
+    # The re-derived range excludes the segments that exist on disk.
+    assert project.generate_range_string == "3"
+    assert saved == ["3"]
+
+
+def test_generation_app_finalizes_on_worker_exited(monkeypatch, fake_worker, tmp_path) -> None:
+    queued_events = [
+        [
+            ConsoleOutput("job", "stdout", "worker output\n"),
+            WorkerExited(
+                "job",
+                "Model worker process exited unexpectedly. Worker log: /tmp/worker.log",
+            ),
+        ]
+    ]
+    fake_worker.batches = queued_events
+    monkeypatch.setattr(
+        generation_app_module,
+        "make_worker_log_file_path",
+        lambda: "/tmp/fake-worker.log",
+    )
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause(0.3)
+            assert app.terminal_result is not None
+            assert app.terminal_result.status == GenerationTerminalStatus.FAILED
+            assert "Worker log: /tmp/worker.log" in app.terminal_result.message
+            await pilot.press("enter")
+        assert app.return_value is not None
+        assert app.return_value.status == GenerationTerminalStatus.FAILED
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_generation_progress_promotes_batch_divider_to_full_width_rule(
+    fake_worker, tmp_path
+) -> None:
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(70, 16)) as pilot:
+            await pilot.pause()
+            # Pre-batch output (model warm-up) so the heading is not the
+            # first content in the log; the divider is then promoted.
+            app._feed_console(["worker output"], "")
+            app._handle_update(
+                GenerationProgress(
+                    processed=0,
+                    remaining=1,
+                    total=1,
+                    current_indices=(0,),
+                )
+            )
+            app._feed_console(["-------", "Processing line 1"], "")
+            await pilot.pause()
+
+            log = app.query_one(WorkerLogContentArea).worker_log
+            width = log.scrollable_content_region.width
+            assert log._lines[0].text.plain == "worker output"
+            assert log._lines[1].text.plain == "-------"
+            assert log._lines[1].row_text(width, 0).plain == ("- " * ((width + 1) // 2))[:width]
+            assert log._lines[2].text.plain == "Processing line 1"
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_generation_run_end_places_closing_divider_before_summary(
+    fake_worker, tmp_path
+) -> None:
+    """The run-end event promotes the summary block's dash line to the
+    closing rule, and the terminal summary does not add a second one."""
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(70, 20)) as pilot:
+            await pilot.pause()
+            log = app.query_one(WorkerLogContentArea).worker_log
+
+            # First (and only) batch: its heading divider is omitted because
+            # it is the log's first visible content.
+            app._handle_update(
+                GenerationProgress(
+                    processed=0, remaining=1, total=1, current_indices=(0,)
+                )
+            )
+            app._feed_console(
+                ["-------", "Processing line 1", "Saved: 00001.flac"], ""
+            )
+            await pilot.pause()
+
+            # The batch loop ends; the trailing summary block follows.
+            app._handle_update(GenerationRunEnded())
+            app._feed_console(["------", "Elapsed: 1.2s", "Lines saved: 1 (all)"], "")
+            await pilot.pause()
+
+            lines = [line.text.plain for line in log._lines]
+            assert lines == [
+                "Processing line 1",
+                "Saved: 00001.flac",
+                "------",
+                "Elapsed: 1.2s",
+                "Lines saved: 1 (all)",
+                "",
+            ]
+            width = log.scrollable_content_region.width
+            assert log._lines[2].row_text(width, 0).plain == (
+                "- " * ((width + 1) // 2)
+            )[:width]
+
+            # The terminal summary must not place a second closing rule.
+            app._show_terminal_summary(
+                GenerationModalResult(
+                    GenerationTerminalStatus.COMPLETED, "none", transcript.path
+                )
+            )
+            await pilot.pause()
+            separators = [
+                line for line in log._lines if isinstance(line, _SeparatorLine)
+            ]
+            assert len(separators) == 1
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_generation_worker_exit_places_closing_divider_without_run_end_event(
+    fake_worker, tmp_path
+) -> None:
+    """A path that never emits the run-end event (a dead worker) still gets a
+    closing rule from the terminal-summary safety net."""
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(70, 20)) as pilot:
+            await pilot.pause()
+            log = app.query_one(WorkerLogContentArea).worker_log
+            app._feed_console(["Processing line 1", "Saved: 00001.flac"], "")
+            await pilot.pause()
+
+            app._on_worker_exit(WorkerExited("job", "worker died"))
+            await pilot.pause()
+
+            lines = [line.text.plain for line in log._lines]
+            separator_index = next(
+                index
+                for index, line in enumerate(log._lines)
+                if isinstance(line, _SeparatorLine)
+            )
+            assert lines[separator_index - 1] == "Saved: 00001.flac"
+            assert "worker died" in "\n".join(lines[separator_index + 1 :])
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_generation_app_waits_for_enter_after_terminal_summary(monkeypatch, fake_worker, tmp_path) -> None:
+    queued_events = [
+        [
+            ConsoleOutput("job", "stdout", "worker output\n"),
+            GenerationUpdate("job", GenerationStarted(total=2)),
+            GenerationUpdate(
+                "job",
+                GenerationProgress(
+                    processed=1, remaining=1, total=2, eta_seconds=90.0
+                ),
+            ),
+            GenerationFinished(
+                "job",
+                GenerationTerminalStatus.COMPLETED,
+                "2",
+            ),
+        ]
+    ]
+    fake_worker.batches = queued_events
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0, 1}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            # Polling and the final-output settle timer can take longer than
+            # a fixed pause when the full suite is busy.
+            async with asyncio.timeout(5):
+                while app.terminal_result is None:
+                    await pilot.pause(0.05)
+            assert app.terminal_result.status == GenerationTerminalStatus.COMPLETED
+            assert app.return_value is None
+            # The bottom prompt row was removed; the terminal phase now
+            # surfaces in the header status line instead.
+            assert "Generation completed" in str(
+                app.query_one("#generation-status", Static).render()
+            )
+            # The header title is the fixed accent-colored line.
+            assert "Generating audio" in str(
+                app.query_one("#generation-title", Static).render()
+            )
+            # The progress event's ETA snapshot reaches the stats line.
+            assert "ETA: 1m30s" in str(
+                app.query_one("#generation-stats", Static).render()
+            )
+            # Once the job has stopped, the header prompt line switches to
+            # the continue hint.
+            assert "to continue" in str(
+                app.query_one("#generation-hotkey", Static).render()
+            )
+            await pilot.press("enter")
+        assert app.return_value is not None
+        assert app.return_value.status == GenerationTerminalStatus.COMPLETED
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+    text = Path(transcript.path).read_text(encoding="utf-8")
+    assert "worker output" in text
+    assert "Generation completed." in text
+    # The transcript stores plain text (ANSI is stripped), so compare
+    # against the uncolored hotkey label.
+    assert "Press [ENTER] to continue" in text
+
+
+def test_generation_app_selects_terminal_sound(monkeypatch) -> None:
+    sound_calls: list[str] = []
+    monkeypatch.setattr(
+        generation_app_module.app_support,
+        "play_done_sound",
+        lambda: sound_calls.append("done"),
+    )
+    monkeypatch.setattr(
+        generation_app_module.app_support,
+        "play_fatal_gen_sound",
+        lambda: sound_calls.append("fatal"),
+    )
+
+    app = GenerationApp(
+        make_state(),
+        {0},
+        1,
+        GenerationTranscript("", enabled=False),
+    )
+    for status in GenerationTerminalStatus:
+        for reset_cause in (None, *HardResetCause):
+            sound_calls.clear()
+            result = GenerationModalResult(
+                status,
+                "",
+                "",
+                hard_reset_cause=reset_cause,
+            )
+
+            app._post_terminal_summary(result)
+
+            expected: list[str] = []
+            if status is GenerationTerminalStatus.COMPLETED:
+                expected = ["done"]
+            elif status in (
+                GenerationTerminalStatus.ABORTED,
+                GenerationTerminalStatus.FAILED,
+            ):
+                expected = ["fatal"]
+            elif status is GenerationTerminalStatus.WORKER_RESET and reset_cause in (
+                HardResetCause.GENERATION_TIMEOUT,
+                HardResetCause.MODEL_UNHEALTHY,
+            ):
+                expected = ["fatal"]
+            assert sound_calls == expected, (status, reset_cause)
+
+
+def test_regular_generation_still_waits_for_enter_without_auto_concat() -> None:
+    """The auto-concat preference still governs the regular generation
+    flow: without it, a completed batch waits for ENTER."""
+    project = make_project(generate_range_string="all", gen_auto_concat=False)
+    app = GenerationApp(
+        cast(State, SimpleNamespace(project=project)),
+        {0},
+        1,
+        GenerationTranscript("", enabled=False),
+    )
+    result = GenerationModalResult(GenerationTerminalStatus.COMPLETED, "", "")
+
+    app._pre_terminal_summary(result)
+    app.terminal_result = result
+
+    assert not app.auto_exit
+    assert app.prompt_mode == "finished"
+    # Regular generation always shows the completion banner.
+    assert app.terminal_label(result) == "Generation completed."
+    assert app.terminal_display_label(result) == "Generation completed."
+    assert any("ENTER" in line for line in app.terminal_summary_extra_lines(result))
+
+
+def test_generation_app_auto_continues_when_auto_concat_enabled(monkeypatch, fake_worker, tmp_path) -> None:
+    queued_events = [
+        [
+            ConsoleOutput("job", "stdout", "worker output\n"),
+            GenerationUpdate("job", GenerationStarted(total=2)),
+            GenerationUpdate(
+                "job",
+                GenerationProgress(processed=1, remaining=1, total=2),
+            ),
+            GenerationFinished(
+                "job",
+                GenerationTerminalStatus.COMPLETED,
+                "2",
+            ),
+        ]
+    ]
+    fake_worker.batches = queued_events
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+
+    project = make_project(generate_range_string="all", gen_auto_concat=True)
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(
+        cast(State, SimpleNamespace(project=project)), {0, 1}, 1, transcript
+    )
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause(0.3)
+            assert app.terminal_result is not None
+            assert app.terminal_result.status == GenerationTerminalStatus.COMPLETED
+            assert app.auto_exit
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+    # The app exited on its own within that pause: no ENTER keypress and
+    # no continue delay were involved.
+    assert app.return_value is not None
+    assert app.return_value.status == GenerationTerminalStatus.COMPLETED
+
+    text = Path(transcript.path).read_text(encoding="utf-8")
+    assert "worker output" in text
+    assert "Generation completed." in text
+    assert "Proceeding to concatenation..." in text
+    assert f"Press {util.make_hotkey_string('ENTER')} to continue" not in text
+
+
+def test_progress_bar_updates_never_resize_the_log_area(monkeypatch, fake_worker, tmp_path) -> None:
+    """The model library's carriage-return progress bar updates the
+    document's current line in place, and committing it advances the
+    document by one line in the normal document flow. Across the bar's
+    whole lifecycle (start, ticks, commit) the log area's height must
+    stay constant, so the content area never resizes or flickers when
+    a progress bar starts or finishes."""
+    queued_events = [
+        [ConsoleOutput("job", "stdout", "worker output\n")],
+        [ConsoleOutput("job", "stdout", "\rbar 10%")],
+        [ConsoleOutput("job", "stdout", "\rbar 50%")],
+        [ConsoleOutput("job", "stdout", "\rbar 100%\n")],
+        [
+            GenerationFinished(
+                "job",
+                GenerationTerminalStatus.COMPLETED,
+                "2",
+            )
+        ],
+    ]
+
+    def fake_drain(max_events=1000):
+        # One batch per call, so a manual drain delivers exactly one.
+        return queued_events.pop(0) if queued_events else []
+
+    # Park the poll interval; the test drives the drain manually so each
+    # phase boundary (idle feed, bar start, bar ticks, bar commit,
+    # finished) is sampled deterministically.
+    monkeypatch.setattr(worker_app_module, "EVENT_POLL_SECONDS", 3600.0)
+    # Park the settle timer so the terminal summary (which would add
+    # lines) cannot fire mid-test.
+    monkeypatch.setattr(
+        generation_app_module, "FINAL_OUTPUT_SETTLE_SECONDS", 3600.0
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(fake_drain))
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            log = app.query_one(WorkerLogContentArea).worker_log
+            # One sample per phase: the initial idle state, then the
+            # state after each drained event batch. The virtual height
+            # tracks the document: the empty current line; the committed
+            # output line; the bar ticking in place on the current line
+            # (no growth); the committed bar plus a fresh current line.
+            virtual_heights: list[int] = [log.virtual_size.height]
+            area_heights: list[int] = [log.scrollable_content_region.height]
+            for _ in range(len(queued_events)):
+                app._drain_worker_events()
+                await pilot.pause()
+                virtual_heights.append(log.virtual_size.height)
+                area_heights.append(log.scrollable_content_region.height)
+            assert virtual_heights == [1, 2, 2, 2, 3, 3]
+            # The area itself never resized: no layout change, no flicker.
+            assert len(set(area_heights)) == 1
+            assert not queued_events
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_escape_snaps_scrolled_log_to_bottom(monkeypatch, fake_worker, tmp_path) -> None:
+    """ESC forces the worker log to jump to the bottom and resume tail
+    following: a user who scrolled up to read earlier output immediately
+    sees the cancellation notice and the latest worker lines."""
+    queued_events = [
+        [ConsoleOutput("job", "stdout", f"worker line {i}\n") for i in range(60)],
+    ]
+
+    def fake_drain(max_events=1000):
+        return queued_events.pop(0) if queued_events else []
+
+    monkeypatch.setattr(worker_app_module, "EVENT_POLL_SECONDS", 3600.0)
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(fake_drain))
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        ModelWorker,
+        "request_cancel",
+        staticmethod(lambda operation_id: True),
+    )
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            log = app.query_one(WorkerLogContentArea).worker_log
+            app._drain_worker_events()
+            await pilot.pause()
+            assert log.max_scroll_y > 0
+            assert log.scroll_offset.y == log.max_scroll_y
+
+            # Scrolling up detaches from the tail.
+            log.action_history_up()
+            await pilot.pause()
+            assert not log.follow_tail
+            assert log.scroll_offset.y < log.max_scroll_y
+
+            # ESC snaps the log back to the bottom, and the appended
+            # cancellation notice is visible there.
+            await pilot.press("escape")
+            await pilot.pause()
+            assert log.follow_tail
+            assert log.scroll_offset.y == log.max_scroll_y
+            document = "\n".join(line.text.plain for line in log._lines)
+            assert "Cancellation requested" in document
+            assert "worker line 59" in document
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_second_escape_hard_resets_worker_immediately(monkeypatch, fake_worker, tmp_path) -> None:
+    cancel_calls: list[str] = []
+    reset_calls: list[int] = []
+
+    def fake_reset() -> str:
+        reset_calls.append(1)
+        return ""
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        ModelWorker,
+        "request_cancel",
+        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.press("escape")
+            assert cancel_calls == ["job"]
+            assert app.cancel_requested
+            await pilot.pause()
+            # While the worker waits for a safe boundary, the header prompt
+            # switches to the kill-process hint.
+            assert "to kill process and stop immediately" in str(
+                app.query_one("#generation-hotkey", Static).render()
+            )
+
+            # The second ESC hard-resets the worker immediately, with no
+            # confirmation dialog.
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+
+            assert reset_calls == [1]
+            assert type(app.screen).__name__ == "Screen"
+            assert app.terminal_result is not None
+            assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
+            assert app.terminal_result.hard_reset_cause is HardResetCause.USER_ESCALATION
+            # The WORKER_RESET message points at the worker's own log file.
+            assert "Worker log" in app.terminal_result.message
+            # Once the job has stopped, the header prompt line switches to
+            # the continue hint.
+            assert "to continue" in str(
+                app.query_one("#generation-hotkey", Static).render()
+            )
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_second_escape_in_sgl_omni_mode_is_not_offered(monkeypatch, fake_worker, tmp_path) -> None:
+    """In SGL-Omni backend mode the worker holds no local TTS model memory,
+    so the hard-reset offer is gated off: ESC only requests a cancel and
+    further presses are no-ops."""
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+
+    cancel_calls: list[str] = []
+    reset_calls: list[int] = []
+
+    def fake_reset() -> str:
+        reset_calls.append(1)
+        return ""
+
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        ModelWorker,
+        "request_cancel",
+        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.press("escape")
+            assert cancel_calls == ["job"]
+            assert app.cancel_requested
+            await pilot.pause()
+            # The cancellation notice no longer offers the hard reset.
+            log = app.query_one(WorkerLogContentArea).worker_log
+            document = "\n".join(line.text.plain for line in log._lines)
+            assert "Cancellation requested" in document
+            assert "hard-reset" not in document
+            # The pending header prompt waits rather than advertising the
+            # kill-process escape hatch.
+            hotkey = str(app.query_one("#generation-hotkey", Static).render())
+            assert "kill process" not in hotkey
+            assert "Waiting for the current generation to stop" in hotkey
+
+            # Further ESC presses do nothing: no worker dump, no reset,
+            # no terminal result.
+            await pilot.press("escape")
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+
+            assert reset_calls == []
+            assert not app.reset_in_progress
+            assert app.terminal_result is None
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def _install_gen_timeout_worker_stubs(monkeypatch) -> dict:
+    """Stub ModelWorker so a timeout event can be delivered on demand."""
+    reset_calls: list[int] = []
+    cancel_calls: list[str] = []
+    latch = {"deliver": False}
+    events = [GenerationUpdate("job", GenerationTimedOut(180.0))]
+
+    def fake_drain_events() -> list:
+        if latch["deliver"] and events:
+            return [events.pop(0)]
+        return []
+
+    def fake_reset() -> str:
+        reset_calls.append(1)
+        return ""
+
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_generation",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(fake_drain_events))
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        ModelWorker,
+        "request_cancel",
+        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
+    return {"latch": latch, "reset_calls": reset_calls, "cancel_calls": cancel_calls}
+
+
+def test_gen_timeout_event_hard_resets_worker(monkeypatch, tmp_path) -> None:
+    stubs = _install_gen_timeout_worker_stubs(monkeypatch)
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            stubs["latch"]["deliver"] = True
+            await pilot.pause(0.3)
+
+            assert stubs["reset_calls"] == [1]
+            assert app.terminal_result is not None
+            assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
+            assert app.terminal_result.hard_reset_cause is HardResetCause.GENERATION_TIMEOUT
+            # The summary cites the gen timeout and its cap value.
+            assert "GEN_TIMEOUT" in app.terminal_result.message
+            assert "180" in app.terminal_result.message
+            await pilot.press("enter")
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_gen_timeout_still_resets_worker_after_single_escape(monkeypatch, tmp_path) -> None:
+    """A pending single-ESC cancel must not suppress the gen timeout."""
+    stubs = _install_gen_timeout_worker_stubs(monkeypatch)
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            # One ESC requests cancellation; the in-flight inference is
+            # still allowed to run (and hang) past the cap.
+            await pilot.press("escape")
+            assert stubs["cancel_calls"] == ["job"]
+            assert app.cancel_requested
+
+            # The timeout fires anyway and hard-resets the worker.
+            stubs["latch"]["deliver"] = True
+            await pilot.pause(0.3)
+
+            assert stubs["reset_calls"] == [1]
+            assert app.terminal_result is not None
+            assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
+            assert app.terminal_result.hard_reset_cause is HardResetCause.GENERATION_TIMEOUT
+            assert "180" in app.terminal_result.message
+            await pilot.press("enter")
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_interface_failure_cleanup_reports_worker_restart_failure(
+    monkeypatch, tmp_path
+) -> None:
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=SimpleNamespace(
+                dir_path=str(tmp_path),
+                generate_range_string="all",
+            ),
+            prefs=SimpleNamespace(save_gen_log=False),
+        ),
+    )
+    reset_calls: list[None] = []
+
+    def failing_run(app, **_kwargs):
+        app.operation_id = "job"
+        raise RuntimeError("interface exploded")
+
+    monkeypatch.setattr(ModelWorker, "start", staticmethod(lambda: ""))
+    monkeypatch.setattr(
+        ModelWorker,
+        "reset",
+        staticmethod(
+            lambda: reset_calls.append(None) or "replacement worker failed to start"
+        ),
+    )
+    monkeypatch.setattr(GenerationApp, "run", failing_run)
+    monkeypatch.setattr(
+        generation_app_module,
+        "_reconcile_generation_result",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        generation_app_module,
+        "_present_console_result",
+        lambda *_args: None,
+    )
+
+    result = run_generation_app(state, {0}, 1)
+
+    assert reset_calls == [None]
+    assert result.status is GenerationTerminalStatus.FAILED
+    assert "RuntimeError: interface exploded" in result.message
+    assert "replacement worker failed to start" in result.message
+    assert result.hard_reset_cause is HardResetCause.INTERFACE_FAILURE
+
+
+def test_interface_failure_reuses_the_sessions_own_result(
+    monkeypatch, tmp_path
+) -> None:
+    """A session that recorded a result before failing is not re-classified.
+
+    The session already presented its own outcome, so the runner returns it
+    as-is and leaves the (now idle) worker alone instead of hard-resetting it.
+    """
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=SimpleNamespace(
+                dir_path=str(tmp_path),
+                generate_range_string="all",
+            ),
+            prefs=SimpleNamespace(save_gen_log=False),
+        ),
+    )
+    reset_calls: list[None] = []
+    own_result = GenerationModalResult(
+        GenerationTerminalStatus.CANCELLED, "", "", "session outcome"
+    )
+
+    def failing_run(app, **_kwargs):
+        app.operation_id = "job"
+        app.terminal_result = own_result
+        raise RuntimeError("interface exploded after the summary")
+
+    monkeypatch.setattr(ModelWorker, "start", staticmethod(lambda: ""))
+    monkeypatch.setattr(
+        ModelWorker,
+        "reset",
+        staticmethod(lambda: reset_calls.append(None) or ""),
+    )
+    monkeypatch.setattr(GenerationApp, "run", failing_run)
+    monkeypatch.setattr(
+        generation_app_module,
+        "_reconcile_generation_result",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        generation_app_module,
+        "_present_console_result",
+        lambda *_args: None,
+    )
+
+    result = run_generation_app(state, {0}, 1)
+
+    assert result is own_result
+    assert reset_calls == []

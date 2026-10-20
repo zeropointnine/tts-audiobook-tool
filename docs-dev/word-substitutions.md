@@ -35,7 +35,7 @@ It covers:
 | Menu surface | `tts_audiobook_tool/menus/text_menu.py` (`TextMenu.word_substitutions_menu`) |
 | Uncommon-words inspector | `tts_audiobook_tool/app_support/app_text.py` (`get_uncommon_words`) + `tts_audiobook_tool/text_ops/whitelist.py` |
 | Language-code normalization | `tts_audiobook_tool/text_ops/language_util.py` (`normalize_language_code`) |
-| Tests | `tests/test_prompt_normalizer.py`, `tests/test_word_substitutions_app.py`, `tests/test_word_substitutions_dialog.py`, `tests/test_text_menu.py`, `tests/test_language_util.py` |
+| Tests | `tests/text/test_prompt_normalizer.py`, `tests/ui/test_word_substitutions_app.py`, `tests/ui/test_word_substitutions_dialog.py`, `tests/text/test_text_menu.py`, `tests/text/test_language_util.py` |
 
 ---
 
@@ -541,17 +541,17 @@ Behavioral invariants:
 
 Relevant tests:
 
-- `tests/test_prompt_normalizer.py` — end-to-end matching, capitalization,
+- `tests/text/test_prompt_normalizer.py` — end-to-end matching, capitalization,
   plural/possessive suffixes (including alias language codes such as `en-US`).
-- `tests/test_word_substitutions_app.py` — staged edits and commit/rollback.
-- `tests/test_word_substitutions_dialog.py` — `normalize_original_key` cases,
+- `tests/ui/test_word_substitutions_app.py` — staged edits and commit/rollback.
+- `tests/ui/test_word_substitutions_dialog.py` — `normalize_original_key` cases,
   whitespace/punctuation-only errors, stale-error clearing, collision,
   equality-after-normalization, Tab/Enter/Esc behavior.
-- `tests/test_text_menu.py` — the edit item's label and count, presence and
+- `tests/text/test_text_menu.py` — the edit item's label and count, presence and
   absence of the uncommon-words inspector (phrase groups, language support,
   alias codes), the inspector's printed report, and the text-import
   confirmation.
-- `tests/test_project_book_integration.py` — word substitutions surviving
+- `tests/project/test_project_book_integration.py` — word substitutions surviving
   text-file/manual and EPUB import.
-- `tests/test_language_util.py` — the shared normalizer and the fact that the
+- `tests/text/test_language_util.py` — the shared normalizer and the fact that the
   whitelist and word equivalence delegate to it.

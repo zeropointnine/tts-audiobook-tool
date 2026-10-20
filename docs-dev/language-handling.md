@@ -54,7 +54,7 @@ It lowercases, strips, takes the subtag before the first `-`, and runs a small a
 table (`english/eng -> en`, `spanish/spa -> es`). The docstring there states the
 philosophy explicitly: features that key off a language normalize on read rather than
 at input. `Whitelist.normalize_language_code` and `WordEquivalence` delegate to this
-same function, and `tests/test_language_util.py` asserts the subsystems share it.
+same function, and `tests/text/test_language_util.py` asserts the subsystems share it.
 
 Not every consumer normalizes, though — several compare the raw stored value (see the
 musings at the end).

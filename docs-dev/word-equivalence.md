@@ -10,7 +10,7 @@ spacing-repairable matches.
 (`WordEquivalence`)
 **Validator integration:** `tts_audiobook_tool/validator.py`
 (`Validator.get_word_error_alignment()`)
-**Tests:** `tests/test_word_equivalence.py`
+**Tests:** `tests/text/test_word_equivalence.py`
 
 ---
 

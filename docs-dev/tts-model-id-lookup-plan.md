@@ -61,7 +61,7 @@ After callers have been migrated:
 
 ### 4. Update tests and documentation
 
-Update [catalog tests](<../tests/test_model_catalog.py>) to assert lookup contracts rather than uppercase attributes or annotations:
+Update [catalog tests](<../tests/models/test_model_catalog.py>) to assert lookup contracts rather than uppercase attributes or annotations:
 
 - Strict and tolerant lookup agree for every shipped model.
 - Strict unknown lookup raises; tolerant unknown lookup returns the placeholder without modifying a saved selection.

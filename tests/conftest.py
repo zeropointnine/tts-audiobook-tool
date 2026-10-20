@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -89,6 +90,33 @@ def stub_system_sleep_inhibitor(monkeypatch):
     yield
 
 
+class _NoSleepTime:
+    """``time`` module stand-in whose ``sleep`` returns immediately."""
+
+    def __getattr__(self, name):
+        import time
+        return getattr(time, name)
+
+    @staticmethod
+    def sleep(_seconds):
+        pass
+
+
+@pytest.fixture(autouse=True)
+def skip_ui_pauses(monkeypatch):
+    """Drop the human-paced UI pauses: ``print_feedback``'s read-it pause
+    (0.8 s, doubled for errors) and the hint "[...]" animation (2 s).
+
+    The pause *values* are untouched, so tests that record what would have been
+    slept (see test_print_feedback) still see the real durations.
+    """
+    from tts_audiobook_tool import util
+    from tts_audiobook_tool.app_support import hints
+
+    monkeypatch.setattr(util, "time", _NoSleepTime())
+    monkeypatch.setattr(hints, "time", _NoSleepTime())
+
+
 @pytest.fixture(autouse=True)
 def isolate_app_user_dir(monkeypatch):
     """
@@ -102,6 +130,39 @@ def isolate_app_user_dir(monkeypatch):
         os.makedirs(user_dir, exist_ok=True)
         monkeypatch.setattr(app_paths, "get_app_user_dir", lambda: user_dir)
         yield
+
+
+@pytest.fixture
+def prefs_path() -> Path:
+    """The prefs file location for this test (inside the isolated user dir)."""
+    from tts_audiobook_tool.prefs import Prefs
+
+    return Path(Prefs.get_file_path())
+
+
+class FakeWorker:
+    """Stands in for the worker process behind ``ModelWorker``.
+
+    Generation and real-time playback submissions return ``"job"``, and
+    ``drain_events`` hands out ``batches`` one list per call (``[]`` once
+    empty, i.e. an idle worker). Assign or extend ``batches`` to feed events.
+    """
+
+    def __init__(self, monkeypatch) -> None:
+        from tts_audiobook_tool.model_worker import ModelWorker
+
+        self.batches: list[list] = []
+        for method in ("submit_generation", "submit_realtime_playback"):
+            monkeypatch.setattr(ModelWorker, method, staticmethod(lambda **_: "job"))
+        monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(self._drain))
+
+    def _drain(self, *_args, **_kwargs) -> list:
+        return self.batches.pop(0) if self.batches else []
+
+
+@pytest.fixture
+def fake_worker(monkeypatch) -> FakeWorker:
+    return FakeWorker(monkeypatch)
 
 
 @pytest.fixture(autouse=True)

@@ -164,4 +164,4 @@ The one-model and multiple-model mismatch rules, startup/project-load local mode
 - [Menu loop](<../tts_audiobook_tool/menus/menu_util.py>): reconciliation before menu items are built and FYI delivery after `on_shown`.
 - [State](<../tts_audiobook_tool/state.py>) and [model picker](<../tts_audiobook_tool/menus/model/model_select_menu.py>): project initialization and explicit selection.
 - [Remote discovery](<../tts_audiobook_tool/app_support/remote_tts_discovery.py>): cached observations, backend identification, and discovery errors.
-- [Selection tests](<../tests/test_project_tts_selection.py>), [status tests](<../tests/test_menu_status.py>), and [remote integration tests](<../tests/test_remote_tts_integration.py>): executable references for the rules and binding boundary.
+- [Selection tests](<../tests/models/test_project_tts_selection.py>), [status tests](<../tests/ui/test_menu_status.py>), and [remote integration tests](<../tests/models/test_remote_tts_integration.py>): executable references for the rules and binding boundary.

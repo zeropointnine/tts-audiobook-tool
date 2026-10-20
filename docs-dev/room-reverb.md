@@ -237,13 +237,13 @@ cancelling on), level-matched by loudness normalization, using
 
 ## Tests
 
-[`tests/test_room_reverb.py`](../tests/test_room_reverb.py) (IR, streaming continuity, DRR,
+[`tests/audio/test_room_reverb.py`](../tests/audio/test_room_reverb.py) (IR, streaming continuity, DRR,
 dry break effects, stereo IRs and mono fold-down, stereo concat wiring, per-voice rooms in concat
 (`TestConcatPerVoiceRooms`), setting load/save); several rooms in
-[`tests/test_voice_spatial.py`](../tests/test_voice_spatial.py); which voice's room and stereo in
-[`tests/test_voice_spatial_policy.py`](../tests/test_voice_spatial_policy.py); menu in
-[`tests/test_concat_menu.py`](../tests/test_concat_menu.py); realtime in
-[`tests/test_real_time_playback_app.py`](../tests/test_real_time_playback_app.py)
+[`tests/audio/test_voice_spatial.py`](../tests/audio/test_voice_spatial.py); which voice's room and stereo in
+[`tests/voices/test_voice_spatial_policy.py`](../tests/voices/test_voice_spatial_policy.py); menu in
+[`tests/audio/test_concat_menu.py`](../tests/audio/test_concat_menu.py); realtime in
+[`tests/ui/test_real_time_playback_app.py`](../tests/ui/test_real_time_playback_app.py)
 (`test_realtime_save_writes_exactly_what_was_played`, `test_realtime_uses_each_segments_voice_room`).
 
 ## Open questions

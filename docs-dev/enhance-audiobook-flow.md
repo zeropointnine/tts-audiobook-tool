@@ -9,7 +9,7 @@ Relevant code:
 - `tts_audiobook_tool/enhance/enhance_artifacts.py` — artifacts, state snapshot, caching
 - `tts_audiobook_tool/enhance/enhance_menu.py` — menu presentation
 - `tts_audiobook_tool/enhance/enhance_flow.py` — user-triggered operations
-- Tests: `tests/test_enhance_artifacts.py`, `tests/test_enhance_menu.py`, `tests/test_enhance_flow.py`
+- Tests: `tests/enhance/test_enhance_artifacts.py`, `tests/enhance/test_enhance_menu.py`, `tests/enhance/test_enhance_flow.py`
 
 ## Overview
 

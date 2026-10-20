@@ -4,15 +4,43 @@ Shared test support for GenerateUtil.generate_files() tests.
 Replaces the model/validation layer with a mocked stack so tests can inject
 a deterministic generate_and_validate_batch side effect. Call
 generate_files_mock_stack() as a context manager around
-GenerateUtil.generate_files(...).
+GenerateUtil.generate_files(...). make_generate_state() builds the minimal
+State those tests drive.
 """
 
 from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import Any, Iterator
-from unittest.mock import patch
+from typing import Any, Iterator, cast
+from unittest.mock import MagicMock, patch
 
+from tts_audiobook_tool.app_types import VoiceSelectMode
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+
+def make_generate_state(num_groups: int = 2, max_retries: int = 2) -> State:
+    phrase_groups = [
+        PhraseGroup([Phrase(f"Hello world {i}.", Reason.SENTENCE)])
+        for i in range(num_groups)
+    ]
+    sound_segments = MagicMock()
+    sound_segments.get_word_error_counts_in_generate_range.return_value = {}
+    project = SimpleNamespace(
+        max_retries=max_retries,
+        phrase_groups=phrase_groups,
+        sound_segments=sound_segments,
+        generate_range_string="all",
+        voice_select_mode=VoiceSelectMode.DISABLED,
+        save=MagicMock(return_value=""),
+    )
+    return cast(
+        State,
+        SimpleNamespace(
+            project=project,
+            prefs=SimpleNamespace(stt_variant=None, stt_config=None, save_debug_files=False),
+        ),
+    )
 
 
 class StubValidationResult:

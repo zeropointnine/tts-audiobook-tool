@@ -2,7 +2,8 @@
 
 ``test_content_textual_app.py`` keeps its own richer stubs; the concrete
 editor test modules (generate, voice line, text, section markers) and
-``test_project_util.py`` share the equivalents defined here.
+``test_project_util.py`` share the equivalents defined here. ``run`` is the
+shared ``asyncio.run`` driver for every Textual test module.
 """
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
-def run(coroutine) -> None:
-    asyncio.run(coroutine)
+def run(coroutine):
+    return asyncio.run(coroutine)
 
 
 def make_phrase_group(text: str, voice_index: int = -1) -> PhraseGroup:

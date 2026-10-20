@@ -260,20 +260,20 @@ The main menu and model status derive their Chatterbox label from `project.chatt
 ## Tests and maintenance checklist
 
 
-- `tests/test_chatterbox_variants.py`
+- `tests/models/test_chatterbox_variants.py`
   - new-project V3 default;
   - legacy V2 ID compatibility;
   - V3 serialization round trip;
   - checkpoint selectors and per-version defaults;
   - model lifecycle parameters.
-- `tests/test_chatterbox_voice_clone_cache.py`
+- `tests/models/test_chatterbox_voice_clone_cache.py`
   - V2 and V3 loader arguments;
   - Turbo exclusion from `t3_model`;
   - existing conditional-cache behavior against the updated library.
-- `tests/test_main_menu_heading.py`
+- `tests/ui/test_main_menu_heading.py`
   - V2 availability hint triggering;
   - V3 hint suppression.
-- `tests/test_start_chatterbox_package.py`
+- `tests/models/test_start_chatterbox_package.py`
   - old PyPI provenance detection;
   - Git installation acceptance;
   - alternate-version and missing-package behavior;

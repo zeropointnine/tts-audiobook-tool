@@ -159,7 +159,7 @@ These examples illustrate different markup and title conventions; they are not g
 
 ## Validation coverage
 
-Regression coverage is implemented in [test_heading_end_detector.py](../tests/test_heading_end_detector.py), [test_epub_extractor.py](../tests/test_epub_extractor.py), and [test_project_text_edit_util.py](../tests/test_project_text_edit_util.py). It covers:
+Regression coverage is implemented in [test_heading_end_detector.py](../tests/text/test_heading_end_detector.py), [test_epub_extractor.py](../tests/text/test_epub_extractor.py), and [test_project_text_edit_util.py](../tests/project/test_project_text_edit_util.py). It covers:
 
 - exact and case/whitespace-normalized opening-title matches;
 - English chapter-prefix equivalences and the nonempty-remainder requirement, gated by English language codes including regional variants;

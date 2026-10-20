@@ -4,6 +4,8 @@ When inspecting large source files, prefer targeted searches and bounded line-ra
 
 # Testing and validation
 
+Use the [test-routing guide](<docs/test-routing.md>) to choose focused tests and the correct environment before running validation. Start with direct coverage, add consumer tests only for affected contracts, and report relevant skips or environment limitations.
+
 Once appropriate validation has passed, stop. Do not expand testing merely to increase confidence when the remaining risk is low relative to the scope of the change.
 
 The full project test suite is relatively expensive. Treat it as broad validation, not the default completion step for every edit.

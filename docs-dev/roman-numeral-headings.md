@@ -82,6 +82,6 @@ Spanish already normalized `Once.` and `Once` identically, so it needed no chang
 
 ## Tests
 
-`tests/test_roman_heading.py` covers the parser (valid, invalid, range and excluded cases), the expander (positive/negative text, whitespace, language handling), the reason policy on `PhraseGroup.spoken_text()`, the source/transcript comparison, and the punctuation-independent English number normalization.
+`tests/text/test_roman_heading.py` covers the parser (valid, invalid, range and excluded cases), the expander (positive/negative text, whitespace, language handling), the reason policy on `PhraseGroup.spoken_text()`, the source/transcript comparison, and the punctuation-independent English number normalization.
 
 See also: `docs-dev/tts-validation-architecture.md`, `docs-dev/text-segmentation.md` (phrase reasons).

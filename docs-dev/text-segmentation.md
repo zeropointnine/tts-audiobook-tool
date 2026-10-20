@@ -300,10 +300,10 @@ Changes to segmentation should preserve these properties:
 | `tts_audiobook_tool/text_ops/phrase_grouper.py` | Strategy-based prompt grouping and max-word enforcement |
 | `tts_audiobook_tool/text_ops/dialog_segmenter.py` | Optional dialog qualification, quote-edge splitting, voice assignment, and attribution reason |
 | `tts_audiobook_tool/app_types/phrase.py` | `Phrase`, `PhraseGroup`, and ordered `Reason` definitions |
-| `tests/test_quote_spans.py` | Quote-pairing behavior |
-| `tests/test_phrase_segmenter.py` | Sentence and phrase boundary behavior and source preservation |
-| `tests/test_phrase_grouper.py` | Grouping strategies and end-to-end dialog composition |
-| `tests/test_dialog_segmenter.py` | Dialog qualification, splitting, reasons, and voice assignment |
+| `tests/text/test_quote_spans.py` | Quote-pairing behavior |
+| `tests/text/test_phrase_segmenter.py` | Sentence and phrase boundary behavior and source preservation |
+| `tests/text/test_phrase_grouper.py` | Grouping strategies and end-to-end dialog composition |
+| `tests/text/test_dialog_segmenter.py` | Dialog qualification, splitting, reasons, and voice assignment |
 
 ## Limitations and extension points
 

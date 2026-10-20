@@ -207,7 +207,7 @@ These are the invariants that keep the worker from becoming an orphan, a zombie,
 - **Never print from the main process during a worker session.** Output reaches the screen only as `ConsoleOutput` events.
 - **Cancellation must be observable at a safe boundary.** Add `Interrupts().did_interrupt` checks in any new long loop inside worker-owned code; a loop with no check is uncancellable and will be hard-reset instead.
 - **Give every new blocking inference path a timeout story** — the in-worker watchdog for TTS steps, a parent-side `timeout_seconds` for anything else — and say which one applies.
-- **Add a test per protocol message.** `tests/test_model_worker.py` covers lifecycle (start/shutdown, synthesized `WorkerExited`, SIGTERM handling, deterministic IPC teardown, cancel-then-acknowledge, timeout-stops-worker, `for_worker` parity); `tests/test_worker_reset.py` covers reset causes. Run that file, not the whole suite, when touching the worker.
+- **Add a test per protocol message.** `tests/workers/test_model_worker.py` covers lifecycle (start/shutdown, synthesized `WorkerExited`, SIGTERM handling, deterministic IPC teardown, cancel-then-acknowledge, timeout-stops-worker, `for_worker` parity); `tests/workers/test_worker_reset.py` covers reset causes. Run that file, not the whole suite, when touching the worker.
 
 ## Weaknesses and things worth revisiting
 

@@ -25,4 +25,4 @@ tts_audiobook_tool = ["assets/*.flac", "assets/*.json", "assets/*.txt", "assets/
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = "."
+pythonpath = [".", "tests"]

@@ -97,8 +97,8 @@ part of a breath.
 
 ## Tests
 
-[`tests/test_noise_bed.py`](../tests/test_noise_bed.py) (generator continuity, level, band
-limit, fades, concat wiring) and [`tests/test_room_tone_setting.py`](../tests/test_room_tone_setting.py)
+[`tests/audio/test_noise_bed.py`](../tests/audio/test_noise_bed.py) (generator continuity, level, band
+limit, fades, concat wiring) and [`tests/audio/test_room_tone_setting.py`](../tests/audio/test_room_tone_setting.py)
 (default, legacy migration, persistence).
 
 ## Open questions
