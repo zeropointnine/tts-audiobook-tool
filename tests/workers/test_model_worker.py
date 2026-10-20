@@ -1358,6 +1358,7 @@ def test_command_producers_snapshot_live_project_selection(kind, tmp_path, monke
     project = Project(dir_path=str(tmp_path))
     assert project.save() == ""
     project.tts_model_type = "higgs_v3_audiocpp"
+    project.tts_server_model_id = "unsaved-server-selection"
     prefs = Prefs(
         project_dir=str(tmp_path), stt_variant=SttVariant.DISABLED,
         remote_tts_url="http://example.test:9009", tts_force_cpu=True,
@@ -1394,26 +1395,31 @@ def test_command_producers_snapshot_live_project_selection(kind, tmp_path, monke
 
     command = commands.get_nowait()
     assert command.settings.tts_model_type_id == "higgs_v3_audiocpp"
+    assert command.settings.tts_server_model_id == "unsaved-server-selection"
     assert command.settings.remote_tts_url == "http://example.test:9009"
     assert command.settings.stt_variant_id == SttVariant.DISABLED.id
     assert command.settings.tts_force_cpu is True
     assert command.settings.save_debug_files is True
     assert {field.name for field in fields(command.settings)} == {
         "stt_variant_id", "stt_config_id", "tts_force_cpu", "tts_model_type_id",
-        "remote_tts_url", "save_debug_files",
+        "remote_tts_url", "save_debug_files", "tts_server_model_id",
     }
     # A queued snapshot remains independent of further live edits.
     project.tts_model_type = "vibevoice_local"
+    project.tts_server_model_id = "later-server-selection"
     assert command.settings.tts_model_type_id == "higgs_v3_audiocpp"
+    assert command.settings.tts_server_model_id == "unsaved-server-selection"
 
 
-def test_worker_state_overrides_disk_selection_before_binding(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("server_id", ["", "unsaved-server-selection"])
+def test_worker_state_overrides_disk_selection_before_binding(tmp_path, monkeypatch, server_id) -> None:
     from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
     from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
     from tts_audiobook_tool.tts import TtsRuntimeMode
 
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
-    project = Project(dir_path=str(tmp_path), tts_model_type="vibevoice_local")
+    project = Project(dir_path=str(tmp_path), tts_model_type="vibevoice_local",
+                      tts_server_model_id="saved-server-selection")
     project._sound_segments = SimpleNamespace(dont_show_scan_message=False)
     calls = []
     monkeypatch.setattr(
@@ -1425,7 +1431,7 @@ def test_worker_state_overrides_disk_selection_before_binding(tmp_path, monkeypa
     )
     monkeypatch.setattr(
         Tts, "bind_project",
-        staticmethod(lambda selected, **kwargs: calls.append(("bind", selected.tts_model_type))),
+        staticmethod(lambda selected, **kwargs: calls.append(("bind", selected.tts_model_type, selected.tts_server_model_id))),
     )
     monkeypatch.setattr(
         RemoteTtsDiscovery, "refresh",
@@ -1433,14 +1439,16 @@ def test_worker_state_overrides_disk_selection_before_binding(tmp_path, monkeypa
     )
     command = TtsPreviewCommand(
         "snapshot", str(tmp_path),
-        GenerationSettings("disabled", "cpu_int8_float32", False, "higgs_v3_audiocpp", "http://example.test", False),
+        GenerationSettings("disabled", "cpu_int8_float32", False, "higgs_v3_audiocpp", "http://example.test", False,
+                           tts_server_model_id=server_id),
         "Hello",
     )
 
     state = model_worker_module._make_worker_state(command)
 
     assert state.project is project
-    assert calls == [("refresh", True), "load", ("bind", "higgs_v3_audiocpp")]
+    assert calls == [("refresh", True), "load", ("bind", "higgs_v3_audiocpp", server_id)]
+    assert state.project.tts_server_model_id == server_id
     assert state.prefs.remote_tts_url == "http://example.test"
     assert not hasattr(state.prefs, "remote_tts_type")
     assert not hasattr(state.prefs, "remote_tts_model_id")
@@ -1480,6 +1488,32 @@ def test_local_worker_state_ignores_saved_remote_url(tmp_path, monkeypatch) -> N
     assert state.prefs.remote_tts_url == "http://offline.example"
     assert Tts.get_active_type() is model_type
     assert Tts._binding_issue is None
+
+
+def test_chat_cached_project_applies_each_exact_server_id_before_binding(tmp_path, monkeypatch) -> None:
+    # Reusing a cached project must not retain the previous command's server ID.
+    project = Project(dir_path=str(tmp_path), tts_server_model_id="saved-selection")
+    project._sound_segments = SimpleNamespace(dont_show_scan_message=False)
+    monkeypatch.setattr(model_worker_module, "_get_or_load_chat_project", lambda command: project)
+    monkeypatch.setattr(Project, "save", lambda self: pytest.fail("command overrides must not save"))
+    bound = []
+    monkeypatch.setattr(Tts, "bind_project", staticmethod(
+        lambda selected, **kwargs: bound.append((selected.tts_model_type, selected.tts_server_model_id)),
+    ))
+    settings = GenerationSettings("disabled", "cpu_int8_float32", False, "higgs_v3_audiocpp", "", False,
+                                  tts_server_model_id="first-server-id")
+    command = model_worker_module.SynthesizeChatCommand("chat", str(tmp_path), settings, "Hello", False, None)
+    first = model_worker_module._make_chat_worker_state(command)
+    second = model_worker_module._make_chat_worker_state(replace(
+        command, settings=replace(settings, tts_server_model_id="second-server-id"),
+    ))
+    cleared = model_worker_module._make_chat_worker_state(replace(
+        command, settings=replace(settings, tts_server_model_id=""),
+    ))
+    assert first.project is second.project is cleared.project is project
+    assert bound == [("higgs_v3_audiocpp", server_id)
+                     for server_id in ("first-server-id", "second-server-id", "")]
+    assert project.tts_server_model_id == ""
 
 
 def test_chat_cached_project_rebinds_each_command_selection_without_forced_probe(tmp_path, monkeypatch) -> None:

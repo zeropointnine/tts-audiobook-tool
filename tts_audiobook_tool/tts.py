@@ -93,6 +93,7 @@ class Tts:
     _remote_issue: str = ""
     _binding_issue: ReadinessIssue | None = None
     _bound_project_type_id: str = ""
+    _bound_project_server_model_id: str = ""
 
     # Process-level client-vs-local mode, independent of catalog backend.
     _backend_mode: TtsRuntimeMode | None = None
@@ -324,13 +325,49 @@ class Tts:
         """
         available = Tts.get_available_tts_models()
         if Tts.is_remote_mode():
-            if not available or any(model.id == project.tts_model_type for model in available):
+            # An explicit entry is a durable choice, even while missing/offline.
+            if project.tts_server_model_id or not available:
                 return None
-        model = available[0] if len(available) == 1 else TtsModelType.require_by_id("none")
-        if project.tts_model_type == model.id:
+            selected = project.get_tts_model_type()
+            model = (selected if selected in available else
+                     available[0] if len(available) == 1 else TtsModelType.require_by_id("none"))
+            server_id = ""
+            if model.value.backend_kind is TtsBackendKind.AUDIO_CPP:
+                from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+                candidates = [server_id for candidate, server_id in RemoteTtsDiscovery.get_snapshot().candidates
+                              if candidate == model]
+                # Legacy projects with several matches retain the type but need
+                # an explicit entry choice. Never persist an arbitrary first ID.
+                if len(candidates) == 1:
+                    server_id = candidates[0]
+        else:
+            model = available[0] if len(available) == 1 else TtsModelType.require_by_id("none")
+            server_id = ""
+        if (project.tts_model_type, project.tts_server_model_id) == (model.id, server_id):
             return None
         project.tts_model_type = model.id
+        project.tts_server_model_id = server_id
         return model
+
+    @staticmethod
+    def is_project_model_selection_required(project: Project) -> bool:
+        """Whether interactive settings should open the model/entry picker."""
+        available = Tts.get_available_tts_models()
+        selected = project.get_tts_model_type()
+        if selected.id == "none":
+            if len(available) >= 2:
+                return True
+        if not Tts.is_remote_mode():
+            return False
+        from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+        snapshot = RemoteTtsDiscovery.get_snapshot()
+        if snapshot.issue is not None:
+            return False
+        if project.tts_server_model_id:
+            return (selected, project.tts_server_model_id) not in snapshot.candidates
+        candidates = [pair for pair in snapshot.candidates
+                      if selected.id == "none" or pair[0] == selected]
+        return len(candidates) > 1
 
     @staticmethod
     def get_local_model_type() -> TtsModelType:
@@ -566,7 +603,8 @@ class Tts:
         each fully prepared prompt (the exact text handed to the model) is
         written to the debug log.
         """
-        if project.get_tts_model_type().id == "none" or Tts.get_active_type() != project.get_tts_model_type():
+        if (project.get_tts_model_type().id == "none" or Tts.get_active_type() != project.get_tts_model_type()
+                or (project.tts_server_model_id and project.tts_server_model_id != Tts._selected_server_model_id)):
             return Tts._binding_issue.verbose if Tts._binding_issue else "Project TTS model is not bound"
         try:
             max_random_seed = resolve_max_random_seed(Tts._type.value.max_random_seed, max_random_seed)
@@ -897,9 +935,9 @@ class Tts:
         """Bind a validated project selection without changing its saved ID.
 
         Metadata reads use the Project directly. Only this runtime boundary
-        resolves an exact remote entry, which remains ephemeral. audio.cpp uses
-        the first matching entry in discovery order; other remote backends require
-        a unique match. Repeated bindings reuse discovery and unchanged instances.
+        resolves the saved exact audio.cpp entry (or a unique legacy match).
+        Missing/incompatible entries never fall back to another checkpoint.
+        Repeated bindings reuse discovery and unchanged instances.
         """
         selected = project.get_tts_model_type()
         issue: ReadinessIssue | None = None
@@ -921,18 +959,22 @@ class Tts:
                 issue = ReadinessIssue("Remote TTS server", snapshot.issue.message)
             else:
                 candidates = [pair for pair in snapshot.candidates if pair[0] == selected]
-                if candidates and (
-                    selected.value.backend_kind is TtsBackendKind.AUDIO_CPP
-                    or len(candidates) == 1
-                ):
-                    # Discovery preserves /v1/models order; never sort or prefer loaded entries.
+                if selected.value.backend_kind is TtsBackendKind.AUDIO_CPP and project.tts_server_model_id:
+                    if (selected, project.tts_server_model_id) in candidates:
+                        new_id = project.tts_server_model_id
+                    else:
+                        issue = ReadinessIssue("TTS model", (
+                            f"Saved server model ID {project.tts_server_model_id!r} is unavailable or no longer "
+                            "matches the selected TTS model. Select an entry in Model settings > TTS model."))
+                elif len(candidates) == 1:
                     new_id = candidates[0][1]
                 elif not candidates:
                     issue = ReadinessIssue("TTS model", _missing_remote_model_issue(snapshot, selected))
                 else:
                     issue = ReadinessIssue("TTS model", (
                         "Multiple server entries match the selected TTS model"
-                        f" ({', '.join(server_id for _, server_id in candidates)})"))
+                        f" ({', '.join(server_id for _, server_id in candidates)}). "
+                        "Select an entry in Model settings > TTS model."))
         new_type = selected if issue is None else TtsModelType.require_by_id("none")
         if new_type != Tts.get_active_type() or new_id != Tts._selected_server_model_id:
             if current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:
@@ -941,6 +983,7 @@ class Tts:
             Tts._selected_server_model_id = new_id
         Tts._binding_issue = issue
         Tts._bound_project_type_id = project.tts_model_type
+        Tts._bound_project_server_model_id = project.tts_server_model_id
         Tts._remote_issue = issue.verbose if issue is not None and Tts.is_remote_mode() else ""
         SglOmniUtil._model_id = new_id if selected.value.backend_kind is TtsBackendKind.SGL_OMNI else ""
         Tts.set_model_params_using_project(project)

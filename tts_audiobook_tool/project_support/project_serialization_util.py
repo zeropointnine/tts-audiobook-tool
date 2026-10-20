@@ -947,6 +947,7 @@ class ProjectSerializationUtil:
             "dir_path": project.dir_path,
             "version": PROJECT_SPEC_VERSION,
             "tts_model_type": project.tts_model_type,
+            "tts_server_model_id": project.tts_server_model_id,
             "voice_references": [voice.to_dict() for voice in project.voice_references],
 
             "language_code": project.language_code,

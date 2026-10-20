@@ -175,6 +175,7 @@ class State:
         available = Tts.get_available_tts_models()
         model_id = available[0].id if len(available) == 1 else "none"
         self.project = Project(dir_path=str(project_dir_path), tts_model_type=model_id)
+        Tts.reconcile_project_model(self.project)
 
         self.project.save()
         return ""

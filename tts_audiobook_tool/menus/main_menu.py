@@ -171,8 +171,7 @@ def make_model_label(state: State) -> str:
     suffix = ""
     if (
         state.project.dir_path
-        and state.project.get_tts_model_type().id == "none"
-        and len(Tts.get_available_tts_models()) >= 2
+        and Tts.is_project_model_selection_required(state.project)
     ):
         suffix = f" {COL_ERROR}(requires: TTS model selection)"
     return f"Model settings{suffix}"

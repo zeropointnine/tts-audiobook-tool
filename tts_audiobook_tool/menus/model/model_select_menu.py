@@ -22,20 +22,29 @@ class ModelSelectMenu:
 
     @staticmethod
     def is_selection_required(state: State) -> bool:
-        """
-        True when the project has no usable model and there is a choice to make;
-        matches the main menu's red `(requires: TTS model selection)` suffix
-        """
-        return (state.project.get_tts_model_type().id == "none"
-                and len(Tts.get_available_tts_models()) >= 2)
+        """Use the shared selection policy, including ambiguous legacy entries."""
+        return Tts.is_project_model_selection_required(state.project)
+
+    @staticmethod
+    def _get_choices(available: list[TtsModelType]) -> list[tuple[TtsModelType, str]]:
+        """Count exact audio.cpp entries, but retain distinct types elsewhere."""
+        snapshot = RemoteTtsDiscovery.get_snapshot()
+        choices = []
+        for model in dict.fromkeys(available):
+            entries = [candidate for candidate in snapshot.candidates if candidate[0] == model]
+            if (model.value.backend_kind is TtsBackendKind.AUDIO_CPP
+                    and snapshot.backend_kind is TtsBackendKind.AUDIO_CPP and entries):
+                choices.extend(entries)
+            else:
+                choices.append((model, ""))
+        return sorted(dict.fromkeys(choices), key=lambda choice: (
+            choice[0].value.ui["proper_name"].casefold(), choice[1].casefold(), choice[1],
+        ))
 
     @staticmethod
     def make_menu_label(state: State) -> str:
-        """
-        Menu item label, eg, `Switch TTS model (3 available) (currently: Chatterbox)`
-        The `Switch` prefix and `available` count are only shown when there is a choice to make
-        """
-        num_available = len(Tts.get_available_tts_models())
+        """Show the number of selectable entries, not just catalog types."""
+        num_available = len(ModelSelectMenu._get_choices(Tts.get_available_tts_models()))
         label = "TTS model"
         if num_available > 1:
             label = f"Switch TTS model {COL_DIM}({num_available} available)"
@@ -47,57 +56,58 @@ class ModelSelectMenu:
         if model.id == "none":
             if state.project.tts_model_type != "none":
                 return f"Unknown model: {state.project.tts_model_type}"
-            if len(Tts.get_available_tts_models()) >= 2:
+            if ModelSelectMenu.is_selection_required(state):
                 return f"{COL_ERROR}requires selection"
             return "None (unselected)"
-        return model.value.ui["proper_name"]
+        label = model.value.ui["proper_name"]
+        if model.value.backend_kind is TtsBackendKind.AUDIO_CPP and state.project.tts_server_model_id:
+            label += f" {COL_DIM}({state.project.tts_server_model_id}){COL_DEFAULT}"
+        return label
 
     @staticmethod
     def menu(state: State) -> None:
         available = Tts.get_available_tts_models(refresh=True)
-        models = [TtsModelType.require_by_id("none")] + sorted(
-            dict.fromkeys(available), key=lambda model: model.value.ui["proper_name"].casefold(),
-        )
+        choices = [(TtsModelType.require_by_id("none"), "")] + ModelSelectMenu._get_choices(available)
         snapshot = RemoteTtsDiscovery.get_snapshot()
 
-        def make_label(model: TtsModelType) -> str:
+        def make_label(choice: tuple[TtsModelType, str]) -> str:
+            model, server_id = choice
+            if model.id == "none":
+                return "None (unselected)"
             label = model.value.ui["proper_name"]
-            if (snapshot.backend_kind is not TtsBackendKind.AUDIO_CPP
-                    or model.value.backend_kind is not TtsBackendKind.AUDIO_CPP):
+            if not server_id:
                 return label
-            server_ids = [server_id for candidate, server_id in snapshot.candidates if candidate == model]
-            if not server_ids:
-                return label
-            # Match binding's first-entry policy, even with several candidates.
-            entries = [entry for entry in snapshot.models if entry.get("id") == server_ids[0]]
-            if len(entries) != 1:
-                return label
-            path = entries[0].get("path")
-            if isinstance(path, str):
-                # The server may use either path style, independently of the client OS.
-                filename = ntpath.basename(path.strip())
-                if filename and filename not in (".", ".."):
-                    label += f" {COL_DIM}({filename}){COL_DEFAULT}"
-            return label
+            details = server_id
+            entries = [entry for entry in snapshot.models if entry.get("id") == server_id]
+            if len(entries) == 1:
+                path = entries[0].get("path")
+                if isinstance(path, str):
+                    # Server path style is independent of the client's OS.
+                    filename = ntpath.basename(path.strip())
+                    if filename and filename not in (".", ".."):
+                        details += f"; {filename}"
+            return f"{label} {COL_DIM}({details}){COL_DEFAULT}"
 
-        labels = ["None (unselected)"] + [make_label(model) for model in models[1:]]
-
-        def on_select(model: TtsModelType) -> None:
+        def on_select(choice: tuple[TtsModelType, str]) -> None:
+            model, server_id = choice
             state.pending_tts_model_change = None
             state.project.tts_model_type = model.id
+            state.project.tts_server_model_id = server_id
             error = state.project.save()
             if error:
                 ask.ask_error(error)
             Tts.bind_project(state.project)
-            # Re-arm the model-dependent project FYIs (voice sample durations,
-            # segmentation max words) so they re-check against the new model.
+            # Re-arm model-dependent project FYIs after an explicit selection.
             state.pending_project_load_checks = True
             print_feedback("Project TTS model:", ModelSelectMenu.make_model_label(state))
 
+        model = state.project.get_tts_model_type()
+        current = ((model, state.project.tts_server_model_id
+                    if model.value.backend_kind is TtsBackendKind.AUDIO_CPP else "")
+                   if state.project.tts_model_type == model.id else None)
         MenuUtil.options_menu(
-            state=state, heading_text="TTS model", labels=labels,
-            values=models, current_value=(state.project.get_tts_model_type()
-                if state.project.tts_model_type == state.project.get_tts_model_type().id else None),
+            state=state, heading_text="TTS model", labels=[make_label(choice) for choice in choices],
+            values=choices, current_value=current,
             default_value=None, on_select=on_select,
             breadcrumb="TTS model",
         )

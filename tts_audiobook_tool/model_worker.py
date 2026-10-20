@@ -344,6 +344,7 @@ def _make_generation_settings(state: Any) -> GenerationSettings:
         stt_config_id=prefs.stt_config.id,
         tts_force_cpu=prefs.tts_force_cpu,
         tts_model_type_id=state.project.tts_model_type,
+        tts_server_model_id=getattr(state.project, "tts_server_model_id", ""),
         remote_tts_url=prefs.remote_tts_url,
         save_debug_files=prefs.save_debug_files,
     )
@@ -385,6 +386,7 @@ def _make_chat_worker_state(command: SynthesizeChatCommand) -> Any:
         # The command is authoritative even when the cached/on-disk project
         # has a different selection. Assignment binds this snapshot in memory.
         project.tts_model_type = command.settings.tts_model_type_id
+        project.tts_server_model_id = command.settings.tts_server_model_id
         state.project = project
     except BaseException:
         # Only kill when the project is not the retained cache value.
@@ -432,6 +434,7 @@ def _make_worker_state(
         # The command is authoritative even when the cached/on-disk project
         # has a different selection. Assignment binds this snapshot in memory.
         project.tts_model_type = command.settings.tts_model_type_id
+        project.tts_server_model_id = command.settings.tts_server_model_id
         state.project = project
     except BaseException:
         project.kill()

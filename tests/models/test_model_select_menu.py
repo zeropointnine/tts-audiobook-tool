@@ -9,6 +9,13 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
+@pytest.fixture(autouse=True)
+def empty_discovery(monkeypatch):
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsSnapshot
+
+    monkeypatch.setattr(select_menu_module.RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot())
+
+
 @pytest.mark.parametrize("available_count", [0, 1, 2, 3])
 def test_unselected_project_model_label_requires_selection_with_multiple_types(monkeypatch, available_count):
     from tts_audiobook_tool.project import Project
@@ -96,17 +103,17 @@ def test_project_model_picker_saves_only_project_selection(monkeypatch, selected
 
     ModelSelectMenu.menu(state)
 
-    assert captured["values"] == [TtsModelType.require_by_id("none"), selected]
-    assert captured["current_value"] is TtsModelType.require_by_id("mira_local")
+    assert captured["values"] == [(TtsModelType.require_by_id("none"), ""), (selected, "")]
+    assert captured["current_value"] == (TtsModelType.require_by_id("mira_local"), "")
     assert captured["labels"][0] == "None (unselected)"
     assert captured["default_value"] is None
     assert all("Auto" not in label for label in captured["labels"])
     assert project.tts_model_type == "mira_local"
-    captured["on_select"](selected)
+    captured["on_select"]((selected, ""))
     assert state.pending_tts_model_change is None
     assert state.pending_project_load_checks is True
     assert saves == bindings == [selected.id]
-    captured["on_select"](TtsModelType.require_by_id("none"))
+    captured["on_select"]((TtsModelType.require_by_id("none"), ""))
     assert project.tts_model_type == "none"
     assert state.pending_project_load_checks is True
 
@@ -125,7 +132,7 @@ def test_project_model_picker_sorts_labels_and_keeps_values_aligned(monkeypatch)
     ModelSelectMenu.menu(cast(State, SimpleNamespace(project=Project())))
 
     expected = [models[2], models[1], models[0]]
-    assert captured["values"] == [TtsModelType.require_by_id("none")] + expected
+    assert captured["values"] == [(TtsModelType.require_by_id("none"), "")] + [(model, "") for model in expected]
     assert captured["labels"] == ["None (unselected)"] + [model.value.ui["proper_name"] for model in expected]
 
 
@@ -185,11 +192,10 @@ def test_audio_cpp_model_picker_filename(monkeypatch, path, filename):
 
     ModelSelectMenu.menu(state)
 
-    expected = model.value.ui["proper_name"]
-    if filename:
-        expected += f" {COL_DIM}({filename}){COL_DEFAULT}"
+    details = "operator-chatterbox" + (f"; {filename}" if filename else "")
+    expected = f"{model.value.ui['proper_name']} {COL_DIM}({details}){COL_DEFAULT}"
     assert captured["labels"] == ["None (unselected)", expected,
-                                   f"{other.value.ui['proper_name']} {COL_DIM}(higgs.gguf){COL_DEFAULT}"]
+                                   f"{other.value.ui['proper_name']} {COL_DIM}(operator-higgs; higgs.gguf){COL_DEFAULT}"]
     assert captured["default_value"] is None
     assert refreshes == [{"refresh": True}]
 
@@ -220,12 +226,17 @@ def test_model_picker_omits_unavailable_or_non_audio_cpp_filename(monkeypatch, m
 
     ModelSelectMenu.menu(cast(State, SimpleNamespace(project=Project())))
 
-    assert captured["labels"] == ["None (unselected)", model.value.ui["proper_name"]]
+    from tts_audiobook_tool.text_util import strip_ansi_codes
+
+    suffix = "" if metadata_case == "sgl_omni" else " (server-id)"
+    assert [strip_ansi_codes(label) for label in captured["labels"]] == [
+        "None (unselected)", model.value.ui["proper_name"] + suffix,
+    ]
 
 
 @pytest.mark.parametrize("reverse", [False, True])
 @pytest.mark.parametrize("missing_first_path", [False, True])
-def test_audio_cpp_picker_uses_first_matching_entry_filename(monkeypatch, reverse, missing_first_path):
+def test_audio_cpp_picker_exposes_each_matching_entry(monkeypatch, reverse, missing_first_path):
     from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsSnapshot
     from tts_audiobook_tool.project import Project
     from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
@@ -251,7 +262,102 @@ def test_audio_cpp_picker_uses_first_matching_entry_filename(monkeypatch, revers
 
     ModelSelectMenu.menu(cast(State, SimpleNamespace(project=Project())))
 
-    expected = model.value.ui["proper_name"]
-    if not missing_first_path:
-        expected += f" {COL_DIM}({first}.gguf){COL_DEFAULT}"
-    assert captured["labels"] == ["None (unselected)", expected]
+    # Same-type entries remain separate, sorted choices regardless of response order.
+    expected_labels = ["None (unselected)"]
+    for server_id in sorted(matching_ids):
+        details = server_id
+        if server_id != first or not missing_first_path:
+            details += f"; {server_id}.gguf"
+        expected_labels.append(f"{model.value.ui['proper_name']} {COL_DIM}({details}){COL_DEFAULT}")
+    assert captured["labels"] == expected_labels
+    assert captured["values"] == [(TtsModelType.require_by_id("none"), "")] + [
+        (model, server_id) for server_id in sorted(matching_ids)
+    ]
+
+
+@pytest.mark.parametrize("saved_id", ["", "entry-b", "unavailable-entry"])
+def test_audio_cpp_picker_persists_exact_entry_and_clears_for_other_backends(monkeypatch, saved_id):
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsSnapshot
+    from tts_audiobook_tool.project import Project
+    from tts_audiobook_tool.text_util import strip_ansi_codes
+    from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
+
+    # The catalog type alone must not highlight either of two legacy matches.
+    model = TtsModelType.require_by_id("chatterbox_audiocpp")
+    sgl = TtsModelType.require_by_id("auk_sglomni")
+    snapshot = RemoteTtsSnapshot(
+        backend_kind=TtsBackendKind.AUDIO_CPP,
+        models=({"id": "entry-a", "path": "/srv/shared.gguf"},
+                {"id": "entry-b", "path": "/srv/shared.gguf"}),
+        candidates=((model, "entry-b"), (model, "entry-a"), (model, "entry-a")),
+    )
+    project = Project(tts_model_type=model.id, tts_server_model_id=saved_id)
+    state = cast(State, SimpleNamespace(project=project, pending_tts_model_change=object(),
+                                       pending_project_load_checks=False))
+    captured = {}
+    saved = []
+    bound = []
+    monkeypatch.setattr(select_menu_module.RemoteTtsDiscovery, "get_snapshot", lambda: snapshot)
+    monkeypatch.setattr(select_menu_module.Tts, "get_available_tts_models", lambda **kwargs: [model, sgl, model])
+    monkeypatch.setattr(select_menu_module.MenuUtil, "options_menu", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(Project, "save", lambda current: saved.append((current.tts_model_type, current.tts_server_model_id)) or "")
+    monkeypatch.setattr(select_menu_module.Tts, "bind_project", lambda current: bound.append((current.tts_model_type, current.tts_server_model_id)))
+    monkeypatch.setattr(select_menu_module, "print_feedback", lambda *args: None)
+
+    ModelSelectMenu.menu(state)
+
+    assert captured["current_value"] == (model, saved_id)
+    assert ((model, saved_id) in captured["values"]) is (saved_id == "entry-b")
+    assert (project.tts_model_type, project.tts_server_model_id) == (model.id, saved_id)
+    label = strip_ansi_codes(ModelSelectMenu.make_menu_label(state))
+    assert "(3 available)" in label
+    if saved_id:
+        assert saved_id in label
+    for server_id in ("entry-a", "entry-b"):
+        index = captured["values"].index((model, server_id))
+        assert server_id in captured["labels"][index]
+        assert "shared.gguf" in captured["labels"][index]
+        captured["on_select"]((model, server_id))
+        assert saved[-1] == bound[-1] == (model.id, server_id)
+    captured["on_select"]((sgl, ""))
+    assert saved[-1] == bound[-1] == (sgl.id, "")
+    captured["on_select"]((model, "entry-b"))
+    captured["on_select"]((TtsModelType.require_by_id("none"), ""))
+    assert saved[-1] == bound[-1] == ("none", "")
+    assert state.pending_tts_model_change is None
+    assert state.pending_project_load_checks is True
+
+
+def test_picker_uses_shared_selection_required_policy(monkeypatch):
+    from tts_audiobook_tool.project import Project
+
+    # Exact-entry ambiguity is resolved centrally rather than by distinct type count.
+    project = Project(tts_model_type="chatterbox_audiocpp")
+    seen = []
+    monkeypatch.setattr(select_menu_module.Tts, "is_project_model_selection_required",
+                        lambda current: seen.append(current) or True)
+    assert ModelSelectMenu.is_selection_required(cast(State, SimpleNamespace(project=project)))
+    assert seen == [project]
+
+
+@pytest.mark.parametrize("selected_id", ["none", "chatterbox_audiocpp"])
+def test_same_type_audio_entries_count_as_multiple_picker_choices(monkeypatch, selected_id):
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsSnapshot
+    from tts_audiobook_tool.project import Project
+    from tts_audiobook_tool.text_util import strip_ansi_codes
+    from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
+
+    # A legacy type-only selection needs a picker even with one distinct type.
+    model = TtsModelType.require_by_id("chatterbox_audiocpp")
+    snapshot = RemoteTtsSnapshot(backend_kind=TtsBackendKind.AUDIO_CPP,
+                                 candidates=((model, "one"), (model, "two")))
+    monkeypatch.setattr(select_menu_module.RemoteTtsDiscovery, "get_snapshot", lambda: snapshot)
+    monkeypatch.setattr(select_menu_module.Tts, "get_available_tts_models", lambda: [model])
+    monkeypatch.setattr(select_menu_module.Tts, "is_remote_mode", lambda: True)
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type=selected_id)))
+
+    assert ModelSelectMenu.is_selection_required(state)
+    label = strip_ansi_codes(ModelSelectMenu.make_menu_label(state))
+    assert "Switch TTS model (2 available)" in label
+    if selected_id == "none":
+        assert "currently: requires selection" in label

@@ -23,7 +23,7 @@ The canonical project directory has:
 
 See [`Project`](../tts_audiobook_tool/project.py), [`ProjectSerializationUtil`](../tts_audiobook_tool/project_support/project_serialization_util.py), and [`ProjectTextIOUtil`](../tts_audiobook_tool/project_support/project_text_io_util.py) for the respective in-memory, settings-file, and text-file boundaries.
 
-For the rules governing the selected model ID (`Project.tts_model_type`), refer to [TTS model selection rules](<tts-model-selection.md>). Selection policy is documented there rather than in this storage-format reference.
+The selected catalog model is `Project.tts_model_type`. The additive `tts_server_model_id` string stores an exact audio.cpp entry alongside it (default `""` for older projects and other backends); save/export/import/copy preserve opaque values, even when unavailable. It is not a model-setting owner or checkpoint fingerprint, and no endpoint identity is stored. For startup, reconciliation and binding policy, refer to [TTS model selection rules](<tts-model-selection.md>).
 
 ## Canonical settings shape
 
