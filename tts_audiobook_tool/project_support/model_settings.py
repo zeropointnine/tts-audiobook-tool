@@ -1,7 +1,10 @@
 """Backend-neutral ownership and reconciliation of model-scoped project settings.
 
-The registry describes *permissions*, never project-authored sharing rules. Unknown
-whole objects are retained so projects can travel between model environments.
+The registry describes *permissions*, never project-authored sharing rules. Every
+current setting is owned by exactly one model ID. `ModelSettings.shared` only
+retains historical shared-group objects that could not be migrated and unknown
+objects. Unknown whole objects are retained so projects can travel between
+model environments.
 """
 from __future__ import annotations
 
@@ -36,6 +39,8 @@ class Binding:
     model_id: str
     name: str
     section: str
+    # Historical shared-group name; only set on the frozen legacy bindings in
+    # model_settings_compat. Current bindings are always private ("").
     group: str = ""
     default: Any = None
     sentinel: Any = None
@@ -88,7 +93,6 @@ class ModelSettingsRegistry:
     def __init__(self) -> None:
         self.bindings: dict[tuple[str, str], Binding] = {}
         self.legacy: dict[str, Binding] = {}
-        self.members: dict[str, tuple[str, ...]] = {}
         # Backend bounds supplement storage types only during load reconciliation.
         self.parameter_bounds: dict[tuple[str, str], tuple[int | float, int | float]] = {}
 
@@ -96,8 +100,8 @@ class ModelSettingsRegistry:
         key = (binding.model_id, binding.name)
         if key in self.bindings:
             raise ValueError(f"Duplicate model setting {key}")
-        if binding.group and binding.model_id not in self.members.get(binding.group, ()):
-            raise ValueError(f"Unauthorized shared group {binding.group} for {binding.model_id}")
+        if binding.group:
+            raise ValueError(f"Shared model setting {binding.model_id}.{binding.name} is not supported")
         self.bindings[key] = binding
         if legacy_attr:
             self.legacy[legacy_attr] = binding
@@ -117,16 +121,13 @@ class ModelSettingsRegistry:
                 raise ValueError(f"Invalid {model_id}.{setting['name']} enum default")
         else:
             value_type, item_type = types[kind]
-        return Binding(model_id, setting["name"], setting["section"], setting.get("group", ""),
+        return Binding(model_id, setting["name"], setting["section"], "",
                        setting["default"], setting.get("sentinel", -1), "sentinel" in setting,
                        value_type, item_type, setting.get("preserve_default", False))
 
     def register_model_settings(self, model_id: str, settings: tuple[dict[str, Any], ...]) -> None:
         """Install a model's catalog storage identically for every backend/ID."""
         bindings = [self._binding(model_id, setting) for setting in settings]
-        for binding in bindings:
-            if binding.group and model_id not in self.members.get(binding.group, ()):
-                raise ValueError(f"Unauthorized shared group {binding.group} for {model_id}")
         for key in list(self.bindings):
             if key[0] == model_id:
                 del self.bindings[key]
@@ -139,7 +140,6 @@ class ModelSettingsRegistry:
         from tts_audiobook_tool.project_support.model_settings_compat import legacy_bindings
         document, _, _, _ = _load_catalog(CATALOG_PATH)
         pending = ModelSettingsRegistry()
-        pending.members = {name: tuple(ids) for name, ids in document.get("setting_groups", {}).items()}
         for entry in document["models"]:
             model_id = entry["id"]
             pending.register_model_settings(model_id, parse_model_settings(entry))
@@ -164,7 +164,7 @@ class ModelSettingsRegistry:
         })
         # Migration defaults/owners are frozen separately from current defaults.
         legacy = legacy_bindings()
-        self.bindings, self.members, self.legacy = pending.bindings, pending.members, legacy
+        self.bindings, self.legacy = pending.bindings, legacy
         self.parameter_bounds = pending.parameter_bounds
 
     def register_configured_model(self, definition: SglOmniModelDefinition) -> None:
@@ -227,10 +227,7 @@ class ModelSettingsRegistry:
         for binding in self.bindings.values():
             if binding.section != "parameters":
                 continue
-            if binding.group:
-                obj = result["shared"].setdefault(binding.group, {"model_ids": list(self.members[binding.group])})
-            else:
-                obj = result["models"].setdefault(binding.model_id, {})
+            obj = result["models"].setdefault(binding.model_id, {})
             parameters = obj.setdefault("parameters", {})
             value = parameters.get(binding.name)
             if binding.has_sentinel and value == binding.sentinel:
@@ -239,7 +236,7 @@ class ModelSettingsRegistry:
         return result
 
     def resolve(self, store: ModelSettings, binding: Binding) -> Any:
-        obj = store.shared.get(binding.group, {}) if binding.group else store.models.get(binding.model_id, {})
+        obj = store.models.get(binding.model_id, {})
         if binding.section == "voice_references":
             return [ref.get(binding.name, "") for ref in obj.get("voice_references", [])]
         value = obj.get(binding.section, {}).get(binding.name, binding.default)
@@ -252,7 +249,7 @@ class ModelSettingsRegistry:
         return deepcopy(value)
 
     def assign(self, store: ModelSettings, binding: Binding, value: Any, *, reset: bool = False) -> None:
-        obj = store.shared.setdefault(binding.group, {"model_ids": list(self.members[binding.group])}) if binding.group else store.models.setdefault(binding.model_id, {})
+        obj = store.models.setdefault(binding.model_id, {})
         if binding.section == "voice_references":
             if reset:
                 value = []
@@ -313,7 +310,7 @@ class ModelSettingsRegistry:
         # existing whole-object precedence of flat private fields (e.g. target).
         provided_models = raw_models
         from tts_audiobook_tool.project_support.model_settings_compat import fork_retired_groups, split_moss_local_seed
-        source, legacy = fork_retired_groups(source, legacy, self.legacy, self.bindings, self.members)
+        source, legacy = fork_retired_groups(source, legacy, self.legacy, self.bindings)
         source = split_moss_local_seed(source, self.bindings)
         raw_models, raw_shared = source.get("models", {}), source.get("shared", {})
         result = ModelSettings()
@@ -324,30 +321,23 @@ class ModelSettingsRegistry:
             if model_id not in known_models:
                 result.models[model_id] = deepcopy(raw)
                 continue
-            cleaned = self._clean_object(raw, [b for b in self.for_model(model_id) if not b.group], f"models.{model_id}")
+            cleaned = self._clean_object(raw, self.for_model(model_id), f"models.{model_id}")
             result.models[model_id] = cleaned
+        # No current setting is shared. A remaining shared object is either
+        # unknown or a historical group whose family this registry does not
+        # know; both are retained verbatim.
         for group, raw in raw_shared.items():
             if not isinstance(raw, dict):
                 raise ValueError(f"model_settings.shared.{group} must be an object")
-            if group not in self.members:
-                result.shared[group] = deepcopy(raw)
-                continue
-            members = self.members[group]
-            recorded = raw.get("model_ids")
-            if (not isinstance(recorded, list) or len(recorded) != len(members)
-                    or not all(isinstance(id, str) for id in recorded)
-                    or set(recorded) != set(members)):
-                raise ValueError(f"model_settings.shared.{group}.model_ids: expected members {list(members)!r}")
-            bindings = [b for b in self.bindings.values() if b.group == group]
-            cleaned = self._clean_object(raw, bindings, f"shared.{group}")
-            cleaned["model_ids"] = list(members)
-            result.shared[group] = cleaned
+            result.shared[group] = deepcopy(raw)
         if legacy:
             for attr, value in legacy.items():
                 binding = self.legacy.get(attr)
-                if binding is None:
+                # Historically shared fields are consumed by fork_retired_groups;
+                # when this registry does not know the family there is no owner.
+                if binding is None or binding.group:
                     continue
-                if binding.group and binding.group in raw_shared or not binding.group and binding.model_id in provided_models:
+                if binding.model_id in provided_models:
                     continue
                 if binding.section == "voice_references":
                     continue
@@ -363,7 +353,7 @@ class ModelSettingsRegistry:
             for attr, binding in self.legacy.items():
                 if binding.section != "voice_references" or binding.name != "file_name" or attr not in legacy:
                     continue
-                if binding.group and binding.group in raw_shared or not binding.group and binding.model_id in provided_models:
+                if binding.group or binding.model_id in provided_models:
                     continue
                 voices = legacy[attr]
                 voices = [voices] if isinstance(voices, str) and voices else voices
@@ -379,8 +369,7 @@ class ModelSettingsRegistry:
                 refs = [{"file_name": voice, "transcript": transcripts[i] if i < len(transcripts) else ""}
                         for i, voice in enumerate(voices) if isinstance(voice, str) and voice]
                 if refs:
-                    obj = result.shared.setdefault(binding.group, {"model_ids": list(self.members[binding.group])}) if binding.group else result.models.setdefault(binding.model_id, {})
-                    obj["voice_references"] = refs
+                    result.models.setdefault(binding.model_id, {})["voice_references"] = refs
         return result
 
     @staticmethod
@@ -392,13 +381,9 @@ class ModelSettingsRegistry:
         self.validate_value(binding, value)
         if binding.has_sentinel and value == binding.sentinel:
             return
-        # Shared overrides must be valid for every declared backend consumer,
-        # including when the local member has no backend parameter declaration.
-        model_ids = self.members[binding.group] if binding.group else (binding.model_id,)
-        for model_id in model_ids:
-            bounds = self.parameter_bounds.get((model_id, binding.name))
-            if bounds is not None and not bounds[0] <= value <= bounds[1]:
-                raise ValueError(f"{model_id}.{binding.name}: expected a value between {bounds[0]} and {bounds[1]}")
+        bounds = self.parameter_bounds.get((binding.model_id, binding.name))
+        if bounds is not None and not bounds[0] <= value <= bounds[1]:
+            raise ValueError(f"{binding.model_id}.{binding.name}: expected a value between {bounds[0]} and {bounds[1]}")
 
     def _clean_object(self, raw: dict, bindings: list[Binding], where: str) -> dict[str, Any]:
         allowed: dict[str, dict[str, Binding]] = {}
@@ -491,16 +476,15 @@ register_builtin_fields()
 def normalize_paths(store: ModelSettings, registry: ModelSettingsRegistry = REGISTRY) -> bool:
     """Canonicalize only declared file paths; never touch opaque repository IDs."""
     changed = False
-    for collection, known in ((store.models, {id for id, _ in registry.bindings}),
-                              (store.shared, set(registry.members))):
-        for key, obj in collection.items():
-            if key not in known:
-                continue
-            for ref in obj.get("voice_references", []):
-                ref["file_name"], did_change = path_norm.normalize_stored_relative_path(ref["file_name"])
+    known = {id for id, _ in registry.bindings}
+    for key, obj in store.models.items():
+        if key not in known:
+            continue
+        for ref in obj.get("voice_references", []):
+            ref["file_name"], did_change = path_norm.normalize_stored_relative_path(ref["file_name"])
+            changed |= did_change
+        for name, value in obj.get("files", {}).items():
+            if isinstance(value, str):
+                obj["files"][name], did_change = path_norm.normalize_stored_relative_path(value)
                 changed |= did_change
-            for name, value in obj.get("files", {}).items():
-                if isinstance(value, str):
-                    obj["files"][name], did_change = path_norm.normalize_stored_relative_path(value)
-                    changed |= did_change
     return changed

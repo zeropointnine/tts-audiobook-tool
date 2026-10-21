@@ -454,7 +454,7 @@ class ProjectVoiceUtil:
         # references the same file name.
         secondary = tts_type.id == "indextts2_local" and is_secondary
         binding = None if secondary else _settings_registry().voice_binding(tts_type.id)
-        exclude_owner = (binding.group or binding.model_id, binding.name) if binding else None
+        exclude_owner = (binding.model_id, binding.name) if binding else None
         used = ProjectVoiceUtil.get_used_voice_file_names(project, exclude_owner, exclude_secondary=secondary)
         # A sole voice still at its defaults is a placeholder (a project always
         # has one voice); an appended sample takes its place.

@@ -124,12 +124,11 @@ class SglOmniModelDefinition:
 class SglOmniDefinitions:
     models: dict[str, SglOmniModelDefinition]
     fingerprint: str
-    setting_groups: dict[str, tuple[str, ...]] | None = None
 
 
 def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
     """Validate request policies and catalog storage uniformly for every ID."""
-    document, specs, entries, fingerprint = _load_catalog(path)
+    _, specs, entries, fingerprint = _load_catalog(path)
     installed = TtsModelType._initial_specs
     missing = installed.keys() - {spec.id for spec in specs}
     if missing:
@@ -351,5 +350,4 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
     missing = required - models.keys()
     if missing:
         _fail("models", f"missing built-in SGL-Omni definition(s): {', '.join(sorted(missing))}")
-    groups = {name: tuple(ids) for name, ids in document.get("setting_groups", {}).items()}
-    return SglOmniDefinitions(models, fingerprint, groups)
+    return SglOmniDefinitions(models, fingerprint)

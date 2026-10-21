@@ -12,7 +12,7 @@ from tts_audiobook_tool.project_support.model_settings import (
     Binding, ModelSettings, ModelSettingsRegistry, REGISTRY, normalize_paths,
     register_builtin_fields,
 )
-from tts_audiobook_tool.project_support.model_settings_compat import RETIRED_GROUPS
+from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
 from tts_audiobook_tool.project_support.model_settings_declarations import BUILTIN_LEGACY_FIELDS
 
 
@@ -41,8 +41,9 @@ def test_catalog_voice_and_batch_presence_comes_from_storage_bindings() -> None:
         assert model.can_batch() == (orchestration is not None)
         if orchestration is not None:
             assert orchestration.section == "orchestration"
-    assert REGISTRY.voice_binding("auk_sglomni").group == REGISTRY.voice_binding("auk_flash_sglomni").group == "auk"
-    assert REGISTRY.voice_binding("qwen3tts_local").group == REGISTRY.voice_binding("qwen3tts_sglomni").group == ""
+    # Voice bindings are capability metadata; none is owned by a shared group.
+    assert all(REGISTRY.voice_binding(model.id) is None or REGISTRY.voice_binding(model.id).group == ""
+               for model in TtsModelType.all())
     assert REGISTRY.transcript_binding("zonos2_sglomni") is None
 
 
@@ -76,9 +77,10 @@ def test_retired_audio_cpp_concurrent_requests_is_dropped_on_load() -> None:
     assert "orchestration" not in saved["model_settings"]["models"][model_id]
 
 
-def test_shared_group_owns_only_declared_fields() -> None:
-    assert set(REGISTRY.members) == {"auk"}
-    # Qwen3's and Fish S2's retired groups left every setting private.
+def test_no_current_setting_is_shared() -> None:
+    # Every historical group (including AuK, the last one) is retired, so each
+    # current binding is owned by exactly one model ID.
+    assert all(binding.group == "" for binding in REGISTRY.bindings.values())
     for model_id in ("qwen3tts_local", "qwen3tts_sglomni"):
         for name in ("temperature", "top_k", "top_p", "repetition_penalty", "seed"):
             assert REGISTRY.get(model_id, name).group == ""
@@ -89,7 +91,9 @@ def test_shared_group_owns_only_declared_fields() -> None:
     assert REGISTRY.get("fish_s2_sglomni", "temperature").group == ""
     with pytest.raises(ValueError, match="Unknown setting"):
         REGISTRY.get("fish_s2_sglomni", "seed")
-    assert REGISTRY.get("auk_flash_sglomni", "speed").group == "auk"
+    for model_id in ("auk_sglomni", "auk_flash_sglomni"):
+        for name in ("speed", "seed", "concurrent_requests"):
+            assert REGISTRY.get(model_id, name).group == ""
     assert REGISTRY.get("moss_delay_sglomni", "delay_top_k").group == ""
     with pytest.raises(ValueError, match="Unknown setting"):
         REGISTRY.get("moss_delay_sglomni", "local_top_k")
@@ -97,7 +101,9 @@ def test_shared_group_owns_only_declared_fields() -> None:
         REGISTRY.get("qwen3tts_sglomni", "rolling_cont")
 
 
-def test_legacy_migration_pairs_voices_and_preserves_shared_ownership() -> None:
+def test_legacy_migration_pairs_voices_and_forks_historical_sharing() -> None:
+    # Flat AuK fields were historically shared; they now fan out to each
+    # member's private object, after which the members edit independently.
     settings = REGISTRY.reconcile({}, {
         "auk_voice_file_name": ["a.flac", "b.flac"],
         "auk_voice_transcript": ["first"],
@@ -105,18 +111,19 @@ def test_legacy_migration_pairs_voices_and_preserves_shared_ownership() -> None:
         "auk_seed": -1,  # Seed keeps its explicit -1 (random) value.
         "auk_server_concurrent_requests": 3,
     })
-    assert settings.shared["auk"]["model_ids"] == ["auk_sglomni", "auk_flash_sglomni"]
-    assert settings.shared["auk"]["voice_references"] == [
-        {"file_name": "a.flac", "transcript": "first"},
-        {"file_name": "b.flac", "transcript": ""},
-    ]
-    assert settings.shared["auk"]["parameters"] == {"seed": -1}
-    assert settings.shared["auk"]["orchestration"] == {"concurrent_requests": 3}
-    assert REGISTRY.resolve(settings, REGISTRY.get("auk_flash_sglomni", "speed")) == 1.0
+    assert "auk" not in settings.shared
+    for model_id in SHARED_MEMBERS["auk"]:
+        assert settings.models[model_id]["voice_references"] == [
+            {"file_name": "a.flac", "transcript": "first"},
+            {"file_name": "b.flac", "transcript": ""},
+        ]
+        assert settings.models[model_id]["parameters"] == {"seed": -1}
+        assert settings.models[model_id]["orchestration"] == {"concurrent_requests": 3}
     REGISTRY.assign(settings, REGISTRY.get("auk_sglomni", "speed"), 1.4)
-    assert REGISTRY.resolve(settings, REGISTRY.get("auk_flash_sglomni", "speed")) == 1.4
-    REGISTRY.assign(settings, REGISTRY.get("auk_flash_sglomni", "speed"), None, reset=True)
-    assert "speed" not in settings.shared["auk"].get("parameters", {})
+    assert REGISTRY.resolve(settings, REGISTRY.get("auk_sglomni", "speed")) == 1.4
+    assert REGISTRY.resolve(settings, REGISTRY.get("auk_flash_sglomni", "speed")) == 1.0
+    REGISTRY.assign(settings, REGISTRY.get("auk_sglomni", "speed"), None, reset=True)
+    assert "speed" not in settings.models["auk_sglomni"]["parameters"]
 
 
 def test_new_objects_take_precedence_and_unknown_objects_round_trip() -> None:
@@ -126,24 +133,17 @@ def test_new_objects_take_precedence_and_unknown_objects_round_trip() -> None:
             "absent_custom": {"experimental": {"anything": [1, 2]}},
         },
         "shared": {
-            "auk": {"model_ids": ["auk_sglomni", "auk_flash_sglomni"], "parameters": {"speed": 1.5, "old_unused": 12}},
             "unavailable": {"model_ids": ["absent_custom"], "future": "untouched"},
         },
     }
-    settings = REGISTRY.reconcile(source, {
-        "qwen3_rolling_cont": 3, "auk_seed": 7,
-        "auk_speed": 1.2, "auk_voice_file_name": ["old.flac"],
-    })
+    settings = REGISTRY.reconcile(source, {"qwen3_rolling_cont": 3})
     assert settings.models["qwen3tts_local"] == {"parameters": {"rolling_cont": 1}}
-    assert settings.shared["auk"] == {
-        "model_ids": ["auk_sglomni", "auk_flash_sglomni"], "parameters": {"speed": 1.5},
-    }
     assert settings.models["absent_custom"] == source["models"]["absent_custom"]
     assert settings.shared["unavailable"] == source["shared"]["unavailable"]
     assert REGISTRY.reconcile(settings.to_dict()).to_dict() == settings.to_dict()
 
 
-def test_unauthorized_membership_rejected_without_mutating_source() -> None:
+def test_bad_historical_membership_rejected_without_mutating_source() -> None:
     source = {"shared": {"auk": {"model_ids": ["auk_sglomni", "unauthorized"]}}}
     with pytest.raises(ValueError, match="model_ids"):
         REGISTRY.reconcile(source)
@@ -157,16 +157,13 @@ def test_invalid_parameters_are_pruned_without_losing_valid_overrides() -> None:
         "speaker_id": 7,  # no longer a Qwen3 setting
         "batch_size": 4,  # orchestration, not a parameter
     }}, "auk_sglomni": {"parameters": {
-        "speed": 1.8,  # shared owner, not this private model object
-    }}}, "shared": {"auk": {
-        "model_ids": ["auk_sglomni", "auk_flash_sglomni"],
-        "parameters": {"rolling_cont": 1, "speed": 1.2},
-    }}}
+        "speed": 1.8,
+        "rolling_cont": 1,  # another model's setting
+    }}}}
     settings = REGISTRY.reconcile(source)
     assert settings.models["qwen3tts_local"] == {"parameters": {"rolling_cont": 2}}
-    assert not settings.models.get("auk_sglomni")
-    assert settings.shared["auk"]["parameters"] == {"speed": 1.2}
-    assert source["models"]["auk_sglomni"]["parameters"]["speed"] == 1.8
+    assert settings.models["auk_sglomni"] == {"parameters": {"speed": 1.8}}
+    assert source["models"]["auk_sglomni"]["parameters"]["rolling_cont"] == 1
     assert REGISTRY.reconcile({"models": {"fish_s2_local": {"parameters": []}}}).models["fish_s2_local"] == {}
 
     # File references and shared-group membership retain their stricter
@@ -218,6 +215,14 @@ def test_new_configured_id_has_no_python_project_field() -> None:
     assert registry.reconcile(settings.to_dict()).models["server_custom"] == settings.models["server_custom"]
 
 
+def test_registry_rejects_shared_bindings() -> None:
+    # Shared settings storage is gone; only frozen legacy bindings carry a group.
+    registry = ModelSettingsRegistry()
+    with pytest.raises(ValueError, match="Shared model setting custom.speed is not supported"):
+        registry.add(Binding("custom", "speed", "parameters", group="custom_group", default=1.0, value_type=float))
+    assert not registry.bindings
+
+
 def test_explicit_value_equal_to_default_is_not_removed() -> None:
     registry = ModelSettingsRegistry()
     registry.add(Binding("custom", "temperature", "parameters", default=0.9, value_type=float))
@@ -231,8 +236,7 @@ def test_explicit_value_equal_to_default_is_not_removed() -> None:
 def test_every_current_binding_is_declared_by_the_catalog() -> None:
     from tts_audiobook_tool.tts_models.model_catalog import load_settings_catalog
 
-    groups, models = load_settings_catalog()
-    assert REGISTRY.members == groups
+    models = load_settings_catalog()
     expected = {(model_id, setting["name"]): REGISTRY._binding(model_id, setting)
                 for model_id, settings in models.items() for setting in settings}
     assert REGISTRY.bindings == expected
@@ -265,9 +269,9 @@ def test_current_bindings_retain_frozen_legacy_storage_contracts() -> None:
                 assert replace(current, name=legacy.name, group=legacy.group) == legacy, name
             continue
         current = REGISTRY.get(legacy.model_id, legacy.name)
-        if legacy.group in RETIRED_GROUPS:
+        if legacy.group:
             # Historical sharing remains frozen; current ownership forked.
-            assert legacy.group not in REGISTRY.members
+            assert legacy.group in SHARED_MEMBERS
             assert current.group == ""
             assert replace(current, group=legacy.group) == legacy, attr
         else:
@@ -276,6 +280,3 @@ def test_current_bindings_retain_frozen_legacy_storage_contracts() -> None:
         assert current.default == default, attr
         assert current.has_sentinel == (default == -1 and not attr.endswith("_seed")), attr
         assert current.preserve_default == attr.endswith("_seed"), attr
-        if current.group:
-            for member in REGISTRY.members[current.group]:
-                assert replace(REGISTRY.get(member, current.name), model_id=current.model_id) == current, attr

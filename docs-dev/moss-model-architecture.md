@@ -89,7 +89,7 @@ Language hints reuse `MossBaseModel.get_language_name()` to map the project code
 
 ## Project settings
 
-MOSS generation settings are private under `model_settings.models.<catalog ID>`; there is no current `shared.moss` group. Primary voice references instead use top-level `Project.voice_references`, shared across all models within the project. Historically, the audio.cpp additions left project version 3 unchanged; the project-wide voice-list migration now uses project version 4. Existing IDs, catalog schema 1, and non-voice AuK sharing are unchanged. Fish S2 and Qwen3 later retired their local/server groups through the same generic fork (see [project spec v5](<project-spec-v5.md>)).
+MOSS generation settings are private under `model_settings.models.<catalog ID>`; there is no current `shared.moss` group. Primary voice references instead use top-level `Project.voice_references`, shared across all models within the project. Historically, the audio.cpp additions left project version 3 unchanged; the project-wide voice-list migration now uses project version 4. Existing IDs and catalog schema 1 are unchanged. Fish S2, Qwen3 and AuK later retired their groups through the same generic fork, so no shared group remains (see [project spec v5](<project-spec-v5.md>)).
 
 | Owner | Private sampling settings |
 |---|---|

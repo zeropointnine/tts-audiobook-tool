@@ -6,9 +6,11 @@ from tts_audiobook_tool.project_support.model_settings_declarations import BUILT
 if TYPE_CHECKING:
     from tts_audiobook_tool.project_support.model_settings import Binding
 
-# Historical ownership, including the now-retired MOSS, Fish S2 and Qwen3
-# groups. Do not edit these mappings to match current catalog ownership: old
-# projects still need them.
+# Historical shared ownership. Every group here is retired: no current model
+# setting is shared, and on load each group is consumed by copying its values
+# into its historical members' private objects (see `fork_retired_group`). Do
+# not edit these mappings to match current catalog ownership: old projects
+# still need them.
 SHARED_MEMBERS: dict[str, tuple[str, ...]] = {
     "auk": ("auk_sglomni", "auk_flash_sglomni"),
     "fish_s2": ("fish_s2_local", "fish_s2_sglomni"),
@@ -28,14 +30,6 @@ PRIVATE_FIELDS: dict[str, set[str]] = {
     "moss": {"target", "rolling_cont"},
     "qwen3": {"target", "model_type", "rolling_cont", "batch_size", "server_concurrent_requests"},
 }
-
-# Shared groups that no longer exist in the catalog. On load, each one is
-# consumed by copying its values into its historical members' private objects
-# (see `fork_retired_group`). To retire another group: remove it from the
-# catalog's `setting_groups` and its settings' `group` keys, then append it here.
-# A local member without catalog parameter bounds should also borrow its server
-# counterpart's (`BORROWED_PARAMETER_BOUNDS` in model_settings.py).
-RETIRED_GROUPS: tuple[str, ...] = ("moss", "fish_s2", "qwen3")
 
 # moss_local retired its shared `seed` parameter in favor of one seed per
 # preset. Historical values migrate to all three, following the same
@@ -110,12 +104,9 @@ def fork_retired_groups(
     legacy: Mapping[str, Any] | None,
     historical: Mapping[str, Binding],
     current: Mapping[tuple[str, str], Binding],
-    members: Mapping[str, tuple[str, ...]],
 ) -> tuple[dict[str, Any], Mapping[str, Any] | None]:
-    """Consume every retired shared group, in retirement order."""
-    for group in RETIRED_GROUPS:
-        if group in members:
-            continue  # Defensive: a group reinstated in the catalog is current again.
+    """Consume every historical shared group (their members are disjoint)."""
+    for group in SHARED_MEMBERS:
         source, legacy = fork_retired_group(group, source, legacy, historical, current)
     return source, legacy
 

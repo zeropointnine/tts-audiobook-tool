@@ -23,7 +23,7 @@ def metadata_catalog(monkeypatch):
               "_configured_definitions", "_audio_cpp_definitions", "_available_local_models", "_binding_issue",
               "_bound_project_type_id", "_bound_project_audio_cpp_model_id", "_selected_server_model_id", "_remote_issue", "_model_params")
     saved = {name: getattr(Tts, name) for name in fields}
-    registry = (dict(REGISTRY.bindings), dict(REGISTRY.legacy), dict(REGISTRY.members))
+    registry = (dict(REGISTRY.bindings), dict(REGISTRY.legacy))
     catalog = (dict(TtsModelType._catalog), dict(TtsModelType._specs))
     monkeypatch.setattr(Tts, "_probe_backend_mode", staticmethod(lambda: TtsRuntimeMode.LOCAL))
     Tts.init_local_model_type()
@@ -32,7 +32,7 @@ def metadata_catalog(monkeypatch):
     finally:
         for name, value in saved.items():
             setattr(Tts, name, value)
-        REGISTRY.bindings, REGISTRY.legacy, REGISTRY.members = registry
+        REGISTRY.bindings, REGISTRY.legacy = registry
         TtsModelType._catalog, TtsModelType._specs = catalog
 
 

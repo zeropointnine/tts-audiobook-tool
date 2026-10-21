@@ -902,9 +902,7 @@ def test_audio_cpp_catalog_rejects_invalid_declarations(tmp_path, entry_id, muta
 ])
 def test_moss_settings_are_private_and_architecture_scoped(model_id, prefixes, local_only):
     raw = read_catalog(CATALOG_PATH)
-    assert raw["setting_groups"] == {
-        "auk": ["auk_sglomni", "auk_flash_sglomni"],
-    }
+    assert "setting_groups" not in raw
     expected = [
         {"name": "file_name", "section": "voice_references", "type": "list[str]", "default": []},
         {"name": "transcript", "section": "voice_references", "type": "list[str]", "default": []},
@@ -937,9 +935,12 @@ def test_moss_settings_are_private_and_architecture_scoped(model_id, prefixes, l
         _entry(data, "higgs_v3_sglomni")["settings"][0]), "unique nonempty setting names"),
     (lambda data: _entry(data, "higgs_v3_sglomni")["settings"][0].update(extra=True), "unsupported setting declaration"),
     (lambda data: _entry(data, "higgs_v3_sglomni")["settings"][0].update(default="wrong"), "default.*expected"),
-    (lambda data: data["setting_groups"]["auk"].append("missing"), "setting_groups.auk"),
-    (lambda data: next(s for s in _entry(data, "qwen3tts_sglomni")["settings"]
-                       if s["name"] == "temperature").update(group="unauthorized"), "unauthorized shared group"),
+    # Settings are never shared: neither a root group table nor a per-setting
+    # group key is accepted any more.
+    (lambda data: data.update(setting_groups={"auk": ["auk_sglomni", "auk_flash_sglomni"]}),
+     "unsupported field.*setting_groups"),
+    (lambda data: next(s for s in _entry(data, "auk_sglomni")["settings"]
+                       if s["name"] == "speed").update(group="auk"), "unsupported setting declaration"),
 ])
 def test_rejects_invalid_setting_declarations_atomically(tmp_path, mutate, match):
     from tts_audiobook_tool.project_support.model_settings import REGISTRY
@@ -964,13 +965,14 @@ def test_backend_storage_defaults_and_sentinels_match_parameter_contracts(tmp_pa
         load_catalog(write_catalog(tmp_path / "bad-storage.toml", data))
 
 
-@pytest.mark.parametrize("name", ["file_name", "transcript"])
-def test_voice_and_transcript_cannot_have_different_storage_owners(tmp_path, name):
+def test_transcript_declaration_requires_a_voice_declaration(tmp_path):
+    # A local entry has no backend-derived voice storage, so dropping its
+    # explicit file_name leaves a transcript with no voice to annotate.
     data = read_catalog(CATALOG_PATH)
-    setting = next(s for s in _entry(data, "auk_flash_sglomni")["settings"] if s["name"] == name)
-    setting.pop("group")
-    with pytest.raises(ValueError, match="settings.transcript.*file_name storage owner"):
-        load_catalog(write_catalog(tmp_path / "split-voice-owner.toml", data))
+    entry = _entry(data, "moss_local")
+    entry["settings"] = [s for s in entry["settings"] if s["name"] != "file_name"]
+    with pytest.raises(ValueError, match="settings.transcript.*requires a file_name declaration"):
+        load_catalog(write_catalog(tmp_path / "transcript-without-voice.toml", data))
 
 
 def test_sgl_omni_voice_instructions_are_an_optional_bool(tmp_path):

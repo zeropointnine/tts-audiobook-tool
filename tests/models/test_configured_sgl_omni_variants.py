@@ -282,7 +282,7 @@ def test_auk_speed_utf8_and_seed_are_one_per_call(server_mode, capture, tmp_path
     project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": Tts.get_active_type().id})
     project.set_model_setting("auk_flash_sglomni", "file_name", ["sample.flac"])
     project.set_model_setting("auk_flash_sglomni", "transcript", ["é"])
-    project.set_model_setting("auk_sglomni", "speed", 2.0)
+    project.set_model_setting("auk_flash_sglomni", "speed", 2.0)
     instance.generate_using_project(project, ["à", "abcd"], force_random_seed=True)
     assert [payload["stage_params"]["auk_engine"]["gen_seconds"] for payload in capture] == [2.0, 4.0]
     assert [payload["seed"] for payload in capture] == [12345, 12345]

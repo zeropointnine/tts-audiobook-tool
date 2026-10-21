@@ -68,7 +68,7 @@ class ProjectLoadUtil:
             isinstance(objects, dict) and any(
                 isinstance(obj, dict) and 'voice_references' in obj
                 for key, obj in objects.items()
-                if section != 'shared' or key not in SHARED_MEMBERS or key in REGISTRY.members
+                if section != 'shared' or key not in SHARED_MEMBERS
             )
             for section, objects in (('models', settings.get('models', {})), ('shared', settings.get('shared', {})))
         )

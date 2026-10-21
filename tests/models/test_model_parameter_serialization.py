@@ -19,13 +19,10 @@ def test_save_documents_every_declared_parameter_without_mutating_store(caplog):
     for binding in REGISTRY.bindings.values():
         if binding.section != "parameters":
             continue
-        collection, owner = ("shared", binding.group) if binding.group else ("models", binding.model_id)
-        obj = saved["model_settings"][collection][owner]
+        obj = saved["model_settings"]["models"][binding.model_id]
         assert obj["parameters"][binding.name] is None
-        if binding.group:
-            assert obj["model_ids"] == list(REGISTRY.members[binding.group])
-            private = saved["model_settings"]["models"].get(binding.model_id, {}).get("parameters", {})
-            assert binding.name not in private
+    # Every parameter is private, so nothing is documented under a shared group.
+    assert saved["model_settings"]["shared"] == {}
     assert project.model_settings.to_dict() == before
 
     restored = Project.model_validate(deepcopy(saved))

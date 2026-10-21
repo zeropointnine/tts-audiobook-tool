@@ -111,7 +111,7 @@ def _warn_unusable_historical(group: str, detail: str) -> None:
 
 def _collect_sources(d: dict[str, Any]) -> list[VoiceReferenceSource]:
     from tts_audiobook_tool.project_support.model_settings import REGISTRY, ModelSettings
-    from tts_audiobook_tool.project_support.model_settings_compat import RETIRED_GROUPS, SHARED_MEMBERS
+    from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
     from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 
     settings = d.get('model_settings', {})
@@ -141,36 +141,29 @@ def _collect_sources(d: dict[str, Any]) -> list[VoiceReferenceSource]:
                 ids = (key,)
                 refs = normalize_voice_references(obj['voice_references'], f'model_settings.models.{key}.voice_references')
             else:
-                if key not in REGISTRY.members and key not in SHARED_MEMBERS:
+                # No group is current; only historical groups are sources.
+                expected = SHARED_MEMBERS.get(key)
+                if expected is None:
                     continue
-                historical = key not in REGISTRY.members
-                expected = REGISTRY.members.get(key, SHARED_MEMBERS.get(key))
                 recorded = obj.get('model_ids', [])
                 if not isinstance(recorded, list) or not all(isinstance(id, str) for id in recorded):
-                    if historical:
-                        _warn_unusable_historical(key, 'model_ids must be an array of strings')
-                        continue
-                    raise ValueError(f'model_settings.shared.{key}.model_ids must be an array of strings')
-                if expected is not None and (len(recorded) != len(expected) or set(recorded) != set(expected)):
-                    if historical:
-                        _warn_unusable_historical(key, f'expected members {list(expected)!r}')
-                        continue
-                    raise ValueError(f'model_settings.shared.{key}.model_ids: expected members {list(expected)!r}')
+                    _warn_unusable_historical(key, 'model_ids must be an array of strings')
+                    continue
+                if len(recorded) != len(expected) or set(recorded) != set(expected):
+                    _warn_unusable_historical(key, f'expected members {list(expected)!r}')
+                    continue
                 ids = tuple(recorded)
                 try:
                     refs = normalize_voice_references(obj['voice_references'], f'model_settings.shared.{key}.voice_references')
                 except ValueError:
-                    if historical:
-                        _warn_unusable_historical(key, 'unusable voice_references')
-                        continue
-                    raise
-                if key in RETIRED_GROUPS:
-                    # Retired-group references only fill private lists that
-                    # were not explicitly supplied (including empty lists).
-                    models = settings.get('models', {})
-                    ids = tuple(id for id in ids if 'voice_references' not in models.get(id, {}))
-                    if not ids:
-                        refs = []
+                    _warn_unusable_historical(key, 'unusable voice_references')
+                    continue
+                # Historical-group references only fill private lists that
+                # were not explicitly supplied (including empty lists).
+                models = settings.get('models', {})
+                ids = tuple(id for id in ids if 'voice_references' not in models.get(id, {}))
+                if not ids:
+                    refs = []
             # Pre-v4 scoped lists never held sample-less voices (such entries
             # were dropped on load); keep that, so they are not migrated as voices.
             refs = [ref for ref in refs if ref.has_sample]
@@ -188,7 +181,7 @@ def _collect_sources(d: dict[str, Any]) -> list[VoiceReferenceSource]:
             continue
         # Retired historical sharing is consumed once, before private fan-out.
         ids = SHARED_MEMBERS.get(binding.group, (binding.model_id,)) if binding.group else (binding.model_id,)
-        if binding.group in RETIRED_GROUPS:
+        if binding.group:
             ids = tuple(id for id in ids if 'voice_references' not in settings.get('models', {}).get(id, {}))
             if not ids:
                 continue
@@ -288,8 +281,8 @@ def prepare_project_voice_references(
             for key, obj in objects.items():
                 if not isinstance(obj, dict):
                     continue
-                if section == 'shared' and key in SHARED_MEMBERS and key not in REGISTRY.members:
-                    # Retired historical groups keep their object so the
+                if section == 'shared' and key in SHARED_MEMBERS:
+                    # Historical groups keep their object so the
                     # existing reconciliation warning path can retain a
                     # malformed group non-destructively; a well-formed group
                     # is consumed by the historical fork instead.

@@ -23,7 +23,7 @@ def remote_mode(monkeypatch):
               "_configured_definitions", "_audio_cpp_definitions", "_selected_server_model_id", "_remote_issue",
               "_available_local_models", "_binding_issue", "_bound_project_type_id", "_bound_project_audio_cpp_model_id", "_model_params")
     saved = {name: getattr(Tts, name) for name in fields}
-    registry = (dict(REGISTRY.bindings), dict(REGISTRY.legacy), dict(REGISTRY.members))
+    registry = (dict(REGISTRY.bindings), dict(REGISTRY.legacy))
     catalog = (dict(TtsModelType._catalog), dict(TtsModelType._specs))
     monkeypatch.setattr(Tts, "_probe_backend_mode", staticmethod(lambda: TtsRuntimeMode.REMOTE_CLIENT))
     monkeypatch.setattr(RemoteTtsDiscovery, "_snapshots", {})
@@ -35,7 +35,7 @@ def remote_mode(monkeypatch):
     finally:
         for name, value in saved.items():
             setattr(Tts, name, value)
-        REGISTRY.bindings, REGISTRY.legacy, REGISTRY.members = registry
+        REGISTRY.bindings, REGISTRY.legacy = registry
         TtsModelType._catalog, TtsModelType._specs = catalog
 
 

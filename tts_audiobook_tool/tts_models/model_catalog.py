@@ -479,7 +479,7 @@ def _load_catalog(path: Path) -> tuple[dict[str, Any], list[TtsModelSpec], list[
         document = tomllib.loads(raw.decode("utf-8"))
     except (OSError, ValueError) as exc:
         raise ValueError(f"Model catalog {path}: {exc}") from exc
-    root = _object(document, "root", {"schema_version", "models", "setting_groups"})
+    root = _object(document, "root", {"schema_version", "models"})
     if type(root.get("schema_version")) is not int or root["schema_version"] != CATALOG_SCHEMA_VERSION:
         _fail("schema_version", f"expected supported version {CATALOG_SCHEMA_VERSION}")
     entries = _field(root, "models", "root", list)
@@ -509,10 +509,8 @@ def load_catalog(path: Path = CATALOG_PATH) -> tuple[list[TtsModelSpec], list[di
     return specs, servers, fingerprint
 
 
-def load_settings_catalog(path: Path = CATALOG_PATH) -> tuple[dict[str, tuple[str, ...]], dict[str, tuple[dict[str, Any], ...]]]:
-    """Load current settings for all backends; never consult legacy declarations."""
+def load_settings_catalog(path: Path = CATALOG_PATH) -> dict[str, tuple[dict[str, Any], ...]]:
+    """Load each model's current settings for all backends; never consult legacy declarations."""
     document, _, _, _ = _load_catalog(path)
     from tts_audiobook_tool.tts_models.catalog_settings import parse_model_settings
-    groups = {name: tuple(ids) for name, ids in document.get("setting_groups", {}).items()}
-    settings = {entry["id"]: parse_model_settings(entry) for entry in document["models"]}
-    return groups, settings
+    return {entry["id"]: parse_model_settings(entry) for entry in document["models"]}

@@ -322,13 +322,17 @@ def test_historical_moss_flat_fallback_survives_partial_private_override():
     assert prepare_project_voice_references(source)['voice_references'] == [voice('old.flac', '')]
 
 
-def test_invalid_shared_voice_membership_fails_without_source_mutation():
+def test_invalid_historical_shared_voice_membership_is_retained_without_source_mutation():
+    # No shared group is current any more, so a malformed historical group
+    # (here AuK's) is not a voice source and does not block loading: it is
+    # retained verbatim for the non-destructive reconciliation warning path.
     source = {'model_settings': {'shared': {'auk': {
         'model_ids': ['auk_sglomni', 'unexpected'], 'voice_references': [ref()],
     }}}}
     original = deepcopy(source)
-    with pytest.raises(ValueError, match='expected members'):
-        prepare_project_voice_references(source)
+    result = prepare_project_voice_references(source)
+    assert result['voice_references'] == []
+    assert result['model_settings']['shared']['auk'] == original['model_settings']['shared']['auk']
     assert source == original
 
 

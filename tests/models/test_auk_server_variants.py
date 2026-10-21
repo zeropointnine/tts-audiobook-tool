@@ -2,7 +2,7 @@ import pytest
 
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
-from project_settings_test_support import get_setting, set_setting
+from project_settings_test_support import get_setting
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.tts import Tts
@@ -28,8 +28,9 @@ def test_auk_variants_have_distinct_catalog_identity(
     ]
     assert info.ui["proper_name"] == proper_name
     assert info.default_output_sample_rate == 24_000
-    assert REGISTRY.voice_binding(model_type.id).group == "auk"
-    assert REGISTRY.transcript_binding(model_type.id).group == "auk"
+    # AuK and AuK-Flash share no settings storage.
+    assert REGISTRY.voice_binding(model_type.id).group == ""
+    assert REGISTRY.transcript_binding(model_type.id).group == ""
     assert REGISTRY.orchestration_binding(model_type.id).name == "concurrent_requests"
     # A sample-less voice is generated from its instructions (voice description).
     assert not info.requires_voice
@@ -50,14 +51,15 @@ def test_auk_variants_declare_no_concurrency(model_type):
     # but the effective value never exceeds one.
     assert REGISTRY.orchestration_binding(model_type.id).name == "concurrent_requests"
     project = Project(tts_model_type=model_type.id)
-    set_setting(project, "auk_server_concurrent_requests", 4)
-    assert get_setting(project, "auk_server_concurrent_requests") == 4
+    project.set_model_setting(model_type.id, "concurrent_requests", 4)
+    assert project.get_model_setting(model_type.id, "concurrent_requests") == 4
     assert ProjectVoiceUtil.get_batch_size(project) == 1
 
     payload = ProjectSerializationUtil.to_project_json_dict(project)
-    assert payload["model_settings"]["shared"]["auk"]["orchestration"] == {
+    assert payload["model_settings"]["models"][model_type.id]["orchestration"] == {
         "concurrent_requests": 4
     }
+    assert "auk" not in payload["model_settings"]["shared"]
 
 
 @pytest.mark.parametrize(
@@ -88,7 +90,7 @@ def test_find_auk_variant_using_sgl_omni_model_id():
     )
 
 
-def test_auk_project_fields_are_shared_normalized_and_serialized():
+def test_auk_project_fields_are_private_normalized_and_serialized():
     project = Project.model_validate(
         {
             "auk_voice_file_name": "voice.flac",
@@ -105,19 +107,21 @@ def test_auk_project_fields_are_shared_normalized_and_serialized():
     assert get_setting(project, "auk_speed") == 1.0
     assert get_setting(project, "auk_seed") == -1
 
-    # AuK and AuK-Flash share one storage group.
     payload = ProjectSerializationUtil.to_project_json_dict(project)
     # V4 keeps one project-wide voice list; scoped clone storage is not emitted.
     assert payload["voice_references"] == [
         {"file_name": "voice.flac", "transcript": "reference transcript", "room_reverb": "off"}
     ]
-    shared = payload["model_settings"]["shared"]["auk"]
-    assert shared["model_ids"] == ["auk_sglomni", "auk_flash_sglomni"]
-    assert "voice_references" not in shared
-    # Unset speed is documented as null; seeds stay explicit by design.
-    # Default concurrency remains absent from the orchestration section.
-    assert shared["parameters"] == {"speed": None, "seed": -1}
-    assert "orchestration" not in shared
+    # The historical flat fields went to both AuK and AuK-Flash, each of which
+    # now owns its settings privately; nothing is written to a shared group.
+    assert "auk" not in payload["model_settings"]["shared"]
+    for model_id in ("auk_sglomni", "auk_flash_sglomni"):
+        private = payload["model_settings"]["models"][model_id]
+        assert "voice_references" not in private
+        # Unset speed is documented as null; seeds stay explicit by design.
+        # Default concurrency remains absent from the orchestration section.
+        assert private["parameters"] == {"speed": None, "seed": -1}
+        assert "orchestration" not in private
 
 
 @pytest.mark.parametrize("invalid_value", [float("nan"), float("inf"), float("-inf")])

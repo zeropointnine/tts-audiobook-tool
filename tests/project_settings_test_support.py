@@ -1,7 +1,7 @@
 """Test helpers for model-scoped project settings.
 
 Version 3 stores model settings in `Project.model_settings`, keyed by the stable
-model or shared-group ID and the declared setting name. Tests written against
+model ID and the declared setting name. Tests written against
 the former flat project fields can keep naming those fields through these
 helpers: the declaration registry maps each old field name to the (model, name)
 pair that now owns its value.
@@ -30,7 +30,3 @@ def model_object(project: Project, model_id: str) -> dict[str, Any]:
     """The project's private storage object for one model, or an empty object."""
     return project.model_settings.models.get(model_id, {})
 
-
-def shared_object(project: Project, group: str) -> dict[str, Any]:
-    """The project's storage object for one shared group, or an empty object."""
-    return project.model_settings.shared.get(group, {})

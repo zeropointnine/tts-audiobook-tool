@@ -22,13 +22,10 @@
 # `voice_samples` has no target: it always expands in Voice clone.
 # audio.cpp `request_options` pins constants into every request's `options` object;
 # they are not persisted and have no menu control, unlike `parameters` entries.
-# Shared settings use explicit `setting_groups`; their declarations must agree.
+# Every persisted setting belongs to exactly one model ID; settings are never shared between models.
 # The full file, including comments, is fingerprinted for cross-process consistency.
 
 schema_version = 1
-
-[setting_groups]
-auk = ["auk_sglomni", "auk_flash_sglomni"]
 
 # ------------------------------------------------------------------------
 # none: This handle is a placeholder, not an inference backend. TOML has no null; only this entry
@@ -72,7 +69,7 @@ project_links = [
 # ------------------------------------------------------------------------
 [[models]]
 id = "breeze_tts_2_local"
-# Settings are independent of breeze_tts_2_audiocpp (no setting group).
+# Settings are independent of breeze_tts_2_audiocpp.
 settings = [
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
@@ -686,11 +683,11 @@ project_links = [
 [[models]]
 id = "auk_sglomni"
 settings = [
-    { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "auk" },
-    { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "auk" },
-    { name = "concurrent_requests", section = "orchestration", type = "int", default = 1, group = "auk" },
-    { name = "speed", section = "parameters", type = "float", default = 1.0, group = "auk" },
-    { name = "seed", section = "parameters", type = "int", default = -1, group = "auk", preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+    { name = "concurrent_requests", section = "orchestration", type = "int", default = 1 },
+    { name = "speed", section = "parameters", type = "float", default = 1.0 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
 ]
 backend_kind = "sgl_omni"
 
@@ -763,11 +760,11 @@ target_menu = "model"
 [[models]]
 id = "auk_flash_sglomni"
 settings = [
-    { name = "file_name", section = "voice_references", type = "list[str]", default = [], group = "auk" },
-    { name = "transcript", section = "voice_references", type = "list[str]", default = [], group = "auk" },
-    { name = "concurrent_requests", section = "orchestration", type = "int", default = 1, group = "auk" },
-    { name = "speed", section = "parameters", type = "float", default = 1.0, group = "auk" },
-    { name = "seed", section = "parameters", type = "int", default = -1, group = "auk", preserve_default = true },
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
+    { name = "concurrent_requests", section = "orchestration", type = "int", default = 1 },
+    { name = "speed", section = "parameters", type = "float", default = 1.0 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
 ]
 backend_kind = "sgl_omni"
 
@@ -2822,7 +2819,7 @@ target_menu = "model"
 # ------------------------------------------------------------------------
 [[models]]
 id = "qwen3tts_audiocpp"
-# Private settings: native defaults differ from the shared local/SGL Qwen group.
+# Private settings: native defaults differ from local/SGL-Omni Qwen3.
 settings = [
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [] },

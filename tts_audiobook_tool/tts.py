@@ -238,8 +238,6 @@ class Tts:
         audio_definitions = load_audio_cpp_definitions()
         if definitions.fingerprint != audio_definitions.fingerprint:
             raise RuntimeError("Remote backend definitions have different catalog fingerprints")
-        if definitions.setting_groups is not None:
-            REGISTRY.members = dict(definitions.setting_groups)
         # Build each audio.cpp behavior once so a subclass whose declared
         # parameters disagree with the catalog fails here, at startup, rather
         # than when that model is first selected.

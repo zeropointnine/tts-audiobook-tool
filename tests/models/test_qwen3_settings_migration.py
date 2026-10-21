@@ -7,7 +7,7 @@ import pytest
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
-from tts_audiobook_tool.project_support.model_settings_compat import RETIRED_GROUPS, SHARED_MEMBERS
+from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.tts_models.sgl_omni_configured import ConfiguredSettings
@@ -31,8 +31,6 @@ def old_source():
 
 def test_group_is_retired_and_both_members_own_a_seed():
     assert IDS == (LOCAL, SERVER)
-    assert "qwen3" in RETIRED_GROUPS
-    assert "qwen3" not in REGISTRY.members
     for model_id in IDS:
         for name in (*SAMPLING, "seed"):
             assert REGISTRY.get(model_id, name).group == ""

@@ -20,7 +20,7 @@ Every shipped entry in [`model_catalog.toml`](<../tts_audiobook_tool/tts_models/
 
 Both lookups return the same object for a known ID and do not discover or load models. Metadata overlays retain that handle and update its `.value` spec. For simple classification compare `.id` to a literal (for example `model.id == "none"`); structural dispatch uses `match model.id` with literal string cases.
 
-Canonical shipped real-model IDs use `<modelname>_<backend>`: `_local`, `_sglomni`, or `_audiocpp`; backend values remain `local`, `sgl_omni`, and `audio_cpp`. The `none` placeholder comes first, then local, SGL-Omni, and audio.cpp entries, alphabetically by model name within each backend (AuK before AuK-Flash). Storage group names, file tags, upstream names, and legacy project field prefixes are independent of these IDs. The pre-release ID rename requires no migration for undeployed IDs; existing v1/v2 flat-field migration produces the current canonical owners.
+Canonical shipped real-model IDs use `<modelname>_<backend>`: `_local`, `_sglomni`, or `_audiocpp`; backend values remain `local`, `sgl_omni`, and `audio_cpp`. The `none` placeholder comes first, then local, SGL-Omni, and audio.cpp entries, alphabetically by model name within each backend (AuK before AuK-Flash). Historical storage group names, file tags, upstream names, and legacy project field prefixes are independent of these IDs. The pre-release ID rename requires no migration for undeployed IDs; existing v1/v2 flat-field migration produces the current canonical owners.
 
 ## 1. Determine process mode and availability
 

@@ -287,7 +287,7 @@ class ProjectTransferUtil:
             for binding in REGISTRY.for_model(model_type.id):
                 if binding.section != "files":
                     continue
-                owner = (binding.group or binding.model_id, binding.name)
+                owner = (binding.model_id, binding.name)
                 if owner not in seen_owners:
                     seen_owners.add(owner)
                     raw_voice_file_names.append(project.get_model_setting(model_type.id, binding.name))

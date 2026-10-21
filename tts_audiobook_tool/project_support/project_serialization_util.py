@@ -1000,7 +1000,7 @@ class ProjectSerializationUtil:
         from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
         for section in ("models", "shared"):
             for key, obj in result[section].items():
-                if section == "shared" and key in SHARED_MEMBERS and key not in REGISTRY.members:
+                if section == "shared" and key in SHARED_MEMBERS:
                     # A retired historical group only survives here when
                     # reconciliation failed and the object was retained
                     # non-destructively; keep it verbatim.
