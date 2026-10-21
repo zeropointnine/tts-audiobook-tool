@@ -684,14 +684,18 @@ def extend_sentence_gaps(
     """
     Applies the project's "minimum sentence silence inside segments" setting,
     like concat does, but using the in-memory STT word timings rather than the
-    sidecar. Realtime only transcribes once the buffer has enough runway (and
+    sidecar (and capped at the max silence gap, likewise). Realtime only transcribes once the buffer has enough runway (and
     with Whisper enabled), so segments without transcript words are returned
     unchanged.
     """
     sound = validation_result.sound
     if not isinstance(validation_result, TranscriptResult):
         return sound  # STT skipped
-    min_gap = state.project.min_segment_sentence_silence.duration
+    min_gap = SoundPipeline.effective_min_sentence_silence(
+        state.project.min_segment_sentence_silence.duration,
+        state.project.limit_silence_gaps,
+        state.project.limit_silence_gaps_duration,
+    )
     if min_gap <= 0 or not validation_result.transcript_words or len(phrase_group.phrases) < 2:
         return sound
 

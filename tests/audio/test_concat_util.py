@@ -454,6 +454,7 @@ def concatenate_gap_sound(
     sound: Sound | None = None,
     min_sentence_silence: float = 0.0,
     segment_path: str = "segment.flac",
+    limit_silence_gaps_duration: float = 0.2,
 ) -> object:
     sound = sound if sound is not None else make_gap_sound()
     phrase = Phrase("Gap phrase.", Reason.SENTENCE)
@@ -463,7 +464,7 @@ def concatenate_gap_sound(
         render=sound,
         use_break_sound_effect=False,
         limit_silence_gaps=limit_silence_gaps,
-        limit_silence_gaps_duration=0.2,
+        limit_silence_gaps_duration=limit_silence_gaps_duration,
         min_sentence_silence=min_sentence_silence,
     )
 
@@ -676,9 +677,53 @@ def test_sentence_gap_extension_does_not_hide_pipeline_errors(sentence_gap_sidec
 
 
 def test_sentence_gap_extension_runs_before_limiting_and_map_composes() -> None:
-    # A 0.15s sentence gap is extended to 0.4s, then the limiter (max 0.2s) cuts
-    # it back down: the two steps overlap, extension first. The recorded map
-    # must take a sidecar time through both so it lands on the final audio.
+    # A 0.15s sentence gap is extended to 0.4s, then the limiter (max 0.5s) cuts
+    # a separate 1.0s trailing gap. The recorded map must take a sidecar time
+    # through both steps so it lands on the final audio.
+    from sentence_gap_test_support import SR, Utterance, make_speech
+
+    u = Utterance(gap_s=0.15)
+    sound = Sound(np.concatenate([u.sound.data, np.zeros(SR, dtype=np.float32), make_speech(0.5)]), SR)
+    info = MagicMock(transcript_words=u.words, timed_phrases=u.timed_phrases)
+    sidecar_path = MagicMock()
+    sidecar_path.exists.return_value = True
+
+    def run(limit: bool, min_silence: float) -> ConcatRenderResult:
+        result = concatenate_gap_sound(limit, sound, min_silence, limit_silence_gaps_duration=0.5)
+        assert isinstance(result, ConcatRenderResult)
+        return result
+
+    with patch("tts_audiobook_tool.concat_util.get_segment_stt_info_path", return_value=sidecar_path), \
+         patch("tts_audiobook_tool.concat_util.SegmentTranscriptUtil.load", return_value=info):
+        extended_only = run(False, 0.4)
+        both = run(True, 0.4)
+        disabled = run(False, 0.0)
+
+    # Disabled: untouched, no map
+    assert disabled.gap_trim_maps == [None]
+
+    # Extension alone: audio grows and the map shifts later words by the insertion
+    ext_map = extended_only.gap_trim_maps[0]
+    assert ext_map is not None
+    assert extended_only.durations[0] > sound.duration + 0.2
+    assert extended_only.durations[0] == pytest.approx(ext_map.new_duration, abs=0.01)
+    last_word_start = u.words[3]["start"]
+    assert ext_map.map_time(last_word_start + 0.01) > last_word_start + 0.2
+
+    # Both: limiter acts on the extended audio, and the map agrees with the result
+    both_map = both.gap_trim_maps[0]
+    assert both_map is not None
+    assert len(both_map.insertions) == 1
+    assert len(both_map.trims) == 1
+    assert both.durations[0] < extended_only.durations[0]
+    assert both_map.new_duration == pytest.approx(both.durations[0], abs=0.01)
+    assert both_map.map_time(sound.duration) == pytest.approx(both.durations[0], abs=0.01)
+
+
+def test_sentence_gap_extension_capped_by_max_silence_gap() -> None:
+    # With min sentence silence (0.4s) above the max gap (0.2s), extending to
+    # 0.4s would just be cut back by the limiter; the target is capped at 0.2s
+    # instead, so the 0.15s gap grows only slightly and nothing is trimmed.
     from sentence_gap_test_support import Utterance
 
     u = Utterance(gap_s=0.15)
@@ -688,29 +733,15 @@ def test_sentence_gap_extension_runs_before_limiting_and_map_composes() -> None:
 
     with patch("tts_audiobook_tool.concat_util.get_segment_stt_info_path", return_value=sidecar_path), \
          patch("tts_audiobook_tool.concat_util.SegmentTranscriptUtil.load", return_value=info):
-        extended_only = concatenate_gap_sound(False, u.sound, min_sentence_silence=0.4)
-        both = concatenate_gap_sound(True, u.sound, min_sentence_silence=0.4)
-        disabled = concatenate_gap_sound(False, u.sound, min_sentence_silence=0.0)
+        capped = concatenate_gap_sound(True, u.sound, min_sentence_silence=0.4)
+        zero_max = concatenate_gap_sound(True, u.sound, min_sentence_silence=0.4, limit_silence_gaps_duration=0.0)
 
-    assert isinstance(extended_only, ConcatRenderResult)
-    assert isinstance(both, ConcatRenderResult)
-    assert isinstance(disabled, ConcatRenderResult)
-
-    # Disabled: untouched, no map
-    assert disabled.gap_trim_maps == [None]
-
-    # Extension alone: audio grows and the map shifts later words by the insertion
-    ext_map = extended_only.gap_trim_maps[0]
-    assert ext_map is not None
-    assert extended_only.durations[0] > u.sound.duration + 0.2
-    assert extended_only.durations[0] == pytest.approx(ext_map.new_duration, abs=0.01)
-    last_word_start = u.words[3]["start"]
-    assert ext_map.map_time(last_word_start + 0.01) > last_word_start + 0.2
-
-    # Both: limiter acts on the extended audio, and the map agrees with the result
-    both_map = both.gap_trim_maps[0]
-    assert both_map is not None
-    assert len(both_map.insertions) == 1
-    assert both.durations[0] < extended_only.durations[0]
-    assert both_map.new_duration == pytest.approx(both.durations[0], abs=0.01)
-    assert both_map.map_time(u.sound.duration) == pytest.approx(both.durations[0], abs=0.01)
+    assert isinstance(capped, ConcatRenderResult)
+    assert isinstance(zero_max, ConcatRenderResult)
+    capped_map = capped.gap_trim_maps[0]
+    assert capped_map is not None
+    assert capped_map.trims == []
+    assert 0 < capped_map.inserted_duration < 0.1
+    # Max 0 removes every silence: no extension at all
+    zero_map = zero_max.gap_trim_maps[0]
+    assert zero_map is None or zero_map.insertions == []

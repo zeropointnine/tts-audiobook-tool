@@ -581,7 +581,8 @@ class ConcatUtil:
             Minimum duration, in seconds, of the silence at sentence boundaries
             inside each segment (0 disables). Short gaps are extended using the
             segment sidecar's timings; segments without a usable sidecar are
-            left alone. Applied before limit_silence_gaps. Gaps are extended
+            left alone. Applied before limit_silence_gaps, and capped at
+            limit_silence_gaps_duration when that is enabled. Gaps are extended
             with digital silence.
         :param room_tone_db:
             Level (dBFS RMS) of the constant noise bed run under the whole
@@ -611,6 +612,10 @@ class ConcatUtil:
 
         On error, returns error string
         """
+
+        min_sentence_silence = SoundPipeline.effective_min_sentence_silence(
+            min_sentence_silence, limit_silence_gaps, limit_silence_gaps_duration
+        )
 
         duration_sum = 0.0
         # Pre-allocate so durations stays aligned with phrases_and_paths indices
@@ -772,9 +777,9 @@ class ConcatUtil:
             curr_sound = result
 
             # Short sentence-boundary silences are extended first, then over-long
-            # gaps are cut (so the two can partly undo each other if configured
-            # that way). Sidecar timings are against the saved audio, hence the
-            # map below accounts for both steps.
+            # gaps are cut (the extension target is capped at the max above, so
+            # the two don't undo each other). Sidecar timings are against the
+            # saved audio, hence the map below accounts for both steps.
             curr_sound, insertions = ConcatUtil.extend_sentence_gaps_for_segment(
                 curr_sound, path, min_sentence_silence
             )

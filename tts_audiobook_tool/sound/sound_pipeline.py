@@ -334,6 +334,24 @@ class SoundPipeline:
         return sound
 
     @staticmethod
+    def effective_min_sentence_silence(
+        min_sentence_silence: float,
+        limit_silence_gaps: bool,
+        limit_silence_gaps_duration: float,
+    ) -> float:
+        """
+        The minimum sentence silence to actually extend to. Gap limiting runs
+        after sentence gap extension, so with limiting enabled any extension
+        beyond the max gap duration would just be cut back down; the minimum is
+        capped at the max instead (0 when the max is 0, ie disabled).
+        """
+        if min_sentence_silence <= 0:
+            return 0.0
+        if limit_silence_gaps:
+            return max(0.0, min(min_sentence_silence, limit_silence_gaps_duration))
+        return min_sentence_silence
+
+    @staticmethod
     def extend_sentence_gaps_with_insertions(
         sound: Sound,
         timed_phrases: Sequence[TimedPhrase],

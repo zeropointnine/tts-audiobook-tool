@@ -10,8 +10,16 @@ from tts_audiobook_tool.app_types.validation_result import SkippedResult, Trimme
 from tts_audiobook_tool.state import State
 
 
-def make_state(setting: MinSegmentSentenceSilence) -> State:
-    project = SimpleNamespace(min_segment_sentence_silence=setting)
+def make_state(
+    setting: MinSegmentSentenceSilence,
+    limit_silence_gaps: bool = False,
+    limit_silence_gaps_duration: float = 1.0,
+) -> State:
+    project = SimpleNamespace(
+        min_segment_sentence_silence=setting,
+        limit_silence_gaps=limit_silence_gaps,
+        limit_silence_gaps_duration=limit_silence_gaps_duration,
+    )
     return cast(State, SimpleNamespace(project=project))
 
 
@@ -48,3 +56,17 @@ def test_no_extension_when_disabled_or_stt_skipped() -> None:
     )
     assert disabled is u.sound
     assert skipped is u.sound
+
+
+def test_extension_capped_by_max_silence_gap() -> None:
+    # Gap limiting runs afterwards, so extending past its max would be undone:
+    # the target is capped at the max (here 0.2s, so a 0.15s gap grows < 0.1s)
+    u = Utterance(gap_s=0.15)
+    capped = real_time_playback.extend_sentence_gaps(
+        make_state(MinSegmentSentenceSilence.ENABLED, True, 0.2), make_phrase_group(), make_transcript_result(u)
+    )
+    zero_max = real_time_playback.extend_sentence_gaps(
+        make_state(MinSegmentSentenceSilence.ENABLED, True, 0.0), make_phrase_group(), make_transcript_result(u)
+    )
+    assert capped.duration < u.sound.duration + 0.1
+    assert zero_max is u.sound
