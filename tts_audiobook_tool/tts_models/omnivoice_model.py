@@ -18,6 +18,27 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
+def _release_cached_vram_if_large() -> None:
+    """
+    Releases PyTorch's cached-but-unused CUDA memory, but only when it is
+    significant (more than 1 GiB above what live tensors actually use).
+
+    The caching allocator keeps freed blocks reserved for reuse and never
+    returns them to the driver on its own, so any transient peak would
+    otherwise stay reserved for the rest of the session. That cache is not
+    usable by other runtimes sharing the GPU (faster-whisper/CTranslate2,
+    ONNX Runtime), which can push the total into shared system memory.
+
+    Calling empty_cache() after every segment would force the allocator to
+    re-request memory from the driver each time, so it is skipped when the
+    cache is small.
+    """
+    if not torch.cuda.is_available():
+        return
+    if torch.cuda.memory_reserved() > torch.cuda.memory_allocated() + 1024**3:
+        torch.cuda.empty_cache()
+
+
 class OmniVoiceModel(OmniVoiceBaseModel):
     """
     App wrapper for `omnivoice.OmniVoice`
@@ -166,15 +187,21 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         Raising here aborts the generation with an error string (handled by
         the caller) and nothing gets cached.
         """
-        prompt = self._model.create_voice_clone_prompt(
-            ref_audio=source_path,
-            ref_text=transcript or None,
-        )
-        return VoiceClonePrompt(
-            ref_audio_tokens=prompt.ref_audio_tokens.detach().cpu().clone(),
-            ref_text=prompt.ref_text,
-            ref_rms=prompt.ref_rms,
-        )
+        # The library's create_voice_clone_prompt() is not decorated with
+        # inference_mode (unlike its generate()). Called directly, it records
+        # an autograd graph while encoding the reference audio, which holds
+        # several GiB of activations (~4.9 GiB for a 16s reference) until the
+        # result is released.
+        with torch.inference_mode():
+            prompt = self._model.create_voice_clone_prompt(
+                ref_audio=source_path,
+                ref_text=transcript or None,
+            )
+            return VoiceClonePrompt(
+                ref_audio_tokens=prompt.ref_audio_tokens.detach().cpu().clone(),
+                ref_text=prompt.ref_text,
+                ref_rms=prompt.ref_rms,
+            )
 
     # ── Generation modes ──────────────────────────────────────────────────
 
@@ -227,6 +254,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                     kw["instruct"] = instruct   # cloning + combined styles
 
                 audio_arrays: list[np.ndarray] = self._model.generate(**kw)
+                _release_cached_vram_if_large()
+
                 audio = audio_arrays[0].astype(np.float32)
                 if audio.ndim > 1:
                     audio = audio.mean(axis=0)
@@ -266,6 +295,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                     speed=speed,
                     generation_config=generation_config,
                 )
+                _release_cached_vram_if_large()
+
                 audio = audio_arrays[0].astype(np.float32)
                 if audio.ndim > 1:
                     audio = audio.mean(axis=0)
@@ -303,6 +334,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                     speed=speed,
                     generation_config=generation_config,
                 )
+                _release_cached_vram_if_large()
+
                 audio = audio_arrays[0].astype(np.float32)
                 if audio.ndim > 1:
                     audio = audio.mean(axis=0)
