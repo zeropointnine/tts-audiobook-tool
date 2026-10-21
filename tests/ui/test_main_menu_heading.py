@@ -222,6 +222,26 @@ def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(mon
     assert COL_ERROR in result
 
 
+def test_tts_model_heading_shows_terse_binding_issue_status(monkeypatch):
+    # The heading pins only the short status; the full sentence is a one-time FYI.
+    from tts_audiobook_tool.tts import TtsBindingIssue
+    model = TtsModelType.require_by_id("chatterbox_audiocpp")
+    Tts._type = TtsModelType.require_by_id("none")
+    Tts._backend_mode = TtsRuntimeMode.REMOTE_CLIENT
+    Tts._selected_server_model_id = ""
+    issue = TtsBindingIssue("TTS model", "Saved audio.cpp model ID 'x' is unavailable ...",
+                            kind="entry_unavailable", status="unavailable")
+    Tts._binding_issue = issue
+    Tts._remote_issue = issue.verbose
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+        backend_kind=TtsBackendKind.AUDIO_CPP))
+
+    result = text_util.strip_ansi_codes(get_heading_tts_text(make_state(model)))
+
+    assert result.endswith("audio.cpp: unavailable")
+    assert "Saved audio.cpp model ID" not in result
+
+
 def test_tts_model_heading_detail_keeps_local_model_unchanged():
     Tts._type = TtsModelType.require_by_id("chatterbox_local")
     Tts._backend_mode = TtsRuntimeMode.LOCAL

@@ -14,7 +14,7 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_types.voice import Voice, ensure_voice_slot
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.model_settings import ModelSettings, REGISTRY
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.reason_pauses import ReasonPauses, ReasonPauseTypes
 from tts_audiobook_tool.util import *
 
@@ -108,6 +108,12 @@ class Project(BaseModel):
     # Exact audio.cpp server entry ID; opaque and independent of the catalog ID.
     # Always empty for other backends.
     audio_cpp_model_id: str = ""
+    # The most recent complete audio.cpp selection (catalog ID + server ID).
+    # Survives switching to a local or SGL-Omni model, so reconnecting to
+    # audio.cpp can restore it. Invariant: equals the current pair whenever
+    # that pair is a complete audio.cpp selection (see `set_tts_selection`).
+    last_audio_cpp_model_type: str = ""
+    last_audio_cpp_model_id: str = ""
     model_settings: ModelSettings = Field(default_factory=ModelSettings)
     # Never empty: a project always has at least one (possibly sample-less) voice.
     voice_references: list[Voice] = Field(default_factory=lambda: [Voice()])
@@ -133,6 +139,18 @@ class Project(BaseModel):
     def get_tts_model_type(self) -> TtsModelType:
         """Resolve the saved selection without changing it or auto-detecting."""
         return TtsModelType.get_by_id(self.tts_model_type)
+
+    def set_tts_selection(self, model_id: str, audio_cpp_model_id: str = "") -> None:
+        """Assign the selected pair, remembering it if it is a complete audio.cpp selection."""
+        self.tts_model_type = model_id
+        self.audio_cpp_model_id = audio_cpp_model_id
+        self._remember_audio_cpp_selection()
+
+    def _remember_audio_cpp_selection(self) -> None:
+        if (self.audio_cpp_model_id
+                and self.get_tts_model_type().value.backend_kind is TtsBackendKind.AUDIO_CPP):
+            self.last_audio_cpp_model_type = self.tts_model_type
+            self.last_audio_cpp_model_id = self.audio_cpp_model_id
 
     @field_validator("model_settings", mode="before")
     @classmethod
@@ -220,6 +238,10 @@ class Project(BaseModel):
     none_voice_file_name: str = ""
 
     def model_post_init(self, __context: Any) -> None:
+        # Seeds projects saved before the last_* fields existed, before any
+        # local-mode reconciliation can overwrite their audio.cpp pair.
+        self._remember_audio_cpp_selection()
+
         # A `dir_path` written by another operating system's path grammar is not
         # a directory here. Creating it anyway would litter the working
         # directory with a folder literally named `C:\Users\…`.

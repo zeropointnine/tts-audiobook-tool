@@ -1031,10 +1031,135 @@ def test_status_clears_unavailable_selection_with_multiple_models(monkeypatch, c
     old_name = (f"Unknown model: {saved}" if saved == "future_catalog_id" else
                 _display_name(TtsModelType.get_by_id(saved)))
     assert output == ("" if not should_notify else (
-        f"🔔 FYI\nThis project was last used with TTS model {old_name}, which is currently unavailable.\n"
+        f"🔔 FYI\nThis project was last used with TTS model {old_name},\nwhich is currently unavailable.\n"
         "Select a TTS model in Model settings > TTS model.\n\n"
     ))
     assert state.pending_tts_model_change is None
+
+
+@pytest.mark.parametrize("case", [
+    "restored", "restored_from_none", "restored_unbound", "unavailable_multiple", "unavailable_sole",
+])
+def test_remembered_audio_cpp_selection_notices(monkeypatch, capsys, case):
+    # Reconnecting to audio.cpp after using a local model restores (or reports
+    # failing to restore) the project's last-used audio.cpp entry, deferred to
+    # the end of the next complete menu like other model-change notices.
+    fish = TtsModelType.require_by_id("fish_s2_audiocpp")
+    chatterbox = TtsModelType.require_by_id("chatterbox_audiocpp")
+    higgs = TtsModelType.require_by_id("higgs_v3_audiocpp")
+    state = make_state()
+    state.project.set_tts_selection(fish.id, "fish-q8")
+    state.project.set_tts_selection("none" if case == "restored_from_none" else "chatterbox_local")
+    state.project.dir_path = "/example/book"
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    candidates = {
+        "unavailable_multiple": ((chatterbox, "cb"), (higgs, "higgs")),
+        "unavailable_sole": ((chatterbox, "cb"),),
+    }.get(case, ((chatterbox, "cb"), (fish, "fish-q8")))
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+        TtsBackendKind.AUDIO_CPP, candidates=candidates))
+    monkeypatch.setattr(Project, "save", lambda _: "")
+    monkeypatch.setattr(Tts, "get_active_type", lambda: (
+        TtsModelType.require_by_id("none") if case == "restored_unbound"
+        else TtsModelType.get_by_id(state.project.tts_model_type)))
+    monkeypatch.setattr("tts_audiobook_tool.ask.ask_enter_to_continue",
+                        lambda *_: pytest.fail("Model-change notices must not pause"))
+
+    MenuStatus.print_block(state)
+    MenuStatus.print_block(state)
+    assert "FYI" not in capsys.readouterr().out
+    MenuStatus.show_pending_project_hints(state)
+    MenuStatus.show_pending_project_hints(state)
+    output = text_util.strip_ansi_codes(capsys.readouterr().out)
+
+    old_line = "This project was last used with TTS model Chatterbox TTS (local)"
+    remembered = f"{fish.value.ui['proper_name']} (audio.cpp; fish-q8)"
+    expected_selection = {
+        "unavailable_multiple": ("none", ""),
+        "unavailable_sole": (chatterbox.id, "cb"),
+    }.get(case, (fish.id, "fish-q8"))
+    assert (state.project.tts_model_type, state.project.audio_cpp_model_id) == expected_selection
+    assert (state.project.last_audio_cpp_model_type, state.project.last_audio_cpp_model_id) == (
+        (chatterbox.id, "cb") if case == "unavailable_sole" else (fish.id, "fish-q8"))
+    expected = {
+        "restored": f"{old_line};\nIt will now use its last-used audio.cpp model, {remembered}",
+        "restored_from_none": f"It will now use its last-used audio.cpp model, {remembered}",
+        "restored_unbound": (f"{old_line};\nIt is now configured to use its last-used audio.cpp model, "
+                             f"{remembered},\nbut the runtime is unavailable (see Model settings)."),
+        "unavailable_multiple": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, is currently "
+                                 "unavailable.\nSelect a TTS model in Model settings > TTS model."),
+        "unavailable_sole": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, is unavailable,\n"
+                             f"so it will now use the sole active audio.cpp model, {_display_name(chatterbox)}"),
+    }[case]
+    assert output == f"🔔 FYI\n{expected}\n\n"
+
+
+@pytest.mark.parametrize("sole", [True, False])
+def test_saved_entry_missing_from_new_server_announces_replacement(monkeypatch, capsys, sole):
+    # Eg, after changing the server URL: the saved entry is replaced (sole
+    # entry, else unselected) with the usual model-change FYI, naming entries.
+    fish = TtsModelType.require_by_id("fish_drama3_audiocpp")
+    chatterbox = TtsModelType.require_by_id("chatterbox_audiocpp")
+    higgs = TtsModelType.require_by_id("higgs_v3_audiocpp")
+    state = make_state()
+    state.project.set_tts_selection(fish.id, "fish-drama3")
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    candidates = ((chatterbox, "cb"),) if sole else ((chatterbox, "cb"), (higgs, "higgs"))
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+        TtsBackendKind.AUDIO_CPP, candidates=candidates))
+    monkeypatch.setattr(Tts, "get_active_type", lambda: TtsModelType.get_by_id(state.project.tts_model_type))
+
+    MenuStatus.print_block(state)
+    capsys.readouterr()
+    MenuStatus.show_pending_project_hints(state)
+    output = text_util.strip_ansi_codes(capsys.readouterr().out)
+
+    old_name = f"{fish.value.ui['proper_name']} (audio.cpp; fish-drama3)"
+    if sole:
+        assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name};\n"
+                          f"It will now use the sole active audio.cpp model, "
+                          f"{chatterbox.value.ui['proper_name']} (audio.cpp; cb)\n\n")
+    else:
+        assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name}\n, which is currently "
+                          "unavailable.\nSelect a TTS model in Model settings > TTS model.\n\n")
+    assert state.project.last_audio_cpp_model_id == ("cb" if sole else "fish-drama3")
+
+
+def test_binding_issue_is_a_terse_status_plus_one_time_fyi(monkeypatch, capsys):
+    # The status row keeps only a short qualifier while the issue persists; the
+    # full explanation is shown once, and again only after the issue clears.
+    from tts_audiobook_tool.tts import TtsBindingIssue
+    model = TtsModelType.require_by_id("chatterbox_audiocpp")
+    state = make_state(model)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    snapshot = RemoteTtsSnapshot(TtsBackendKind.AUDIO_CPP, candidates=((model, "one"), (model, "two")))
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: snapshot)
+    issue = TtsBindingIssue("TTS model", "Multiple server entries match the selected TTS model (one, two). ...",
+                            kind="ambiguous_entry", status="requires entry selection", server_ids=("one", "two"))
+    current = {"issue": issue}
+
+    def bind(project, **kwargs):
+        Tts._binding_issue = current["issue"]
+        return current["issue"]
+    monkeypatch.setattr(Tts, "bind_project", bind)
+    name = f"{model.value.ui['proper_name']} (audio.cpp)"
+    notice = (f"🔔 FYI\nSeveral server entries match this project's TTS model, {name}:\n"
+              "one, two.\nSelect one in Model settings > TTS model.\n\n")
+
+    def draw() -> tuple[str, str]:
+        MenuStatus.print_block(state)
+        status = text_util.strip_ansi_codes(capsys.readouterr().out)
+        MenuStatus.show_pending_project_hints(state)
+        return status, text_util.strip_ansi_codes(capsys.readouterr().out)
+
+    status, hint = draw()
+    assert "(requires entry selection)" in status and "Multiple server entries" not in status
+    assert hint == notice
+    assert draw()[1] == ""
+    current["issue"] = None
+    assert draw()[1] == ""
+    current["issue"] = issue
+    assert draw()[1] == notice
 
 
 def test_remote_unselected_project_still_reports_connection_failure(monkeypatch, capsys):

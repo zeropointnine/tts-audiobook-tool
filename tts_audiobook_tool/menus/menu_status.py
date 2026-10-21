@@ -13,7 +13,7 @@ from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import ModelStateSnapshot
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.state import PendingTtsModelChange, State
+from tts_audiobook_tool.state import PendingBindingNotice, PendingTtsModelChange, State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
@@ -26,15 +26,19 @@ class MenuStatus:
     @staticmethod
     def prepare_tts(state: State) -> None:
         """Reconcile before building menu items or displaying project metadata."""
-        from tts_audiobook_tool.tts import Tts
+        from tts_audiobook_tool.tts import Tts, TtsSelectionChangeReason
 
         previous_id = state.project.tts_model_type
-        changed = Tts.reconcile_project_model(state.project)
+        previous_server_id = state.project.audio_cpp_model_id
+        # Captured first: reconciling to a new audio.cpp entry overwrites it.
+        last_audio_cpp = (state.project.last_audio_cpp_model_type, state.project.last_audio_cpp_model_id)
+        change = Tts.reconcile_project_selection(state.project)
+        changed = change.model if change is not None else None
         if changed is not None and state.project.dir_path:
             error = state.project.save()
             if error:
                 ask.ask_error(error)
-        Tts.bind_project(state.project)
+        MenuStatus._queue_binding_notice(state, Tts.bind_project(state.project))
         local_startup_finished = (
             not Tts.is_remote_mode() and getattr(state, "has_shown_main_menu", False)
             and not getattr(state, "pending_project_load_checks", False)
@@ -43,23 +47,86 @@ class MenuStatus:
             changed is not None and changed.id == "none" and not Tts.is_remote_mode()
         ):
             state.pending_tts_model_change = None
-        elif changed is not None:
+        elif change is not None and changed is not None:
             pending = getattr(state, "pending_tts_model_change", None)
-            old_id = (pending.old_model_id if pending is not None
-                      and pending.new_model_id == previous_id else previous_id)
-            # Clearing selection only announces an unavailable audio.cpp model.
-            announce = old_id not in ("none", changed.id) and (
-                changed.id != "none"
-                or TtsModelType.get_by_id(old_id).value.backend_kind is TtsBackendKind.AUDIO_CPP
-            )
+            coalesce = pending is not None and pending.new_model_id == previous_id
+            old_id = pending.old_model_id if pending is not None and coalesce else previous_id
+            old_server_id = pending.old_audio_cpp_model_id if pending is not None and coalesce else previous_server_id
+            new_server_id = state.project.audio_cpp_model_id
+            remembered = change.reason in (TtsSelectionChangeReason.RESTORED_AUDIO_CPP,
+                                           TtsSelectionChangeReason.LAST_AUDIO_CPP_UNAVAILABLE)
+            entry_replaced = change.reason is TtsSelectionChangeReason.SAVED_ENTRY_UNAVAILABLE
+            if remembered:
+                # Restoring, or failing to restore, the remembered audio.cpp
+                # entry is always worth a notice, even from an unselected project.
+                announce = old_id != changed.id
+            elif entry_replaced:
+                # The saved exact entry is gone; even a same-type entry is a change.
+                announce = (old_id, old_server_id) != (changed.id, new_server_id)
+            else:
+                # Clearing selection only announces an unavailable audio.cpp model.
+                announce = old_id not in ("none", changed.id) and (
+                    changed.id != "none"
+                    or TtsModelType.get_by_id(old_id).value.backend_kind is TtsBackendKind.AUDIO_CPP
+                )
             state.pending_tts_model_change = (
-                PendingTtsModelChange(old_id, changed.id) if announce else None
+                PendingTtsModelChange(
+                    old_id, changed.id, change.reason.value,
+                    *(last_audio_cpp if remembered else ("", "")),
+                    # Exact entries are named only when the entry itself changed.
+                    old_audio_cpp_model_id=old_server_id if entry_replaced else "",
+                    new_audio_cpp_model_id=new_server_id if entry_replaced else "",
+                )
+                if announce else None
             )
+
+    @staticmethod
+    def _queue_binding_notice(state: State, issue: object) -> None:
+        """Queue a one-time FYI when a server-entry binding issue first appears.
+
+        Shown once per (selection, server URL, issue); it re-arms when the
+        issue clears or a project is loaded. The status row keeps only a terse
+        qualifier while the issue persists.
+        """
+        from tts_audiobook_tool.tts import Tts, TtsBindingIssue
+
+        if not isinstance(issue, TtsBindingIssue) or not Tts.is_remote_mode():
+            state.binding_notice_key = None
+            state.pending_binding_notice = None
+            return
+        project = state.project
+        key = (project.tts_model_type, project.audio_cpp_model_id, RemoteTtsDiscovery.get_base_url(), issue.verbose)
+        if key == getattr(state, "binding_notice_key", None):
+            return
+        state.binding_notice_key = key
+        state.pending_binding_notice = PendingBindingNotice(
+            project.tts_model_type, project.audio_cpp_model_id, issue.kind, issue.verbose, issue.server_ids)
+
+    @staticmethod
+    def show_pending_binding_hint(state: State) -> None:
+        pending = getattr(state, "pending_binding_notice", None)
+        if pending is None:
+            return
+        state.pending_binding_notice = None
+        if (state.project.tts_model_type, state.project.audio_cpp_model_id) != (
+                pending.model_id, pending.audio_cpp_model_id):
+            return
+        name = _make_model_name(pending.model_id, pending.audio_cpp_model_id)
+        if pending.kind == "ambiguous_entry":
+            text = (f"Several server entries match this project's TTS model, {name}:\n"
+                    f"{', '.join(pending.server_ids)}.\nSelect one in Model settings > TTS model.")
+        elif pending.kind in ("entry_unavailable", "no_match"):
+            text = (f"This project's TTS model, {name}, is not available on this server.\n"
+                    "Select a TTS model in Model settings > TTS model.")
+        else:
+            text = pending.verbose
+        hints.print_hint(Hint("", "FYI", text))
 
     @staticmethod
     def show_pending_project_hints(state: State, *, is_first_main_menu: bool = False) -> None:
         """Run shared project-load checks once, after rendering a complete menu."""
         MenuStatus.show_pending_tts_model_hint(state, is_first_main_menu=is_first_main_menu)
+        MenuStatus.show_pending_binding_hint(state)
         if not getattr(state, "pending_project_load_checks", False):
             return
         if not is_first_main_menu and not getattr(state, "has_shown_main_menu", False):
@@ -123,14 +190,17 @@ class MenuStatus:
             return
         state.pending_tts_model_change = None
 
-        old_name = _make_model_name(pending.old_model_id)
+        old_name = _make_model_name(pending.old_model_id, pending.old_audio_cpp_model_id)
+        if pending.reason in ("restored_audio_cpp", "last_audio_cpp_unavailable"):
+            hints.print_hint(Hint("", "FYI", _make_remembered_audio_cpp_notice(pending, old_name)))
+            return
         if pending.new_model_id == "none":
             hints.print_hint(Hint("", "FYI", (
-                f"This project was last used with TTS model {old_name}, which is currently unavailable.\n"
+                f"This project was last used with TTS model {old_name},\nwhich is currently unavailable.\n"
                 "Select a TTS model in Model settings > TTS model."
             )))
             return
-        current_name = _make_model_name(pending.new_model_id)
+        current_name = _make_model_name(pending.new_model_id, pending.new_audio_cpp_model_id)
         text = f"This project was last used with TTS model {old_name};\n"
         active = Tts.get_active_type()
         if active.id == pending.new_model_id:
@@ -190,14 +260,48 @@ _BACKEND_KIND_LABELS: dict[TtsBackendKind | None, str] = {
 }
 
 
-def _make_model_name(raw_id: str) -> str:
-    """Eg: "Chatterbox TTS (local)"; the backend qualifies identically-named models."""
+def binding_issue_status(issue: object) -> str:
+    """Terse pinned qualifier for a binding issue; full text for other issues."""
+    return getattr(issue, "status", "") or getattr(issue, "verbose", "")
+
+
+def _make_model_name(raw_id: str, server_id: str = "") -> str:
+    """Eg: "Chatterbox TTS (local)"; the backend qualifies identically-named models.
+
+    With `server_id`: "Fish Audio Drama 3 (audio.cpp; fish-drama-q8)".
+    """
     model = TtsModelType.get_by_id(raw_id)
     if model.id == "none":
         return "None (unselected)" if raw_id == model.id else f"Unknown model: {raw_id}"
     proper_name = model.value.ui["proper_name"]
-    backend_label = _BACKEND_KIND_LABELS.get(model.value.backend_kind)
-    return f"{proper_name} ({backend_label})" if backend_label else proper_name
+    qualifiers = [label for label in (_BACKEND_KIND_LABELS.get(model.value.backend_kind), server_id) if label]
+    return f"{proper_name} ({'; '.join(qualifiers)})" if qualifiers else proper_name
+
+
+def _make_remembered_audio_cpp_notice(pending: PendingTtsModelChange, old_name: str) -> str:
+    """Notice text for restoring (or failing to restore) the remembered audio.cpp entry."""
+    from tts_audiobook_tool.tts import Tts
+
+    remembered = _make_model_name(pending.last_audio_cpp_model_type, pending.last_audio_cpp_model_id)
+    has_old = pending.old_model_id != "none"
+    is_bound = Tts.get_active_type().id == pending.new_model_id
+    if pending.reason == "restored_audio_cpp":
+        text = f"This project was last used with TTS model {old_name};\n" if has_old else ""
+        if is_bound:
+            return text + f"It will now use its last-used audio.cpp model, {remembered}"
+        return text + (f"It is now configured to use its last-used audio.cpp model, {remembered},\n"
+                       "but the runtime is unavailable (see Model settings).")
+    text = f"This project was last used with TTS model {old_name}.\n" if has_old else ""
+    subject = "Its" if has_old else "This project's"
+    if pending.new_model_id == "none":
+        return text + (f"{subject} last-used audio.cpp model, {remembered},\nis currently unavailable.\n"
+                       "Select a TTS model in Model settings > TTS model.")
+    current_name = _make_model_name(pending.new_model_id)
+    text += f"{subject} last-used audio.cpp model, {remembered}, is unavailable,\n"
+    if is_bound:
+        return text + f"so it will now use the sole active audio.cpp model, {current_name}"
+    return text + (f"so it is now configured to use {current_name}, "
+                   "but the runtime is unavailable (see Model settings).")
 
 
 def _make_project_text(state: State) -> str:
@@ -297,7 +401,8 @@ def _make_server_tts_text(state: State) -> str:
     elif selected.id != "none" and backend_kind is TtsBackendKind.LOCAL:
         text += f" {COL_ERROR}(unavailable in server mode)"
     elif selected.id != "none" and Tts._binding_issue is not None:
-        text += f" {COL_ERROR}({Tts._binding_issue.verbose})"
+        # Terse pinned qualifier; the full explanation is a one-time FYI.
+        text += f" {COL_ERROR}({binding_issue_status(Tts._binding_issue)})"
     return text
 
 def _make_voices_text(state: State) -> str:

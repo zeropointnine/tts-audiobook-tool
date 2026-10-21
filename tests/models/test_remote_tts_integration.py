@@ -269,22 +269,30 @@ def test_legacy_unique_entry_is_saved_by_interactive_reconciliation(remote_mode,
 
 
 @pytest.mark.parametrize("failure", ["missing", "incompatible", "offline"])
-def test_saved_entry_failure_never_substitutes_or_discards_selection(remote_mode, failure):
-    # A sole alternative, a reused incompatible ID, or outage cannot rewrite intent.
+def test_saved_entry_failure_binding_never_substitutes(remote_mode, failure):
+    # Binding (workers, run starts) never rewrites intent or falls back to
+    # another entry. Interactive reconciliation replaces a saved entry only
+    # when a reachable server lacks it; an outage preserves it.
     project = Project(tts_model_type=MODEL.id, audio_cpp_model_id="saved")
+    other = TtsModelType.require_by_id("higgs_v3_audiocpp")
     if failure == "offline":
         current = RemoteTtsSnapshot(issue=RemoteTtsIssue("unavailable", "offline"))
     elif failure == "incompatible":
-        other = TtsModelType.require_by_id("higgs_v3_audiocpp")
         current = RemoteTtsSnapshot(TtsBackendKind.AUDIO_CPP, candidates=((other, "saved"),))
     else:
         current = snapshot("alternative")
     RemoteTtsDiscovery._store(current, URL)
-    assert Tts.reconcile_project_model(project) is None
     assert Tts.bind_project(project) is not None
     assert (project.tts_model_type, project.audio_cpp_model_id) == (MODEL.id, "saved")
     assert Tts.get_active_type().id == "none"
     assert Tts._selected_server_model_id == ""
+
+    Tts.reconcile_project_model(project)
+    expected = {"offline": (MODEL.id, "saved"), "incompatible": (other.id, "saved"),
+                "missing": (MODEL.id, "alternative")}[failure]
+    assert (project.tts_model_type, project.audio_cpp_model_id) == expected
+    # The replaced entry stays remembered only while no new pair was chosen.
+    assert project.last_audio_cpp_model_id == expected[1]
 
 
 def test_new_project_persists_unique_server_entry(remote_mode, tmp_path):

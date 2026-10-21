@@ -68,13 +68,17 @@ class ModelSelectMenu:
     @staticmethod
     def menu(state: State) -> None:
         available = Tts.get_available_tts_models(refresh=True)
-        choices = [(TtsModelType.require_by_id("none"), "")] + ModelSelectMenu._get_choices(available)
+        # "None" is deliberately not offered: it can't persist as a choice.
+        choices = ModelSelectMenu._get_choices(available)
         snapshot = RemoteTtsDiscovery.get_snapshot()
+        if not choices:
+            # Leave the saved selection untouched; there is nothing to pick from.
+            ask.ask_error(snapshot.issue.message if snapshot.issue is not None
+                          else "The remote TTS server has no supported models.")
+            return
 
         def make_label(choice: tuple[TtsModelType, str]) -> str:
             model, server_id = choice
-            if model.id == "none":
-                return "None (unselected)"
             label = model.value.ui["proper_name"]
             if not server_id:
                 return label
@@ -92,8 +96,7 @@ class ModelSelectMenu:
         def on_select(choice: tuple[TtsModelType, str]) -> None:
             model, server_id = choice
             state.pending_tts_model_change = None
-            state.project.tts_model_type = model.id
-            state.project.audio_cpp_model_id = server_id
+            state.project.set_tts_selection(model.id, server_id)
             inferred_type = None
             if (model.id == "qwen3tts_audiocpp"
                     and snapshot.backend_kind is TtsBackendKind.AUDIO_CPP

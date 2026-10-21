@@ -647,6 +647,8 @@ def test_state_for_worker_mirrors_init_attribute_set() -> None:
         "pocket_voice_clone_access_validated",
         "pending_project_load_checks",
         "pending_tts_model_change",
+        "pending_binding_notice",
+        "binding_notice_key",
     }
     assert state.project is None
     assert state.dont_show_scan_message is False

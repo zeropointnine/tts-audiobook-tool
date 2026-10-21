@@ -56,6 +56,36 @@ class TtsRuntimeMode(Enum):
     REMOTE_CLIENT = "remote_client"
 
 
+class TtsSelectionChangeReason(Enum):
+    # Ordinary availability-driven reconciliation.
+    AUTOMATIC = "automatic"
+    # The project's remembered audio.cpp entry was reselected.
+    RESTORED_AUDIO_CPP = "restored_audio_cpp"
+    # The remembered audio.cpp entry is not on the server; ordinary rules applied.
+    LAST_AUDIO_CPP_UNAVAILABLE = "last_audio_cpp_unavailable"
+    # The saved exact server entry is not on the (reachable) server.
+    SAVED_ENTRY_UNAVAILABLE = "saved_entry_unavailable"
+
+
+@dataclass(frozen=True)
+class TtsSelectionChange:
+    """An automatic change to a project's TTS selection, and why it happened."""
+    model: TtsModelType
+    reason: TtsSelectionChangeReason = TtsSelectionChangeReason.AUTOMATIC
+
+
+@dataclass
+class TtsBindingIssue(ReadinessIssue):
+    """A server-entry binding failure for a selected model.
+
+    `verbose` remains the full sentence (blocker text, worker errors);
+    `status` is the terse qualifier pinned in the status row and heading.
+    """
+    kind: str = ""  # "entry_unavailable" | "ambiguous_entry" | "no_match"
+    status: str = ""
+    server_ids: tuple[str, ...] = ()
+
+
 class Tts:
     """
     Static class for accessing the TTS model.
@@ -316,26 +346,55 @@ class Tts:
 
     @staticmethod
     def reconcile_project_model(project: Project) -> TtsModelType | None:
-        """Reconcile an interactive selection; return the changed type, if any.
+        """Reconcile an interactive selection; return the changed type, if any."""
+        change = Tts.reconcile_project_selection(project)
+        return change.model if change is not None else None
+
+    @staticmethod
+    def reconcile_project_selection(project: Project) -> TtsSelectionChange | None:
+        """Reconcile an interactive selection; describe the change, if any.
 
         Local mode forces the installed model, or NONE when none is available.
         In remote mode, failed/empty discovery must not discard a saved selection.
-        Runtime binding remains separate and never mutates the Project, so
-        workers and metadata-only callers do not auto-select.
+        A saved exact entry missing from a reachable server is replaced: by the
+        server's sole entry, else NONE (the remembered pair keeps it for a
+        later restore). Connecting to audio.cpp while a non-audio.cpp model is
+        selected restores the project's remembered audio.cpp entry when the
+        server offers it. Runtime binding remains separate and never mutates
+        the Project, so workers and metadata-only callers do not auto-select.
         """
         available = Tts.get_available_tts_models()
+        reason = TtsSelectionChangeReason.AUTOMATIC
         if Tts.is_remote_mode():
-            # An explicit entry is a durable choice, even while missing/offline.
-            if project.audio_cpp_model_id or not available:
+            # Offline/failed discovery is not evidence against the saved selection.
+            if not available:
                 return None
+            from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+            snapshot = RemoteTtsDiscovery.get_snapshot()
             selected = project.get_tts_model_type()
+            if project.audio_cpp_model_id:
+                if (selected, project.audio_cpp_model_id) in snapshot.candidates:
+                    return None
+                # Apply the rules as if unselected: never prefer another entry of
+                # the saved type while other models are on offer. Only a sole
+                # available type is selected (with its entry, if unique).
+                reason = TtsSelectionChangeReason.SAVED_ENTRY_UNAVAILABLE
+                selected = TtsModelType.require_by_id("none")
+            elif (snapshot.backend_kind is TtsBackendKind.AUDIO_CPP
+                    and project.last_audio_cpp_model_id
+                    and selected.value.backend_kind is not TtsBackendKind.AUDIO_CPP):
+                # Exact pair only: a server ID now serving another model type
+                # must not be adopted as "the same" model.
+                last = (TtsModelType.get_by_id(project.last_audio_cpp_model_type), project.last_audio_cpp_model_id)
+                if last in snapshot.candidates:
+                    project.set_tts_selection(last[0].id, last[1])
+                    return TtsSelectionChange(last[0], TtsSelectionChangeReason.RESTORED_AUDIO_CPP)
+                reason = TtsSelectionChangeReason.LAST_AUDIO_CPP_UNAVAILABLE
             model = (selected if selected in available else
                      available[0] if len(available) == 1 else TtsModelType.require_by_id("none"))
             server_id = ""
             if model.value.backend_kind is TtsBackendKind.AUDIO_CPP:
-                from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
-                candidates = [server_id for candidate, server_id in RemoteTtsDiscovery.get_snapshot().candidates
-                              if candidate == model]
+                candidates = [server_id for candidate, server_id in snapshot.candidates if candidate == model]
                 # Legacy projects with several matches retain the type but need
                 # an explicit entry choice. Never persist an arbitrary first ID.
                 if len(candidates) == 1:
@@ -345,9 +404,8 @@ class Tts:
             server_id = ""
         if (project.tts_model_type, project.audio_cpp_model_id) == (model.id, server_id):
             return None
-        project.tts_model_type = model.id
-        project.audio_cpp_model_id = server_id
-        return model
+        project.set_tts_selection(model.id, server_id)
+        return TtsSelectionChange(model, reason)
 
     @staticmethod
     def is_project_model_selection_required(project: Project) -> bool:
@@ -963,18 +1021,21 @@ class Tts:
                     if (selected, project.audio_cpp_model_id) in candidates:
                         new_id = project.audio_cpp_model_id
                     else:
-                        issue = ReadinessIssue("TTS model", (
+                        issue = TtsBindingIssue("TTS model", (
                             f"Saved audio.cpp model ID {project.audio_cpp_model_id!r} is unavailable or no longer "
-                            "matches the selected TTS model. Select an entry in Model settings > TTS model."))
+                            "matches the selected TTS model. Select an entry in Model settings > TTS model."),
+                            kind="entry_unavailable", status="unavailable")
                 elif len(candidates) == 1:
                     new_id = candidates[0][1]
                 elif not candidates:
-                    issue = ReadinessIssue("TTS model", _missing_remote_model_issue(snapshot, selected))
+                    issue = TtsBindingIssue("TTS model", _missing_remote_model_issue(snapshot, selected),
+                                            kind="no_match", status="not on server")
                 else:
-                    issue = ReadinessIssue("TTS model", (
-                        "Multiple server entries match the selected TTS model"
-                        f" ({', '.join(server_id for _, server_id in candidates)}). "
-                        "Select an entry in Model settings > TTS model."))
+                    server_ids = tuple(server_id for _, server_id in candidates)
+                    issue = TtsBindingIssue("TTS model", (
+                        f"Multiple server entries match the selected TTS model ({', '.join(server_ids)}). "
+                        "Select an entry in Model settings > TTS model."),
+                        kind="ambiguous_entry", status="requires entry selection", server_ids=server_ids)
         new_type = selected if issue is None else TtsModelType.require_by_id("none")
         if new_type != Tts.get_active_type() or new_id != Tts._selected_server_model_id:
             if current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:

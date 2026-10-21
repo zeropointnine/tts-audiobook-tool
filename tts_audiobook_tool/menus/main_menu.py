@@ -147,7 +147,12 @@ def get_heading_tts_text(state: State) -> str:
     if Tts.get_active_type() == state.project.get_tts_model_type() and Tts._selected_server_model_id:
         s += f" {COL_DIM}{backend} server model id: {Tts._selected_server_model_id}{COL_ACCENT}"
     else:
-        s += f" {COL_ERROR}{backend}: {Tts._remote_issue or (snapshot.issue.message if snapshot.issue else 'select a server model')}{COL_ACCENT}"
+        from tts_audiobook_tool.menus.menu_status import binding_issue_status
+        issue = Tts._binding_issue
+        # Binding failures get their terse status; server failures keep their message.
+        detail = (binding_issue_status(issue) if issue is not None and getattr(issue, "status", "")
+                  else Tts._remote_issue or (snapshot.issue.message if snapshot.issue else 'select a server model'))
+        s += f" {COL_ERROR}{backend}: {detail}{COL_ACCENT}"
     return s
 
 # ---

@@ -948,6 +948,8 @@ class ProjectSerializationUtil:
             "version": PROJECT_SPEC_VERSION,
             "tts_model_type": project.tts_model_type,
             "audio_cpp_model_id": project.audio_cpp_model_id,
+            "last_audio_cpp_model_type": project.last_audio_cpp_model_type,
+            "last_audio_cpp_model_id": project.last_audio_cpp_model_id,
             "voice_references": [voice.to_dict() for voice in project.voice_references],
 
             "language_code": project.language_code,

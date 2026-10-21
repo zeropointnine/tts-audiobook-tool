@@ -385,8 +385,7 @@ def _make_chat_worker_state(command: SynthesizeChatCommand) -> Any:
     try:
         # The command is authoritative even when the cached/on-disk project
         # has a different selection. Assignment binds this snapshot in memory.
-        project.tts_model_type = command.settings.tts_model_type_id
-        project.audio_cpp_model_id = command.settings.audio_cpp_model_id
+        project.set_tts_selection(command.settings.tts_model_type_id, command.settings.audio_cpp_model_id)
         state.project = project
     except BaseException:
         # Only kill when the project is not the retained cache value.
@@ -433,8 +432,7 @@ def _make_worker_state(
     try:
         # The command is authoritative even when the cached/on-disk project
         # has a different selection. Assignment binds this snapshot in memory.
-        project.tts_model_type = command.settings.tts_model_type_id
-        project.audio_cpp_model_id = command.settings.audio_cpp_model_id
+        project.set_tts_selection(command.settings.tts_model_type_id, command.settings.audio_cpp_model_id)
         state.project = project
     except BaseException:
         project.kill()

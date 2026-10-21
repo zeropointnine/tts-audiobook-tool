@@ -271,3 +271,153 @@ def test_startup_checks_duplicate_local_libraries_before_success(monkeypatch):
     monkeypatch.setattr(Tts, "init_local_model_type", staticmethod(lambda: (TtsModelType.require_by_id("vibevoice_local"), 2)))
     with pytest.raises(SystemExit):
         object.__new__(Start).init_tts_or_exit()
+
+
+# --- Remembered audio.cpp selection ---
+
+FISH = TtsModelType.require_by_id("fish_s2_audiocpp")
+HIGGS = TtsModelType.require_by_id("higgs_v3_audiocpp")
+CHATTERBOX_CPP = TtsModelType.require_by_id("chatterbox_audiocpp")
+
+
+def _remote_snapshot(monkeypatch, backend, candidates):
+    snapshot = RemoteTtsSnapshot(backend, candidates=candidates)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(RemoteTtsDiscovery, "refresh", lambda force=False: snapshot)
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: snapshot)
+
+
+def test_set_tts_selection_remembers_only_complete_audio_cpp_pairs():
+    # Switching away from audio.cpp (or to a type-only legacy selection) keeps
+    # the last complete pair; a new complete pair replaces it.
+    project = Project()
+    project.set_tts_selection(FISH.id, "fish-q8")
+    for model_id, server_id in (("vibevoice_local", ""), ("auk_sglomni", ""), (HIGGS.id, ""), ("none", "")):
+        project.set_tts_selection(model_id, server_id)
+        assert (project.last_audio_cpp_model_type, project.last_audio_cpp_model_id) == (FISH.id, "fish-q8")
+    project.set_tts_selection(HIGGS.id, "higgs")
+    assert (project.last_audio_cpp_model_type, project.last_audio_cpp_model_id) == (HIGGS.id, "higgs")
+
+
+def test_remembered_audio_cpp_pair_round_trips_and_seeds_older_projects(tmp_path):
+    # A project saved before the fields existed is seeded from its current pair
+    # on load, so local-mode reconciliation cannot lose it.
+    legacy = Project.model_validate({"tts_model_type": FISH.id, "audio_cpp_model_id": "fish-q8"})
+    assert (legacy.last_audio_cpp_model_type, legacy.last_audio_cpp_model_id) == (FISH.id, "fish-q8")
+    project = Project(dir_path=str(tmp_path))
+    project.set_tts_selection(FISH.id, "fish-q8")
+    project.set_tts_selection("vibevoice_local")
+    assert project.save() == ""
+    payload = json.loads((tmp_path / "project.json").read_text())
+    assert (payload["last_audio_cpp_model_type"], payload["last_audio_cpp_model_id"]) == (FISH.id, "fish-q8")
+    loaded = Project.model_validate(payload)
+    assert (loaded.tts_model_type, loaded.last_audio_cpp_model_id) == ("vibevoice_local", "fish-q8")
+
+
+def test_local_reconciliation_keeps_remembered_audio_cpp_pair(monkeypatch):
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.LOCAL)
+    monkeypatch.setattr(Tts, "_available_local_models", (TtsModelType.require_by_id("vibevoice_local"),))
+    project = Project(tts_model_type=FISH.id, audio_cpp_model_id="fish-q8")
+    assert Tts.reconcile_project_model(project) is TtsModelType.require_by_id("vibevoice_local")
+    assert (project.audio_cpp_model_id, project.last_audio_cpp_model_id) == ("", "fish-q8")
+
+
+@pytest.mark.parametrize("current", ["vibevoice_local", "auk_sglomni", "none", "future_catalog_id"])
+def test_reconnecting_to_audio_cpp_restores_remembered_entry(monkeypatch, current):
+    # Restoring beats the sole/multiple availability rules, and picks the exact
+    # entry even when another entry has the same catalog type.
+    from tts_audiobook_tool.tts import TtsSelectionChangeReason
+    _remote_snapshot(monkeypatch, TtsBackendKind.AUDIO_CPP,
+                     ((FISH, "fish-f16"), (FISH, "fish-q8"), (HIGGS, "higgs")))
+    project = Project(last_audio_cpp_model_type=FISH.id, last_audio_cpp_model_id="fish-q8")
+    project.set_tts_selection(current)
+
+    change = Tts.reconcile_project_selection(project)
+
+    assert change is not None
+    assert (change.model, change.reason) == (FISH, TtsSelectionChangeReason.RESTORED_AUDIO_CPP)
+    assert (project.tts_model_type, project.audio_cpp_model_id) == (FISH.id, "fish-q8")
+    assert Tts.reconcile_project_selection(project) is None
+
+
+@pytest.mark.parametrize("candidates, expected", [
+    # Remembered ID now serves another type: never adopted.
+    (((HIGGS, "fish-q8"), (CHATTERBOX_CPP, "cb")), ("none", "")),
+    (((HIGGS, "higgs"), (CHATTERBOX_CPP, "cb")), ("none", "")),
+    (((CHATTERBOX_CPP, "cb"),), (CHATTERBOX_CPP.id, "cb")),
+])
+def test_unavailable_remembered_entry_falls_back_to_ordinary_rules(monkeypatch, candidates, expected):
+    from tts_audiobook_tool.tts import TtsSelectionChangeReason
+    _remote_snapshot(monkeypatch, TtsBackendKind.AUDIO_CPP, candidates)
+    project = Project(tts_model_type="vibevoice_local",
+                      last_audio_cpp_model_type=FISH.id, last_audio_cpp_model_id="fish-q8")
+
+    change = Tts.reconcile_project_selection(project)
+
+    assert change is not None and change.reason is TtsSelectionChangeReason.LAST_AUDIO_CPP_UNAVAILABLE
+    assert (project.tts_model_type, project.audio_cpp_model_id) == expected
+
+
+def test_legacy_type_only_audio_cpp_selection_is_not_replaced_by_remembered_entry(monkeypatch):
+    _remote_snapshot(monkeypatch, TtsBackendKind.AUDIO_CPP, ((FISH, "fish-q8"), (HIGGS, "higgs")))
+    project = Project(tts_model_type=HIGGS.id,
+                      last_audio_cpp_model_type=FISH.id, last_audio_cpp_model_id="fish-q8")
+
+    Tts.reconcile_project_selection(project)
+
+    assert (project.tts_model_type, project.audio_cpp_model_id) == (HIGGS.id, "higgs")
+
+
+@pytest.mark.parametrize("candidates, expected", [
+    # Several models: unselected, even though another Fish entry is offered.
+    (((FISH, "fish-f16"), (HIGGS, "higgs")), ("none", "")),
+    # Sole entry: auto-selected, whatever its type.
+    (((HIGGS, "higgs"),), (HIGGS.id, "higgs")),
+    # Sole type with several entries: type kept, entry requires selection.
+    (((HIGGS, "a"), (HIGGS, "b")), (HIGGS.id, "")),
+])
+def test_saved_entry_missing_from_reachable_server_is_replaced(monkeypatch, candidates, expected):
+    # E.g. after pointing the app at a different audio.cpp server. The old pair
+    # stays remembered unless a new complete pair replaces it.
+    from tts_audiobook_tool.tts import TtsSelectionChangeReason
+    _remote_snapshot(monkeypatch, TtsBackendKind.AUDIO_CPP, candidates)
+    project = Project(tts_model_type=FISH.id, audio_cpp_model_id="fish-drama3")
+
+    change = Tts.reconcile_project_selection(project)
+
+    assert change is not None and change.reason is TtsSelectionChangeReason.SAVED_ENTRY_UNAVAILABLE
+    assert (project.tts_model_type, project.audio_cpp_model_id) == expected
+    assert project.last_audio_cpp_model_id == (expected[1] or "fish-drama3")
+    assert Tts.reconcile_project_selection(project) is None
+
+
+def test_saved_entry_still_offered_by_server_is_kept(monkeypatch):
+    _remote_snapshot(monkeypatch, TtsBackendKind.AUDIO_CPP, ((FISH, "fish-drama3"), (HIGGS, "higgs")))
+    project = Project(tts_model_type=FISH.id, audio_cpp_model_id="fish-drama3")
+    assert Tts.reconcile_project_selection(project) is None
+
+
+def test_sgl_omni_server_replaces_saved_audio_cpp_entry_and_reconnect_restores_it(monkeypatch):
+    # Pointing at SGL-Omni auto-selects its single model; returning to the
+    # audio.cpp server restores the remembered entry.
+    from tts_audiobook_tool.tts import TtsSelectionChangeReason
+    sgl = TtsModelType.require_by_id("auk_sglomni")
+    project = Project(tts_model_type=FISH.id, audio_cpp_model_id="fish-drama3")
+    _remote_snapshot(monkeypatch, TtsBackendKind.SGL_OMNI, ((sgl, "org/auk"),))
+    assert Tts.reconcile_project_model(project) is sgl
+    _remote_snapshot(monkeypatch, TtsBackendKind.AUDIO_CPP, ((FISH, "fish-drama3"), (HIGGS, "higgs")))
+    change = Tts.reconcile_project_selection(project)
+    assert change is not None and change.reason is TtsSelectionChangeReason.RESTORED_AUDIO_CPP
+    assert (project.tts_model_type, project.audio_cpp_model_id) == (FISH.id, "fish-drama3")
+
+
+def test_sgl_omni_server_does_not_restore_audio_cpp_entry(monkeypatch):
+    sgl = TtsModelType.require_by_id("auk_sglomni")
+    _remote_snapshot(monkeypatch, TtsBackendKind.SGL_OMNI, ((sgl, "org/auk"),))
+    project = Project(tts_model_type="vibevoice_local",
+                      last_audio_cpp_model_type=FISH.id, last_audio_cpp_model_id="fish-q8")
+
+    change = Tts.reconcile_project_selection(project)
+
+    assert change is not None and change.model is sgl
+    assert project.last_audio_cpp_model_id == "fish-q8"

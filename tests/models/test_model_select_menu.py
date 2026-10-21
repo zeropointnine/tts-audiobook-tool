@@ -103,9 +103,8 @@ def test_project_model_picker_saves_only_project_selection(monkeypatch, selected
 
     ModelSelectMenu.menu(state)
 
-    assert captured["values"] == [(TtsModelType.require_by_id("none"), ""), (selected, "")]
+    assert captured["values"] == [(selected, "")]
     assert captured["current_value"] == (TtsModelType.require_by_id("mira_local"), "")
-    assert captured["labels"][0] == "None (unselected)"
     assert captured["default_value"] is None
     assert all("Auto" not in label for label in captured["labels"])
     assert project.tts_model_type == "mira_local"
@@ -113,9 +112,6 @@ def test_project_model_picker_saves_only_project_selection(monkeypatch, selected
     assert state.pending_tts_model_change is None
     assert state.pending_project_load_checks is True
     assert saves == bindings == [selected.id]
-    captured["on_select"]((TtsModelType.require_by_id("none"), ""))
-    assert project.tts_model_type == "none"
-    assert state.pending_project_load_checks is True
 
 
 def test_project_model_picker_sorts_labels_and_keeps_values_aligned(monkeypatch):
@@ -132,8 +128,8 @@ def test_project_model_picker_sorts_labels_and_keeps_values_aligned(monkeypatch)
     ModelSelectMenu.menu(cast(State, SimpleNamespace(project=Project())))
 
     expected = [models[2], models[1], models[0]]
-    assert captured["values"] == [(TtsModelType.require_by_id("none"), "")] + [(model, "") for model in expected]
-    assert captured["labels"] == ["None (unselected)"] + [model.value.ui["proper_name"] for model in expected]
+    assert captured["values"] == [(model, "") for model in expected]
+    assert captured["labels"] == [model.value.ui["proper_name"] for model in expected]
 
 
 def test_project_model_picker_preserves_unknown_selection_until_explicit_choice(monkeypatch):
@@ -142,7 +138,8 @@ def test_project_model_picker_preserves_unknown_selection_until_explicit_choice(
     project = Project(tts_model_type="future-model")
     state = cast(State, SimpleNamespace(project=project))
     captured = {}
-    monkeypatch.setattr(select_menu_module.Tts, "get_available_tts_models", lambda **kwargs: [])
+    model = TtsModelType.require_by_id("chatterbox_audiocpp")
+    monkeypatch.setattr(select_menu_module.Tts, "get_available_tts_models", lambda **kwargs: [model])
     monkeypatch.setattr(select_menu_module.MenuUtil, "options_menu", lambda **kwargs: captured.update(kwargs))
 
     ModelSelectMenu.menu(state)
@@ -150,6 +147,28 @@ def test_project_model_picker_preserves_unknown_selection_until_explicit_choice(
     assert project.tts_model_type == "future-model"
     assert captured["current_value"] is None
     assert ModelSelectMenu.make_model_label(state) == "Unknown model: future-model"
+
+
+@pytest.mark.parametrize("issue_message", [None, "Could not connect to the remote TTS server: refused"])
+def test_project_model_picker_without_choices_reports_error_and_keeps_selection(monkeypatch, issue_message):
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsIssue, RemoteTtsSnapshot
+    from tts_audiobook_tool.project import Project
+
+    # With no choices (and no "None" item), the picker reports why instead of
+    # showing an empty menu, and the saved selection survives.
+    issue = RemoteTtsIssue("unavailable", issue_message) if issue_message else None
+    monkeypatch.setattr(select_menu_module.RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(issue=issue))
+    monkeypatch.setattr(select_menu_module.Tts, "get_available_tts_models", lambda **kwargs: [])
+    monkeypatch.setattr(select_menu_module.MenuUtil, "options_menu",
+                        lambda **kwargs: pytest.fail("No menu should be shown without choices"))
+    errors = []
+    monkeypatch.setattr(select_menu_module.ask, "ask_error", errors.append)
+    project = Project(tts_model_type="chatterbox_audiocpp", audio_cpp_model_id="entry-a")
+
+    ModelSelectMenu.menu(cast(State, SimpleNamespace(project=project)))
+
+    assert errors == [issue_message or "The remote TTS server has no supported models."]
+    assert (project.tts_model_type, project.audio_cpp_model_id) == ("chatterbox_audiocpp", "entry-a")
 
 
 @pytest.mark.parametrize(
@@ -194,7 +213,7 @@ def test_audio_cpp_model_picker_filename(monkeypatch, path, filename):
 
     details = "operator-chatterbox" + (f"; {filename}" if filename else "")
     expected = f"{model.value.ui['proper_name']} {COL_DIM}({details}){COL_DEFAULT}"
-    assert captured["labels"] == ["None (unselected)", expected,
+    assert captured["labels"] == [expected,
                                    f"{other.value.ui['proper_name']} {COL_DIM}(operator-higgs; higgs.gguf){COL_DEFAULT}"]
     assert captured["default_value"] is None
     assert refreshes == [{"refresh": True}]
@@ -230,7 +249,7 @@ def test_model_picker_omits_unavailable_or_non_audio_cpp_filename(monkeypatch, m
 
     suffix = "" if metadata_case == "sgl_omni" else " (server-id)"
     assert [strip_ansi_codes(label) for label in captured["labels"]] == [
-        "None (unselected)", model.value.ui["proper_name"] + suffix,
+        model.value.ui["proper_name"] + suffix,
     ]
 
 
@@ -263,16 +282,14 @@ def test_audio_cpp_picker_exposes_each_matching_entry(monkeypatch, reverse, miss
     ModelSelectMenu.menu(cast(State, SimpleNamespace(project=Project())))
 
     # Same-type entries remain separate, sorted choices regardless of response order.
-    expected_labels = ["None (unselected)"]
+    expected_labels = []
     for server_id in sorted(matching_ids):
         details = server_id
         if server_id != first or not missing_first_path:
             details += f"; {server_id}.gguf"
         expected_labels.append(f"{model.value.ui['proper_name']} {COL_DIM}({details}){COL_DEFAULT}")
     assert captured["labels"] == expected_labels
-    assert captured["values"] == [(TtsModelType.require_by_id("none"), "")] + [
-        (model, server_id) for server_id in sorted(matching_ids)
-    ]
+    assert captured["values"] == [(model, server_id) for server_id in sorted(matching_ids)]
 
 
 @pytest.mark.parametrize("saved_id", ["", "entry-b", "unavailable-entry"])
@@ -321,9 +338,7 @@ def test_audio_cpp_picker_persists_exact_entry_and_clears_for_other_backends(mon
         assert saved[-1] == bound[-1] == (model.id, server_id)
     captured["on_select"]((sgl, ""))
     assert saved[-1] == bound[-1] == (sgl.id, "")
-    captured["on_select"]((model, "entry-b"))
-    captured["on_select"]((TtsModelType.require_by_id("none"), ""))
-    assert saved[-1] == bound[-1] == ("none", "")
+    assert all(choice[0].id != "none" for choice in captured["values"])
     assert state.pending_tts_model_change is None
     assert state.pending_project_load_checks is True
 
