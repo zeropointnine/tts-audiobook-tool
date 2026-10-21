@@ -187,12 +187,12 @@ def setup_flow(tmp_path, monkeypatch, voices, *, sidecar="", stt=("", "")):
     if sidecar:
         path.with_suffix(".txt").write_text(sidecar, encoding="utf-8")
     project = make_project(tmp_path, voices)
-    prefs = SimpleNamespace(last_voice_dir="", save=lambda: None, stt_variant=SttVariant.DISABLED)
+    prefs = SimpleNamespace(last_voice_dir="", save=lambda: None, stt_variant=SttVariant.DISABLED, import_max_silence_gap=None)
     state = cast(State, SimpleNamespace(project=project, prefs=prefs))
     events: list = []
     monkeypatch.setattr(VoiceMenuShared, "ask_voice_file", lambda *_: str(path))
     monkeypatch.setattr(SoundFileUtil, "load", lambda *_: sound())
-    monkeypatch.setattr(voice_menu_shared.SoundPipeline, "apply_voice_clone_post_processing", lambda value: value)
+    monkeypatch.setattr(voice_menu_shared.SoundPipeline, "apply_voice_clone_post_processing", lambda value, **_: value)
     monkeypatch.setattr(voice_menu_shared.PlaySoundUtil, "play_sound_async", lambda *_: None)
     monkeypatch.setattr(voice_menu_shared.hints, "show_hint_if_necessary", lambda *_, **__: None)
     monkeypatch.setattr(voice_menu_shared.ask, "ask_enter_to_continue", lambda *_: None)

@@ -62,6 +62,45 @@ def test_post_processing_trims_leading_and_trailing_silence():
     assert abs(len(result.data) - sr // 2) < sr // 10
 
 
+def make_tone_gap_tone(gap_s: float, tone_s: float = 0.5) -> Sound:
+    sr = APP_SAMPLE_RATE
+    t = np.arange(int(sr * tone_s)) / sr
+    tone = (0.5 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+    return Sound(np.concatenate([tone, np.zeros(int(sr * gap_s), dtype=np.float32), tone]), sr)
+
+
+def test_post_processing_limits_internal_silence_gap_only_when_requested():
+    source = make_tone_gap_tone(gap_s=1.5)
+    unlimited = SoundPipeline.apply_voice_clone_post_processing(source)
+    limited = SoundPipeline.apply_voice_clone_post_processing(source, max_silence_gap=0.3)
+    assert abs(unlimited.duration - 2.5) < 0.1
+    # 0.5s tone + 0.3s gap + 0.5s tone (tolerance for the detector's frame window)
+    assert abs(limited.duration - 1.3) < 0.1
+
+
+def test_reimport_with_changed_gap_limit_is_treated_as_new_sample(tmp_path):
+    # Import dedupe compares the post-processed audio, so the same source file
+    # re-imported under a different gap limit is a distinct sample: appended,
+    # it gets its own file rather than sharing the earlier one; set over its
+    # own voice, it overwrites that voice's file with the new audio.
+    project = make_project(tmp_path)
+    dots = TtsModelType.require_by_id("dots_local")
+    source = make_tone_gap_tone(gap_s=1.5)
+    original = SoundPipeline.apply_voice_clone_post_processing(source)
+    limited = SoundPipeline.apply_voice_clone_post_processing(source, max_silence_gap=0.3)
+
+    ProjectVoiceUtil.set_voice_and_save(project, original, "clip", "", dots)
+    ProjectVoiceUtil.set_voice_and_save(project, limited, "clip", "", dots, append=True)
+    assert get_setting(project, "dots_voice_file_name") == ["clip.flac", "clip_2.flac"]
+
+    voice_dir = tmp_path / PROJECT_VOICE_SUBDIR
+    before = (voice_dir / "clip.flac").read_bytes()
+    err = ProjectVoiceUtil.set_voice_sample_at_index_and_save(project, 0, limited, "clip", dots)
+    assert not err
+    assert get_setting(project, "dots_voice_file_name")[0] == "clip.flac"
+    assert (voice_dir / "clip.flac").read_bytes() != before
+
+
 def test_post_processing_entirely_silent_input_returns_empty():
     result = SoundPipeline.apply_voice_clone_post_processing(make_sound(44_100, amplitude=0.0))
     assert result.data.size == 0

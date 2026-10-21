@@ -490,6 +490,7 @@ class MenuUtil:
 
         The "cycle" alternative to `options_menu()` for small enumerations.
         Appends " (default)" when the current value is `default_value`.
+        An empty `label` displays the value label alone (eg, `Enabled`).
 
         `values` and `value_labels` are parallel lists. `get_value` is read each
         time the label is drawn and when selected, so it reflects current state.
@@ -509,7 +510,7 @@ class MenuUtil:
         def make_label(_: State) -> str:
             i = index_of_current()
             value_label = value_labels[i] if i >= 0 else "?"
-            s = f"{label}: {COL_ACCENT}{value_label}"
+            s = f"{label}: {COL_ACCENT}{value_label}" if label else f"{COL_ACCENT}{value_label}"
             if i >= 0 and values[i] == default_value:
                 s += f" {COL_DIM}(default)"
             return s

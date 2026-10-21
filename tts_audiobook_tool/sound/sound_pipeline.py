@@ -434,11 +434,13 @@ class SoundPipeline:
         )
 
     @staticmethod
-    def apply_voice_clone_post_processing(sound: Sound) -> Sound:
+    def apply_voice_clone_post_processing(sound: Sound, max_silence_gap: float | None = None) -> Sound:
         """
         App's standard post-processing treatment on voice clone source audio.
 
         - Trims silence from both ends
+        - When `max_silence_gap` is not None, shortens internal silence gaps
+          longer than that many seconds
         - Resamples to the app's native sample rate. TTS models all resample
           reference audio internally as needed, so no model-specific rate is
           used here.
@@ -450,6 +452,10 @@ class SoundPipeline:
         sound = SilenceUtil.trim_silence_ends(sound)[0]
         if sound.data.size == 0:
             return sound
+        if max_silence_gap is not None:
+            sound = SoundPipeline.limit_silence_gaps_if_enabled(
+                sound, enabled=True, max_gap_duration=max_silence_gap
+            )
         sound = SoundPipeline.resample_for_app(sound)
         data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
         return Sound(data, sound.sr)

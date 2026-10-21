@@ -32,6 +32,12 @@ PROJECT_CONCURRENT_REQUESTS_MAX = 16
 PREFS_DEFAULT_CHAT_INPUT_MODE = ChatInputMode.MIC_IMMEDIATE
 PREFS_DEFAULT_CHAT_ECHO_OVERRIDE = False
 
+# Limiting of internal silence gaps when importing voice clone samples
+PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_ENABLED = False
+PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_DURATION = 0.5
+IMPORT_LIMIT_SILENCE_DURATION_MIN = 0.0
+IMPORT_LIMIT_SILENCE_DURATION_MAX = 1.0
+
 # Environment variable read at request time to obtain the LLM API key.
 # The prefs file stores only this variable's name, never the key itself.
 PREFS_DEFAULT_LLM_API_KEY_ENV_VAR = "OPEN_AI_KEY"

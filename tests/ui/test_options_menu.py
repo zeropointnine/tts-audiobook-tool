@@ -8,8 +8,9 @@ from tts_audiobook_tool.app_support.remote_tts_discovery import (
     RemoteTtsDiscovery, RemoteTtsIssue, RemoteTtsSnapshot,
 )
 from tts_audiobook_tool.menus import options_menu
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, get_string_from
 from tts_audiobook_tool.menus.options_menu import OptionsMenu
+from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_util import strip_ansi_codes
@@ -78,7 +79,7 @@ def test_options_refresh_item_is_remote_only_and_uses_latest_snapshot(monkeypatc
     state = cast(State, SimpleNamespace(
         project=SimpleNamespace(get_tts_model_type=lambda: TtsModelType.require_by_id("none")),
         prefs=SimpleNamespace(
-            aac_bitrate="128k", save_gen_log=False, save_debug_files=False,
+            aac_bitrate="128k", save_gen_log=False, save_debug_files=False, import_limit_silence_enabled=False,
             remote_tts_url="http://remote.example:8111", llm_url="",
         ),
     ))
@@ -124,7 +125,7 @@ def test_remote_options_refreshes_before_rendering_on_each_entry(monkeypatch, se
     state = cast(State, SimpleNamespace(
         project=SimpleNamespace(get_tts_model_type=lambda: TtsModelType.require_by_id("none")),
         prefs=SimpleNamespace(
-            aac_bitrate="128k", save_gen_log=False, save_debug_files=False,
+            aac_bitrate="128k", save_gen_log=False, save_debug_files=False, import_limit_silence_enabled=False,
             remote_tts_url="http://server.test", llm_url="",
         ),
     ))
@@ -217,7 +218,7 @@ def capture_options_items(monkeypatch, *, remote_mode, model_id, use_mlx_whisper
     state = cast(State, SimpleNamespace(
         project=SimpleNamespace(get_tts_model_type=lambda: TtsModelType.require_by_id(model_id)),
         prefs=SimpleNamespace(
-            aac_bitrate="128k", save_gen_log=False, save_debug_files=False,
+            aac_bitrate="128k", save_gen_log=False, save_debug_files=False, import_limit_silence_enabled=False,
             remote_tts_url="http://127.0.0.1:8080", llm_url="",
             stt_variant=SttVariant.get_default(), stt_config=SttConfig.CUDA_FLOAT16,
             tts_force_cpu=False,
@@ -481,3 +482,47 @@ def test_audio_cpp_unload_failure_shows_error_without_success_or_refresh(monkeyp
     OptionsMenu.unload_audio_cpp_models()
 
     assert events == [("Unloading...", {"skip_pause": True}), ("error", "Teardown failed")]
+
+
+def test_import_limit_silence_label_reflects_setting():
+    prefs = Prefs()
+    state = cast(State, SimpleNamespace(prefs=prefs))
+    assert strip_ansi_codes(OptionsMenu.make_import_limit_silence_label(state)) == "Voice sample silence gaps (optional)"
+    prefs.import_limit_silence_enabled = True
+    prefs.import_limit_silence_duration = 0.25
+    assert strip_ansi_codes(OptionsMenu.make_import_limit_silence_label(state)) == "Voice sample silence gaps (currently: 0.25s)"
+
+
+def test_import_limit_silence_menu_toggles_and_asks_duration(monkeypatch):
+    # The first item cycles Disabled/Enabled; the Max duration item only exists
+    # while enabled and edits the duration through the stock number prompt
+    prefs = Prefs()
+    state = cast(State, SimpleNamespace(prefs=prefs))
+    menus = []
+    asked = []
+    monkeypatch.setattr(MenuUtil, "menu", lambda **kw: menus.append(kw))
+    monkeypatch.setattr(Prefs, "save", lambda self: "")
+    monkeypatch.setattr(options_menu, "print_feedback", lambda *_, **__: None)
+    monkeypatch.setattr(options_menu.ask, "ask_number_and_save", lambda *args, **_: asked.append(args))
+
+    OptionsMenu.import_limit_silence_menu(state)
+    make_items = menus[0]["items"]
+    assert menus[0]["heading"] == "Voice sample - limit silence gaps"
+
+    items = make_items(state)
+    assert [strip_ansi_codes(get_string_from(state, item.label)) for item in items] == ["Disabled (default)"]
+
+    items[0].handler(state, items[0])
+    assert prefs.import_limit_silence_enabled is True
+    items = make_items(state)
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+    assert labels == ["Enabled", "Max duration: 0.5s (default)"]
+
+    items[1].handler(state, items[1])
+    saveable, target, _prompt, min_value, max_value, default_value = asked[0][:6]
+    assert (saveable, target) == (prefs, "import_limit_silence_duration")
+    assert (min_value, max_value, default_value) == (0.0, 1.0, 0.5)
+
+    items[0].handler(state, items[0])
+    assert prefs.import_limit_silence_enabled is False
+    assert len(make_items(state)) == 1

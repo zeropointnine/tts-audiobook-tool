@@ -457,12 +457,38 @@ class DialogSegmenter:
         (any language) or, when the language code is "en", a capital-initial
         word whose next word is a whitelisted attribution verb (eg,
         "Some dialog," John said.).
+
+        An attribution never begins a new paragraph: when the whitespace run
+        around `offset` contains a line break, the continuation belongs to
+        the next paragraph and this returns False (eg, `“Sorry.”\\n\\nI
+        replied ...` must keep the dialog paragraph's own reason).
         """
+        if DialogSegmenter._crosses_line_break(text, offset):
+            return False
         if DialogSegmenter._continues_with_lowercase_alpha(text, offset):
             return True
         if (language_code or "") != "en":
             return False
         return DialogSegmenter._continues_with_name_verb(text, offset)
+
+    @staticmethod
+    def _crosses_line_break(text: str, offset: int) -> bool:
+        """
+        Whether the whitespace run containing `offset` (the whitespace just
+        before it, which span ends absorb, plus the whitespace at or after
+        it) includes a line break.
+        """
+        index = offset
+        while index > 0 and text[index - 1].isspace():
+            index -= 1
+            if text[index] in "\n\r":
+                return True
+        index = offset
+        while index < len(text) and text[index].isspace():
+            if text[index] in "\n\r":
+                return True
+            index += 1
+        return False
 
     @staticmethod
     def _continues_with_name_verb(text: str, offset: int) -> bool:

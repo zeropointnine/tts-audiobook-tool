@@ -685,6 +685,40 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
 
         self.assertEqual(groups[0].phrases[-1].reason, Reason.PHRASE)
 
+    def test_next_paragraph_is_never_an_attribution(self):
+        # A one-sentence dialog paragraph followed by a paragraph that merely
+        # looks like an attribution ("I replied ..." matches name + verb;
+        # "and ..." is lowercase) keeps its PARAGRAPH reason: attributions
+        # never cross a paragraph break.
+        for next_paragraph in ("I replied to his apology.", "and then he left."):
+            for language_code in ("en", None):
+                with self.subTest(
+                    next_paragraph=next_paragraph,
+                    language_code=language_code,
+                ):
+                    original_groups = [
+                        PhraseGroup([Phrase("“Sorry.”\n\n", Reason.PARAGRAPH)]),
+                        make_group(next_paragraph),
+                    ]
+
+                    groups = DialogSegmenter.segment_groups(
+                        original_groups,
+                        language_code=language_code,
+                    )
+
+                    self.assertEqual(
+                        self.phrase_reasons(groups)[0],
+                        [("“Sorry.”\n\n", Reason.PARAGRAPH)],
+                    )
+
+    def test_mid_group_span_end_before_line_break_is_not_quote_end(self):
+        # Same rule when the dialog span end falls inside a first-pass group
+        # (the split path) rather than at a group boundary.
+        groups = segment_one_lang("She paused, “Sorry.”\nI replied.", "en")
+
+        self.assertEqual(groups[1].text, "“Sorry.”\n")
+        self.assertEqual(groups[1].phrases[-1].reason, Reason.PHRASE)
+
     def test_span_end_at_group_boundary_with_name_verb_hits_for_en(self):
         original_groups = [
             make_group('She said, "Some dialog," '),

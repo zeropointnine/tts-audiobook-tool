@@ -240,7 +240,12 @@ class VoiceMenuShared:
             ask.ask_error("Sound file must be at least 2 seconds")
             return None
 
-        sound = SoundPipeline.apply_voice_clone_post_processing(sound)
+        # The result is what gets saved, so a re-import of the same source
+        # under a different gap limit yields different audio, which import
+        # treats as a new sample rather than sharing the existing file.
+        sound = SoundPipeline.apply_voice_clone_post_processing(
+            sound, max_silence_gap=state.prefs.import_max_silence_gap
+        )
 
         if sound.data.size == 0:
             ask.ask_error("Selected sound sample is entirely silence")

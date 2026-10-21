@@ -135,6 +135,47 @@ def test_save_gen_log_invalid_value_is_normalized_to_false(
     assert normalized["save_gen_log"] is False
 
 
+def test_import_limit_silence_defaults_and_round_trips(
+    prefs_path: Path,
+) -> None:
+    prefs = Prefs()
+    assert prefs.import_limit_silence_enabled is False
+    assert prefs.import_limit_silence_duration == 0.5
+    # Disabled means "don't limit", regardless of the stored duration
+    assert prefs.import_max_silence_gap is None
+
+    prefs.import_limit_silence_enabled = True
+    prefs.import_limit_silence_duration = 0.25
+    prefs.save()
+
+    loaded = Prefs.load()
+    assert loaded.import_limit_silence_enabled is True
+    assert loaded.import_limit_silence_duration == 0.25
+    assert loaded.import_max_silence_gap == 0.25
+
+
+@pytest.mark.parametrize(
+    ("enabled", "duration"),
+    [("yes", 0.3), (True, "0.3"), (True, 1.5), (True, -0.1), (True, True)],
+)
+def test_import_limit_silence_invalid_values_are_normalized(
+    prefs_path: Path, enabled, duration,
+) -> None:
+    # Each invalid field independently falls back to its default; valid ones are kept
+    prefs_path.write_text(
+        json.dumps({"import_limit_silence_enabled": enabled, "import_limit_silence_duration": duration}),
+        encoding="utf-8",
+    )
+
+    prefs = Prefs.load()
+
+    assert prefs.import_limit_silence_enabled is (enabled if isinstance(enabled, bool) else False)
+    expected_duration = 0.3 if duration == 0.3 and not isinstance(duration, bool) else 0.5
+    assert prefs.import_limit_silence_duration == expected_duration
+    normalized = json.loads(prefs_path.read_text(encoding="utf-8"))
+    assert normalized["import_limit_silence_duration"] == expected_duration
+
+
 def test_hint_mutations_require_explicit_save(
     prefs_path: Path,
 ) -> None:

@@ -143,6 +143,13 @@ class OptionsMenu:
                 )
             )
 
+            items.append(
+                MenuItem(
+                    lambda _: OptionsMenu.make_import_limit_silence_label(state),
+                    lambda _, __: OptionsMenu.import_limit_silence_menu(state)
+                )
+            )
+
             items.append( MenuItem("Reset contextual hints", on_hints) )
 
             items.append(
@@ -298,11 +305,70 @@ class OptionsMenu:
         MenuUtil.options_menu(
             state=state,
             heading_text="AAC/M4B bitrate",
+            subheading="Bitrate when the audiobook file type is set to AAC/M4B",
             labels=AAC_BITRATES,
             values=AAC_BITRATES,
             current_value=state.prefs.aac_bitrate,
             default_value=AAC_BITRATE_DEFAULT,
             on_select=on_select
+        )
+
+    @staticmethod
+    def make_import_limit_silence_label(state: State) -> str:
+        label = "Voice sample silence gaps"
+        if not state.prefs.import_limit_silence_enabled:
+            return f"{label} {COL_DIM}(optional)"
+        value = format_seconds(state.prefs.import_limit_silence_duration)
+        return f"{label} {make_currently_string(value)}"
+
+    @staticmethod
+    def import_limit_silence_menu(state: State) -> None:
+
+        def on_enabled_select(value: bool) -> None:
+            state.prefs.import_limit_silence_enabled = value
+            state.prefs.save()
+            print_feedback(f"{IMPORT_LIMIT_SILENCE_TITLE} set to: {'enabled' if value else 'disabled'}")
+
+        def make_duration_label(_: State) -> str:
+            duration = state.prefs.import_limit_silence_duration
+            s = f"Max duration: {COL_ACCENT}{format_seconds(duration)}"
+            if duration == PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_DURATION:
+                s += f" {COL_DIM}(default)"
+            return s
+
+        def on_duration(_: State, __: MenuItem) -> None:
+            ask.ask_number_and_save(
+                state.prefs,
+                "import_limit_silence_duration",
+                "Enter maximum silence gap duration (seconds):",
+                IMPORT_LIMIT_SILENCE_DURATION_MIN,
+                IMPORT_LIMIT_SILENCE_DURATION_MAX,
+                PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_DURATION,
+                "Maximum silence gap set to:",
+            )
+
+        def make_items(_: State) -> list[MenuItem]:
+            items = [
+                MenuUtil.make_cycle_item(
+                    label="",
+                    values=[False, True],
+                    value_labels=["Disabled", "Enabled"],
+                    get_value=lambda: state.prefs.import_limit_silence_enabled,
+                    default_value=PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_ENABLED,
+                    on_select=on_enabled_select,
+                )
+            ]
+            # Duration only applies when enabled
+            if state.prefs.import_limit_silence_enabled:
+                items.append(MenuItem(make_duration_label, on_duration))
+            return items
+
+        MenuUtil.menu(
+            state=state,
+            heading=IMPORT_LIMIT_SILENCE_TITLE,
+            items=make_items,
+            subheading=IMPORT_LIMIT_SILENCE_SUBHEADING,
+            breadcrumb=IMPORT_LIMIT_SILENCE_TITLE,
         )
 
     @staticmethod
@@ -383,6 +449,19 @@ def print_about_model(state: State) -> None:
     ask.ask_enter_to_continue()
 
 
+
+def format_seconds(value: float) -> str:
+    """ Eg, 0.5 -> "0.5s", 0.25 -> "0.25s", 1.0 -> "1.0s" """
+    s = f"{value:.2f}"
+    if s.endswith("0"):
+        s = s[:-1]
+    return f"{s}s"
+
+IMPORT_LIMIT_SILENCE_TITLE = "Voice sample - limit silence gaps"
+
+IMPORT_LIMIT_SILENCE_SUBHEADING = \
+"""When importing samples for voice cloning, this will limit internal silence gaps.
+Can be useful for dramatic lines with long pauses between phrases, etc."""
 
 DEBUG_SUBHEADING = \
 """Saves intermediate sound segment files and diagnostic json data

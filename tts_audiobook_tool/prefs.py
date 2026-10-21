@@ -70,6 +70,8 @@ class Prefs(Saveable):
             chat_save_mic: bool = PROJECT_DEFAULT_CHAT_SAVE_MIC,
             save_debug_files: bool = False,
             save_gen_log: bool = False,
+            import_limit_silence_enabled: bool = PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_ENABLED,
+            import_limit_silence_duration: float = PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_DURATION,
             startup_version_code: int | None = None,
     ) -> None:
         self._project_dir = project_dir
@@ -110,6 +112,8 @@ class Prefs(Saveable):
         self._chat_save_mic = chat_save_mic
         self._save_debug_files = save_debug_files
         self._save_gen_log = save_gen_log
+        self._import_limit_silence_enabled = import_limit_silence_enabled
+        self._import_limit_silence_duration = float(import_limit_silence_duration)
 
         # The startup-messaging version code the app last ran with.
         # None means "no history" (brand-new user, or a prefs file from before
@@ -402,6 +406,28 @@ class Prefs(Saveable):
             save_gen_log = False
             dirty = True
 
+        # Voice sample import - limit silence gaps
+        import_limit_silence_enabled = prefs_dict.get(
+            "import_limit_silence_enabled", PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_ENABLED
+        )
+        if not isinstance(import_limit_silence_enabled, bool):
+            import_limit_silence_enabled = PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_ENABLED
+            dirty = True
+        import_limit_silence_duration = prefs_dict.get(
+            "import_limit_silence_duration", PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_DURATION
+        )
+        if (
+            isinstance(import_limit_silence_duration, bool)
+            or not isinstance(import_limit_silence_duration, (int, float))
+            or not (
+                IMPORT_LIMIT_SILENCE_DURATION_MIN
+                <= import_limit_silence_duration
+                <= IMPORT_LIMIT_SILENCE_DURATION_MAX
+            )
+        ):
+            import_limit_silence_duration = PREFS_DEFAULT_IMPORT_LIMIT_SILENCE_DURATION
+            dirty = True
+
         # Startup version code (None is a valid value: no history)
         startup_version_code = prefs_dict.get("startup_version_code", None)
         if startup_version_code is not None and (
@@ -435,6 +461,8 @@ class Prefs(Saveable):
             chat_save_mic=chat_save_mic,
             save_debug_files=save_debug_files,
             save_gen_log=save_gen_log,
+            import_limit_silence_enabled=import_limit_silence_enabled,
+            import_limit_silence_duration=import_limit_silence_duration,
             startup_version_code=startup_version_code,
             hints=hint_prefs,
         )
@@ -474,6 +502,27 @@ class Prefs(Saveable):
     @save_gen_log.setter
     def save_gen_log(self, value: bool):
         self._save_gen_log = value
+
+    @property
+    def import_limit_silence_enabled(self) -> bool:
+        return self._import_limit_silence_enabled
+
+    @import_limit_silence_enabled.setter
+    def import_limit_silence_enabled(self, value: bool) -> None:
+        self._import_limit_silence_enabled = bool(value)
+
+    @property
+    def import_limit_silence_duration(self) -> float:
+        return self._import_limit_silence_duration
+
+    @import_limit_silence_duration.setter
+    def import_limit_silence_duration(self, value: float) -> None:
+        self._import_limit_silence_duration = float(value)
+
+    @property
+    def import_max_silence_gap(self) -> float | None:
+        """Max internal silence gap for imported voice samples, or None when not limiting."""
+        return self._import_limit_silence_duration if self._import_limit_silence_enabled else None
 
     @property
     def startup_version_code(self) -> int | None:
@@ -719,6 +768,8 @@ class Prefs(Saveable):
                 "chat_save_mic": self._chat_save_mic,
                 "save_debug_files": self._save_debug_files,
                 "save_gen_log": self._save_gen_log,
+                "import_limit_silence_enabled": self._import_limit_silence_enabled,
+                "import_limit_silence_duration": self._import_limit_silence_duration,
                 "startup_version_code": self._startup_version_code,
             }
 
