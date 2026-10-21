@@ -219,7 +219,7 @@ class Qwen3BaseModel(TtsBaseModel):
 
         warnings = super().get_warning_issues(project)
 
-        from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+        from tts_audiobook_tool.tts_models.model_support import make_language_value_note
         language, detail = self.resolve_language_value(project.language_code)
         warnings.append(make_language_value_note(language, project.language_code, detail))
 

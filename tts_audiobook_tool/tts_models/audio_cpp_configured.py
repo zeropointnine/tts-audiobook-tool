@@ -171,7 +171,7 @@ class AudioCppModelSupport:
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = []
         if self.definition.language_policy != "omit":
-            from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+            from tts_audiobook_tool.tts_models.model_support import make_language_value_note
             warnings.append(make_language_value_note(
                 self.resolve_request_language(project.language_code), project.language_code,
                 self.definition.language_hint_note))

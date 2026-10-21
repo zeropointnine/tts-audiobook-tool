@@ -73,3 +73,22 @@ def make_max_words_exceed_warning(project: Project, reco: tuple[int, int, str], 
         f" exceeds {name} recommended model limit ({limit})\n"
         f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded"
     )
+
+
+def make_language_value_note(value: str | None, language_code: str | None, detail: str = "") -> str:
+    """
+    The informational pre-flight note naming the language value a model receives:
+    the value actually sent (after any mapping from the project language code),
+    with the project code it was derived from, plus an optional qualifying `detail`
+    (eg "applies to IndexTTS2.5 only"). Shared by every model that passes a
+    language to inference, eg::
+
+        Language value passed to model: English (project language code = "en")
+
+    A `value` of None or "" means no language reaches the model ("none").
+    """
+    code = (language_code or "").strip()
+    source = f'project language code = "{code}"' if code else "project language code not set"
+    if detail:
+        source += f"; {detail}"
+    return f"Language value passed to model: {value or 'none'} ({source})"

@@ -1,10 +1,9 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
-from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.util import COL_ACCENT, COL_DIM, COL_DIM_ITALICS, COL_ERROR, ellipsize_path_for_menu, make_currently_string, print_feedback, printt
+from tts_audiobook_tool.util import COL_DIM, COL_DIM_ITALICS, ellipsize_path_for_menu, make_currently_string, print_feedback, printt
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 
 class VoiceVibeVoiceMenu:

@@ -19,7 +19,7 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.audio_cpp_configured import AudioCppBackendAdapter, AudioCppModelSupport, AudioCppSettings
 from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
 from tts_audiobook_tool.tts_models.audio_cpp_detection import detect_audio_cpp_models
-from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+from tts_audiobook_tool.tts_models.model_support import make_language_value_note
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 MODEL_ID = "qwen3tts_audiocpp"

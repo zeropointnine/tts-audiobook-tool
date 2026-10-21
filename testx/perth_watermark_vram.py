@@ -49,7 +49,7 @@ Run: ./venv-cb/bin/python -m testx.perth_watermark_vram
 import gc
 
 import numpy as np
-import perth
+import perth # type: ignore
 import torch
 
 SR = 24000

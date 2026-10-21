@@ -9,7 +9,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.util import COL_DEFAULT, COL_DIM, COL_ERROR, make_currently_string, print_feedback, printt
+from tts_audiobook_tool.util import COL_DEFAULT, COL_DIM, make_currently_string, print_feedback, printt
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 
 class VoiceIndexTts2Menu:

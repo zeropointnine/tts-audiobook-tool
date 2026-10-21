@@ -813,7 +813,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **Qwen3-TTS**
 - Base, CustomVoice and VoiceDesign model types
-- Temperature, top_p, top_k; repetition penalty, max tokens, seed
+- Temperature, top_p, top_k; repetition penalty, seed
 - See [Qwen3-TTS setup notes](<docs/tips-audio-cpp.md#qwen3-tts>)
 
 
@@ -886,9 +886,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-10-20**
+**2026-10-21**
 
 - Added support for **Breeze TTS 2 (local)**. Supports batch mode.
+- Added support for **Qwen3-TTS for audio.cpp** (all varianets).
 
 **2026-10-19**
 

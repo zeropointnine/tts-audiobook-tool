@@ -22,7 +22,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+from tts_audiobook_tool.tts_models.model_support import make_language_value_note
 from tts_audiobook_tool.tts_models.audio_cpp_configured import (
     AudioCppBackendAdapter, AudioCppModelSupport, AudioCppSettings,
 )

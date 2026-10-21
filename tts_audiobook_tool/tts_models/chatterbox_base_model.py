@@ -64,7 +64,7 @@ class ChatterboxBaseModel(TtsBaseModel):
         warnings = super().get_warning_issues(project)
         # Multilingual receives the project code verbatim as `language_id`; Turbo takes none.
         if project.get_model_setting('chatterbox_local', 'type').is_multilingual:
-            from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+            from tts_audiobook_tool.tts_models.model_support import make_language_value_note
             warnings.append(make_language_value_note(project.language_code, project.language_code))
         return warnings
 

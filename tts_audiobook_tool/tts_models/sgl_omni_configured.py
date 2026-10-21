@@ -168,7 +168,7 @@ class ConfiguredModelSupport:
         warnings = []
         if self.definition.language_policy == "moss":
             from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
-            from tts_audiobook_tool.tts_models.language_value_note import make_language_value_note
+            from tts_audiobook_tool.tts_models.model_support import make_language_value_note
             # Mirrors the payload: an unknown name omits the field.
             language = MossBaseModel.get_language_name(project.language_code)
             warnings.append(make_language_value_note(language, project.language_code))

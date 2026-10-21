@@ -2,10 +2,11 @@ import random
 from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
+from typing import Any
 
 import torch
 from huggingface_hub import snapshot_download
-from transformers import LogitsProcessorList
+from transformers import LogitsProcessorList # type: ignore
 
 from breeze_tts.infer import templates as breeze_templates # type: ignore
 from breeze_tts.infer.batch import BatchDepthDecoder # type: ignore
@@ -181,7 +182,8 @@ class BreezeModel(BreezeBaseModel):
             })
             set_all_seeds(seed)
             with self._cached_reference_codes():
-                inputs = prepare_inputs(
+                # Upstream annotates every value as `Tensor | None | float`; per key they're concrete
+                inputs: dict[str, Any] = prepare_inputs(
                     self._tokenizer, self._audio_tokenizer, self._model, requests, template,
                     guidance_scale=cfg, guidance_scale_ref=None, guidance_scale_ins=None,
                 )
@@ -239,24 +241,29 @@ class BreezeModel(BreezeBaseModel):
         (upstream reads them only at capture).
         """
         assert self._model is not None
-        if self._batch_depth_decoder is None:
-            self._batch_depth_decoder = BatchDepthDecoder(self._model, max_batch_size=PROJECT_BATCH_SIZE_MAX)
+        # Local binding: `BatchDepthDecoder` is untyped (unresolved upstream import), so narrowing
+        # the attribute on assignment falls back to its declared `| None` type
+        decoder = self._batch_depth_decoder
+        if decoder is None:
+            decoder = BatchDepthDecoder(self._model, max_batch_size=PROJECT_BATCH_SIZE_MAX)
+            self._batch_depth_decoder = decoder
         head = self._model.depth_decoder.codebooks_head
         checkpoint_weight = head.weight.data
         # Captures only when the bucket changes
-        self._batch_depth_decoder.prepare(batch_size)
+        decoder.prepare(batch_size)
         # Compare storage, not tensor identity (`.data` returns a new tensor object on every access). Dropping the
         # captured fp32 tensor here would free the memory the graph replays from.
         if head.weight.data_ptr() != checkpoint_weight.data_ptr():
             self._graph_head_weight = head.weight.data
             head.weight.data = checkpoint_weight
-        graph = self._batch_depth_decoder.graph
+        graph = decoder.graph
+        assert graph is not None # Set by `prepare()`
         # The graph's buffers are inference tensors (allocated during capture)
         with torch.inference_mode():
             graph.set_temperature(sampling.temperature)
             graph.set_top_k(sampling.top_k)
             graph.set_top_p(sampling.top_p)
-        return self._batch_depth_decoder
+        return decoder
 
     @contextmanager
     def _cached_reference_codes(self) -> Iterator[None]:

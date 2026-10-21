@@ -19,8 +19,6 @@ class ModelQwen3Menu:
     (unlike the other static model menus, which do not require this)
     """
 
-    # Temperature/top-p/top-k are mirrored to the subtalker (see Qwen3Model);
-    # same wording as the audio.cpp catalog's input_prompt_suffix.
     SAMPLING_PROMPT_SUFFIX = "(applies to both talker and subtalker)"
 
     @staticmethod

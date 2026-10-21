@@ -355,7 +355,7 @@ def main() -> None:
                             continue
                         try:
                             tts_instance = Tts.get_instance()
-                            massaged = tts_instance.massage_for_inference(text)
+                            massaged = tts_instance.prepare_text_for_inference(project, text)
                             with _MuteCurrentThreadOutput():
                                 result = tts_instance.generate_using_project(project, [massaged])
                             if isinstance(result, str):

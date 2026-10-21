@@ -136,7 +136,7 @@ class AudioCppUtil:
             data = audio.read(dtype="float32", always_2d=True)
         if data.size == 0:
             raise ValueError("audio.cpp response contains no audio")
-        return Sound(np.mean(data, axis=1, dtype=np.float32), rate)
+        return Sound(data.mean(axis=1, dtype=np.float32), rate)
 
     @staticmethod
     def generate(base_url: str, payload: dict, print_request: bool = False) -> Sound | str:
