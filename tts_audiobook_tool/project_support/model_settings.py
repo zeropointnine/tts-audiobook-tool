@@ -71,8 +71,9 @@ RETIRED_SETTINGS: dict[str, frozenset[str]] = {
     "orchestration": frozenset({"concurrent_requests"}),
 }
 # Server model ID -> local model ID that borrows its catalog parameter bounds
-# for load validation. Local models have no catalog parameter declarations;
-# while their settings were shared, the server's bounds validated them.
+# for load validation, for settings the local entry does not describe in
+# `[models.local.parameters]`; while their settings were shared, the server's
+# bounds validated them.
 BORROWED_PARAMETER_BOUNDS: dict[str, str] = {
     "moss_delay_sglomni": "moss_local",
     "moss_local_sglomni": "moss_local",
@@ -95,6 +96,9 @@ class ModelSettingsRegistry:
         self.legacy: dict[str, Binding] = {}
         # Backend bounds supplement storage types only during load reconciliation.
         self.parameter_bounds: dict[tuple[str, str], tuple[int | float, int | float]] = {}
+        # Allowed values of local fixed-choice parameters (`[models.local.parameters]`
+        # with `choices`), likewise checked only during load reconciliation.
+        self.parameter_choices: dict[tuple[str, str], tuple[Any, ...]] = {}
 
     def add(self, binding: Binding, legacy_attr: str = "") -> None:
         key = (binding.model_id, binding.name)
@@ -144,14 +148,22 @@ class ModelSettingsRegistry:
             model_id = entry["id"]
             pending.register_model_settings(model_id, parse_model_settings(entry))
             for name, parameter in entry.get(entry.get("backend_kind", ""), {}).get("parameters", {}).items():
-                if parameter["type"] in ("int", "float"):
+                # Fixed-choice (and bool) parameters have no numeric bounds.
+                if parameter["type"] in ("int", "float") and "choices" not in parameter:
                     pending.parameter_bounds[(model_id, name)] = (parameter["min"], parameter["max"])
+                # Local models have no readiness check on stored settings, so an
+                # out-of-choice value resets on load like an out-of-bounds number.
+                # (A bool's implicit True/False choice is covered by its storage type.)
+                if entry.get("backend_kind") == "local" and "choices" in parameter:
+                    pending.parameter_choices[(model_id, name)] = tuple(
+                        choice["value"] for choice in parameter["choices"])
         # Local implementations of a retired group use the same UI bounds as
         # the catalog's server controls. Keep validating local saved values
         # after retiring their shared storage, without coupling overrides.
         for (model_id, name), bounds in tuple(pending.parameter_bounds.items()):
             local_id = BORROWED_PARAMETER_BOUNDS.get(model_id)
-            if local_id is not None and (local_id, name) in pending.bindings:
+            if (local_id is not None and (local_id, name) in pending.bindings
+                    and (local_id, name) not in pending.parameter_bounds):
                 pending.parameter_bounds[(local_id, name)] = bounds
         # The v1.5 Local Transformer preset has no server counterpart to copy
         # bounds from, so its local-only settings carry the preset's own.
@@ -166,6 +178,7 @@ class ModelSettingsRegistry:
         legacy = legacy_bindings()
         self.bindings, self.legacy = pending.bindings, legacy
         self.parameter_bounds = pending.parameter_bounds
+        self.parameter_choices = pending.parameter_choices
 
     def register_configured_model(self, definition: SglOmniModelDefinition) -> None:
         self.register_model_settings(definition.spec.id, definition.settings)
@@ -384,6 +397,9 @@ class ModelSettingsRegistry:
         bounds = self.parameter_bounds.get((binding.model_id, binding.name))
         if bounds is not None and not bounds[0] <= value <= bounds[1]:
             raise ValueError(f"{binding.model_id}.{binding.name}: expected a value between {bounds[0]} and {bounds[1]}")
+        choices = self.parameter_choices.get((binding.model_id, binding.name))
+        if choices is not None and value not in choices:
+            raise ValueError(f"{binding.model_id}.{binding.name}: expected one of {', '.join(map(str, choices))}")
 
     def _clean_object(self, raw: dict, bindings: list[Binding], where: str) -> dict[str, Any]:
         allowed: dict[str, dict[str, Binding]] = {}

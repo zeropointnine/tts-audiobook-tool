@@ -175,12 +175,12 @@ def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, str | None]:
             from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
             from tts_audiobook_tool.tts_models.fish_s1_model import FishS1Model
             # Loads the library's built-in model
-            return FishS1Model(DeviceType.CUDA, FishS1BaseModel.DEFAULT_COMPILE_ENABLED), None
+            return FishS1Model(DeviceType.CUDA, FishS1BaseModel.LOCAL.choice("compile_enabled").typed_default), None
 
         case "fish_s2_local":
             from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
             from tts_audiobook_tool.tts_models.fish_s2_model import FishS2Model
-            return FishS2Model(DeviceType.CUDA, FishS2BaseModel.DEFAULT_COMPILE_ENABLED), None
+            return FishS2Model(DeviceType.CUDA, FishS2BaseModel.LOCAL.choice("compile_enabled").typed_default), None
 
         case "glm_local":
             from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel

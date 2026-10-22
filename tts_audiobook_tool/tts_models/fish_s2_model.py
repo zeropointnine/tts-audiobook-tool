@@ -302,20 +302,10 @@ class FishS2Model(FishS2BaseModel):
         else:
             self.clear_voice_clone()
 
-        if project.get_model_setting('fish_s2_local', 'temperature') == -1:
-            temperature = FishS2BaseModel.TEMPERATURE_DEFAULT
-        else:
-            temperature = project.get_model_setting('fish_s2_local', 'temperature')
-
-        if project.get_model_setting('fish_s2_local', 'top_p') == -1:
-            top_p = FishS2BaseModel.TOP_P_DEFAULT
-        else:
-            top_p = project.get_model_setting('fish_s2_local', 'top_p')
-
-        if project.get_model_setting('fish_s2_local', 'top_k') == -1:
-            top_k = FishS2BaseModel.TOP_K_DEFAULT
-        else:
-            top_k = project.get_model_setting('fish_s2_local', 'top_k')
+        local = FishS2BaseModel.LOCAL
+        temperature = local.resolve_float(project, "temperature")
+        top_p = local.resolve_float(project, "top_p")
+        top_k = local.resolve_int(project, "top_k")
 
         seed = -1 if force_random_seed else project.get_model_setting('fish_s2_local', 'seed')
         if seed == -1:

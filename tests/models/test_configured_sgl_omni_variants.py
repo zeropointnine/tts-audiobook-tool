@@ -16,7 +16,7 @@ from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.app_types.voice import Voice
-from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -434,7 +434,7 @@ def test_moss_server_payload_uses_only_its_private_settings(model_id, prefix, se
 def test_menu_seed_and_shared_fish_edit_without_storage_mutation(server_mode, monkeypatch):
     for id, size in (("auk_sglomni", 2), ("moss_delay_sglomni", 4), ("fish_s2_sglomni", 3)):
         server_mode(id)
-        items = ModelConfiguredSglOmniMenu.make_items(SimpleNamespace(project=Project(tts_model_type=Tts.get_active_type().id)), Tts.get_configured_definition(Tts.get_active_type()))
+        items = ModelCatalogMenu.make_items(SimpleNamespace(project=Project(tts_model_type=Tts.get_active_type().id)), Tts.get_configured_definition(Tts.get_active_type()))
         assert len(items) == size
         if id != "fish_s2_sglomni":
             assert "Seed" in items[-1].label
@@ -461,13 +461,13 @@ def test_fish_server_menu_reset_and_edit_stay_private(server_mode, monkeypatch):
     project.set_model_setting("fish_s2_local", "top_k", 50)
     project.set_model_setting("fish_s2_sglomni", "top_k", 73)
     monkeypatch.setattr(Project, "save", lambda self: "")
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.printt", lambda *_: None)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.print_feedback", lambda *_: None)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.ask.ask_input",
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.printt", lambda *_: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.print_feedback", lambda *_: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.ask.ask_input",
                         lambda **_: next(responses))
     responses = iter(("-1", "25"))
     state = SimpleNamespace(project=project)
-    item = ModelConfiguredSglOmniMenu.make_items(state, instance.definition)[-1]
+    item = ModelCatalogMenu.make_items(state, instance.definition)[-1]
     item.handler(state, item)
     assert project.get_model_setting("fish_s2_sglomni", "top_k") == -1
     item.handler(state, item)
@@ -561,8 +561,8 @@ def test_configured_backend_has_no_static_model_class(server_mode):
 @pytest.mark.parametrize("model_id", tuple(load_definitions().models))
 def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, model_id):
     from tts_audiobook_tool.menus.menu_util import MenuItem
-    from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
-    from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
+    from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
+    from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
     from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
@@ -572,27 +572,28 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
                    for label in ("samples", "selection mode", "selections")]
     voice_calls = []
 
-    def make_voice_items(current, model_type):
+    def make_voice_items(current, model_type, **kwargs):
         assert current is state and model_type.id == model_id
+        assert kwargs == {"preset_choices": None, "allow_custom_preset": False}
         voice_calls.append(model_type)
         return voice_items
 
     monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", make_voice_items)
-    monkeypatch.setattr(ModelConfiguredSglOmniMenu, "make_parameter_item",
+    monkeypatch.setattr(ModelCatalogMenu, "make_parameter_item",
                         lambda _state, parameter, _label, *_, **__: MenuItem(parameter.name, lambda *_: None))
     monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("seed", lambda *_: None))
     monkeypatch.setattr(ModelMenuShared, "make_choice_item",
                         lambda _state, parameter, *_, **__: MenuItem(parameter.name, lambda *_: None))
 
-    actual_voice = VoiceConfiguredSglOmniMenu.make_items(state, definition)
+    actual_voice = VoiceCatalogMenu.make_items(state, definition)
     voice_control_count = sum(control.kind == "voice_samples" for control in definition.menu)
     assert actual_voice == voice_items * voice_control_count
     assert len(voice_calls) == voice_control_count
     assert all(not item.superlabel for item in actual_voice)
-    assert not hasattr(VoiceConfiguredSglOmniMenu, "make_parameter_item")
+    assert not hasattr(VoiceCatalogMenu, "make_parameter_item")
 
-    actual_model = ModelConfiguredSglOmniMenu.make_items(state, definition)
+    actual_model = ModelCatalogMenu.make_items(state, definition)
     expected = []
     for control in definition.menu:
         if control.target_menu != "model":

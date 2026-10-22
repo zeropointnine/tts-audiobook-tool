@@ -5,6 +5,7 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
 class ModelChatterboxMenu:
@@ -15,106 +16,26 @@ class ModelChatterboxMenu:
         """
         
         def make_items(_: State) -> list[MenuItem]:
+            model_type: ChatterboxType = state.project.get_model_setting('chatterbox_local', 'type')
 
-            items = []
+            def item(name: str, label: str) -> MenuItem:
+                return ModelCatalogMenu.make_local_parameter_item(state, "chatterbox_local", name, label)
 
-            items.append( 
-                MenuItem(
-                    make_model_type_label, 
-                    lambda _, __: ask_type(state), 
-                ) 
-            )
-
-            item = ModelMenuShared.make_temperature_item(
-                state=state,
-                target=SettingRef("chatterbox_local", "temperature"),
-                default_value=ChatterboxBaseModel.DEFAULT_TEMPERATURE, 
-                min_value=0.01, max_value=2.0
-            )
-            items.append(item)
-
-            if state.project.get_model_setting('chatterbox_local', 'type').is_multilingual:
-                items.append( 
-                    MenuUtil.make_number_item(
-                        state=state,
-                        target=SettingRef("chatterbox_local", "exaggeration"),
-                        base_label="Exaggeration",
-                        default_value=ChatterboxBaseModel.DEFAULT_EXAGGERATION,
-                        is_minus_one_default=True,
-                        num_decimals=2,
-                        prompt=f"Enter value for exaggeration {COL_DIM}({0.25} to {2.0}){COL_DEFAULT}:",
-                        min_value=0.25, 
-                        max_value=2.0
-                    )
-                )
-
-            if state.project.get_model_setting('chatterbox_local', 'type').is_multilingual:
-                items.append( 
-                    MenuUtil.make_number_item(
-                        state=state,
-                        target=SettingRef("chatterbox_local", "cfg"),
-                        base_label="CFG/pace",
-                        default_value=ChatterboxBaseModel.DEFAULT_CFG,
-                        is_minus_one_default=True,
-                        num_decimals=2,
-                        prompt=f"Enter value for CFG {COL_DIM}({0.2} to {1.0}){COL_DEFAULT}:",
-                        min_value=0.2, 
-                        max_value=1.0
-                    )
-                )
-
-            items.append(
-                ModelMenuShared.make_top_p_item(
-                    state=state,
-                    target=SettingRef("chatterbox_local", "top_p"),
-                    default_value=ChatterboxBaseModel.DEFAULT_TOP_P
-                )
-            )
-
-            if state.project.get_model_setting('chatterbox_local', 'type') == ChatterboxType.TURBO:
-                items.append(
-                    ModelMenuShared.make_top_k_item(
-                        state=state,
-                        target=SettingRef("chatterbox_local", "turbo_top_k"),
-                        default_value=ChatterboxBaseModel.DEFAULT_TOP_K
-                    )
-                )
-
-            # Repetition penalty - using separate values for each variant
-            if state.project.get_model_setting('chatterbox_local', 'type').is_multilingual:
-                qual = state.project.get_model_setting('chatterbox_local', 'type').label.removeprefix("Chatterbox-")
-                target = (
-                    SettingRef("chatterbox_local", "ml_v2_repetition_penalty")
-                    if state.project.get_model_setting('chatterbox_local', 'type') == ChatterboxType.MULTILINGUAL_V2
-                    else SettingRef("chatterbox_local", "ml_v3_repetition_penalty")
-                )
-            else:
-                qual = "Turbo"
-                target = SettingRef("chatterbox_local", "turbo_repetition_penalty")
-            default_value = ChatterboxBaseModel.default_repetition_penalty(
-                state.project.get_model_setting('chatterbox_local', 'type')
-            )
-            rep_min = REPETITION_PENALTY_MIN_DEFAULT
-            rep_max = REPETITION_PENALTY_MAX_DEFAULT
-
-            item = MenuUtil.make_number_item(
-                state=state,
-                target=target,
-                base_label=f"Repetition penalty ({qual})", 
-                default_value=default_value,
-                is_minus_one_default=True,
-                num_decimals=2,
-                prompt=f"Enter repetition penalty {COL_DIM}({rep_min} to {rep_max}){COL_DEFAULT}:",
-                min_value=rep_min,
-                max_value=rep_max
-            )
-            items.append(item)
-
-            items.append(
-                ModelMenuShared.make_seed_item(state, SettingRef("chatterbox_local", "seed"))
-            )
+            items = [MenuItem(make_model_type_label, lambda _, __: ask_type(state))]
+            items.append(item("temperature", "Temperature"))
+            if model_type.is_multilingual:
+                items.append(item("exaggeration", "Exaggeration"))
+                items.append(item("cfg", "CFG/pace"))
+            items.append(item("top_p", "Top-P"))
+            if model_type == ChatterboxType.TURBO:
+                items.append(item("turbo_top_k", "Top-K"))
+            # Each variant has its own repetition penalty
+            qualifier = model_type.label.removeprefix("Chatterbox-") if model_type.is_multilingual else "Turbo"
+            items.append(item(
+                ChatterboxBaseModel.repetition_penalty_setting(model_type), f"Repetition penalty ({qualifier})"))
+            items.append(ModelMenuShared.make_seed_item(state, SettingRef("chatterbox_local", "seed")))
             return items
-        
+
         ModelMenuShared.menu_wrapper(state, make_items)
 
 def make_model_type_label(state: State) -> str:

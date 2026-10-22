@@ -1,4 +1,5 @@
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project_support.model_settings import SettingRef
@@ -7,7 +8,7 @@ from tts_audiobook_tool.tts_models.dots_base_model import (
     DotsBaseModel,
     DotsCompileMode,
 )
-from tts_audiobook_tool.util import COL_DEFAULT, COL_DIM, make_menu_label, print_feedback
+from tts_audiobook_tool.util import make_menu_label, print_feedback
 
 class ModelDotsMenu:
     @staticmethod
@@ -25,6 +26,9 @@ class ModelDotsMenu:
             default = DotsCompileMode.default()
             return make_menu_label("Compile", mode.label, default.label)
 
+        def item(name: str, label: str) -> MenuItem:
+            return ModelCatalogMenu.make_local_parameter_item(state, "dots_local", name, label)
+
         def make_items(_: State) -> list[MenuItem]:
             items = []
             items.append(
@@ -40,68 +44,13 @@ class ModelDotsMenu:
                 )
             )
 
-            if not DotsBaseModel.is_sampling_locked_target(
-                state.project.get_model_setting('dots_local', 'target')
-            ):
-                attr, variant, default_steps, min_steps, max_steps = (
-                    DotsBaseModel.get_num_steps_config(state.project.get_model_setting('dots_local', 'target'))
-                )
-                items.append(
-                    MenuUtil.make_number_item(
-                        state=state,
-                        target=attr,
-                        base_label=f"Steps ({variant})",
-                        default_value=default_steps,
-                        is_minus_one_default=True,
-                        num_decimals=0,
-                        prompt=make_ranged_prompt(
-                            f"number of sampling steps ({variant})",
-                            min_steps,
-                            max_steps,
-                        ),
-                        min_value=min_steps,
-                        max_value=max_steps,
-                    )
-                )
-
-            items.append(
-                MenuUtil.make_number_item(
-                    state=state,
-                    target=SettingRef("dots_local", "speaker_scale"),
-                    base_label="Speaker scale",
-                    default_value=DotsBaseModel.SPEAKER_SCALE_DEFAULT,
-                    is_minus_one_default=True,
-                    num_decimals=1,
-                    prompt=make_ranged_prompt(
-                        "speaker scale",
-                        DotsBaseModel.SPEAKER_SCALE_MIN,
-                        DotsBaseModel.SPEAKER_SCALE_MAX,
-                    ),
-                    min_value=DotsBaseModel.SPEAKER_SCALE_MIN,
-                    max_value=DotsBaseModel.SPEAKER_SCALE_MAX,
-                )
-            )
-
-            if DotsBaseModel.is_cfg_configurable_target(
-                state.project.get_model_setting('dots_local', 'target')
-            ):
-                items.append(
-                    MenuUtil.make_number_item(
-                        state=state,
-                        target=SettingRef("dots_local", "guidance_scale"),
-                        base_label="CFG",
-                        default_value=DotsBaseModel.GUIDANCE_SCALE_DEFAULT,
-                        is_minus_one_default=True,
-                        num_decimals=1,
-                        prompt=make_ranged_prompt(
-                            "CFG",
-                            DotsBaseModel.GUIDANCE_SCALE_MIN,
-                            DotsBaseModel.GUIDANCE_SCALE_MAX,
-                        ),
-                        min_value=DotsBaseModel.GUIDANCE_SCALE_MIN,
-                        max_value=DotsBaseModel.GUIDANCE_SCALE_MAX,
-                    )
-                )
+            target = state.project.get_model_setting('dots_local', 'target')
+            if not DotsBaseModel.is_sampling_locked_target(target):
+                name, variant = DotsBaseModel.get_num_steps_config(target)
+                items.append(item(name, f"Steps ({variant})"))
+            items.append(item("speaker_scale", "Speaker scale"))
+            if DotsBaseModel.is_cfg_configurable_target(target):
+                items.append(item("guidance_scale", "CFG"))
 
             items.append(ModelMenuShared.make_seed_item(state, SettingRef("dots_local", "seed")))
             return items
@@ -165,6 +114,3 @@ class ModelDotsMenu:
             subheading=subheading,
             breadcrumb="dots.tts compile",
         )
-
-def make_ranged_prompt(what: str, min_value: float, max_value: float) -> str:
-    return f"Enter {what} {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:"

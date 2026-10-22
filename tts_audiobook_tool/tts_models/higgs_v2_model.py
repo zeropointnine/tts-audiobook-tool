@@ -159,20 +159,10 @@ class HiggsV2Model(HiggsV2BaseModel):
             voice_path = ""
             voice_transcript = ""
 
-        if project.get_model_setting('higgs_v2_local', 'temperature') == -1:
-            temperature = HiggsV2BaseModel.DEFAULT_TEMPERATURE
-        else:
-            temperature = project.get_model_setting('higgs_v2_local', 'temperature')
-
-        if project.get_model_setting('higgs_v2_local', 'top_k') == -1:
-            top_k = HiggsV2BaseModel.DEFAULT_TOP_K
-        else:
-            top_k = project.get_model_setting('higgs_v2_local', 'top_k')
-
-        if project.get_model_setting('higgs_v2_local', 'top_p') == -1:
-            top_p = HiggsV2BaseModel.DEFAULT_TOP_P
-        else:
-            top_p = project.get_model_setting('higgs_v2_local', 'top_p')
+        local = HiggsV2BaseModel.LOCAL
+        temperature = local.resolve_float(project, "temperature")
+        top_k = local.resolve_int(project, "top_k")
+        top_p = local.resolve_float(project, "top_p")
 
         seed = -1 if force_random_seed else project.get_model_setting('higgs_v2_local', 'seed')
         if seed == -1:

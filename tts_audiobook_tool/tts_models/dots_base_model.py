@@ -4,8 +4,8 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.constants import SEED_MAX as APP_SEED_MAX
-from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import COL_DIM, ellipsize_path_for_menu
 
@@ -81,21 +81,25 @@ class DotsBaseModel(TtsBaseModel):
     SEED_MIN = -1
     SEED_MAX = APP_SEED_MAX
 
-    SPEAKER_SCALE_DEFAULT = 1.5
-    SPEAKER_SCALE_MIN = 0.0
-    SPEAKER_SCALE_MAX = 3.0
+    # Sampling defaults and bounds (`[models.local.parameters]`); see `LOCAL.resolve()`.
+    # The aliases below serve legacy project migration.
+    LOCAL = require_local_definition("dots_local")
 
-    NUM_STEPS_SOAR_DEFAULT = 10
-    NUM_STEPS_SOAR_MIN = 1
-    NUM_STEPS_SOAR_MAX = 32
+    SPEAKER_SCALE_DEFAULT = LOCAL.number("speaker_scale").default
+    SPEAKER_SCALE_MIN = LOCAL.number("speaker_scale").min
+    SPEAKER_SCALE_MAX = LOCAL.number("speaker_scale").max
 
-    NUM_STEPS_MF_DEFAULT = 4
-    NUM_STEPS_MF_MIN = 1
-    NUM_STEPS_MF_MAX = 8
+    NUM_STEPS_SOAR_DEFAULT = LOCAL.number("num_steps_soar").default
+    NUM_STEPS_SOAR_MIN = LOCAL.number("num_steps_soar").min
+    NUM_STEPS_SOAR_MAX = LOCAL.number("num_steps_soar").max
 
-    GUIDANCE_SCALE_DEFAULT = 1.2
-    GUIDANCE_SCALE_MIN = 1.0
-    GUIDANCE_SCALE_MAX = 3.0
+    NUM_STEPS_MF_DEFAULT = LOCAL.number("num_steps_mf").default
+    NUM_STEPS_MF_MIN = LOCAL.number("num_steps_mf").min
+    NUM_STEPS_MF_MAX = LOCAL.number("num_steps_mf").max
+
+    GUIDANCE_SCALE_DEFAULT = LOCAL.number("guidance_scale").default
+    GUIDANCE_SCALE_MIN = LOCAL.number("guidance_scale").min
+    GUIDANCE_SCALE_MAX = LOCAL.number("guidance_scale").max
 
     @classmethod
     def resolve_target(cls, target: str) -> str:
@@ -106,32 +110,19 @@ class DotsBaseModel(TtsBaseModel):
         return cls.resolve_target(target) == cls.MF_REPO_ID
 
     @classmethod
-    def get_num_steps_config(cls, target: str) -> tuple[SettingRef, str, int, int, int]:
+    def get_num_steps_config(cls, target: str) -> tuple[str, str]:
         """
         Returns the num-steps setting that applies to the given target, as
-        (setting ref, variant label, default, min, max)
+        (setting/parameter name, variant label)
         """
         if cls.is_meanflow_target(target):
-            return (
-                SettingRef("dots_local", "num_steps_mf"),
-                "mf",
-                cls.NUM_STEPS_MF_DEFAULT,
-                cls.NUM_STEPS_MF_MIN,
-                cls.NUM_STEPS_MF_MAX,
-            )
-        return (
-            SettingRef("dots_local", "num_steps_soar"),
-            "soar",
-            cls.NUM_STEPS_SOAR_DEFAULT,
-            cls.NUM_STEPS_SOAR_MIN,
-            cls.NUM_STEPS_SOAR_MAX,
-        )
+            return "num_steps_mf", "mf"
+        return "num_steps_soar", "soar"
 
     @classmethod
     def resolve_num_steps(cls, project: Project) -> int:
-        ref, _, default, _, _ = cls.get_num_steps_config(project.get_model_setting('dots_local', 'target'))
-        value: int = project.get_model_setting(ref.model_id, ref.name)
-        return default if value == -1 else value
+        name, _ = cls.get_num_steps_config(project.get_model_setting('dots_local', 'target'))
+        return cls.LOCAL.resolve_int(project, name)
 
     @classmethod
     def is_sampling_locked_target(cls, target: str) -> bool:

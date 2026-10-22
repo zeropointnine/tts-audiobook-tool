@@ -109,9 +109,9 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         # Instructions belong to the selected voice, keyed by model id.
         voice = ProjectVoiceUtil.current_voice(project, model_type, voice_selection_index)
         instruct = voice.instructions.get(model_type.id, "") if voice is not None else ""
-        cfg      = project.get_model_setting('omnivoice_local', 'cfg') if project.get_model_setting('omnivoice_local', 'cfg') != -1 else self.CFG_DEFAULT
-        speed    = project.get_model_setting('omnivoice_local', 'speed') if project.get_model_setting('omnivoice_local', 'speed') != -1 else self.DEFAULT_SPEED
-        steps    = project.get_model_setting('omnivoice_local', 'num_step') if project.get_model_setting('omnivoice_local', 'num_step') != -1 else self.DEFAULT_STEPS
+        cfg      = self.LOCAL.resolve_float(project, "cfg")
+        speed    = self.LOCAL.resolve_float(project, "speed")
+        steps    = self.LOCAL.resolve_int(project, "num_step")
         seed     = -1 if force_random_seed else project.get_model_setting('omnivoice_local', 'seed')
 
         has_voice    = bool(voice_path and os.path.isfile(voice_path))

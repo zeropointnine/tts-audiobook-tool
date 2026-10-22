@@ -63,7 +63,7 @@ def test_remote_model_menu_redraw_resolves_reconciled_model_and_setting_owner(
     monkeypatch.setattr(model_menu_shared.ask, "ask_input", lambda **kwargs: str(value))
     monkeypatch.setattr(model_menu_shared.ask, "print_feedback",
                         lambda *args, **kwargs: None)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.print_feedback",
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.print_feedback",
                         lambda *args, **kwargs: None)
     ModelMenuShared.menu(state)
     factory = captured["items"]

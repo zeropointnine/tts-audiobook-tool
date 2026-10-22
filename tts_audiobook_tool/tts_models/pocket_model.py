@@ -133,9 +133,7 @@ class PocketModel(PocketBaseModel):
             voice_file_name = ProjectVoiceUtil.current_voice_value(project, model_type, voice_selection_index)
             voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
 
-        temperature = project.get_model_setting('pocket_local', 'temperature')
-        if temperature == -1:
-            temperature = PocketModel.DEFAULT_TEMPERATURE
+        temperature = PocketModel.LOCAL.resolve_float(project, "temperature")
 
         seed = -1 if force_random_seed else project.get_model_setting('pocket_local', 'seed')
         if seed <= -1:

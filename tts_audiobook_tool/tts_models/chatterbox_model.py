@@ -105,15 +105,6 @@ class ChatterboxModel(ChatterboxBaseModel):
             return value
         return value.detach().to(device).clone()
 
-    @staticmethod
-    def _resolve_setting(value: float, default: float) -> float:
-        """
-        Maps the project-level "unset" sentinel (-1) to the given default.
-        """
-        if value == -1:
-            return default
-        return value
-
     def generate_using_project(
             self,
             project: Project,
@@ -132,11 +123,12 @@ class ChatterboxModel(ChatterboxBaseModel):
         # Parameters common to both model types
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("chatterbox_local"), voice_selection_index)
 
-        temperature = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox_local', 'temperature'), ChatterboxBaseModel.DEFAULT_TEMPERATURE)
-        top_p = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox_local', 'top_p'), ChatterboxBaseModel.DEFAULT_TOP_P)
+        local = ChatterboxBaseModel.LOCAL
+        temperature = local.resolve_float(project, "temperature")
+        top_p = local.resolve_float(project, "top_p")
         # Only consumed by the multilingual variant, but always passed
-        exaggeration = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox_local', 'exaggeration'), ChatterboxBaseModel.DEFAULT_EXAGGERATION)
-        cfg = ChatterboxModel._resolve_setting(project.get_model_setting('chatterbox_local', 'cfg'), ChatterboxBaseModel.DEFAULT_CFG)
+        exaggeration = local.resolve_float(project, "exaggeration")
+        cfg = local.resolve_float(project, "cfg")
 
         # Note how each model has an independent repetition penalty value b/c the values behave differently on each
         language_id = ""
@@ -144,20 +136,13 @@ class ChatterboxModel(ChatterboxBaseModel):
         turbo_top_k: int | None = None
         if self._model_type.is_multilingual:
             language_id = project.language_code
-            ml_repetition_penalty = (
-                project.get_model_setting('chatterbox_local', 'ml_v2_repetition_penalty')
-                if self._model_type == ChatterboxType.MULTILINGUAL_V2
-                else project.get_model_setting('chatterbox_local', 'ml_v3_repetition_penalty')
-            )
-            repetition_penalty = ChatterboxModel._resolve_setting(
-                ml_repetition_penalty,
-                ChatterboxBaseModel.default_repetition_penalty(self._model_type),
-            )
         else:
-            turbo_top_k = None if project.get_model_setting('chatterbox_local', 'turbo_top_k') == -1 else project.get_model_setting('chatterbox_local', 'turbo_top_k')
-            repetition_penalty = ChatterboxModel._resolve_setting(
-                project.get_model_setting('chatterbox_local', 'turbo_repetition_penalty'), ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
-            )
+            # Unset sends no top-k (the library default)
+            stored_top_k = project.get_model_setting('chatterbox_local', 'turbo_top_k')
+            if stored_top_k != local.number("turbo_top_k").default_sentinel:
+                turbo_top_k = local.resolve_int(project, "turbo_top_k")
+        repetition_penalty = local.resolve_float(
+            project, ChatterboxBaseModel.repetition_penalty_setting(self._model_type))
 
         # Randomize seed here so that generate() receives a concrete value
         seed = -1 if force_random_seed else project.get_model_setting('chatterbox_local', 'seed')

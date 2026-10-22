@@ -5,6 +5,7 @@ from enum import Enum
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.constants import MAX_WORDS_PER_SEGMENT_RECO_RANGE
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
@@ -17,15 +18,8 @@ class ChatterboxBaseModel(TtsBaseModel):
 
     INFO = TtsModelType.require_by_id("chatterbox_local").value
 
-    DEFAULT_EXAGGERATION = 0.5 # ml only, not turbo
-    DEFAULT_CFG = 0.5 # ml only, not turbo
-    DEFAULT_TEMPERATURE = 0.8
-    DEFAULT_TOP_P = 0.95 # ml library default is 1.0, turbo library default is 0.95. but anyway.
-    DEFAULT_TOP_K = 1000 # turbo only, not ml
-    DEFAULT_REPETITION_PENALTY_ML_V2 = 2.0
-    DEFAULT_REPETITION_PENALTY_ML_V3 = 1.2
-    DEFAULT_REPETITION_PENALTY_ML = DEFAULT_REPETITION_PENALTY_ML_V2
-    DEFAULT_REPETITION_PENALTY_TURBO = 1.2
+    # Parameter defaults and bounds (`[models.local.parameters]`); see `LOCAL.resolve()`
+    LOCAL = require_local_definition("chatterbox_local")
 
     @classmethod
     def get_max_words_range_reco(
@@ -36,12 +30,18 @@ class ChatterboxBaseModel(TtsBaseModel):
         return MAX_WORDS_PER_SEGMENT_RECO_RANGE
 
     @staticmethod
-    def default_repetition_penalty(model_type: ChatterboxType) -> float:
+    def repetition_penalty_setting(model_type: ChatterboxType) -> str:
+        """Each variant has its own repetition penalty setting: the values behave differently."""
         if model_type == ChatterboxType.MULTILINGUAL_V2:
-            return ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML_V2
+            return "ml_v2_repetition_penalty"
         if model_type == ChatterboxType.MULTILINGUAL_V3:
-            return ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML_V3
-        return ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
+            return "ml_v3_repetition_penalty"
+        return "turbo_repetition_penalty"
+
+    @staticmethod
+    def default_repetition_penalty(model_type: ChatterboxType) -> float:
+        name = ChatterboxBaseModel.repetition_penalty_setting(model_type)
+        return float(ChatterboxBaseModel.LOCAL.number(name).default)
 
     @abstractmethod
     def supported_languages_multi(self) -> list[str]:

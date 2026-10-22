@@ -76,27 +76,11 @@ class MiraModel(MiraBaseModel):
         else:
             self.clear_voice_clone()
 
-        if project.get_model_setting('mira_local', 'temperature') == -1:
-            temperature = MiraBaseModel.TEMPERATURE_DEFAULT
-        elif project.get_model_setting('mira_local', 'temperature') < MiraBaseModel.TEMPERATURE_MIN or project.get_model_setting('mira_local', 'temperature') > MiraBaseModel.TEMPERATURE_MAX:
-            temperature = MiraBaseModel.TEMPERATURE_DEFAULT
-        else:
-            temperature = project.get_model_setting('mira_local', 'temperature')
-
-        if project.get_model_setting('mira_local', 'top_p') == -1:
-            top_p = MiraBaseModel.TOP_P_DEFAULT
-        else:
-            top_p = project.get_model_setting('mira_local', 'top_p')
-
-        if project.get_model_setting('mira_local', 'top_k') == -1:
-            top_k = MiraBaseModel.TOP_K_DEFAULT
-        else:
-            top_k = project.get_model_setting('mira_local', 'top_k')
-
-        if project.get_model_setting('mira_local', 'repetition_penalty') == -1:
-            repetition_penalty = MiraBaseModel.REPETITION_PENALTY_DEFAULT
-        else:
-            repetition_penalty = project.get_model_setting('mira_local', 'repetition_penalty')
+        local = MiraBaseModel.LOCAL
+        temperature = local.resolve_float(project, "temperature")
+        top_p = local.resolve_float(project, "top_p")
+        top_k = local.resolve_int(project, "top_k")
+        repetition_penalty = local.resolve_float(project, "repetition_penalty")
 
         self.set_params(
             temperature=temperature, max_new_tokens=MiraBaseModel.MAX_NEW_TOKENS,

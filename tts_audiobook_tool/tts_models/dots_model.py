@@ -97,17 +97,9 @@ class DotsModel(DotsBaseModel):
         seed = -1 if force_random_seed else project.get_model_setting('dots_local', 'seed')
         if seed == -1:
             seed = random.randrange(0, get_random_seed_max(self.SEED_MAX - 1, max_random_seed) + 1)
-        speaker_scale = (
-            self.SPEAKER_SCALE_DEFAULT
-            if project.get_model_setting('dots_local', 'speaker_scale') == -1
-            else project.get_model_setting('dots_local', 'speaker_scale')
-        )
+        speaker_scale = self.LOCAL.resolve_float(project, "speaker_scale")
         num_steps = self.resolve_num_steps(project)
-        guidance_scale = (
-            self.GUIDANCE_SCALE_DEFAULT
-            if project.get_model_setting('dots_local', 'guidance_scale') == -1
-            else project.get_model_setting('dots_local', 'guidance_scale')
-        )
+        guidance_scale = self.LOCAL.resolve_float(project, "guidance_scale")
         return self.generate(
             prompts=prompts,
             voice_path=voice_path,

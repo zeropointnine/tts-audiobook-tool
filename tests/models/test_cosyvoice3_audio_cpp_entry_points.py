@@ -16,7 +16,7 @@ import soundfile as sf
 
 from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
 from tts_audiobook_tool.menus.menu_util import get_string_from
-from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
@@ -47,7 +47,7 @@ def test_mode_decisions_agree_across_entry_points(monkeypatch, tmp_path, mode, u
     support = AudioCppModelSupport(definition)
 
     # Instructions are per-voice data, never a global menu control.
-    labels = [get_string_from(state, item.label) for item in ModelAudioCppMenu.make_items(state, definition)]
+    labels = [get_string_from(state, item.label) for item in ModelCatalogMenu.make_items(state, definition)]
     assert not any("instructions" in label.lower() for label in labels)
     assert support.can_instructions(project) is (mode == "instruct")
     # Instruct mode hints (non-blocking) at a voice with no instructions.

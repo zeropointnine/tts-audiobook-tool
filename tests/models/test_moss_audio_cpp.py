@@ -13,8 +13,9 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
-from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
-from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
+from tts_audiobook_tool.menus.model.catalog_menu_source import catalog_menu_source
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
+from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
 from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
@@ -293,12 +294,12 @@ def test_menus_partition_voice_sampling_and_seed_controls(
     monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("Seed (currently: random)", lambda *_: None))
     state = SimpleNamespace(project=Project(tts_model_type=model_id))
-    voice_items = VoiceAudioCppMenu.make_items(state, definition(model_id))
+    voice_items = VoiceCatalogMenu.make_items(state, definition(model_id))
     assert [item.label for item in voice_items] == [voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
                                                     voice_menu_shared.LABEL_REMOVE_VOICE_SAMPLE,
                                                     voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS]
     assert all(not item.superlabel for item in voice_items)
-    items = ModelAudioCppMenu.make_items(state, definition(model_id))
+    items = ModelCatalogMenu.make_items(state, definition(model_id))
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
         f"Temperature (currently: {defaults[0]:.2f} default)",
         f"Top-P (currently: {defaults[1]:.2f} default)",
@@ -330,8 +331,10 @@ def test_numeric_menu_uses_standard_prompt_validation_and_save(
         return response
 
     monkeypatch.setattr("tts_audiobook_tool.ask.ask_input", answer)
-    state = SimpleNamespace(project=project)
-    control = ModelAudioCppMenu.make_parameter_item(state, parameter, "Temperature")
+    # MOSS temperatures show a one-time hint first; it is covered in test_moss_temperature_prompts.
+    monkeypatch.setattr("tts_audiobook_tool.app_support.hints.show_hint_if_necessary", lambda *_: None)
+    state = SimpleNamespace(project=project, prefs=object())
+    control = ModelCatalogMenu.make_parameter_item(state, parameter, "Temperature", catalog_menu_source(definition(model_id)))
     control.handler(state, control)
     assert text_util.strip_ansi_codes(printed[0]) == (
         f"Enter Temperature (valid range: 0.8-3.0; default: {parameter.default})")
@@ -358,8 +361,9 @@ def test_numeric_menu_prefills_native_default_without_reset_input_or_saving(
         return prefill
 
     monkeypatch.setattr("tts_audiobook_tool.ask.ask_input", answer)
-    state = SimpleNamespace(project=project)
-    control = ModelAudioCppMenu.make_parameter_item(state, parameter, "Value")
+    monkeypatch.setattr("tts_audiobook_tool.app_support.hints.show_hint_if_necessary", lambda *_: None)
+    state = SimpleNamespace(project=project, prefs=object())
+    control = ModelCatalogMenu.make_parameter_item(state, parameter, "Value", catalog_menu_source(definition(model_id)))
     control.handler(state, control)
     assert float(prefills[0]) == parameter.default
     assert project.get_model_setting(model_id, parameter.name) == -1

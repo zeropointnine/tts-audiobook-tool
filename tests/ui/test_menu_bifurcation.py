@@ -308,10 +308,10 @@ def test_indextts2_emotion_controls_keep_secondary_reference_and_setting_targets
     assert saves == [project, project, project]
 
     emotion_items[3].handler(state, emotion_items[3])
-    args, kwargs = numbers[0]
-    assert args[0] is project
-    assert args[1] == SettingRef("indextts2_local", "emo_alpha")
-    assert args[3:6] == (0.01, 1.0, 0.65)
+    _, kwargs = numbers[0]
+    assert kwargs["saveable"] is project
+    assert kwargs["target"] == SettingRef("indextts2_local", "emo_alpha")
+    assert (kwargs["min_value"], kwargs["max_value"], kwargs["default_value"]) == (0.01, 1.0, 0.65)
     assert kwargs["is_minus_one_default"] is True
 
 

@@ -69,7 +69,7 @@ def test_breeze_model_menu_items(monkeypatch, tmp_path):
                         lambda state, items, **kwargs: captured.update(items=items(state)))
     ModelMenuShared.menu(state)
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in captured["items"]]
-    prefixes = ["Temperature", "Top-P", "Top_K", "Repetition penalty", "CFG", "Seed"]
+    prefixes = ["Temperature", "Top-P", "Top-K", "Repetition penalty", "CFG", "Seed"]
     assert len(labels) == len(prefixes)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, prefixes))
 
@@ -208,7 +208,7 @@ def test_breeze_generation_uses_pure_clone_template(fake_model, tmp_path):
     assert call["output_audio"] is True
     assert call["max_new_tokens"] == BreezeBaseModel.MAX_NEW_TOKENS
     assert call["audio_tokenizer"] is model._audio_tokenizer
-    assert [p.penalty for p in call["logits_processor"]] == [BreezeBaseModel.REPETITION_PENALTY_DEFAULT]
+    assert [p.penalty for p in call["logits_processor"]] == [BreezeBaseModel.LOCAL.number("repetition_penalty").default]
 
 
 def test_breeze_generation_batches_prompts_in_one_call(fake_model, tmp_path):

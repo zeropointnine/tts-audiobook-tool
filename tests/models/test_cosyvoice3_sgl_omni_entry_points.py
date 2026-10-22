@@ -21,7 +21,7 @@ from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscove
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.menus.menu_util import MenuUtil, get_string_from
-from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
@@ -101,7 +101,7 @@ def test_mode_decisions_agree_across_entry_points(definition, monkeypatch, tmp_p
     support = ConfiguredModelSupport(definition)
 
     # Instructions are per-voice data, never a global menu control.
-    labels = [get_string_from(state, item.label) for item in ModelConfiguredSglOmniMenu.make_items(state, definition)]
+    labels = [get_string_from(state, item.label) for item in ModelCatalogMenu.make_items(state, definition)]
     assert labels[0].startswith("Mode ")
     assert not any("instructions" in label.lower() for label in labels)
     assert support.can_instructions(project) is (mode == "instruct")
@@ -185,7 +185,7 @@ def test_mode_item_saves_via_option_submenu_and_default_resets(definition, monke
     monkeypatch.setattr(Project, "save", lambda self: "")
     monkeypatch.setattr("tts_audiobook_tool.menus.model.model_menu_shared.print_feedback", lambda *_, **__: None)
     state = SimpleNamespace(project=project)
-    item = ModelConfiguredSglOmniMenu.make_items(state, definition)[0]
+    item = ModelCatalogMenu.make_items(state, definition)[0]
     assert "Zero-shot" in get_string_from(state, item.label)
     picks = iter(["instruct", "zero_shot"])
     offered = {}

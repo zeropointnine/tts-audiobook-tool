@@ -14,6 +14,7 @@ from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.constants import APP_SAMPLE_RATE
 from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
+from tts_audiobook_tool.tts_models.local_definition import get_local_definition
 from tts_audiobook_tool.model_worker_protocol import TtsInspected
 from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.menus.voice import voice_menu_shared, voice_pocket_menu
@@ -380,8 +381,9 @@ def test_static_menus_compose_voice_samples_and_model_seed(monkeypatch, module_n
         labels.extend(strip_ansi_codes(get_string_from(current, item.label)) for item in make_items(current))
 
     monkeypatch.setattr(VoiceMenuShared, "menu_wrapper", capture_menu)
-    module = import_module(f"tts_audiobook_tool.menus.voice.voice_{module_name}_menu")
-    getattr(module, f"Voice{class_name}Menu").menu(state)
+    # Through the dispatcher: models without voice behavior of their own get
+    # the shared default voice menu, the rest their `voice_*_menu.py` module.
+    VoiceMenuShared.menu(state)
 
     expected = [
         f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: a",
@@ -409,12 +411,17 @@ def test_static_menus_compose_voice_samples_and_model_seed(monkeypatch, module_n
         labels.extend(strip_ansi_codes(get_string_from(current, item.label)) for item in make_items(current))
 
     monkeypatch.setattr(ModelMenuShared, "menu_wrapper", capture_model_menu)
-    module = import_module(f"tts_audiobook_tool.menus.model.model_{module_name}_menu")
-    menu = getattr(module, f"Model{class_name}Menu").menu
-    if model_id == "qwen3tts_local":
-        menu(state, TtsInspected(operation_id="test", tts_type_id=model_id, metadata={"model_type": "base"}))
+    local_definition = get_local_definition(model_id)
+    if local_definition is not None and local_definition.has_menu:
+        # Catalog-declared local menus have no per-model module.
+        ModelMenuShared.menu(state)
     else:
-        menu(state)
+        module = import_module(f"tts_audiobook_tool.menus.model.model_{module_name}_menu")
+        menu = getattr(module, f"Model{class_name}Menu").menu
+        if model_id == "qwen3tts_local":
+            menu(state, TtsInspected(operation_id="test", tts_type_id=model_id, metadata={"model_type": "base"}))
+        else:
+            menu(state)
     assert any(label.startswith("Seed") for label in labels)
 
 

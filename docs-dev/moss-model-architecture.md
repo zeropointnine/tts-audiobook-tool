@@ -146,11 +146,9 @@ For local/in-process execution these decisions follow the private `target` setti
 - [`tts_audiobook_tool/tts_models/sgl_omni_definition.py`](../tts_audiobook_tool/tts_models/sgl_omni_definition.py): server-definition validation from the shared catalog.
 - [`sgl_omni_configured.py`](../tts_audiobook_tool/tts_models/sgl_omni_configured.py): common server support and adapter, with type-private MOSS state.
 - [`tts.py`](../tts_audiobook_tool/tts.py): configured server runtime and local factories.
-- [`voice_moss_shared.py`](../tts_audiobook_tool/menus/voice/voice_moss_shared.py): reusable local MOSS settings controls, not shared persistence.
-- [`voice_configured_sgl_omni_menu.py`](../tts_audiobook_tool/menus/voice/voice_configured_sgl_omni_menu.py): configured server settings menu.
+- [`voice_catalog_menu.py`](<../tts_audiobook_tool/menus/voice/voice_catalog_menu.py>) and [`model_catalog_menu.py`](<../tts_audiobook_tool/menus/model/model_catalog_menu.py>): definition-driven voice and model settings menus shared by SGL-Omni and audio.cpp.
 - [`sgl_omni_util.py`](../tts_audiobook_tool/app_support/sgl_omni_util.py): server model-ID and HTTP/audio utilities.
 - [`audio_cpp_definition.py`](<../tts_audiobook_tool/tts_models/audio_cpp_definition.py>): validated audio.cpp definitions from the same catalog.
 - [`audio_cpp_detection.py`](<../tts_audiobook_tool/tts_models/audio_cpp_detection.py>): metadata-based family/task/mode matching, independent of server IDs.
 - [`audio_cpp_configured.py`](<../tts_audiobook_tool/tts_models/audio_cpp_configured.py>): lightweight support and sequential HTTP adapter, including MOSS language routing and Local music/trimming behavior.
-- [`voice_audio_cpp_menu.py`](<../tts_audiobook_tool/menus/voice/voice_audio_cpp_menu.py>): definition-driven voice and sampling settings menu.
 - [`audio_cpp_util.py`](<../tts_audiobook_tool/app_support/audio_cpp_util.py>): reference WAV encoding, HTTP transport, and response downmixing.

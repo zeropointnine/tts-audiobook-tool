@@ -90,6 +90,8 @@ class MenuControl:
     target_menu: str | None
     parameter: str = ""
     label: str = ""
+    # Not declarable for SGL-Omni; present so both backends' controls share a shape.
+    subheading: str = ""
 
 
 @dataclass(frozen=True)
@@ -315,6 +317,8 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
                 _object(control, menu_where, {"kind", "target_menu"})
                 if seed != "resolved":
                     _fail(menu_where, "seed control requires resolved seed")
+            elif kind == "parameter" and "kind" in control:
+                _fail(f"{menu_where}.kind", "numeric controls omit `kind`")
             elif kind != "choice" and "kind" in control:
                 _fail(menu_where, "unsupported menu control")
             target_menu = _required(control, "target_menu", menu_where, str)

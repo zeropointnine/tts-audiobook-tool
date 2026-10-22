@@ -9,8 +9,9 @@ from catalog_toml_support import read_catalog, write_catalog
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot
 from tts_audiobook_tool.menus.menu_util import MenuItem
-from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
-from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
+from tts_audiobook_tool.menus.model.catalog_menu_source import catalog_menu_source
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
+from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -60,6 +61,8 @@ def test_loader_rejects_invalid_values_without_installing_overlay(tmp_path):
         (("parameters", "top_p", "min"), True, "top_p.min"),
         (("parameters", "temperature", "request_key"), "input", "temperature.request_key"),
         (("menu", 2, "parameter"), "no_such_param", r"menu\[2\]\.parameter"),
+        # Numeric controls omit `kind`; spelling out the implicit "parameter" is rejected.
+        (("menu", 2, "kind"), "parameter", "numeric controls omit `kind`"),
         (("spec", "voice_target_attr"), "unpersisted_voice", "voice_target_attr"),
         (("spec", "voice_transcript_attr"), "qwen3_voice_file_name", "voice_transcript_attr"),
         (("spec", "batch_size_attr"), "mira_batch_size", "batch_size_attr"),
@@ -141,7 +144,7 @@ def test_settings_and_project_format_use_model_settings(configured, tmp_path, mo
 def test_numeric_menu_edit_and_reset_use_existing_project_keys(configured, monkeypatch, tmp_path, name, entry, expected):
     project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": "higgs_v3_sglomni", "higgs_v3_seed": 77})
     state = SimpleNamespace(project=project)
-    item = ModelConfiguredSglOmniMenu.make_items(state, configured)[list(configured.parameters).index(name)]
+    item = ModelCatalogMenu.make_items(state, configured)[list(configured.parameters).index(name)]
     saved = []
     monkeypatch.setattr(Project, "save", lambda self: saved.append(ProjectSerializationUtil.to_project_json_dict(self)) or "")
     responses = iter((entry, "-1"))
@@ -149,11 +152,11 @@ def test_numeric_menu_edit_and_reset_use_existing_project_keys(configured, monke
     def ask_input(*, prefill):
         prefilled.append(prefill)
         return next(responses)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.ask.ask_input", ask_input)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.ask.ask_input", ask_input)
     errors = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.ask.ask_error", errors.append)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.print_feedback", lambda *_: None)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.printt", lambda *_: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.ask.ask_error", errors.append)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.print_feedback", lambda *_: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.printt", lambda *_: None)
 
     item.handler(state, item)
     stored = project.model_settings.models["higgs_v3_sglomni"]["parameters"]
@@ -183,13 +186,14 @@ def test_numeric_menu_edit_and_reset_use_existing_project_keys(configured, monke
 ])
 def test_numeric_menu_rejects_invalid_edits_without_saving(configured, monkeypatch, name, entry):
     state = SimpleNamespace(project=Project(tts_model_type="higgs_v3_sglomni"))
-    item = ModelConfiguredSglOmniMenu.make_parameter_item(state, configured.parameters[name], name)
+    item = ModelCatalogMenu.make_parameter_item(
+        state, configured.parameters[name], name, catalog_menu_source(configured))
     saves = []
     monkeypatch.setattr(Project, "save", lambda self: saves.append(True) or "")
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.ask.ask_input", lambda **_: entry)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.ask.ask_input", lambda **_: entry)
     errors = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.ask.ask_error", errors.append)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.printt", lambda *_: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.ask.ask_error", errors.append)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.printt", lambda *_: None)
 
     item.handler(state, item)
     stored = state.project.model_settings.models.get("higgs_v3_sglomni", {}).get("parameters", {})
@@ -202,14 +206,15 @@ def test_numeric_menu_can_reset_invalid_stored_value(configured, monkeypatch):
     project = Project(tts_model_type="higgs_v3_sglomni")
     set_setting(project, "higgs_v3_top_k", 101)
     state = SimpleNamespace(project=project)
-    item = ModelConfiguredSglOmniMenu.make_parameter_item(state, configured.parameters["top_k"], "Top_K")
+    item = ModelCatalogMenu.make_parameter_item(
+        state, configured.parameters["top_k"], "Top_K", catalog_menu_source(configured))
     assert "invalid" in item.label(state)
     monkeypatch.setattr(Project, "save", lambda self: "")
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.ask.ask_input", lambda **_: "-1")
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.ask.ask_input", lambda **_: "-1")
     errors = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.ask.ask_error", errors.append)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.print_feedback", lambda *_: None)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.printt", lambda *_: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.ask.ask_error", errors.append)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.print_feedback", lambda *_: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.printt", lambda *_: None)
 
     item.handler(state, item)
     assert ConfiguredSettings.get(project, configured.parameters["top_k"]) == 100
@@ -261,7 +266,7 @@ def test_voice_menu_routes_to_definition_not_legacy_menu(configured, monkeypatch
     captured = {}
     calls = []
     monkeypatch.setattr(VoiceMenuShared, "menu_wrapper", lambda state, items: captured.update(items=items))
-    monkeypatch.setattr(VoiceConfiguredSglOmniMenu, "make_items",
+    monkeypatch.setattr(VoiceCatalogMenu, "make_items",
                         lambda state, definition: calls.append(definition) or [])
     state = SimpleNamespace(project=Project(tts_model_type="higgs_v3_sglomni"))
     VoiceMenuShared.menu(state)
@@ -290,9 +295,9 @@ def test_configured_readiness_and_menu(configured, monkeypatch, tmp_path):
     assert not any(issue.short in ("voice sample", "voice clone transcript") for issue in issues)
     set_setting(project, "higgs_v3_top_k", 101)
     assert any(issue.short == "top_k" for issue in Tts.get_model_support(project).get_blocking_issues(project, None))
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", lambda *args: [MenuItem("voice", lambda *_: None)])
-    items = ModelConfiguredSglOmniMenu.make_items(SimpleNamespace(project=Project(tts_model_type="higgs_v3_sglomni")), configured)
-    voice_items = VoiceConfiguredSglOmniMenu.make_items(SimpleNamespace(project=Project(tts_model_type="higgs_v3_sglomni")), configured)
+    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", lambda *_, **__: [MenuItem("voice", lambda *_: None)])
+    items = ModelCatalogMenu.make_items(SimpleNamespace(project=Project(tts_model_type="higgs_v3_sglomni")), configured)
+    voice_items = VoiceCatalogMenu.make_items(SimpleNamespace(project=Project(tts_model_type="higgs_v3_sglomni")), configured)
     assert [item.label for item in voice_items] == ["voice"]
     assert not voice_items[0].superlabel
     assert len(items) == 3

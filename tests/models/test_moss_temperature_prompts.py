@@ -7,8 +7,7 @@ from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import HINT_MOSS_TEMPERATURE
 from tts_audiobook_tool.menus.menu_util import get_string_from
-from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
-from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.model.model_moss_shared import ModelMossShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
@@ -39,9 +38,9 @@ def make_temperature_item(state, backend, architecture):
     model_id = state.project.tts_model_type
     if backend == "sgl_omni":
         definition = load_definitions().models[model_id]
-        return ModelConfiguredSglOmniMenu.make_items(state, definition)[0]
+        return ModelCatalogMenu.make_items(state, definition)[0]
     definition = load_audio_cpp_definitions().models[model_id]
-    return ModelAudioCppMenu.make_items(state, definition)[0]
+    return ModelCatalogMenu.make_items(state, definition)[0]
 
 
 @pytest.fixture

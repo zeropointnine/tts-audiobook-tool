@@ -4,6 +4,7 @@ from __future__ import annotations
 from tts_audiobook_tool import util
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
@@ -18,13 +19,8 @@ class OmniVoiceBaseModel(TtsBaseModel):
     INFO = TtsModelType.require_by_id("omnivoice_local").value
 
     DEFAULT_REPO_ID = "k2-fsa/OmniVoice"
-    DEFAULT_SPEED   = 1.0
-    CFG_DEFAULT     = 2.0
-    CFG_MIN         = 0.0
-    CFG_MAX         = 4.0
-    DEFAULT_STEPS   = 32
-    MIN_STEPS       = 8
-    MAX_STEPS       = 64
+    # Speed, CFG and steps defaults and bounds (`[models.local.parameters]`); see `LOCAL.resolve()`
+    LOCAL = require_local_definition("omnivoice_local")
 
     @classmethod
     def get_menu_text(

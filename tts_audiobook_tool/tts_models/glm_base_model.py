@@ -1,6 +1,7 @@
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -11,7 +12,9 @@ else:
 class GlmBaseModel(TtsBaseModel):
 
     INFO = TtsModelType.require_by_id("glm_local").value
-    SAMPLE_RATES = [24000, 32000]
+    LOCAL = require_local_definition("glm_local")
+    # Selectable output sample rates (catalog `sr` choices)
+    SAMPLE_RATES: list[int] = list(LOCAL.choice("sr").values)
 
     @classmethod
     def get_max_words_range_reco(
@@ -27,10 +30,7 @@ class GlmBaseModel(TtsBaseModel):
         # voice menu's "Model samplerate" option). A live instance is
         # constructed from that same setting, so the project value is
         # authoritative here too.
-        sr = int(project.get_model_setting('glm_local', 'sr'))
-        if sr not in GlmBaseModel.SAMPLE_RATES:
-            sr = cls.INFO.default_output_sample_rate
-        return sr
+        return GlmBaseModel.LOCAL.resolve_int(project, "sr")
 
     @classmethod
     def get_menu_text(

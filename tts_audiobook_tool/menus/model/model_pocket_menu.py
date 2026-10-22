@@ -5,6 +5,7 @@ from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
 class ModelPocketMenu:
@@ -31,14 +32,8 @@ class ModelPocketMenu:
                 )
             )
 
-            item = ModelMenuShared.make_temperature_item(
-                state=state,
-                target=SettingRef("pocket_local", "temperature"),
-                default_value=PocketBaseModel.DEFAULT_TEMPERATURE,
-                min_value=PocketBaseModel.TEMPERATURE_MIN,
-                max_value=PocketBaseModel.TEMPERATURE_MAX
-            )
-            items.append(item)
+            items.append(ModelCatalogMenu.make_local_parameter_item(
+                state, "pocket_local", "temperature", "Temperature"))
 
             items.append(
                 ModelMenuShared.make_seed_item(state, SettingRef("pocket_local", "seed"))

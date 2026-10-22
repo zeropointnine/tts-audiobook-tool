@@ -103,7 +103,7 @@ chatterbox_type.is_multilingual
 
 It must not compare only against one multilingual enum member. This applies notably to:
 
-- exposing CFG and exaggeration in `voice_chatterbox_menu.py`;
+- exposing CFG and exaggeration in `model_chatterbox_menu.py`;
 - choosing multilingual generation arguments in `chatterbox_model.py`;
 - validating/selecting project language codes in `project_menu.py`.
 

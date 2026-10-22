@@ -2,12 +2,13 @@ import types
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
+
 import tts_audiobook_tool.tts as tts_module
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.model.model_dots_menu import ModelDotsMenu
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
-from tts_audiobook_tool.menus.voice import VoiceDotsMenu
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY, SettingRef
@@ -146,14 +147,22 @@ def test_dots_project_invalid_values_fall_back_with_warnings():
     )
 
 
-def test_voice_menu_routes_dots_to_dots_menu(monkeypatch):
+def test_voice_menu_routes_dots_to_shared_default_voice_menu(monkeypatch):
+    # dots.tts adds no voice behavior, so it needs no voice menu module.
     state = cast(State, SimpleNamespace(project=Project(tts_model_type="dots_local")))
-    calls: list[State] = []
-    monkeypatch.setattr(VoiceDotsMenu, "menu", staticmethod(calls.append))
+    calls: list[object] = []
+    monkeypatch.setattr(VoiceMenuShared, "menu_wrapper", staticmethod(lambda _state, items: calls.append(items)))
 
     VoiceMenuShared.menu(state)
 
-    assert calls == [state]
+    assert calls == [VoiceMenuShared.make_local_items]
+
+
+def test_voice_menu_has_no_default_for_the_none_placeholder():
+    # The shared default is for local models only; `none` has no voices to manage.
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type="none")))
+    with pytest.raises(NotImplementedError):
+        VoiceMenuShared.menu(state)
 
 
 def test_dots_menu_sampling_controls_visibility_by_target(monkeypatch):
@@ -198,8 +207,11 @@ def test_dots_menu_sampling_controls_visibility_by_target(monkeypatch):
 
 
 def test_dots_menu_num_steps_branches_by_variant(monkeypatch):
+    # Numeric items come from the catalog parameters; the menu only picks which.
+    from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
+
     state = cast(State, SimpleNamespace(project=Project()))
-    number_items: list[dict] = []
+    number_items: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
         ModelMenuShared,
@@ -207,45 +219,30 @@ def test_dots_menu_num_steps_branches_by_variant(monkeypatch):
         staticmethod(lambda actual_state, item_maker, subheading=None: item_maker(actual_state)),
     )
 
-    def fake_number_item(**kwargs):
-        number_items.append(kwargs)
+    def fake_item(_state, model_id, name, label):
+        assert model_id == "dots_local"
+        number_items.append((name, label))
         return MenuItem("num", lambda *_: None)
 
-    monkeypatch.setattr(
-        "tts_audiobook_tool.menus.model.model_dots_menu.MenuUtil.make_number_item",
-        staticmethod(fake_number_item),
-    )
+    monkeypatch.setattr(ModelCatalogMenu, "make_local_parameter_item", staticmethod(fake_item))
 
     ModelDotsMenu.menu(state)  # SOAR default
-    # Number items are ordered: num steps (directly under Compile),
-    # speaker scale, CFG
-    soar = number_items[0]
-    assert soar["target"] == SettingRef("dots_local", "num_steps_soar")
-    assert soar["default_value"] == DotsBaseModel.NUM_STEPS_SOAR_DEFAULT
-    assert soar["min_value"] == DotsBaseModel.NUM_STEPS_SOAR_MIN
-    assert soar["max_value"] == DotsBaseModel.NUM_STEPS_SOAR_MAX
-    assert "(soar)" in soar["prompt"]
-    assert [item["target"] for item in number_items] == [
-        SettingRef("dots_local", "num_steps_soar"),
-        SettingRef("dots_local", "speaker_scale"),
-        SettingRef("dots_local", "guidance_scale"),
+    # Number items are ordered: num steps (directly under Compile), speaker scale, CFG
+    assert number_items == [
+        ("num_steps_soar", "Steps (soar)"),
+        ("speaker_scale", "Speaker scale"),
+        ("guidance_scale", "CFG"),
     ]
-    assert number_items[2]["base_label"] == "CFG"
+    soar = DotsBaseModel.LOCAL.number("num_steps_soar")
+    assert (soar.default, soar.min, soar.max) == (10, 1, 32)
 
     number_items.clear()
     set_setting(state.project, "dots_target", DotsBaseModel.MF_REPO_ID)
     ModelDotsMenu.menu(state)
-    mf = number_items[0]
-    assert mf["target"] == SettingRef("dots_local", "num_steps_mf")
-    assert mf["default_value"] == DotsBaseModel.NUM_STEPS_MF_DEFAULT
-    assert mf["min_value"] == DotsBaseModel.NUM_STEPS_MF_MIN
-    assert mf["max_value"] == DotsBaseModel.NUM_STEPS_MF_MAX
-    assert "(mf)" in mf["prompt"]
     # Meanflow drops CFG, so no guidance number item is offered
-    assert [item["target"] for item in number_items] == [
-        SettingRef("dots_local", "num_steps_mf"),
-        SettingRef("dots_local", "speaker_scale"),
-    ]
+    assert number_items == [("num_steps_mf", "Steps (mf)"), ("speaker_scale", "Speaker scale")]
+    mf = DotsBaseModel.LOCAL.number("num_steps_mf")
+    assert (mf.default, mf.min, mf.max) == (4, 1, 8)
 
 
 def test_dots_target_submenu_has_only_presets_and_invalidates_worker(monkeypatch):

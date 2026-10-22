@@ -94,6 +94,8 @@ def parse_model_settings(entry: dict[str, Any]) -> tuple[dict[str, Any], ...]:
         settings[name] = dict(raw)
     if "transcript" in settings and "file_name" not in settings:
         _fail(f"model {entry['id']}.settings.transcript", "requires a file_name declaration")
+    if backend == "local" and isinstance(entry.get("local"), dict):
+        _validate_local_parameters(entry, settings)
     if backend in ("sgl_omni", "audio_cpp"):
         for name, param in entry[backend].get("parameters", {}).items():
             storage = settings[name]
@@ -115,6 +117,29 @@ def parse_model_settings(entry: dict[str, Any]) -> tuple[dict[str, Any], ...]:
                 _fail(f"{where}.default", "must be within backend bounds or equal its sentinel")
     return tuple(settings.values())
 
+
+def _validate_local_parameters(entry: dict[str, Any], settings: dict[str, dict[str, Any]]) -> None:
+    """Local parameters describe settings the entry declares explicitly.
+
+    Storage keeps its own default: the -1 sentinel ("use default") for a
+    parameter with `default_sentinel`, otherwise the parameter's default itself.
+    """
+    group = entry["local"]
+    for name, param in group.get("parameters", {}).items():
+        where = f"model {entry['id']}.local.parameters.{name}"
+        storage = settings.get(name)
+        if (storage is None or storage["section"] != "parameters"
+                or storage["type"] != param.get("type")):
+            _fail(where, "requires a `parameters` setting of the same name and type")
+        sentinel = param.get("default_sentinel")
+        if storage.get("sentinel") != sentinel:
+            _fail(f"model {entry['id']}.settings.{name}.sentinel", "must match the local default_sentinel")
+        if sentinel is None and storage["default"] != param.get("default"):
+            _fail(f"model {entry['id']}.settings.{name}.default", "must equal the local parameter default")
+        if sentinel is not None and storage["default"] != sentinel:
+            _fail(f"model {entry['id']}.settings.{name}.default", "must equal the local default_sentinel")
+    if any(item.get("kind") == "seed" for item in group.get("menu", [])) and "seed" not in settings:
+        _fail(f"model {entry['id']}.local.menu", "a seed control requires a seed setting")
 
 
 def validate_settings(document: dict[str, Any]) -> None:

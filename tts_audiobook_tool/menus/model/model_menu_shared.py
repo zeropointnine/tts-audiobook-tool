@@ -1,5 +1,5 @@
 """Routing and shared controls for model settings menus."""
-from typing import Callable, Protocol, Sequence
+from typing import Callable
 
 from tts_audiobook_tool import ask, target_util
 from tts_audiobook_tool.app_support import hints
@@ -12,20 +12,9 @@ from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.model_catalog import ParameterChoice
+from tts_audiobook_tool.menus.model.catalog_menu_source import ChoiceSetting
+from tts_audiobook_tool.tts_models.local_definition import get_local_definition
 from tts_audiobook_tool.util import *
-
-
-class ChoiceSetting(Protocol):
-    """The fixed-choice parameter shape both server backends share."""
-    @property
-    def model_id(self) -> str: ...
-    @property
-    def name(self) -> str: ...
-    @property
-    def default(self) -> str: ...
-    @property
-    def choices(self) -> Sequence[ParameterChoice]: ...
 
 
 class ModelMenuShared:
@@ -52,36 +41,20 @@ class ModelMenuShared:
                 state, ModelMenuShared.make_remote_items, initial_hotkey=initial_hotkey
             )
             return
-        # Only local models reach the legacy per-model menus; remote
-        # variants are always handled by the remote menu above.
+        # Only local models reach here; remote variants are always handled
+        # by the remote menu above. A local model whose catalog entry declares
+        # `[[models.local.menu]]` uses the shared catalog renderer.
+        local_definition = get_local_definition(model_type.id)
+        if local_definition is not None and local_definition.has_menu:
+            ModelMenuShared.menu_wrapper(state, ModelMenuShared.make_local_items)
+            return
         match state.project.get_tts_model_type().id:
-            case "breeze_tts_2_local":
-                from tts_audiobook_tool.menus.model.model_breeze_menu import ModelBreezeMenu
-                ModelBreezeMenu.menu(state)
             case "chatterbox_local":
                 from tts_audiobook_tool.menus.model.model_chatterbox_menu import ModelChatterboxMenu
                 ModelChatterboxMenu.menu(state)
             case "dots_local":
                 from tts_audiobook_tool.menus.model.model_dots_menu import ModelDotsMenu
                 ModelDotsMenu.menu(state)
-            case "fish_s1_local":
-                from tts_audiobook_tool.menus.model.model_fish_s1_menu import ModelFishS1Menu
-                ModelFishS1Menu.menu(state)
-            case "fish_s2_local":
-                from tts_audiobook_tool.menus.model.model_fish_s2_menu import ModelFishS2Menu
-                ModelFishS2Menu.menu(state)
-            case "glm_local":
-                from tts_audiobook_tool.menus.model.model_glm_menu import ModelGlmMenu
-                ModelGlmMenu.menu(state)
-            case "higgs_v2_local":
-                from tts_audiobook_tool.menus.model.model_higgs_v2_menu import ModelHiggsV2Menu
-                ModelHiggsV2Menu.menu(state)
-            case "indextts2_local":
-                from tts_audiobook_tool.menus.model.model_indextts2_menu import ModelIndexTts2Menu
-                ModelIndexTts2Menu.menu(state)
-            case "mira_local":
-                from tts_audiobook_tool.menus.model.model_mira_menu import ModelMiraMenu
-                ModelMiraMenu.menu(state)
             case "moss_local":
                 from tts_audiobook_tool.menus.model.model_moss_menu import ModelMossMenu
                 ModelMossMenu.menu(state)
@@ -130,19 +103,24 @@ class ModelMenuShared:
             from tts_audiobook_tool.menus.model.model_select_menu import ModelSelectMenu
             items.append(ModelSelectMenu.make_item(state))
         model_type = state.project.get_tts_model_type()
-        audio_definition = Tts.get_audio_cpp_definition(model_type)
-        definition = Tts.get_configured_definition(model_type)
-        if audio_definition is not None:
-            from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
-            settings = ModelAudioCppMenu.make_items(state, audio_definition)
-        elif definition is not None:
-            from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
-            settings = ModelConfiguredSglOmniMenu.make_items(state, definition)
+        definition = Tts.get_audio_cpp_definition(model_type) or Tts.get_configured_definition(model_type)
+        if definition is not None:
+            from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
+            settings = ModelCatalogMenu.make_items(state, definition)
         else:
             settings = []
         if items and settings:
             settings[0].blank_line_before = True
         return items + settings
+
+    @staticmethod
+    def make_local_items(state: State) -> list[MenuItem]:
+        """Catalog-declared controls for the selected local model, resolved per redraw."""
+        definition = get_local_definition(state.project.get_tts_model_type().id)
+        if definition is None or not definition.has_menu:
+            return []
+        from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
+        return ModelCatalogMenu.make_items(state, definition)
 
     @staticmethod
     def menu_wrapper(
@@ -314,7 +292,7 @@ class ModelMenuShared:
     ) -> MenuItem:
         """A fixed-choice string setting, edited through a one-shot option submenu.
 
-        Shared by both server backends. `get_value` returns the validated stored
+        Shared by the server and local catalog menus. `get_value` returns the validated stored
         choice (raising ValueError when storage is invalid); `set_value` saves
         and returns an error message or "".
         """
@@ -331,7 +309,9 @@ class ModelMenuShared:
             value = valid_value(current)
             if value is None:
                 # Show the broken value rather than the default it would
-                # otherwise masquerade as; readiness blocks on it.
+                # otherwise masquerade as. Server readiness blocks on it; local
+                # choices are checked on load, and local inference falls back
+                # to the default.
                 raw = current.project.get_model_setting(parameter.model_id, parameter.name)
                 return f"{label} {COL_DIM}({COL_ERROR}invalid: {raw!r}{COL_DIM})"
             return make_menu_label(label, labels[value], labels[parameter.default])

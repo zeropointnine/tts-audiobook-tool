@@ -85,18 +85,11 @@ class IndexTts2Model(IndexTts2BaseModel):
         if seed == -1:
             seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
 
-        temperature = project.get_model_setting('indextts2_local', 'temperature')
-        if temperature == -1:
-            temperature = IndexTts2BaseModel.DEFAULT_TEMPERATURE
-        emo_alpha = project.get_model_setting('indextts2_local', 'emo_alpha')
-        if emo_alpha == -1:
-            emo_alpha = IndexTts2BaseModel.DEFAULT_EMO_VOICE_ALPHA
-        top_p = project.get_model_setting('indextts2_local', 'top_p')
-        if top_p == -1:
-            top_p = IndexTts2BaseModel.DEFAULT_TOP_P
-        top_k = project.get_model_setting('indextts2_local', 'top_k')
-        if top_k == -1:
-            top_k = IndexTts2BaseModel.DEFAULT_TOP_K
+        local = IndexTts2BaseModel.LOCAL
+        temperature = local.resolve_float(project, "temperature")
+        emo_alpha = local.resolve_float(project, "emo_alpha")
+        top_p = local.resolve_float(project, "top_p")
+        top_k = local.resolve_int(project, "top_k")
 
         result = self.generate(
             text=prompt,

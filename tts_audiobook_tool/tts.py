@@ -451,7 +451,11 @@ class Tts:
         intentionally be unsaved while a custom model or adapter is validated.
         """
         from tts_audiobook_tool.project import Project
+        from tts_audiobook_tool.tts_models.local_definition import require_local_definition
         assert isinstance(project, Project)
+
+        def resolve(model_id: str, name: str):
+            return require_local_definition(model_id).resolve(project, name)
 
         return {
             "chatterbox_type": project.get_model_setting('chatterbox_local', 'type'),
@@ -459,12 +463,12 @@ class Tts:
             "dots_compile": project.get_model_setting('dots_local', 'compile'),
             "vibevoice_target": project.get_model_setting('vibevoice_local', 'target'),
             "vibevoice_lora_path": project.get_model_setting('vibevoice_local', 'lora_target'),
-            "indextts2_use_fp16": project.get_model_setting('indextts2_local', 'use_fp16'),
-            "glm_sr": project.get_model_setting('glm_local', 'sr'),
+            "indextts2_use_fp16": resolve("indextts2_local", "use_fp16"),
+            "glm_sr": resolve("glm_local", "sr"),
             "moss_target": project.get_model_setting('moss_local', 'target'),
             "qwen3_target": project.get_model_setting('qwen3tts_local', 'target'),
-            "fish_s1_compile_enabled": project.get_model_setting('fish_s1_local', 'compile_enabled'),
-            "fish_s2_compile_enabled": project.get_model_setting('fish_s2_local', 'compile_enabled'),
+            "fish_s1_compile_enabled": resolve("fish_s1_local", "compile_enabled"),
+            "fish_s2_compile_enabled": resolve("fish_s2_local", "compile_enabled"),
             "pocket_model_code": project.get_model_setting('pocket_local', 'model_code'),
             "omnivoice_target": project.get_model_setting('omnivoice_local', 'target'),
         }

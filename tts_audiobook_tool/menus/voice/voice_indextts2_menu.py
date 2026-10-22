@@ -1,13 +1,12 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import HINT_INDEX_SAMPLE_LEN
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import COL_DEFAULT, COL_DIM, make_currently_string, print_feedback, printt
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
@@ -65,19 +64,8 @@ class VoiceIndexTts2Menu:
             items.append(
                 MenuItem(make_vector_label, lambda _, __: ask_vector(project))
             )
-            items.append(
-                MenuUtil.make_number_item(
-                    state=state,
-                    target=SettingRef("indextts2_local", "emo_alpha"),
-                    base_label="Emotion alpha (strength)",
-                    default_value=IndexTts2BaseModel.DEFAULT_EMO_VOICE_ALPHA,
-                    is_minus_one_default=True,
-                    num_decimals=2,
-                    prompt=f"Enter emotion alpha {COL_DIM}({0.01} to {1.0}){COL_DEFAULT}:",
-                    min_value=0.01,
-                    max_value=1.0
-                )
-            )
+            items.append(ModelCatalogMenu.make_local_parameter_item(
+                state, "indextts2_local", "emo_alpha", "Emotion alpha (strength)"))
             return items
 
         VoiceMenuShared.menu_wrapper(state, make_items)

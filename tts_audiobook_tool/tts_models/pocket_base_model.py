@@ -4,6 +4,7 @@ from __future__ import annotations
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
@@ -18,10 +19,9 @@ class PocketBaseModel(TtsBaseModel):
 
     INFO = TtsModelType.require_by_id("pocket_local").value
 
-    DEFAULT_TEMPERATURE = 0.7
+    # Parameter defaults and bounds (`[models.local.parameters]`); see `LOCAL.resolve()`
+    LOCAL = require_local_definition("pocket_local")
     DEFAULT_INT8 = False
-    TEMPERATURE_MIN = 0.01
-    TEMPERATURE_MAX = 2.0
 
     # This is pocket default value
     # Higher value may improve sound quality but I couldn't hear it,

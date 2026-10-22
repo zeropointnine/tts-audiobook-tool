@@ -865,6 +865,11 @@ def test_audio_cpp_menu_is_required():
      lambda entry: entry["audio_cpp"].update(menu=[{"kind": "voice_samples"}, {"kind": "seed", "target_menu": "model"},
                                                    {"kind": "voice_instructions", "parameter": "speed", "target_menu": "model"}]),
      "invalid control"),
+    # Numeric controls omit `kind`; spelling out the implicit "parameter" is rejected.
+    ("omnivoice_audiocpp",
+     lambda entry: entry["audio_cpp"]["menu"][next(
+         i for i, c in enumerate(entry["audio_cpp"]["menu"]) if "kind" not in c)].update(kind="parameter"),
+     "numeric controls omit `kind`"),
     # Fixed-choice string parameters (CosyVoice3's "Mode").
     ("cosyvoice3_audiocpp",
      lambda entry: entry["audio_cpp"]["parameters"]["template_name"].update(default="sft"),

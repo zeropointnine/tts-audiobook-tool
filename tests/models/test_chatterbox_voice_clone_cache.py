@@ -57,16 +57,19 @@ def make_model() -> ChatterboxModel:
     return model
 
 
+LOCAL = ChatterboxBaseModel.LOCAL
+
+
 def generate(model: ChatterboxModel, voice_path: str):
     return model.generate(
         text="Test sentence.",
         voice_path=voice_path,
-        repetition_penalty=ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML_V3,
+        repetition_penalty=float(LOCAL.number("ml_v3_repetition_penalty").default),
         seed=1,
-        exaggeration=ChatterboxBaseModel.DEFAULT_EXAGGERATION,
-        cfg=ChatterboxBaseModel.DEFAULT_CFG,
-        temperature=ChatterboxBaseModel.DEFAULT_TEMPERATURE,
-        top_p=ChatterboxBaseModel.DEFAULT_TOP_P,
+        exaggeration=float(LOCAL.number("exaggeration").default),
+        cfg=float(LOCAL.number("cfg").default),
+        temperature=float(LOCAL.number("temperature").default),
+        top_p=float(LOCAL.number("top_p").default),
     )
 
 

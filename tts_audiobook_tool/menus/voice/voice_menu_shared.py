@@ -28,7 +28,7 @@ from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.transcriber import Transcriber
 
@@ -89,67 +89,46 @@ class VoiceMenuShared:
     @staticmethod
     def menu(state: State) -> None:
         """
-        Simply delegates to the correct model-specific voice menu
+        Delegates to the voice menu for the selected backend/model.
+
+        Server models use the catalog menu. A local model gets the shared
+        voice-sample menu unless it adds voice behavior of its own (extra
+        items, callbacks or preset choices) in a `voice_*_menu.py` module.
         """
-        audio_definition = Tts.get_audio_cpp_definition(state.project.get_tts_model_type())
-        if audio_definition is not None:
-            from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-            VoiceAudioCppMenu.menu(state)
+        model_type = state.project.get_tts_model_type()
+        if (Tts.get_audio_cpp_definition(model_type) is not None
+                or Tts.get_configured_definition(model_type) is not None):
+            from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
+            VoiceCatalogMenu.menu(state)
             return
-        definition = Tts.get_configured_definition(state.project.get_tts_model_type())
-        if definition is not None:
-            from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
-            VoiceConfiguredSglOmniMenu.menu(state)
-            return
-        # Only local models reach the legacy per-model menus; SGL-Omni
-        # variants are always handled by the configured menu above.
-        match state.project.get_tts_model_type().id:
-            case "breeze_tts_2_local":
-                from tts_audiobook_tool.menus.voice import VoiceBreezeMenu
-                VoiceBreezeMenu.menu(state)
-            case "chatterbox_local":
-                from tts_audiobook_tool.menus.voice import VoiceChatterboxMenu
-                VoiceChatterboxMenu.menu(state)
-            case "dots_local":
-                from tts_audiobook_tool.menus.voice import VoiceDotsMenu
-                VoiceDotsMenu.menu(state)
-            case "fish_s1_local":
-                from tts_audiobook_tool.menus.voice import VoiceFishS1Menu
-                VoiceFishS1Menu.menu(state)
-            case "fish_s2_local":
-                from tts_audiobook_tool.menus.voice import VoiceFishS2Menu
-                VoiceFishS2Menu.menu(state)
-            case "glm_local":
-                from tts_audiobook_tool.menus.voice import VoiceGlmMenu
-                VoiceGlmMenu.menu(state)
-            case "higgs_v2_local":
-                from tts_audiobook_tool.menus.voice import VoiceHiggsV2Menu
-                VoiceHiggsV2Menu.menu(state)
+        # Only local models reach here; server variants are always handled by
+        # the catalog menu above.
+        match model_type.id:
             case "indextts2_local":
                 from tts_audiobook_tool.menus.voice import VoiceIndexTts2Menu
                 VoiceIndexTts2Menu.menu(state)
             case "mira_local":
                 from tts_audiobook_tool.menus.voice import VoiceMiraMenu
                 VoiceMiraMenu.menu(state)
-            case "moss_local":
-                from tts_audiobook_tool.menus.voice import VoiceMossMenu
-                VoiceMossMenu.menu(state)
-            case "omnivoice_local":
-                from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
-                VoiceOmniVoiceMenu.menu(state)
             case "pocket_local":
                 from tts_audiobook_tool.menus.voice import VoicePocketMenu
                 VoicePocketMenu.menu(state)
-
             case "qwen3tts_local":
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
-
             case "vibevoice_local":
                 from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
                 VoiceVibeVoiceMenu.menu(state)
             case _:
-                raise NotImplementedError(f"value: {state.project.get_tts_model_type()}")
+                if model_type.value.backend_kind is not TtsBackendKind.LOCAL:
+                    # eg the none placeholder: there is no model to manage voices for
+                    raise NotImplementedError(f"value: {model_type}")
+                VoiceMenuShared.menu_wrapper(state, VoiceMenuShared.make_local_items)
+
+    @staticmethod
+    def make_local_items(state: State) -> list[MenuItem]:
+        """The shared voice-sample items, for a local model without its own voice menu."""
+        return VoiceMenuShared.make_voice_sample_items(state, state.project.get_tts_model_type())
 
     @staticmethod
     def make_remote_items(state: State) -> list[MenuItem]:
@@ -160,14 +139,10 @@ class VoiceMenuShared:
         factory itself. An unselected/unknown model offers no stale controls.
         """
         model_type = state.project.get_tts_model_type()
-        audio_definition = Tts.get_audio_cpp_definition(model_type)
-        if audio_definition is not None:
-            from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-            return VoiceAudioCppMenu.make_items(state, audio_definition)
-        definition = Tts.get_configured_definition(model_type)
+        definition = Tts.get_audio_cpp_definition(model_type) or Tts.get_configured_definition(model_type)
         if definition is not None:
-            from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
-            return VoiceConfiguredSglOmniMenu.make_items(state, definition)
+            from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
+            return VoiceCatalogMenu.make_items(state, definition)
         return []
 
     @staticmethod

@@ -1,17 +1,14 @@
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 
 
 class MiraBaseModel(TtsBaseModel):
 
     INFO = TtsModelType.require_by_id("mira_local").value
 
-    TEMPERATURE_DEFAULT = 0.7
-    TEMPERATURE_MIN = 0.0
-    TEMPERATURE_MAX = 2.0
-    TOP_P_DEFAULT = 0.95
-    TOP_K_DEFAULT = 50
-    REPETITION_PENALTY_DEFAULT = 1.2
+    # Parameter defaults and bounds (`[models.local.parameters]`); see `LOCAL.resolve()`
+    LOCAL = require_local_definition("mira_local")
     MAX_NEW_TOKENS = 2048 # default is 1024, which is enough for ~60 words
 
     def clear_voice_clone(self) -> None:

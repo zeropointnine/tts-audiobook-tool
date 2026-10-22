@@ -6,29 +6,26 @@ import pytest
 
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
-from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
-from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
-from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-from tts_audiobook_tool.menus.voice.voice_configured_sgl_omni_menu import VoiceConfiguredSglOmniMenu
+from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.audio_cpp_definition import AudioCppMenuControl, load_audio_cpp_definitions
 from tts_audiobook_tool.tts_models.sgl_omni_definition import MenuControl, load_definitions
 
 
+# Both backends render through the same catalog menus.
 BACKENDS = [
-    (load_audio_cpp_definitions, "breeze_tts_2_audiocpp", AudioCppMenuControl,
-     ModelAudioCppMenu, VoiceAudioCppMenu),
-    (load_definitions, "qwen3tts_sglomni", MenuControl,
-     ModelConfiguredSglOmniMenu, VoiceConfiguredSglOmniMenu),
+    (load_audio_cpp_definitions, "breeze_tts_2_audiocpp", AudioCppMenuControl),
+    (load_definitions, "qwen3tts_sglomni", MenuControl),
 ]
 
 
 @pytest.fixture(params=BACKENDS, ids=["audio_cpp", "sgl_omni"])
 def backend(request):
-    loader, model_id, control_type, model_menu, voice_menu = request.param
-    return loader().models[model_id], control_type, model_menu, voice_menu
+    loader, model_id, control_type = request.param
+    return loader().models[model_id], control_type, ModelCatalogMenu, VoiceCatalogMenu
 
 
 def test_mixed_destinations_preserve_order_and_exclusively_partition_controls(backend, monkeypatch):
@@ -142,7 +139,7 @@ def test_voice_numeric_and_seed_edit_definition_owner_not_selected_model(backend
     monkeypatch.setattr(ask, "ask_error", errors.append)
     monkeypatch.setattr(ask, "print_feedback", lambda *_, **__: None)
     monkeypatch.setattr(Project, "save", lambda self: saves.append(self) or "")
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu.print_feedback",
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.print_feedback",
                         lambda *_, **__: None)
     items = voice_menu.make_items(state, definition)
     assert len(items) == 2
@@ -178,10 +175,10 @@ def test_audio_cpp_instructions_have_no_global_menu_controls(monkeypatch, model_
     state = SimpleNamespace(project=project)
     monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
                         lambda *_, **__: [MenuItem("Samples", lambda *_: None)])
-    voice_items = VoiceAudioCppMenu.make_items(state, definition)
+    voice_items = VoiceCatalogMenu.make_items(state, definition)
     assert [item.label for item in voice_items] == ["Samples"]
     assert not voice_items[0].blank_line_before
-    items = ModelAudioCppMenu.make_items(state, definition)
+    items = ModelCatalogMenu.make_items(state, definition)
     assert len(items) == setting_count
     assert not any("instructions" in get_string_from(state, item.label).lower() for item in items)
 
@@ -197,7 +194,7 @@ def test_cosyvoice3_mode_item_shows_choice_label_and_saves_via_option_submenu(mo
     monkeypatch.setattr("tts_audiobook_tool.menus.model.model_menu_shared.print_feedback",
                         lambda *_, **__: None)
     state = SimpleNamespace(project=project)
-    items = ModelAudioCppMenu.make_items(state, definition)
+    items = ModelCatalogMenu.make_items(state, definition)
     labels = [get_string_from(state, item.label) for item in items]
     assert labels[0].startswith("Mode ") and "Zero-shot" in labels[0]
     # Per-voice instructions never add a global settings row.
@@ -222,7 +219,7 @@ def _cosyvoice3_model_labels(project: Project) -> list[str]:
     model_id = "cosyvoice3_audiocpp"
     definition = load_audio_cpp_definitions().models[model_id]
     state = SimpleNamespace(project=project)
-    return [get_string_from(state, item.label) for item in ModelAudioCppMenu.make_items(state, definition)]
+    return [get_string_from(state, item.label) for item in ModelCatalogMenu.make_items(state, definition)]
 
 
 @pytest.mark.parametrize("mode", ["zero_shot", "cross_lingual", "instruct"])
@@ -255,7 +252,7 @@ def test_cosyvoice3_invalid_mode_is_shown_and_any_choice_repairs_it(monkeypatch)
     monkeypatch.setattr("tts_audiobook_tool.menus.model.model_menu_shared.print_feedback",
                         lambda *_, **__: None)
     state = SimpleNamespace(project=project)
-    item = ModelAudioCppMenu.make_items(state, definition)[0]
+    item = ModelCatalogMenu.make_items(state, definition)[0]
     label = get_string_from(state, item.label)
     assert label.startswith("Mode ") and "invalid: 'sft'" in label and "Zero-shot" not in label
 

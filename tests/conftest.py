@@ -175,7 +175,8 @@ def initialize_tts_type_for_tests():
     original_metadata = {name: getattr(Tts, name) for name in (
         "_config_fingerprint", "_configured_definitions", "_audio_cpp_definitions", "_configured_runtime",
     )}
-    original_registry = (dict(REGISTRY.bindings), dict(REGISTRY.legacy), dict(REGISTRY.parameter_bounds))
+    original_registry = (dict(REGISTRY.bindings), dict(REGISTRY.legacy), dict(REGISTRY.parameter_bounds),
+                         dict(REGISTRY.parameter_choices))
     original_model_catalog = (dict(TtsModelType._catalog), dict(TtsModelType._specs))
     had_type = hasattr(Tts, "_type")
     original_type = getattr(Tts, "_type", None)
@@ -213,7 +214,8 @@ def initialize_tts_type_for_tests():
     try:
         yield
     finally:
-        REGISTRY.bindings, REGISTRY.legacy, REGISTRY.parameter_bounds = original_registry
+        (REGISTRY.bindings, REGISTRY.legacy, REGISTRY.parameter_bounds,
+         REGISTRY.parameter_choices) = original_registry
         TtsModelType._catalog, TtsModelType._specs = original_model_catalog
         for name, value in original_metadata.items():
             setattr(Tts, name, value)

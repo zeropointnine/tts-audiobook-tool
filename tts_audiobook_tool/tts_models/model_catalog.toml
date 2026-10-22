@@ -17,12 +17,21 @@
 # `settings` declares persisted values separately from request defaults.
 # audio.cpp requires an explicit `menu`; numeric controls require a nonempty `label`.
 # Both server backends require `target_menu = "model"` or "voice" on settings controls.
+# In every backend's menu, numeric controls omit `kind`; `kind` names only the special controls
+# (`choice`, `seed`, `voice_samples`, `rolling_continuation`).
 # A `type = "str"` parameter with `choices` uses `kind = "choice"`; on SGL-Omni it is
 # app-side only (no request_key, never sent) and read by an SglOmniModelBehavior.
 # `voice_samples` has no target: it always expands in Voice clone.
 # audio.cpp `request_options` pins constants into every request's `options` object;
 # they are not persisted and have no menu control, unlike `parameters` entries.
 # Every persisted setting belongs to exactly one model ID; settings are never shared between models.
+# Local entries may add `[models.local.parameters.<name>]` for settings they already declare:
+# numeric (type, default, min, max, optional default_sentinel = -1 and input_prompt_suffix), bool
+# (an implicit True/False choice) or typed `choices` ({ value, label, description? }). An optional
+# `[[models.local.menu]]` makes the whole Model settings menu catalog-driven (it renders only there):
+# numeric controls (parameter, label), `kind = "choice"` (bool/choices; optional subheading),
+# `kind = "rolling_continuation"` (an int parameter; optional subheading = prerequisite line) and at
+# most one `kind = "seed"` (optional `batch_warning = true`). Parameters may be left out of a menu.
 # The full file, including comments, is fingerprinted for cross-process consistency.
 
 schema_version = 1
@@ -126,6 +135,69 @@ project_links = [
     "https://huggingface.co/BreezeBlue/Breeze-TTS-2",
 ]
 
+# Sampling values apply to both the backbone and the depth decoder (as upstream).
+# Upstream defaults (`update_generation_config_for_breeze`).
+[models.local.parameters.temperature]
+type = "float"
+default = 0.9
+default_sentinel = -1
+min = 0.01
+max = 2.0
+
+[models.local.parameters.top_p]
+type = "float"
+default = 1.0
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+[models.local.parameters.top_k]
+type = "int"
+default = 50
+default_sentinel = -1
+min = 1
+max = 100
+
+# As upstream `api.py` / `infer.py`.
+[models.local.parameters.repetition_penalty]
+type = "float"
+default = 1.1
+default_sentinel = -1
+min = 1.0
+max = 2.0
+
+# Upstream recommends 4 with instructions (voice design / voice direction).
+[models.local.parameters.cfg]
+type = "float"
+default = 4.0
+default_sentinel = -1
+min = 1.0
+max = 10.0
+input_prompt_suffix = "(used only by voices with instructions)"
+
+[[models.local.menu]]
+parameter = "temperature"
+label = "Temperature"
+
+[[models.local.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.local.menu]]
+parameter = "top_k"
+label = "Top-K"
+
+[[models.local.menu]]
+parameter = "repetition_penalty"
+label = "Repetition penalty"
+
+[[models.local.menu]]
+parameter = "cfg"
+label = "CFG"
+
+[[models.local.menu]]
+kind = "seed"
+
 # ------------------------------------------------------------------------
 [[models]]
 id = "chatterbox_local"
@@ -167,6 +239,70 @@ project_links = [
     "https://huggingface.co/ResembleAI",
 ]
 
+# Parameters only: the Model settings menu stays hand-written (variant-dependent items)
+# and builds its numeric items from these.
+
+[models.local.parameters.temperature]
+type = "float"
+default = 0.8
+default_sentinel = -1
+min = 0.01
+max = 2.0
+
+# Multilingual only.
+[models.local.parameters.exaggeration]
+type = "float"
+default = 0.5
+default_sentinel = -1
+min = 0.25
+max = 2.0
+
+# Multilingual only.
+[models.local.parameters.cfg]
+type = "float"
+default = 0.5
+default_sentinel = -1
+min = 0.2
+max = 1.0
+
+# Multilingual library default is 1.0, Turbo's is 0.95.
+[models.local.parameters.top_p]
+type = "float"
+default = 0.95
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+# Turbo only; the library default (an unset value sends none).
+[models.local.parameters.turbo_top_k]
+type = "int"
+default = 1000
+default_sentinel = -1
+min = 1
+max = 1000
+
+# Each variant has its own repetition penalty: the values behave differently.
+[models.local.parameters.ml_v2_repetition_penalty]
+type = "float"
+default = 2.0
+default_sentinel = -1
+min = 1.0
+max = 2.0
+
+[models.local.parameters.ml_v3_repetition_penalty]
+type = "float"
+default = 1.2
+default_sentinel = -1
+min = 1.0
+max = 2.0
+
+[models.local.parameters.turbo_repetition_penalty]
+type = "float"
+default = 1.2
+default_sentinel = -1
+min = 1.0
+max = 2.0
+
 # ------------------------------------------------------------------------
 [[models]]
 id = "dots_local"
@@ -206,6 +342,40 @@ project_links = [
     "https://github.com/zeropointnine/dots.tts-for-tat",
     "https://huggingface.co/dots-studio",
 ]
+
+# Parameters only: the Model settings menu stays hand-written (variant-dependent items)
+# and builds its numeric items from these.
+
+[models.local.parameters.speaker_scale]
+type = "float"
+default = 1.5
+default_sentinel = -1
+min = 0.0
+max = 3.0
+
+# Sampling steps for the flow-matching (SOAR) target.
+[models.local.parameters.num_steps_soar]
+type = "int"
+default = 10
+default_sentinel = -1
+min = 1
+max = 32
+
+# Sampling steps for the MeanFlow target.
+[models.local.parameters.num_steps_mf]
+type = "int"
+default = 4
+default_sentinel = -1
+min = 1
+max = 8
+
+# SOAR only (MeanFlow distills CFG; fixed-step targets lock it).
+[models.local.parameters.guidance_scale]
+type = "float"
+default = 1.2
+default_sentinel = -1
+min = 1.0
+max = 3.0
 
 # ------------------------------------------------------------------------
 # fish_s1_local: This distribution probe pins the installed fish-speech version for S1
@@ -248,6 +418,54 @@ project_links = [
     "https://huggingface.co/fishaudio/s1-mini",
 ]
 
+[models.local.parameters.compile_enabled]
+type = "bool"
+default = true
+
+# From the fish gradio demo.
+[models.local.parameters.temperature]
+type = "float"
+default = 0.8
+default_sentinel = -1
+min = 0.01
+max = 2.0
+
+# Library function default.
+[models.local.parameters.top_p]
+type = "float"
+default = 0.8
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+# Library function default.
+[models.local.parameters.repetition_penalty]
+type = "float"
+default = 1.1
+default_sentinel = -1
+min = 1.0
+max = 2.0
+
+[[models.local.menu]]
+kind = "choice"
+parameter = "compile_enabled"
+label = "Torch compile"
+
+[[models.local.menu]]
+parameter = "temperature"
+label = "Temperature"
+
+[[models.local.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.local.menu]]
+parameter = "repetition_penalty"
+label = "Repetition penalty"
+
+[[models.local.menu]]
+kind = "seed"
+
 # ------------------------------------------------------------------------
 # fish_s2_local: S2 uses a different fish-speech distribution version from S1
 [[models]]
@@ -289,6 +507,65 @@ project_links = [
     "https://huggingface.co/fishaudio/s2-pro",
 ]
 
+[models.local.parameters.compile_enabled]
+type = "bool"
+default = true
+
+[models.local.parameters.rolling_cont]
+type = "int"
+default = 0
+min = 0
+max = 3
+
+# From the fish gradio demo (library default is 1.0); the library asserts temperature < 2.
+[models.local.parameters.temperature]
+type = "float"
+default = 0.7
+default_sentinel = -1
+min = 0.01
+max = 1.99
+
+# Library function default.
+[models.local.parameters.top_p]
+type = "float"
+default = 0.9
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+# Library function default.
+[models.local.parameters.top_k]
+type = "int"
+default = 30
+default_sentinel = -1
+min = 1
+max = 100
+
+[[models.local.menu]]
+kind = "choice"
+parameter = "compile_enabled"
+label = "Torch compile"
+
+[[models.local.menu]]
+kind = "rolling_continuation"
+parameter = "rolling_cont"
+subheading = "Fish S2 rolling continuation requires batch size 1."
+
+[[models.local.menu]]
+parameter = "temperature"
+label = "Temperature"
+
+[[models.local.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.local.menu]]
+parameter = "top_k"
+label = "Top-K"
+
+[[models.local.menu]]
+kind = "seed"
+
 # ------------------------------------------------------------------------
 [[models]]
 id = "glm_local"
@@ -329,6 +606,23 @@ project_links = [
     "https://huggingface.co/zai-org/GLM-TTS",
 ]
 
+# Output sample rate of the loaded model.
+[models.local.parameters.sr]
+type = "int"
+default = 24000
+choices = [
+    { value = 24000, label = "24000hz" },
+    { value = 32000, label = "32000hz" },
+]
+
+[[models.local.menu]]
+kind = "choice"
+parameter = "sr"
+label = "Model samplerate"
+
+[[models.local.menu]]
+kind = "seed"
+
 # ------------------------------------------------------------------------
 [[models]]
 id = "higgs_v2_local"
@@ -365,6 +659,42 @@ project_links = [
     "https://github.com/boson-ai/higgs-audio",
     "https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base",
 ]
+
+[models.local.parameters.temperature]
+type = "float"
+default = 0.3
+default_sentinel = -1
+min = 0.01
+max = 2.0
+
+[models.local.parameters.top_p]
+type = "float"
+default = 0.95
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+[models.local.parameters.top_k]
+type = "int"
+default = 50
+default_sentinel = -1
+min = 1
+max = 100
+
+[[models.local.menu]]
+parameter = "temperature"
+label = "Temperature"
+
+[[models.local.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.local.menu]]
+parameter = "top_k"
+label = "Top-K"
+
+[[models.local.menu]]
+kind = "seed"
 
 # ------------------------------------------------------------------------
 [[models]]
@@ -405,6 +735,61 @@ project_links = [
     "https://github.com/index-tts/index-tts",
     "https://huggingface.co/IndexTeam/IndexTTS-2",
 ]
+
+# Project gradio demo default; edited in the Voices menu (Emotion).
+[models.local.parameters.emo_alpha]
+type = "float"
+default = 0.65
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+# Project API default.
+[models.local.parameters.use_fp16]
+type = "bool"
+default = false
+
+# Project API default.
+[models.local.parameters.temperature]
+type = "float"
+default = 0.8
+default_sentinel = -1
+min = 0.01
+max = 2.0
+
+[models.local.parameters.top_p]
+type = "float"
+default = 0.8
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+[models.local.parameters.top_k]
+type = "int"
+default = 30
+default_sentinel = -1
+min = 1
+max = 100
+
+[[models.local.menu]]
+kind = "choice"
+parameter = "use_fp16"
+label = "FP16 (smaller memory footprint)"
+
+[[models.local.menu]]
+parameter = "temperature"
+label = "Temperature"
+
+[[models.local.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.local.menu]]
+parameter = "top_k"
+label = "Top-K"
+
+[[models.local.menu]]
+kind = "seed"
 
 # ------------------------------------------------------------------------
 [[models]]
@@ -449,6 +834,54 @@ project_links = [
     "https://github.com/ysharma3501/MiraTTS",
     "https://huggingface.co/YatharthS/MiraTTS",
 ]
+
+[models.local.parameters.temperature]
+type = "float"
+default = 0.7
+default_sentinel = -1
+min = 0.0
+max = 2.0
+
+[models.local.parameters.top_p]
+type = "float"
+default = 0.95
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+[models.local.parameters.top_k]
+type = "int"
+default = 50
+default_sentinel = -1
+min = 1
+max = 100
+
+[models.local.parameters.repetition_penalty]
+type = "float"
+default = 1.2
+default_sentinel = -1
+min = 1.0
+max = 2.0
+
+[[models.local.menu]]
+parameter = "temperature"
+label = "Temperature"
+
+[[models.local.menu]]
+parameter = "top_p"
+label = "Top-P"
+
+[[models.local.menu]]
+parameter = "top_k"
+label = "Top-K"
+
+[[models.local.menu]]
+parameter = "repetition_penalty"
+label = "Repetition penalty"
+
+[[models.local.menu]]
+kind = "seed"
+batch_warning = true
 
 # ------------------------------------------------------------------------
 # Local implementation of MOSS (both Delay and Local variants)
@@ -544,6 +977,31 @@ project_links = [
 instructions_label = "Voice design"
 instructions_message = "Enter voice design instructions for this voice:\n(Comma-separated, eg \"female, young adult, high pitch, british accent\".\nWith voice sample, only reinforces matching traits; for full effect, clear voice sample)"
 
+# Parameters only: the Model settings menu stays hand-written (variant-dependent items)
+# and builds its numeric items from these.
+
+[models.local.parameters.num_step]
+type = "int"
+default = 32
+default_sentinel = -1
+min = 8
+max = 64
+input_prompt_suffix = "Larger values = enhanced quality, slower"
+
+[models.local.parameters.speed]
+type = "float"
+default = 1.0
+default_sentinel = -1
+min = 0.5
+max = 2.0
+
+[models.local.parameters.cfg]
+type = "float"
+default = 2.0
+default_sentinel = -1
+min = 0.0
+max = 4.0
+
 # ------------------------------------------------------------------------
 [[models]]
 id = "pocket_local"
@@ -584,6 +1042,15 @@ project_links = [
 opt_in_url = "https://github.com/kyutai-labs/pocket-tts"
 # UI name of a per-voice preset (`Voice.presets`)
 preset_label = "Predefined voice"
+
+# Parameters only: the Model settings menu stays hand-written (language picker).
+
+[models.local.parameters.temperature]
+type = "float"
+default = 0.7
+default_sentinel = -1
+min = 0.01
+max = 2.0
 
 # ------------------------------------------------------------------------
 [[models]]
@@ -676,6 +1143,24 @@ voice_path_requestor = "Select voice clone audio clip"
 project_links = [
     "https://github.com/vibevoice-community/VibeVoice",
 ]
+
+# Parameters only: the Model settings menu stays hand-written (model target selection)
+# and builds its numeric items from these.
+
+[models.local.parameters.cfg]
+type = "float"
+default = 2.0
+default_sentinel = -1
+min = 1.0
+max = 7.0
+
+# From the vibevoice library code.
+[models.local.parameters.steps]
+type = "int"
+default = 10
+default_sentinel = -1
+min = 1
+max = 30
 
 # ------------------------------------------------------------------------
 # SGL-Omni

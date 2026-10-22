@@ -5,8 +5,8 @@ import pytest
 
 from catalog_toml_support import read_catalog, write_catalog
 from tts_audiobook_tool.menus.menu_util import get_string_from
-from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
-from tts_audiobook_tool.menus.model.model_configured_sgl_omni_menu import ModelConfiguredSglOmniMenu
+from tts_audiobook_tool.menus.model.catalog_menu_source import catalog_menu_source
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.text_util import strip_ansi_codes
@@ -22,10 +22,10 @@ def test_breeze_top_k_has_prompt_only_disabled_hint(monkeypatch):
     assert parameter.input_prompt_suffix == "(0=disabled)"
     assert control.label == "Top-K"
     state = SimpleNamespace(project=Project())
-    item = ModelAudioCppMenu.make_parameter_item(state, parameter, control.label)
+    item = ModelCatalogMenu.make_parameter_item(state, parameter, control.label, catalog_menu_source(definition))
     prompts = []
     monkeypatch.setattr("tts_audiobook_tool.ask.printt", prompts.append)
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_audio_cpp_menu.ask.ask_input", lambda **_: "")
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.ask.ask_input", lambda **_: "")
     assert strip_ansi_codes(get_string_from(state, item.label)) == "Top-K (currently: 50 default)"
     item.handler(state, item)
     assert [strip_ansi_codes(prompt) for prompt in prompts] == [
@@ -34,7 +34,7 @@ def test_breeze_top_k_has_prompt_only_disabled_hint(monkeypatch):
     assert "input_prompt_suffix" not in saved["model_settings"]["models"][parameter.model_id]["parameters"]
 
 
-def _load_parameter(tmp_path, backend, suffix):
+def _load_definition(tmp_path, backend, suffix):
     data = read_catalog(CATALOG_PATH)
     model_id = "breeze_tts_2_audiocpp" if backend == "audio_cpp" else "zonos2_sglomni"
     entry = next(entry for entry in data["models"] if entry["id"] == model_id)
@@ -45,22 +45,23 @@ def _load_parameter(tmp_path, backend, suffix):
         raw["input_prompt_suffix"] = suffix
     path = write_catalog(tmp_path / "catalog.toml", data)
     loader = load_audio_cpp_definitions if backend == "audio_cpp" else load_definitions
-    return loader(path).models[model_id].parameters["top_k"]
+    return loader(path).models[model_id]
 
 
 @pytest.mark.parametrize("backend", ["audio_cpp", "sgl_omni"])
 @pytest.mark.parametrize("suffix", [None, "", "(sampling hint)"])
 def test_optional_suffix_is_loaded_and_inserted_only_in_edit_prompt(tmp_path, monkeypatch, backend, suffix):
-    parameter = _load_parameter(tmp_path, backend, suffix)
+    definition = _load_definition(tmp_path, backend, suffix)
+    parameter = definition.parameters["top_k"]
     assert parameter.input_prompt_suffix == (suffix or "")
     state = SimpleNamespace(project=Project())
-    menu = ModelAudioCppMenu if backend == "audio_cpp" else ModelConfiguredSglOmniMenu
-    module = "model_audio_cpp_menu" if backend == "audio_cpp" else "model_configured_sgl_omni_menu"
+    module = "tts_audiobook_tool.menus.model.model_catalog_menu"
     prompts = []
-    prompt_module = "tts_audiobook_tool.ask" if backend == "audio_cpp" else f"tts_audiobook_tool.menus.model.{module}"
+    # audio.cpp prompts through the stock ask editor; SGL-Omni prints its own prompt.
+    prompt_module = "tts_audiobook_tool.ask" if backend == "audio_cpp" else module
     monkeypatch.setattr(f"{prompt_module}.printt", prompts.append)
-    monkeypatch.setattr(f"tts_audiobook_tool.menus.model.{module}.ask.ask_input", lambda **_: "")
-    item = menu.make_parameter_item(state, parameter, "Top k")
+    monkeypatch.setattr(f"{module}.ask.ask_input", lambda **_: "")
+    item = ModelCatalogMenu.make_parameter_item(state, parameter, "Top k", catalog_menu_source(definition))
     assert "sampling hint" not in get_string_from(state, item.label)
     item.handler(state, item)
     hint = f" {suffix}" if suffix else ""
@@ -77,4 +78,4 @@ def test_optional_suffix_is_loaded_and_inserted_only_in_edit_prompt(tmp_path, mo
 @pytest.mark.parametrize("invalid", [123, False, [], {}])
 def test_suffix_must_be_a_string(tmp_path, backend, invalid):
     with pytest.raises(ValueError, match=r"top_k\.input_prompt_suffix.*expected a string"):
-        _load_parameter(tmp_path, backend, invalid)
+        _load_definition(tmp_path, backend, invalid)

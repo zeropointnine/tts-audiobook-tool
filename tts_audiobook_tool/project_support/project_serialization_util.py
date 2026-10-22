@@ -692,7 +692,7 @@ class ProjectSerializationUtil:
 
         value = d.get('mira_temperature', -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (MiraBaseModel.TEMPERATURE_MIN <= value <= MiraBaseModel.TEMPERATURE_MAX):
+            if not isinstance(value, (float, int)) or not (MiraBaseModel.LOCAL.number("temperature").min <= value <= MiraBaseModel.LOCAL.number("temperature").max):
                 value = -1
                 add_warning('mira_temperature', value)
         d['mira_temperature'] = value
@@ -805,7 +805,7 @@ class ProjectSerializationUtil:
         from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
         value = d.get('pocket_temperature', -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (PocketBaseModel.TEMPERATURE_MIN <= value <= PocketBaseModel.TEMPERATURE_MAX):
+            if not isinstance(value, (float, int)) or not (PocketBaseModel.LOCAL.number("temperature").min <= value <= PocketBaseModel.LOCAL.number("temperature").max):
                 value = -1
                 add_warning('pocket_temperature', value)
         d['pocket_temperature'] = value
@@ -826,7 +826,7 @@ class ProjectSerializationUtil:
 
         value = d.get("omnivoice_num_step", -1)
         if value != -1:
-            if not isinstance(value, int) or not (OmniVoiceBaseModel.MIN_STEPS <= value <= OmniVoiceBaseModel.MAX_STEPS):
+            if not isinstance(value, int) or not (OmniVoiceBaseModel.LOCAL.number("num_step").min <= value <= OmniVoiceBaseModel.LOCAL.number("num_step").max):
                 value = -1
                 add_warning("omnivoice_num_step", value)
         d["omnivoice_num_step"] = int(value)
@@ -840,7 +840,7 @@ class ProjectSerializationUtil:
 
         value = d.get("omnivoice_cfg", -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (OmniVoiceBaseModel.CFG_MIN <= value <= OmniVoiceBaseModel.CFG_MAX):
+            if not isinstance(value, (float, int)) or not (OmniVoiceBaseModel.LOCAL.number("cfg").min <= value <= OmniVoiceBaseModel.LOCAL.number("cfg").max):
                 value = -1
                 add_warning("omnivoice_cfg", value)
         d["omnivoice_cfg"] = value

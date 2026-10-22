@@ -8,7 +8,7 @@ import soundfile as sf
 
 from tts_audiobook_tool.app_support.audio_cpp_util import AudioCppUtil
 from tts_audiobook_tool.menus.menu_util import get_string_from
-from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
@@ -56,7 +56,7 @@ def test_model_type_menu_subheading(monkeypatch, definition):
     state = SimpleNamespace(project=Project(tts_model_type=MODEL_ID))
     captured = {}
     monkeypatch.setattr(MenuUtil, "options_menu", lambda **kwargs: captured.update(kwargs))
-    item, = ModelAudioCppMenu.make_control_items(state, definition, control)
+    item, = ModelCatalogMenu.make_control_items(state, definition, control)
     item.handler(state, item)
     assert captured["subheading"] == control.subheading
     assert captured["values"] == ["base", "custom_voice", "voice_design"]
@@ -230,7 +230,7 @@ def test_menu_preflight_server_and_adapter_agree(monkeypatch, tmp_path, definiti
     project = make_project(tmp_path, model_type, transcript="")
     sf.write(tmp_path / "sample.flac", np.full(100, .2), 24000, format="FLAC")
     state = SimpleNamespace(project=project, prefs=SimpleNamespace(stt_variant=None, stt_config={}))
-    labels = [get_string_from(state, i.label).lower() for i in ModelAudioCppMenu.make_items(state, definition)]
+    labels = [get_string_from(state, i.label).lower() for i in ModelCatalogMenu.make_items(state, definition)]
     assert not any("clone mode" in label for label in labels)
     assert not any("instructions" in label for label in labels)
     assert Tts.requires_reference_transcript(project) is uses_transcript

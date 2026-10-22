@@ -240,7 +240,8 @@ def test_omnivoice_definition_claims_the_clone_route_with_family_defaults():
 def test_omnivoice_numeric_menu_prompt_shows_the_default(monkeypatch, tmp_path: Path):
     """Numeric prompts follow the app convention: range plus default value."""
     from tts_audiobook_tool import text_util
-    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.model.catalog_menu_source import catalog_menu_source
+    from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 
     item = definition(OMNIVOICE_ID)
     project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": OMNIVOICE_ID})
@@ -249,14 +250,15 @@ def test_omnivoice_numeric_menu_prompt_shows_the_default(monkeypatch, tmp_path: 
     monkeypatch.setattr("tts_audiobook_tool.ask.printt",
                         lambda text: printed.append(text))
     # An empty response leaves storage untouched, so nothing needs saving.
-    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_audio_cpp_menu.ask.ask_input",
+    monkeypatch.setattr("tts_audiobook_tool.menus.model.model_catalog_menu.ask.ask_input",
                         lambda **_: "")
 
     for control in item.menu:
         if control.kind != "parameter":
             continue
         parameter = item.parameters[control.parameter]
-        ModelAudioCppMenu.make_parameter_item(state, parameter, control.label).handler(state, None)
+        ModelCatalogMenu.make_parameter_item(
+            state, parameter, control.label, catalog_menu_source(item)).handler(state, None)
         minimum = int(parameter.min) if parameter.type == "int" else parameter.min
         maximum = int(parameter.max) if parameter.type == "int" else parameter.max
         default = int(parameter.default) if parameter.type == "int" else parameter.default
@@ -269,7 +271,7 @@ def test_omnivoice_menu_renders_settings_in_local_order_without_headings(monkeyp
     """Model settings match local OmniVoice's control order without headings."""
     from tts_audiobook_tool import text_util
     from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
-    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
     from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
     monkeypatch.setattr(ModelMenuShared, "make_seed_item",
@@ -278,7 +280,7 @@ def test_omnivoice_menu_renders_settings_in_local_order_without_headings(monkeyp
     project = Project.model_validate({"dir_path": "", "tts_model_type": OMNIVOICE_ID})
     state = SimpleNamespace(project=project)
 
-    items = ModelAudioCppMenu.make_items(state, definition(OMNIVOICE_ID))
+    items = ModelCatalogMenu.make_items(state, definition(OMNIVOICE_ID))
     assert all(not item.superlabel for item in items)
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
         "Steps (currently: 32 default)",
@@ -292,8 +294,8 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
     from tts_audiobook_tool import text_util
     from tts_audiobook_tool.app_types import VoiceSelectMode
     from tts_audiobook_tool.menus.menu_util import get_string_from
-    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
-    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
+    from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 
     monkeypatch.setattr(Project, "save", lambda self: "")
@@ -304,7 +306,7 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
 
     # As composed by the Voices menu wrapper (selection controls appended last)
     items = VoiceMenuShared.with_voice_selection_items(
-        lambda current: VoiceAudioCppMenu.make_items(current, definition(ECHO_ID)))(state)
+        lambda current: VoiceCatalogMenu.make_items(current, definition(ECHO_ID)))(state)
 
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
         # Echo does not use transcripts, so a missing one is not flagged
@@ -317,7 +319,7 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
     # Only the sample list carries its shared superlabel; no model headings.
     assert [item.superlabel for item in items] == [voice_menu_shared.LABEL_VOICE_SAMPLES_SUPERLABEL, "", "", "", ""]
 
-    items = ModelAudioCppMenu.make_items(state, definition(ECHO_ID))
+    items = ModelCatalogMenu.make_items(state, definition(ECHO_ID))
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
         "Steps (currently: 40 default)",
         "Text guidance scale (currently: 3.00 default)",
@@ -331,14 +333,14 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
 def test_audio_cpp_seed_prompt_does_not_warn_about_unsupported_batch_mode(monkeypatch, model_id):
     from tts_audiobook_tool import text_util
     from tts_audiobook_tool.menus.menu_util import get_string_from
-    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
     from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
     prompts = []
     monkeypatch.setattr("tts_audiobook_tool.menus.model.model_menu_shared.ask.ask_number_and_save",
                         lambda **kwargs: prompts.append(text_util.strip_ansi_codes(kwargs["prompt"])))
     state = SimpleNamespace(project=Project(tts_model_type=model_id))
-    items = ModelAudioCppMenu.make_items(state, definition(model_id))
+    items = ModelCatalogMenu.make_items(state, definition(model_id))
     seed_item = next(item for item in items
                      if text_util.strip_ansi_codes(get_string_from(state, item.label)) == "Seed (currently: random)")
 
@@ -385,17 +387,17 @@ def test_chatterbox_settings_menu_displays_catalog_note(monkeypatch):
 def test_chatterbox_menu_preserves_control_order_without_headings(monkeypatch):
     """The catalog settings menu renders controls without group headings."""
     from tts_audiobook_tool.menus.menu_util import MenuItem
-    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
     from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
     monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("Seed", lambda *_: None))
-    monkeypatch.setattr(ModelAudioCppMenu, "make_parameter_item",
-                        lambda _state, _parameter, label, **_: MenuItem(label, lambda *_: None))
+    monkeypatch.setattr(ModelCatalogMenu, "make_parameter_item",
+                        lambda _state, _parameter, label, *_, **__: MenuItem(label, lambda *_: None))
 
     # The menu reads resolved settings to ask the model's behavior which
     # controls are visible, so the state needs a project.
-    items = ModelAudioCppMenu.make_items(SimpleNamespace(project=Project(tts_model_type=MODEL_ID)), definition())
+    items = ModelCatalogMenu.make_items(SimpleNamespace(project=Project(tts_model_type=MODEL_ID)), definition())
 
     assert [item.label for item in items] == [
         "Temperature", "Exaggeration", "CFG/pace",
@@ -408,13 +410,14 @@ def test_chatterbox_menu_preserves_control_order_without_headings(monkeypatch):
 def test_chatterbox_guidance_menu_label_uses_cfg_pace():
     from tts_audiobook_tool import text_util
     from tts_audiobook_tool.menus.menu_util import get_string_from
-    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.model.catalog_menu_source import catalog_menu_source
+    from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 
     item = definition()
     control = next(control for control in item.menu if control.parameter == "guidance_scale")
     state = SimpleNamespace(project=Project(tts_model_type=MODEL_ID))
-    menu_item = ModelAudioCppMenu.make_parameter_item(
-        state, item.parameters[control.parameter], control.label)
+    menu_item = ModelCatalogMenu.make_parameter_item(
+        state, item.parameters[control.parameter], control.label, catalog_menu_source(item))
 
     assert text_util.strip_ansi_codes(get_string_from(state, menu_item.label)) == (
         "CFG/pace (currently: 0.50 default)")
@@ -1457,8 +1460,8 @@ def test_values_rejected_before_network(monkeypatch):
 @pytest.mark.parametrize("model_id", tuple(load_audio_cpp_definitions().models))
 def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, model_id):
     from tts_audiobook_tool.menus.menu_util import MenuItem
-    from tts_audiobook_tool.menus.voice.voice_audio_cpp_menu import VoiceAudioCppMenu
-    from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+    from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
+    from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
     from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
@@ -1476,14 +1479,14 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
         return voice_items
 
     monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", make_voice_items)
-    monkeypatch.setattr(ModelAudioCppMenu, "make_parameter_item",
+    monkeypatch.setattr(ModelCatalogMenu, "make_parameter_item",
                         lambda _state, parameter, _label, *_, **__: MenuItem(parameter.name, lambda *_: None))
-    monkeypatch.setattr(ModelAudioCppMenu, "make_choice_item",
-                        lambda _state, parameter, _label, **__: MenuItem(parameter.name, lambda *_: None))
+    monkeypatch.setattr(ModelCatalogMenu, "make_choice_item",
+                        lambda _state, parameter, _label, *_, **__: MenuItem(parameter.name, lambda *_: None))
     monkeypatch.setattr(ModelMenuShared, "make_seed_item",
                         lambda *_, **__: MenuItem("seed", lambda *_: None))
 
-    actual_voice = VoiceAudioCppMenu.make_items(state, definition)
+    actual_voice = VoiceCatalogMenu.make_items(state, definition)
     voice_control_count = sum(control.kind == "voice_samples" for control in definition.menu)
     expected_voice = []
     for control in definition.menu:
@@ -1497,9 +1500,9 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
     assert [item.label for item in actual_voice] == expected_voice
     assert len(voice_calls) == voice_control_count
     assert all(not item.superlabel for item in actual_voice)
-    assert not hasattr(VoiceAudioCppMenu, "make_parameter_item")
+    assert not hasattr(VoiceCatalogMenu, "make_parameter_item")
 
-    actual_model = ModelAudioCppMenu.make_items(state, definition)
+    actual_model = ModelCatalogMenu.make_items(state, definition)
     expected = []
     for control in definition.menu:
         if control.target_menu != "model":

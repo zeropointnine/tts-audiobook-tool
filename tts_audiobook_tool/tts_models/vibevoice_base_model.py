@@ -4,6 +4,7 @@ from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
@@ -23,12 +24,9 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         "vibevoice/VibeVoice-7B",
     ]
 
-    # nb, their gradio demo default is 1.3, which is IMO much too low
-    CFG_DEFAULT = 2.0
-    CFG_MIN = 1.0
-    CFG_MAX = 7.0
-
-    DEFAULT_NUM_STEPS = 10 # from vibevoice library code
+    # CFG and steps defaults and bounds (`[models.local.parameters]`); see `LOCAL.resolve()`.
+    # nb, their gradio demo CFG default is 1.3, which is IMO much too low
+    LOCAL = require_local_definition("vibevoice_local")
 
     # Must accommodate worst-case prompt size (app limit 80 words)
     MAX_TOKENS = 250

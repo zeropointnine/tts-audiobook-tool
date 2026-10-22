@@ -1,11 +1,12 @@
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
 
 class ModelVibeVoiceMenu:
@@ -39,32 +40,8 @@ class ModelVibeVoiceMenu:
                 )
 
             # Other config
-            item = MenuUtil.make_number_item(
-                state=state,
-                target=SettingRef("vibevoice_local", "cfg"),
-                base_label="CFG",
-                default_value=VibeVoiceBaseModel.CFG_DEFAULT,
-                is_minus_one_default=True,
-                num_decimals=2,
-                prompt=f"Enter CFG {COL_DIM}({VibeVoiceBaseModel.CFG_MIN} to {VibeVoiceBaseModel.CFG_MAX}):",
-                min_value=VibeVoiceBaseModel.CFG_MIN,
-                max_value=VibeVoiceBaseModel.CFG_MAX
-            )
-            items.append(item)
-
-            items.append(
-                MenuUtil.make_number_item(
-                    state=state,
-                    target=SettingRef("vibevoice_local", "steps"),
-                    base_label="Steps",
-                    default_value=VibeVoiceBaseModel.DEFAULT_NUM_STEPS,
-                    is_minus_one_default=True,
-                    num_decimals=0,
-                    prompt=f"Enter num steps {COL_DIM}(1-30){COL_DEFAULT}:",
-                    min_value=1,
-                    max_value=30
-                )
-            )
+            items.append(ModelCatalogMenu.make_local_parameter_item(state, "vibevoice_local", "cfg", "CFG"))
+            items.append(ModelCatalogMenu.make_local_parameter_item(state, "vibevoice_local", "steps", "Steps"))
 
             items.append(
                 ModelMenuShared.make_seed_item(state, SettingRef("vibevoice_local", "seed"))

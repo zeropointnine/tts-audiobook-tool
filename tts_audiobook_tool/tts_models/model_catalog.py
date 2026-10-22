@@ -182,6 +182,8 @@ def _parse_audio_cpp_menu(value: Any, parameters: dict[str, dict[str, Any]], whe
                 _field(control, "subheading", item_where, str)
         elif "kind" not in item:
             control = _object(item, item_where, {"parameter", "label", "target_menu"})
+        elif kind == "parameter":
+            _fail(f"{item_where}.kind", "numeric controls omit `kind`")
         else:
             _fail(item_where, "invalid control")
         target_menu = _field(control, "target_menu", item_where, str)
@@ -346,6 +348,169 @@ def parse_audio_cpp_declaration(entry: dict[str, Any], where: str) -> dict[str, 
             "request_options": request_options}
 
 
+_LOCAL_GROUP_KEYS = {"parameters", "menu"}
+_LOCAL_PARAMETER_KEYS = {"type", "default", "min", "max", "default_sentinel", "input_prompt_suffix", "choices"}
+_LOCAL_TYPES = {"float": (int, float), "int": int, "bool": bool, "str": str}
+# The stock number editor resets a setting when the user enters -1.
+LOCAL_SENTINEL = -1
+
+
+def _local_value(value: Any, typ: str) -> bool:
+    """A finite value of a local parameter type (bool is never a number)."""
+    if typ == "bool":
+        return type(value) is bool
+    if isinstance(value, bool) or not isinstance(value, _LOCAL_TYPES[typ]):
+        return False
+    return typ == "str" or math.isfinite(value)
+
+
+def _parse_local_choices(value: Any, typ: str, default: Any, where: str) -> list[dict[str, Any]]:
+    """Typed option list; labels are what the option submenu shows."""
+    if not isinstance(value, list) or not value:
+        _fail(where, "expected a nonempty array of choices")
+    choices: list[dict[str, Any]] = []
+    for index, raw in enumerate(value):
+        item_where = f"{where}[{index}]"
+        choice = _object(raw, item_where, _AUDIO_CPP_CHOICE_KEYS)
+        if not _local_value(choice.get("value"), typ):
+            _fail(f"{item_where}.value", f"expected {typ}")
+        if not _field(choice, "label", item_where, str).strip():
+            _fail(f"{item_where}.label", "must not be empty")
+        description = choice.get("description", "")
+        if type(description) is not str:
+            _fail(f"{item_where}.description", "expected a string")
+        if any(existing["value"] == choice["value"] for existing in choices):
+            _fail(item_where, f"duplicate choice {choice['value']!r}")
+        choices.append({"value": choice["value"], "label": choice["label"], "description": description})
+    if default not in (choice["value"] for choice in choices):
+        _fail(where, "default must be one of the choices")
+    return choices
+
+
+def _parse_local_parameters(value: Any, where: str) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        _fail(where, "expected an object")
+    parameters: dict[str, dict[str, Any]] = {}
+    for name, raw in value.items():
+        item_where = f"{where}.{name}"
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_]*", name):
+            _fail(where, f"invalid parameter name {name!r}")
+        param = _object(raw, item_where, _LOCAL_PARAMETER_KEYS)
+        typ = _field(param, "type", item_where, str)
+        if typ not in _LOCAL_TYPES:
+            _fail(f"{item_where}.type", "expected float, int, bool or str")
+        if not _local_value(param.get("default"), typ):
+            _fail(f"{item_where}.default", f"expected {typ}")
+        default = param["default"]
+        # A bool is an implicit True/False choice; a str needs explicit choices.
+        if typ == "bool" and "choices" not in param:
+            param = {**param, "choices": [{"value": True, "label": "True"}, {"value": False, "label": "False"}]}
+        if "choices" in param:
+            for key in ("min", "max", "default_sentinel", "input_prompt_suffix"):
+                if key in param:
+                    _fail(f"{item_where}.{key}", "not valid for a choice parameter")
+            choices = _parse_local_choices(param["choices"], typ, default, f"{item_where}.choices")
+            # The choice's own value, so a float default spelled `1` keys as "1.0" like its choice.
+            default = next(choice["value"] for choice in choices if choice["value"] == default)
+            parameters[name] = {"type": typ, "default": default, "choices": choices}
+            continue
+        if typ == "str":
+            _fail(f"{item_where}.choices", "a string parameter requires choices")
+        value_type = _LOCAL_TYPES[typ]
+        minimum = _audio_cpp_number(param, "min", item_where, typ, value_type)
+        maximum = _audio_cpp_number(param, "max", item_where, typ, value_type)
+        if not minimum <= default <= maximum:
+            _fail(item_where, "expected min <= default <= max")
+        sentinel: int | None = None
+        if "default_sentinel" in param:
+            sentinel = param["default_sentinel"]
+            if type(sentinel) is not int or sentinel != LOCAL_SENTINEL:
+                _fail(f"{item_where}.default_sentinel", f"expected {LOCAL_SENTINEL}")
+            if minimum <= sentinel <= maximum:
+                _fail(f"{item_where}.default_sentinel", "expected a sentinel outside min..max")
+        suffix = param.get("input_prompt_suffix", "")
+        if not isinstance(suffix, str):
+            _fail(f"{item_where}.input_prompt_suffix", "expected a string")
+        parameters[name] = {"type": typ, "default": default, "min": minimum, "max": maximum,
+                            "default_sentinel": sentinel, "input_prompt_suffix": suffix, "choices": None}
+    return parameters
+
+
+def _parse_local_menu(value: Any, parameters: dict[str, dict[str, Any]], where: str) -> list[dict[str, Any]]:
+    """Local menus render only in Model settings; voice menus stay model-specific.
+
+    Controls: numeric `parameter` items (kind omitted), `choice` (bool or
+    choices), `rolling_continuation` (an int parameter; optional `subheading`
+    is the prerequisite line on its screen) and at most one `seed`.
+    """
+    if not isinstance(value, list) or not value:
+        _fail(where, "expected a nonempty list")
+    menu: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        item_where = f"{where}[{index}]"
+        if not isinstance(item, dict):
+            _fail(item_where, "expected controls")
+        kind = item.get("kind", "parameter")
+        if kind == "seed":
+            control = _object(item, item_where, {"kind", "batch_warning"})
+            batch_warning = control.get("batch_warning", False)
+            if type(batch_warning) is not bool:
+                _fail(f"{item_where}.batch_warning", "expected a boolean")
+            menu.append({"kind": "seed", "batch_warning": batch_warning})
+            continue
+        if kind == "parameter" and "kind" in item:
+            _fail(f"{item_where}.kind", "numeric controls omit `kind`")
+        if kind not in ("parameter", "choice", "rolling_continuation"):
+            _fail(item_where, "invalid control")
+        control = _object(item, item_where, {"kind", "parameter", "label", "subheading"})
+        name = _field(control, "parameter", item_where, str)
+        if name not in parameters:
+            _fail(f"{item_where}.{name}", "unknown parameter")
+        param = parameters[name]
+        if kind == "choice" and param["choices"] is None:
+            _fail(f"{item_where}.{name}", "choice requires a bool parameter or one with choices")
+        if kind != "choice" and param["choices"] is not None:
+            _fail(f"{item_where}.{name}", "a bool parameter or one with choices requires the choice control")
+        if kind == "rolling_continuation" and (param["type"] != "int" or param["default_sentinel"] is not None):
+            _fail(f"{item_where}.{name}", "rolling continuation requires an int parameter without a sentinel")
+        label = control.get("label", "")
+        if kind == "rolling_continuation":
+            if "label" in control:
+                _fail(f"{item_where}.label", "rolling continuation has a fixed label")
+        elif type(label) is not str or not label:
+            _fail(f"{item_where}.{name}.label", "must not be empty")
+        subheading = control.get("subheading", "")
+        if type(subheading) is not str:
+            _fail(f"{item_where}.subheading", "expected a string")
+        if subheading and kind == "parameter":
+            _fail(f"{item_where}.subheading", "only supported for choice and rolling continuation controls")
+        menu.append({"kind": kind, "parameter": name, "label": label, "subheading": subheading})
+    named = [item["parameter"] for item in menu if item["kind"] != "seed"]
+    if len(named) != len(set(named)):
+        _fail(where, "expected each parameter at most once")
+    if sum(item["kind"] == "seed" for item in menu) > 1:
+        _fail(where, "expected at most one seed control")
+    return menu
+
+
+def parse_local_declaration(entry: dict[str, Any], where: str) -> dict[str, Any]:
+    """Validate an optional local group: parameter metadata and an optional menu.
+
+    Parameters describe settings the entry already declares in `settings`
+    (bounds or choices, default and the -1 "use default" sentinel). A `menu`
+    makes the whole Model settings menu catalog-driven; without one, a
+    hand-written menu may still build items for individual parameters.
+    Parameters left out of a menu are still available to model code.
+    """
+    if "local" not in entry:
+        return {"parameters": {}, "menu": []}
+    group = _object(entry["local"], f"{where}.local", _LOCAL_GROUP_KEYS)
+    parameters = _parse_local_parameters(group.get("parameters", {}), f"{where}.local.parameters")
+    menu = (_parse_local_menu(group["menu"], parameters, f"{where}.local.menu")
+            if "menu" in group else [])
+    return {"parameters": parameters, "menu": menu}
+
+
 def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
     """Derive one complete spec from its sole declaration in the catalog."""
     id = entry["id"]
@@ -403,6 +568,8 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
     can_voice_clone = True
     module_exclude: list[str] = []
     filters: list[str] = []
+    if is_server and "local" in entry:
+        _fail(where, "server models cannot contain local definitions")
     if backend == TtsBackendKind.SGL_OMNI.value:
         if "audio_cpp" in entry:
             _fail(where, "sgl_omni models cannot contain audio_cpp definitions")
@@ -435,6 +602,9 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
             _fail(f"{where}.backend_kind", "only the none placeholder can lack a backend")
         if "sgl_omni" in entry or "audio_cpp" in entry:
             _fail(where, "local and placeholder models cannot have server behavior")
+        if id == "none" and "local" in entry:
+            _fail(where, "the none placeholder cannot have local definitions")
+        parse_local_declaration(entry, where)
         module = _field(meta, "local_module_test", f"{where}.spec", str)
         raw_devices = _field(meta, "local_torch_devices", f"{where}.spec", list)
         devices = []
@@ -487,7 +657,7 @@ def _load_catalog(path: Path) -> tuple[dict[str, Any], list[TtsModelSpec], list[
     servers: list[dict[str, Any]] = []
     ids: set[str] = set()
     for index, entry in enumerate(entries):
-        item = _object(entry, f"models[{index}]", {"id", "backend_kind", "spec", "sgl_omni", "audio_cpp", "settings"})
+        item = _object(entry, f"models[{index}]", {"id", "backend_kind", "spec", "sgl_omni", "audio_cpp", "local", "settings"})
         id = _field(item, "id", f"models[{index}]", str)
         if not id or not re.fullmatch(r"[a-z][a-z0-9_]*", id) or id in ids:
             _fail(f"models[{index}].id", "expected a unique, lowercase model ID")

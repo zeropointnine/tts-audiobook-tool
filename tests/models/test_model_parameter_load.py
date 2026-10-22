@@ -6,7 +6,8 @@ from typing import cast
 import pytest
 
 from tts_audiobook_tool.app_types.voice import Voice
-from tts_audiobook_tool.menus.model.model_audio_cpp_menu import ModelAudioCppMenu
+from tts_audiobook_tool.menus.model.catalog_menu_source import catalog_menu_source
+from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import ModelSettingsRegistry, REGISTRY
 from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
@@ -21,7 +22,8 @@ from tts_audiobook_tool.tts_models.sgl_omni_definition import load_definitions
 @pytest.mark.parametrize("invalid", [0.0, 2.01, True, "0.8", [], {}, float("nan"), float("inf")])
 def test_invalid_audio_cpp_saved_parameter_resets_without_menu_error(invalid, caplog):
     model_id = "breeze_tts_2_audiocpp"
-    parameter = cast(AudioCppParameter, load_audio_cpp_definitions().models[model_id].parameters["temperature"])
+    definition = load_audio_cpp_definitions().models[model_id]
+    parameter = cast(AudioCppParameter, definition.parameters["temperature"])
     source = {"models": {model_id: {"parameters": {"temperature": invalid, "top_p": 0.7, "seed": 123}}}}
     project = Project.model_validate({"version": 3, "tts_model_type": model_id, "model_settings": source})
 
@@ -33,7 +35,7 @@ def test_invalid_audio_cpp_saved_parameter_resets_without_menu_error(invalid, ca
     assert "resetting to default" in caplog.text
 
     state = cast(State, SimpleNamespace(project=project))
-    item = ModelAudioCppMenu.make_parameter_item(state, parameter, "Temperature")
+    item = ModelCatalogMenu.make_parameter_item(state, parameter, "Temperature", catalog_menu_source(definition))
     assert callable(item.label)
     assert "invalid" not in item.label(state)
     saved = ProjectSerializationUtil.to_project_json_dict(project)
