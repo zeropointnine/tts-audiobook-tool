@@ -72,7 +72,7 @@ def test_all_moss_temperatures_have_standard_prompt_and_preserve_saved_defaults(
     item = make_temperature_item(state, backend, architecture)
     item.handler(state, item)
     assert [text_util.strip_ansi_codes(prompt) for prompt in prompts] == [
-        f"Enter {label}: (valid range: 0.8-3.0; default: {default})"]
+        f"Enter {label} (valid range: 0.8-3.0; default: {default})"]
     assert prefills == [str(default)]
     assert state.project.get_model_setting(model_id, name) == -1
     assert errors == [] and saves == []

@@ -44,7 +44,9 @@ def test_mixed_destinations_preserve_order_and_exclusively_partition_controls(ba
     state = SimpleNamespace(project=Project(tts_model_type=definition.spec.id))
     sample_calls = []
 
-    def make_samples(current, model_type):
+    def make_samples(current, model_type, *, preset_choices=None, allow_custom_preset=False):
+        # Non-Qwen models pass the shared sample builder's default preset options.
+        assert preset_choices is None and not allow_custom_preset
         assert current is state and model_type.id == definition.spec.id
         sample_calls.append(model_type.id)
         return [MenuItem("Add sample", lambda *_: None), MenuItem("Select samples", lambda *_: None)]
@@ -86,7 +88,7 @@ def test_each_destination_delegates_only_its_settings_to_model_control_helper(ba
         return [MenuItem(control.kind, lambda *_: None)]
 
     monkeypatch.setattr(model_menu, "make_control_items", expand)
-    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", lambda *_: [])
+    monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items", lambda *_, **__: [])
     model_menu.make_items(state, definition)
     assert calls == [controls[2]]
     calls.clear()
@@ -104,7 +106,7 @@ def test_only_first_emitted_voice_setting_gets_separator(backend, monkeypatch, e
     state = SimpleNamespace(project=Project(tts_model_type=definition.spec.id))
     sizes = iter(expansion_sizes)
     monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
-                        lambda *_: [MenuItem("Samples", lambda *_: None)])
+                        lambda *_, **__: [MenuItem("Samples", lambda *_: None)])
     monkeypatch.setattr(model_menu, "make_control_items",
                         lambda *_: [MenuItem("Setting", lambda *_: None) for _ in range(next(sizes))])
 
@@ -175,7 +177,7 @@ def test_audio_cpp_instructions_have_no_global_menu_controls(monkeypatch, model_
     project.voice_references[0].instructions[model_id] = instructions
     state = SimpleNamespace(project=project)
     monkeypatch.setattr(VoiceMenuShared, "make_voice_sample_items",
-                        lambda *_: [MenuItem("Samples", lambda *_: None)])
+                        lambda *_, **__: [MenuItem("Samples", lambda *_: None)])
     voice_items = VoiceAudioCppMenu.make_items(state, definition)
     assert [item.label for item in voice_items] == ["Samples"]
     assert not voice_items[0].blank_line_before

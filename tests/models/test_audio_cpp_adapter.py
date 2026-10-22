@@ -261,7 +261,7 @@ def test_omnivoice_numeric_menu_prompt_shows_the_default(monkeypatch, tmp_path: 
         maximum = int(parameter.max) if parameter.type == "int" else parameter.max
         default = int(parameter.default) if parameter.type == "int" else parameter.default
         assert text_util.strip_ansi_codes(printed[-1]) == (
-            f"Enter {control.label}: (valid range: {minimum}-{maximum}; default: {default})"
+            f"Enter {control.label} (valid range: {minimum}-{maximum}; default: {default})"
         )
 
 

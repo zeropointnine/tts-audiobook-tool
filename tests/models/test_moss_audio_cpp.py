@@ -334,7 +334,7 @@ def test_numeric_menu_uses_standard_prompt_validation_and_save(
     control = ModelAudioCppMenu.make_parameter_item(state, parameter, "Temperature")
     control.handler(state, control)
     assert text_util.strip_ansi_codes(printed[0]) == (
-        f"Enter Temperature: (valid range: 0.8-3.0; default: {parameter.default})")
+        f"Enter Temperature (valid range: 0.8-3.0; default: {parameter.default})")
     assert prefills == ["2.3"]
     assert errors == ([error] if error else [])
     assert saves == ([] if expected == 2.3 else [project])
@@ -428,6 +428,7 @@ def test_existing_families_keep_default_language_policy_and_postprocessing():
         expected_policy = {"fish_s2_audiocpp": "omit", "fish_drama3_audiocpp": "omit", "glm_tts_audiocpp": "omit",
                            "cosyvoice3_audiocpp": "omit",
                            "dots_audiocpp": "normalized",
+                           "qwen3tts_audiocpp": "normalized",
                            "indextts2_audiocpp": "normalized",
                            "fireredtts3_audiocpp": "normalized"}.get(model_id, "project_code")
         # IndexTTS2.5 and FireRedTTS3 read their language from `options`, not the top level.

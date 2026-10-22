@@ -1086,8 +1086,8 @@ def test_remembered_audio_cpp_selection_notices(monkeypatch, capsys, case):
         "restored_from_none": f"It will now use its last-used audio.cpp model, {remembered}",
         "restored_unbound": (f"{old_line};\nIt is now configured to use its last-used audio.cpp model, "
                              f"{remembered},\nbut the runtime is unavailable (see Model settings)."),
-        "unavailable_multiple": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, is currently "
-                                 "unavailable.\nSelect a TTS model in Model settings > TTS model."),
+        "unavailable_multiple": (f"{old_line}.\nIts last-used audio.cpp model, {remembered},\n"
+                                 "is currently unavailable.\nSelect a TTS model in Model settings > TTS model."),
         "unavailable_sole": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, is unavailable,\n"
                              f"so it will now use the sole active audio.cpp model, {_display_name(chatterbox)}"),
     }[case]
@@ -1120,7 +1120,7 @@ def test_saved_entry_missing_from_new_server_announces_replacement(monkeypatch, 
                           f"It will now use the sole active audio.cpp model, "
                           f"{chatterbox.value.ui['proper_name']} (audio.cpp; cb)\n\n")
     else:
-        assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name}\n, which is currently "
+        assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name},\nwhich is currently "
                           "unavailable.\nSelect a TTS model in Model settings > TTS model.\n\n")
     assert state.project.last_audio_cpp_model_id == ("cb" if sole else "fish-drama3")
 

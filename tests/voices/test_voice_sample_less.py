@@ -195,7 +195,8 @@ def setup_flow(tmp_path, monkeypatch, voices, *, sidecar="", stt=("", "")):
     monkeypatch.setattr(voice_menu_shared.SoundPipeline, "apply_voice_clone_post_processing", lambda value, **_: value)
     monkeypatch.setattr(voice_menu_shared.PlaySoundUtil, "play_sound_async", lambda *_: None)
     monkeypatch.setattr(voice_menu_shared.hints, "show_hint_if_necessary", lambda *_, **__: None)
-    monkeypatch.setattr(voice_menu_shared.ask, "ask_enter_to_continue", lambda *_: None)
+    monkeypatch.setattr(voice_menu_shared.hints, "show_hints_if_necessary", lambda *_, **__: None)
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_enter_to_continue", lambda *_: events.append(("enter",)))
     monkeypatch.setattr(voice_menu_shared.ask, "ask_error", lambda message: events.append(("error", message)))
     monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *args, **_: events.append(("feedback", args[0])))
 
@@ -214,14 +215,16 @@ def test_set_sample_fills_transcript_from_speech_to_text(tmp_path, monkeypatch):
     )
     VoiceMenuShared.ask_and_set_voice_sample(state, model(), 0)
     assert project.voice_references == [Voice("clip.flac", "New words.", pan=0.5)]
-    assert events == [("transcribing", ""), ("feedback", "Voice file saved")]
+    assert events == [("transcribing", ""), ("feedback", "Voice file saved"), ("enter",)]
 
 
 def test_set_sample_uses_sidecar_transcript(tmp_path, monkeypatch):
     state, project, events = setup_flow(tmp_path, monkeypatch, [Voice()], sidecar="Sidecar words.")
     VoiceMenuShared.ask_and_set_voice_sample(state, model(), 0)
     assert project.voice_references == [Voice("clip.flac", "Sidecar words.")]
-    assert ("transcribing", "") not in events
+    # A sidecar transcript skips speech-to-text but still waits for Enter,
+    # like a transcribed one, so its printed text stays readable
+    assert events == [("feedback", "Voice file saved"), ("enter",)]
 
 
 def test_set_sample_keeps_sample_when_speech_to_text_fails(tmp_path, monkeypatch):

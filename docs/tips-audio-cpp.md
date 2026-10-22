@@ -6,9 +6,9 @@ For regular use, especially if you want to try several TTS models, audio.cpp is 
 
 ## Getting started
 
-Install and model-download instructions can be found in the [audio.cpp documentation](https://github.com/0xShug0/audio.cpp#readme). [Prebuilt binaries](https://github.com/0xShug0/audio.cpp/releases) are available for some system configurations. The [server documentation](https://github.com/0xShug0/audio.cpp/blob/main/app/server/README.md) covers launch options and configuration. Follow those instructions for your operating system, GPU, and chosen models.
+Install and model-download instructions can be found in the [audio.cpp documentation](https://github.com/0xShug0/audio.cpp#readme). [Prebuilt binaries](https://github.com/0xShug0/audio.cpp/releases) are available for some system configurations. The [server documentation](https://github.com/0xShug0/audio.cpp/blob/main/app/server/README.md) covers launch options and configuration.
 
-1. Install audio.cpp and download one or more models. Check the [supported-model table](<../README.md#description>) for the models currently supported through audio.cpp by `tts-audiobook-tool`; not every audio.cpp model is supported here.
+1. Install audio.cpp and download one or more models.
 2. Start `audiocpp_server` using audio.cpp's instructions. Its web UI is useful for downloading models and testing that they work before connecting the audiobook tool.
 3. Set up and launch `tts-audiobook-tool` using the [virtual environment for remote TTS servers](<../README.md#virtual-environment-for-remote-tts-servers-sgl-omni--audiocpp>).
 4. Under `Options` > `Remote TTS server URL`, enter the audio.cpp server's base URL, typically `http://127.0.0.1:8080`. Do not append `/v1` or an endpoint path. Keep the server running while using the app.
@@ -46,21 +46,11 @@ For example, a two-model config using OmniVoice and Echo-TTS might look like thi
 }
 ```
 
-**Each model entry must use `"mode": "offline"`.** `tts-audiobook-tool` sends offline requests and expects each one to return a complete WAV file. It does not detect entries configured with `"mode": "streaming"`; such entries will not appear among the available models.
+See audio.cpp's [server configuration guide](https://github.com/0xShug0/audio.cpp/blob/main/app/server/README.md#config) for the config format and available options.
 
-Adapt the example as needed. See audio.cpp's [server configuration guide](https://github.com/0xShug0/audio.cpp/blob/main/app/server/README.md#config) for the config format and available options.
+Each model entry must use `"mode": "offline"`.
 
-Launch the server with:
-
-```bash
-audiocpp_server --config server.json
-```
+For most single-GPU setups, use `"max_loaded_models": 1`.
 
 After adding or changing config entries, restart the server to apply them.
 
-
-## Keep only one TTS model loaded at a time
-
-**For most single-GPU setups, use `"max_loaded_models": 1`.** You can set this directly at the top level of the JSON config, as shown above or, alternatively, as a command-line option.
-
-The limit applies only to models inside audio.cpp. `tts-audiobook-tool` itself may also need GPU memory for Whisper validation and other supporting models, so leave some headroom even with just one TTS model loaded. See the [VRAM considerations](<../README.md#vram-considerations>) for ways to reduce the app's memory use.

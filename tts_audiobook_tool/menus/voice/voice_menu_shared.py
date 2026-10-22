@@ -262,11 +262,11 @@ class VoiceMenuShared:
         return path, sound
 
     @staticmethod
-    def get_voice_sample_transcript(state: State, path: str, sound: "Sound") -> tuple[str, str, bool]:
+    def get_voice_sample_transcript(state: State, path: str, sound: "Sound") -> tuple[str, str]:
         """
         The transcript for a newly selected primary sample: its sidecar text
         file's, otherwise speech-to-text.
-        Returns (transcript, error, transcribed); error is non-empty only when
+        Returns (transcript, error); error is non-empty only when
         speech-to-text failed.
         """
         # Retain sidecar text for every primary sample, so switching to a
@@ -278,10 +278,9 @@ class VoiceMenuShared:
             printt(f"{transcript_path}:")
             printt(f"{COL_DIM_ITALICS}{transcript}")
             printt()
-            return transcript, "", False
+            return transcript, ""
         # No sidecar text: transcribe every primary sample.
-        transcript, err = VoiceMenuShared.transcribe_voice_sample_to_text(state, sound)
-        return transcript, err, True
+        return VoiceMenuShared.transcribe_voice_sample_to_text(state, sound)
 
     @staticmethod
     def ask_and_set_voice_sample(state: State, tts_type: TtsModelType, index: int) -> None:
@@ -304,8 +303,6 @@ class VoiceMenuShared:
         # or STT), so the shared list is complete for any model; whether a
         # model actually sends the transcript at generation time remains a
         # model-specific capability.
-        hints.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
-
         loaded = VoiceMenuShared.ask_and_load_voice_sound(state, tts_type)
         if loaded is None:
             return
@@ -318,7 +315,7 @@ class VoiceMenuShared:
             ask.ask_error(err)
             return
 
-        transcript, err, transcribed = VoiceMenuShared.get_voice_sample_transcript(state, path, sound)
+        transcript, err = VoiceMenuShared.get_voice_sample_transcript(state, path, sound)
         if err:
             ask.ask_error(f"Voice file saved, but its transcript is missing: {err}")
             return
@@ -327,12 +324,7 @@ class VoiceMenuShared:
             ask.ask_error(f"Voice file saved, but couldn't save its transcript: {err}")
             return
 
-        print_feedback("Voice file saved")
-
-        hints.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME, and_prompt=not transcribed)
-
-        if transcribed:
-            ask.ask_enter_to_continue()
+        VoiceMenuShared._finish_voice_import(state)
 
     @staticmethod
     def ask_and_set_voice_file(
@@ -355,18 +347,15 @@ class VoiceMenuShared:
             raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
         secondary = tts_type.id == "indextts2_local" and is_secondary
-        if not secondary:
-            hints.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
 
         loaded = VoiceMenuShared.ask_and_load_voice_sound(state, tts_type, message_override)
         if loaded is None:
             return
         path, sound = loaded
 
-        force_enter_prompt = False
         transcript = ""
         if not secondary:
-            transcript, err, force_enter_prompt = VoiceMenuShared.get_voice_sample_transcript(state, path, sound)
+            transcript, err = VoiceMenuShared.get_voice_sample_transcript(state, path, sound)
             if err:
                 ask.ask_error(err)
                 return
@@ -384,12 +373,19 @@ class VoiceMenuShared:
             ask.ask_error(err)
             return
 
-        print_feedback("Voice file saved")
+        VoiceMenuShared._finish_voice_import(state)
 
-        hints.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME, and_prompt=not force_enter_prompt)
-
-        if force_enter_prompt:
-            ask.ask_enter_to_continue()
+    @staticmethod
+    def _finish_voice_import(state: State) -> None:
+        """
+        Ends a successful voice sample import, the same way for every source.
+        Always waits for Enter, so that the import's console output (the
+        sidecar or speech-to-text transcript, plus the one-time realtime
+        playback tip) stays readable before the menu redraws.
+        """
+        print_feedback("Voice file saved", skip_pause=True)
+        hints.show_hints_if_necessary(state.prefs, [HINT_TEST_REAL_TIME])
+        ask.ask_enter_to_continue()
 
     @staticmethod
     def load_transcript_sidecar(path: str) -> tuple[Path, str] | None:

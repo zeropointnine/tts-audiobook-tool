@@ -210,7 +210,7 @@ def test_transcript_menu_edits_selected_pair_for_model_without_requirement(monke
         inputs.append(kwargs)
         return "Edited Reference."
     monkeypatch.setattr(voice_menu_shared.ask, "ask_input", ask_input)
-    monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *_: None)
+    monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *_, **__: None)
     # The sample is chosen in the menu, so the index is passed in (no number prompt).
     VoiceMenuShared.edit_voice_sample_transcript(state, 1)
     assert len(inputs) == 1
@@ -235,8 +235,10 @@ def test_import_nonrequiring_model_retains_sidecar_but_secondary_ignores_it(tmp_
     monkeypatch.setattr(voice_menu_shared.SoundPipeline, "apply_voice_clone_post_processing", lambda value, **_: value)
     monkeypatch.setattr(voice_menu_shared.PlaySoundUtil, "play_sound_async", lambda *_: None)
     monkeypatch.setattr(voice_menu_shared.hints, "show_hint_if_necessary", lambda *_, **__: None)
+    monkeypatch.setattr(voice_menu_shared.hints, "show_hints_if_necessary", lambda *_, **__: None)
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_enter_to_continue", lambda *_: None)
     monkeypatch.setattr(voice_menu_shared.Transcriber, "transcribe_to_words", lambda *_: pytest.fail("unexpected STT"))
-    monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *_: None)
+    monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *_, **__: None)
     VoiceMenuShared.ask_and_set_voice_file(state, model("indextts2_local" if secondary else "mira_local"), is_secondary=secondary)
     assert project.voice_references == as_voices([{"file_name": ""}] if secondary else [{"file_name": "clip.flac", "transcript": "Sidecar text"}])
 
@@ -271,6 +273,8 @@ def _setup_short_import(tmp_path, monkeypatch, raw_seconds, trimmed_seconds):
     monkeypatch.setattr(voice_menu_shared.ask, "ask_error", errors.append)
     monkeypatch.setattr(voice_menu_shared.PlaySoundUtil, "play_sound_async", lambda *_: pytest.fail("unexpected playback"))
     monkeypatch.setattr(voice_menu_shared.hints, "show_hint_if_necessary", lambda *_, **__: None)
+    monkeypatch.setattr(voice_menu_shared.hints, "show_hints_if_necessary", lambda *_, **__: None)
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_enter_to_continue", lambda *_: None)
     monkeypatch.setattr(voice_menu_shared.Transcriber, "transcribe_to_words", lambda *_: pytest.fail("unexpected STT"))
     return state, project, errors
 

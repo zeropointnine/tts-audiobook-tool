@@ -128,14 +128,6 @@ Because it is used concurrently with the text-to-speech model, it can add 2-3 GB
 VRAM memory requirements."""
 )
 
-HINT_VOICE_TRANSCRIPT = Hint(
-    "voice_transcript",
-    "Voice clone transcript",
-"""Because this TTS model requires a transcript of the voice clone sample,
-the app will automatically transcribe the text using Whisper.
-If a .txt file with the same base file name exists, it will use that instead."""
-)
-
 HINT_FORCED_STRICTNESS_LOW = Hint(
     "",
     "Note",
