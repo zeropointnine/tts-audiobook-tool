@@ -10,6 +10,11 @@ import requests
 from tts_audiobook_tool.l import L
 
 
+# Finish reasons meaning the output-token limit ended the reply: OpenAI-style
+# APIs report "length", Anthropic "max_tokens"
+OUTPUT_LIMIT_FINISH_REASONS = ("length", "max_tokens")
+
+
 class LlmSession:
     """
     Manages a multi-turn LLM conversation and makes the HTTP API calls.
@@ -68,6 +73,9 @@ class LlmSession:
         self._active_response_lock = threading.Lock()
         self._active_response: requests.Response | None = None
         self._cancel_requested = threading.Event()
+        # Why the provider ended the last reply, as reported ("stop", "length",
+        # "end_turn", "max_tokens", ...); None if not reported. See hit_output_limit.
+        self.last_finish_reason: str | None = None
         self.resolved_api_type = (
             api_type if api_type is not None else self.detect_api_type()
         )
@@ -91,6 +99,12 @@ class LlmSession:
         if extra_line:
             print(extra_line)
         print(sep)
+
+    @property
+    def hit_output_limit(self) -> bool:
+        """Whether the last reply was cut off by the output-token limit (with
+        reasoning models, possibly while still thinking, leaving no answer)."""
+        return self.last_finish_reason in OUTPUT_LIMIT_FINISH_REASONS
 
     def detect_api_type(self) -> str:
         if "anthropic.com" in self.api_endpoint_url:
@@ -133,6 +147,7 @@ class LlmSession:
             L.i("[llm] send skipped: interrupt already set")
             return ""
         self._cancel_requested.clear()
+        self.last_finish_reason = None
         with self.history_lock:
             self.history.append({"role": "user", "content": message})
             history_snapshot = list(self.history)
@@ -316,6 +331,8 @@ class LlmSession:
                         # and some providers' keep-alive/error events arrive
                         # with an empty choices list.
                         continue
+                    if choices[0].get("finish_reason"):
+                        self.last_finish_reason = choices[0]["finish_reason"]
                     delta = choices[0].get("delta") or {}
                     reasoning = delta.get("reasoning_content") or ""
                     if reasoning:
@@ -373,6 +390,7 @@ class LlmSession:
             response.raise_for_status()
             data = response.json()
             self.vlog("RESPONSE (openai)", data)
+            self.last_finish_reason = data["choices"][0].get("finish_reason")
             return data["choices"][0]["message"]["content"]
 
     def call_anthropic(
@@ -420,6 +438,10 @@ class LlmSession:
                     if not line_str.startswith("data: "):
                         continue
                     event_data = json.loads(line_str[6:])
+                    if event_data.get("type") == "message_delta":
+                        stop_reason = (event_data.get("delta") or {}).get("stop_reason")
+                        if stop_reason:
+                            self.last_finish_reason = stop_reason
                     if event_data.get("type") == "content_block_delta":
                         delta = event_data.get("delta", {})
                         if delta.get("type") == "thinking_delta":
@@ -471,6 +493,7 @@ class LlmSession:
             response.raise_for_status()
             data = response.json()
             self.vlog("RESPONSE (anthropic)", data)
+            self.last_finish_reason = data.get("stop_reason")
             return self.extract_anthropic_text(data["content"])
 
     def extract_anthropic_text(self, content: list[dict]) -> str:

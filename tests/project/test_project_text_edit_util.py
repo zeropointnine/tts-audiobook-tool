@@ -16,6 +16,9 @@ from tts_audiobook_tool.project_support.project_text_edit_util import (
 )
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.text_ops.text_edit_session import TextEditSession
+from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile, RangeAttribution
+from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
+from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 
 
 def make_phrase_group(text: str) -> PhraseGroup:
@@ -59,6 +62,53 @@ def make_generated_files(project: Project) -> list[tuple[Path, Path]]:
         sidecar_path.write_text("{}", encoding="utf-8")
         result.append((sound_path, sidecar_path))
     return result
+
+
+@pytest.mark.parametrize("save_error", ["", "disk full"])
+def test_confirmed_edit_clears_only_outdated_assignments_after_text_save(tmp_path, monkeypatch, save_error):
+    # Failed text saves keep all cached results; successful ones retain unchanged ranges.
+    project = make_project(tmp_path)
+    try:
+        saved = AttributionsFile(tuple(
+            RangeAttribution(i, i + 1, UtteranceUtil.range_text_hash(project.book, i, i + 1), ())
+            for i in range(3)
+        ))
+        assert SpeakerAssignFileUtil.save_attributions_file(project.dir_path, saved) == ""
+        session = TextEditSession(project.book)
+        session.update_phrase_group_text(
+            session.phrase_groups[1].item_id, "Edited prose.", max_words=40, pysbd_lang="en",
+        )
+        if save_error:
+            monkeypatch.setattr(ProjectTextEditUtil, "atomic_save_book", lambda *_: save_error)
+        error = ProjectTextEditUtil.commit(
+            project, session.to_book(), session.original_snapshot,
+            edited_segment_indices=session.edited_original_indices,
+        )
+        assert error == save_error
+        expected = saved if save_error else AttributionsFile((saved.ranges[0], saved.ranges[2]))
+        assert SpeakerAssignFileUtil.load_attributions_file(project.dir_path) == expected
+    finally:
+        stop_project(project)
+
+
+def test_commit_reports_assignment_cleanup_failure(tmp_path, monkeypatch):
+    # Cleanup errors must not be presented as a fully successful text save.
+    project = make_project(tmp_path)
+    try:
+        saved = AttributionsFile((RangeAttribution(
+            0, 3, UtteranceUtil.range_text_hash(project.book, 0, 3), (),
+        ),))
+        assert SpeakerAssignFileUtil.save_attributions_file(project.dir_path, saved) == ""
+        session = TextEditSession(project.book)
+        session.delete_phrase_groups({session.phrase_groups[1].item_id})
+        monkeypatch.setattr(SpeakerAssignFileUtil, "save_attributions_file", lambda *_: "disk full")
+        error = ProjectTextEditUtil.commit(
+            project, session.to_book(), session.original_snapshot,
+            session.earliest_affected_original_index,
+        )
+        assert error == "Project text was saved, but outdated dialog assignments could not be cleared: disk full"
+    finally:
+        stop_project(project)
 
 
 def test_commit_atomically_saves_book_and_deletes_audio_from_cutoff(

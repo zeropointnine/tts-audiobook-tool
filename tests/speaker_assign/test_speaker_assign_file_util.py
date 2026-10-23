@@ -10,6 +10,7 @@ from tts_audiobook_tool.speaker_assign.roster import (
     RosterNarration,
 )
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
+from tts_audiobook_tool.speaker_assign.voice_map import VoiceMapFile
 
 
 def make_roster_file() -> RosterFile:
@@ -85,3 +86,35 @@ def test_malformed_provenance_loads_as_defaults() -> None:
     assert roster_file.llm == {} and roster_file.section_text_hashes == ()
     assert roster_file.created == "" and roster_file.raw_reply == ""
     assert roster_file.roster == make_roster_file().roster
+
+
+def test_voices_file_round_trips_and_defaults_to_empty(tmp_path) -> None:
+    # No voices.json means no voices chosen yet (not an error); a saved map
+    # loads back equal and counts as speaker assignment data.
+    project_dir = str(tmp_path)
+    assert SpeakerAssignFileUtil.load_voices_file(project_dir) == VoiceMapFile()
+    assert not SpeakerAssignFileUtil.has_any_data(project_dir)
+
+    voice_map = VoiceMapFile({"BARON": 3, "HELENE": 0})
+    assert SpeakerAssignFileUtil.save_voices_file(project_dir, voice_map) == ""
+
+    assert SpeakerAssignFileUtil.voices_path(project_dir) == os.path.join(project_dir, "speaker_assign", "voices.json")
+    assert SpeakerAssignFileUtil.load_voices_file(project_dir) == voice_map
+    assert SpeakerAssignFileUtil.has_any_data(project_dir)
+
+
+def test_invalid_voices_file_is_an_error_string(tmp_path) -> None:
+    # Untagged payloads and negative or non-integer voice indices don't load.
+    project_dir = str(tmp_path)
+    os.makedirs(SpeakerAssignFileUtil.dir_path(project_dir))
+    path = SpeakerAssignFileUtil.voices_path(project_dir)
+
+    for payload in (
+        {"voices": {"BARON": 1}},
+        {"format": "speaker_voices.v1", "voices": {"BARON": -1}},
+        {"format": "speaker_voices.v1", "voices": {"BARON": "2"}},
+        {"format": "speaker_voices.v1", "voices": {"BARON": True}},
+    ):
+        with open(path, "w", encoding="utf-8") as file:
+            json.dump(payload, file)
+        assert isinstance(SpeakerAssignFileUtil.load_voices_file(project_dir), str)

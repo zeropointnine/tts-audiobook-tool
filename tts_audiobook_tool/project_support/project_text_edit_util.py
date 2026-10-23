@@ -7,6 +7,7 @@ from tts_audiobook_tool.app_types.book_serialization import (
     book_to_project_text_json_dict,
 )
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.speaker_assign.attribution_invalidation import AttributionInvalidation
 from tts_audiobook_tool.text_ops.heading_end_detector import recompute_heading_ends
 from tts_audiobook_tool.text_ops.text_edit_session import TextEditSession
 from tts_audiobook_tool.util import make_error_string
@@ -55,6 +56,9 @@ class ProjectTextEditUtil:
         recompute_heading_ends(
             new_book.sections, new_book.segmentation_settings.language_code
         )
+        assignment_cleanup = AttributionInvalidation.plan(project.dir_path, new_book)
+        if isinstance(assignment_cleanup, str):
+            return assignment_cleanup
         error = ProjectTextEditUtil.atomic_save_book(project.project_text_path, new_book)
         if error:
             return error
@@ -65,6 +69,13 @@ class ProjectTextEditUtil:
             return (
                 "Project text was saved, but the in-memory project update failed: "
                 f"{make_error_string(exception)}"
+            )
+
+        error = assignment_cleanup.commit()
+        if error:
+            return (
+                "Project text was saved, but outdated dialog assignments could not "
+                f"be cleared: {error}"
             )
 
         if prune_markers_cutoff is not None:

@@ -37,15 +37,17 @@ def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
                         lambda *_: pytest.fail("Opening voice controls must not load the model"))
     menu.VoiceVibeVoiceMenu.menu(state)
     items = captured["items"](state)
-    # 2 voice items, Add, LoRA item(s), then selection mode and edit selections.
+    # 2 voice items, Add, LoRA item(s), then selection mode, edit selections
+    # and auto-assign.
     select = items[3]
     assert get_string_from(state, items[2].label) == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
-    assert get_string_from(state, items[-1].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    assert get_string_from(state, items[-2].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    assert get_string_from(state, items[-1].label).startswith(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
     label = strip_ansi_codes(get_string_from(state, select.label))
     assert label.startswith("Select LoRA")
     assert (lora_target or "(optional)") in label
     assert select.blank_line_before
-    assert len(items) == (7 if lora_target else 6)
+    assert len(items) == (8 if lora_target else 7)
     assert all(not item.superlabel for item in items[1:])
     select.handler(state, select)
     assert asked["project"] is state.project
@@ -59,7 +61,7 @@ def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
         assert not clear.blank_line_before
         clear.handler(state, clear)
         assert state.project.get_model_setting("vibevoice_local", "lora_target") == ""
-        assert len(captured["items"](state)) == 6
+        assert len(captured["items"](state)) == 7
         assert saved == [state.project]
         assert cleared == [True]
         assert len(state.project.voice_references) == 2

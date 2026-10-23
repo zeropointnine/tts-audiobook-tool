@@ -175,6 +175,49 @@ class TestPhraseGrouper(unittest.TestCase):
         self.assertEqual(groups[1].last_reason, Reason.SPACE_BREAK)
         self.assertEqual("".join(group.text for group in groups), text)
 
+    def test_quoted_beat_reisolated_by_dialog_split_is_not_space_break(self):
+        # The dialog pass isolates `"..."` (not accepted as dialog, having no
+        # vocalizable content), and the grouper folds it back into the quote
+        # group. Being a silent beat rather than an ornament, it keeps the
+        # paragraph boundary, matching the result without dialog segmentation.
+        text = "He stared at her.\n\n“Well?”\n\n“...”\n\nShe said nothing."
+
+        for dialog_segmentation in (False, True):
+            with self.subTest(dialog_segmentation=dialog_segmentation):
+                groups = PhraseGrouper.text_to_groups(
+                    text,
+                    40,
+                    SegmentationStrategy.SENTENCE_PLUS,
+                    "en",
+                    dialog_segmentation=dialog_segmentation,
+                )
+
+                self.assertEqual(
+                    [group.text for group in groups],
+                    ["He stared at her.\n\n", "“Well?”\n\n“...”\n\n", "She said nothing."],
+                )
+                self.assertEqual(groups[1].last_reason, Reason.PARAGRAPH)
+
+    def test_merge_ornamental_groups_carries_quoted_beat_reason(self):
+        # A beat group adopts its own boundary for the merged phrase; only a
+        # true ornament promotes it to a space break.
+        groups = [
+            PhraseGroup([Phrase("“Well?”\n\n", Reason.PARAGRAPH)]),
+            PhraseGroup([Phrase("“...”\n\n\n", Reason.SPACE_BREAK)]),
+            PhraseGroup([Phrase("“Fine.”\n\n", Reason.PARAGRAPH)]),
+            PhraseGroup([Phrase("“…”", Reason.SENTENCE)]),
+        ]
+
+        result = PhraseGrouper.merge_ornamental_groups(groups)
+
+        self.assertEqual(
+            [(group.text, group.last_reason) for group in result],
+            [
+                ("“Well?”\n\n“...”\n\n\n", Reason.SPACE_BREAK),
+                ("“Fine.”\n\n“…”", Reason.SENTENCE),
+            ],
+        )
+
     def test_leading_ornamental_group_merges_forward(self):
         # With dialog segmentation, the dialog pass can re-split the leading
         # ornament (previously merged into the first content phrase) back out

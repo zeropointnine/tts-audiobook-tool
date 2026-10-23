@@ -63,9 +63,11 @@ Logical-section starts and titles become project `BookSection` records
   ↓
 Existing AppUtil.print_project_text(...) preview is shown
   ↓
-On confirmation, old sound segments are deleted
+Incoming text is checked for invalidated dialog assignments; replacement consequences are confirmed
   ↓
 Project text, chapter dividers, raw text, metadata, and EPUB copy are saved
+  ↓
+Outdated dialog assignments are cleared, then old sound segments are deleted
 ```
 
 ---
@@ -150,6 +152,8 @@ It is intentionally more deliberate than raw `BeautifulSoup.get_text()`:
 - preserves `<br>` line breaks where appropriate,
 - renders `<hr>` as a scene-break-like `* * *`,
 - keeps list items readable,
+- coalesces ordinary block boundaries, so nesting a paragraph inside layout containers does not manufacture a scene break,
+- preserves empty/spacer blocks (including image-only ornaments) as extra spacing, explicit `<br>` runs, and `<hr>` ornaments; CSS-only visual spacing is not interpreted,
 - normalizes whitespace and blank lines,
 - retains source-position information needed for fragment-aware slices,
 - warns when no readable body text is found.
@@ -220,15 +224,15 @@ MenuItem("Import from EPUB file", on_set_text, data="epub")
 
 The EPUB branch in `on_set_text(...)` mirrors the existing text-file and manual import flow:
 
-1. If generated sound segments exist, the user is warned that replacing text will delete them.
-2. The app asks for an `.epub` path.
-3. `EpubExtractor.import_epub(...)` imports, extracts, segments, and returns an `EpubImportResult`.
-4. Significant warnings are shown as import-time FYIs.
-5. The generated phrase groups are previewed with `AppUtil.print_project_text(...)`.
-6. The user confirms or cancels.
-7. On confirmation, old generated sound segments are deleted.
-8. The original EPUB is copied to the project as `project_text.epub`.
-9. Phrase groups, chapter dividers, applied segmentation settings, and raw text are committed atomically.
+1. The app asks for an `.epub` path.
+2. `EpubExtractor.import_epub(...)` imports, extracts, segments, and returns an `EpubImportResult`.
+3. Significant warnings are shown as import-time FYIs, and the generated phrase groups are previewed.
+4. The actual incoming `Book` is checked against saved dialog assignment ranges.
+5. One replacement confirmation lists generated audio, markers, and affected dialog assignment chunks, when any would be invalidated. The user can cancel without clearing anything.
+6. The original EPUB is copied to the project as `project_text.epub`.
+7. Phrase groups, chapter dividers, applied segmentation settings, and raw text are saved. These are separate writes, not a multi-file transaction; errors are surfaced.
+8. After successful persistence, dialog assignments whose saved ranges no longer match are cleared. Still-valid results, the character roster, and voice mappings are retained.
+9. Old generated sound segments are deleted after a successful import.
 10. Real-time line range state is reset the same way as existing text replacement.
 11. The app reports the imported chapter and divider counts.
 
@@ -251,7 +255,7 @@ On confirmed import:
 
 Re-importing the saved `project_text.epub` itself is supported: `EpubExtractor.copy_epub_to_project` detects that the source and destination reference the same file and skips the copy instead of failing.
 
-### Atomic commit method
+### Import commit method
 
 Regular text replacement creates one flat `BookSection`. EPUB import uses a separate commit helper that projects aligned starts and titles into multiple `BookSection` records:
 
@@ -267,7 +271,8 @@ def set_phrase_groups_chapters_and_save(
         dialog_segmentation: bool = False,
         title: str = "",
         section_titles: list[str] | None = None,
-) -> None:
+        invalidation: AttributionInvalidation | None = None,
+) -> str:
     ...
 ```
 
@@ -278,7 +283,8 @@ The helper:
 - records the applied segmentation settings on the `Book`,
 - clears legacy project markers and obsolete generation ranges,
 - saves project metadata and `project_text.json`, and
-- saves `project_text_raw.txt`.
+- saves `project_text_raw.txt`, then persists planned dialog assignment cleanup,
+- returns an error string (empty on success), including partial-save context when appropriate.
 
 Keeping this as a separate method makes the distinction explicit: ordinary text import has one flat section, while EPUB import has navigation-defined logical structure.
 
@@ -330,7 +336,14 @@ EPUB navigation-defined boundaries and titles become `BookSection` records; they
 
 Replacing text from EPUB deletes old generated sound segments and clears section
 markers, matching text-file and manual import behavior. Word substitutions are
-kept.
+kept. Dialog assignments are filtered against the incoming text: unchanged saved
+ranges remain available, while outdated ranges are removed after persistence.
+The character roster and character-to-voice mappings are retained.
+
+The text editor uses the same `AttributionInvalidation` planner in its save
+confirmation and commit path. Preview/cancel never clears assignments; failed
+text writes leave them untouched. The assignment menu treats an older roster as
+an advisory notice explaining reuse or explicit recreation, not as a cache error.
 
 ### Future structure is enabled but not required
 

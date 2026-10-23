@@ -23,6 +23,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_edit_util import (
     ProjectTextEditUtil,
 )
+from tts_audiobook_tool.speaker_assign.attribution_invalidation import AttributionInvalidation
 from tts_audiobook_tool.text_ops.text_edit_session import (
     PhraseGroupSplitPoint,
     TextEditMutationResult,
@@ -727,6 +728,22 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         self.push_screen(SegmentationInfoDialog(self.project))
 
     def make_confirmation_dialog(self) -> SaveChangesDialog:
+        """Preview all derived data removed when the staged text is saved."""
+        dialog = self._make_audio_confirmation_dialog()
+        edit_session = self.edit_session_or_none
+        if edit_session is None:
+            return dialog
+        cleanup = AttributionInvalidation.plan(self.project.dir_path, edit_session.to_book())
+        if isinstance(cleanup, str):
+            return SaveChangesDialog(
+                ["Cannot save changes until dialog assignments can be checked.", "", f"{COL_ERROR}{cleanup}"],
+                confirmation_enabled=False,
+            )
+        if cleanup.warning_text:
+            dialog.copy_lines.extend(["", f"{COL_ERROR}{cleanup.warning_text}"])
+        return dialog
+
+    def _make_audio_confirmation_dialog(self) -> SaveChangesDialog:
         """Warn about generated audio and markers invalidated by the staged edit."""
         edit_session = self.edit_session_or_none
         if edit_session is None:

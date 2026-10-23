@@ -18,6 +18,7 @@ class JsonArtifactType(Enum):
     PREFS = "preferences"
     SPEAKER_ROSTER = "speaker roster"
     SPEAKER_ATTRIBUTIONS = "speaker attributions"
+    SPEAKER_VOICES = "character voices"
 
 
 class JsonSaveUtil:

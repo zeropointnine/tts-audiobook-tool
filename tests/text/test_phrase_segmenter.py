@@ -49,6 +49,52 @@ def test_text_to_phrases_promotes_merged_ornament_to_space_break() -> None:
     ]
 
 
+@pytest.mark.parametrize("ornament", ["* * *", "***", "---", ". . .", "~", "◇", "•••"])
+def test_text_to_phrases_promotes_punctuation_only_ornament(ornament: str) -> None:
+    # ASCII-punctuation ornaments are folded into the preceding sentence string
+    # during sentence segmentation (unlike symbols such as ◇, which survive as
+    # their own phrase). Both kinds must yield a space break on fresh import,
+    # matching the reason recovered when a saved project is loaded.
+    text = f"He stared at her.\n\n{ornament}\n\nMorning came."
+
+    result = PhraseSegmenter.text_to_phrases(text, 40, "en")
+
+    assert result == [
+        Phrase(f"He stared at her.\n\n{ornament}\n\n", Reason.SPACE_BREAK),
+        Phrase("Morning came.", Reason.SENTENCE),
+    ]
+
+
+def test_text_to_phrases_keeps_paragraph_for_quoted_beat() -> None:
+    # A quoted silent beat is folded the same way but is not an ornament.
+    text = 'He stared at her.\n\n"..."\n\nShe said nothing.'
+
+    result = PhraseSegmenter.text_to_phrases(text, 40, "en")
+
+    assert result == [
+        Phrase('He stared at her.\n\n"..."\n\n', Reason.PARAGRAPH),
+        Phrase("She said nothing.", Reason.SENTENCE),
+    ]
+
+
+def test_merge_ornamental_lines_does_not_promote_quoted_beat() -> None:
+    # A quoted silent beat (`"..."`) still folds backward, since it can't be a
+    # TTS prompt by itself, but it is dialog rather than a scene break: the
+    # merged phrase takes the beat's own paragraph boundary.
+    phrases = [
+        Phrase('"Well?"\n\n', Reason.PARAGRAPH),
+        Phrase('"..."\n\n', Reason.PARAGRAPH),
+        Phrase("He shrugged.\n\n", Reason.PARAGRAPH),
+    ]
+
+    result = PhraseSegmenter.merge_ornamental_lines(phrases)
+
+    assert result == [
+        Phrase('"Well?"\n\n"..."\n\n', Reason.PARAGRAPH),
+        Phrase("He shrugged.\n\n", Reason.PARAGRAPH),
+    ]
+
+
 def test_text_to_phrases_merges_leading_ornament_into_first_content_phrase() -> None:
     # Regression: a leading ornamental line used to survive as its own
     # ornament-only phrase (and therefore an ornament-only first PhraseGroup

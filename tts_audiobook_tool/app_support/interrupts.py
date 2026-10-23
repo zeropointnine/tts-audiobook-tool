@@ -19,6 +19,7 @@ class Interrupts(SingletonBase):
 
     _mode = ""
     _flag = False
+    _press_count = 0
     _external_event: InterruptEvent | None = None
 
     def __init__(self):
@@ -33,6 +34,7 @@ class Interrupts(SingletonBase):
         """
         self._mode = mode
         self._flag = False
+        self._press_count = 0
 
     def set_external_event(self, event: InterruptEvent | None) -> None:
         """Use a process-safe event as an additional cancellation source."""
@@ -43,6 +45,11 @@ class Interrupts(SingletonBase):
         event = self._external_event
         return self._flag or (event is not None and event.is_set())
 
+    @property
+    def press_count(self) -> int:
+        """Number of control-c presses since `set()`."""
+        return self._press_count
+
     def clear(self) -> bool:
         """
         Returns did_interrupt as a convenience
@@ -50,6 +57,7 @@ class Interrupts(SingletonBase):
         result = self.did_interrupt
         self._mode = ""
         self._flag = False
+        self._press_count = 0
         return result
 
     def signal_handler(self, _, __):
@@ -58,6 +66,7 @@ class Interrupts(SingletonBase):
             return
 
         self._flag = True
+        self._press_count += 1
 
         feedback = ""
         match self._mode:
@@ -67,6 +76,9 @@ class Interrupts(SingletonBase):
                 feedback = "Control-C pressed, will stop after current generation is complete"
             case "concatenating":
                 feedback = "Control-C pressed, will stop"
+            case "llm":
+                # Silent: the caller reports what a press does (see LlmRequestUtil.send_cancellable)
+                feedback = ""
             case _:
                 feedback = "Control-C pressed, will stop"
         if feedback:

@@ -7,6 +7,9 @@ from textual.widgets import Button, Input, OptionList, Static, TextArea
 from tts_audiobook_tool.app_types import BookSection, SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile, RangeAttribution
+from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
+from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
     EditorSaved,
@@ -1435,6 +1438,44 @@ def test_edit_preserves_original_trailing_break() -> None:
             assert item.phrase_group.text == "Two.\n\n"
 
     run(exercise())
+
+
+@pytest.mark.parametrize("has_audio", [False, True])
+def test_confirmation_previews_assignment_cleanup_without_clearing_it(tmp_path, monkeypatch, has_audio):
+    # Assignment loss is warned about even with no audio, and combines with audio warnings.
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")])])
+    project.dir_path = str(tmp_path)
+    saved = AttributionsFile((RangeAttribution(
+        0, 2, UtteranceUtil.range_text_hash(project.book, 0, 2), (),
+    ),))
+    assert SpeakerAssignFileUtil.save_attributions_file(project.dir_path, saved) == ""
+    app = make_loaded_editor(project)
+    monkeypatch.setattr(project.sound_segments, "snapshot_paths_at_indices",
+                        lambda _: [Path("segment.flac")] if has_audio else [])
+    app.edit_session.update_phrase_group_text(
+        app.edit_session.phrase_groups[0].item_id, "Changed.", max_words=80, pysbd_lang="en",
+    )
+    dialog = app.make_confirmation_dialog()
+    copy = "\n".join(dialog.copy_lines)
+    assert "clear dialog assignments for 1 affected chunk" in copy
+    assert 'Run "Assign dialog to characters" again' in copy
+    assert "roster and voice mappings will be kept" in copy
+    assert ("generated sound segment" in copy) == has_audio
+    assert dialog.confirmation_enabled
+    assert SpeakerAssignFileUtil.load_attributions_file(project.dir_path) == saved
+
+
+def test_confirmation_blocks_save_when_assignment_cache_cannot_be_checked(tmp_path):
+    # Never silently clear or overwrite unreadable attribution data on text save.
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.dir_path = str(tmp_path)
+    path = Path(SpeakerAssignFileUtil.attributions_path(project.dir_path))
+    path.parent.mkdir()
+    path.write_text("{broken", encoding="utf-8")
+    app = make_loaded_editor(project)
+    dialog = app.make_confirmation_dialog()
+    assert not dialog.confirmation_enabled
+    assert "Cannot save changes" in dialog.copy_lines[0]
 
 
 def test_edit_confirmation_warns_only_about_edited_segment(monkeypatch) -> None:

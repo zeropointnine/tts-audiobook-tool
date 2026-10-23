@@ -301,14 +301,15 @@ class BeautifulSoupEpubChapterTextExtractor:
             pieces.append("\n")
             return
         if name == "hr":
-            pieces.append("\n\n* * *\n\n")
+            self.ensure_block_boundary(pieces)
+            pieces.append("* * *\n\n")
             return
-        if name == "li":
-            pieces.append("\n- ")
-
         is_block = name in self.BLOCK_TAGS
-        if is_block and name != "li":
-            pieces.append("\n\n")
+        if is_block:
+            self.ensure_block_boundary(pieces)
+        if name == "li":
+            pieces.append("- ")
+        content_start = len(pieces)
 
         if not hasattr(node, "children"):
             self.append_text_node(str(node), pieces)
@@ -329,7 +330,31 @@ class BeautifulSoupEpubChapterTextExtractor:
                     )
 
         if is_block:
-            pieces.append("\n\n")
+            # Empty blocks can be intentional spacers or image-only ornaments.
+            # Keep that signal explicit, rather than inferring it from the sum
+            # of paragraph boundaries contributed by nested layout wrappers.
+            is_spacer = not any(piece.strip() for piece in pieces[content_start:])
+            self.ensure_block_boundary(pieces, line_breaks=3 if is_spacer else 2)
+
+    @staticmethod
+    def ensure_block_boundary(pieces: list[str], line_breaks: int = 2) -> None:
+        """Request paragraph spacing without multiplying it through nesting.
+
+        Append only: navigation anchors refer to indices in `pieces`, so existing
+        entries must not be merged or rewritten. Explicit br/spacer runs survive.
+        """
+        trailing_breaks = 0
+        for piece in reversed(pieces):
+            for char in reversed(piece):
+                if not char.isspace():
+                    if trailing_breaks < line_breaks:
+                        pieces.append("\n" * (line_breaks - trailing_breaks))
+                    return
+                trailing_breaks += char == "\n"
+            if trailing_breaks >= line_breaks:
+                return
+        if trailing_breaks < line_breaks:
+            pieces.append("\n" * (line_breaks - trailing_breaks))
 
     @classmethod
     def make_text_slices(
@@ -492,11 +517,9 @@ class BeautifulSoupEpubChapterTextExtractor:
             line = re.sub(r"[ \t]+", " ", line).strip()
             lines.append(line)
         text = "\n".join(lines)
-        text = re.sub(
-            r"\n{3,}",
-            lambda match: "\n\n\n" if len(match.group(0)) >= 5 else "\n\n",
-            text,
-        )
+        # Ordinary block boundaries are coalesced during traversal; three or
+        # more line breaks now represent explicit spacing, not wrapper depth.
+        text = re.sub(r"\n{3,}", "\n\n\n", text)
         return text.strip()
 
 

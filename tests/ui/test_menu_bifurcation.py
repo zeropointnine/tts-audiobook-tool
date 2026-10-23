@@ -47,7 +47,8 @@ def sample_group_prefixes(voice_count):
 def selection_group_prefixes(voice_count):
     """Expected label prefixes of the selection controls that close every Voices menu."""
     prefixes = [voice_menu_shared.LABEL_VOICE_SELECTION_MODE] if voice_count >= 2 else []
-    return [*prefixes, voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS]
+    return [*prefixes, voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
+            voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES]
 
 
 def capture_voices_items(captured):
@@ -260,7 +261,8 @@ def test_local_omnivoice_voice_menu_has_no_instructions_items(monkeypatch, instr
     VoiceMenuShared.menu(state)
     items = captured["items"](state)
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
-    assert labels[-1].startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    assert labels[-2].startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    assert labels[-1].startswith(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
     assert not any(label.startswith(("Voice design", "Clear instructions")) for label in labels)
 
 
@@ -339,7 +341,7 @@ def test_remote_voice_factory_tracks_backend_changes(monkeypatch, next_id):
     assert callable(captured["items"])
     state.project.tts_model_type = next_id
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in captured["items"](state)]
-    assert len(labels) == 5
+    assert len(labels) == 6
     expected = sample_group_prefixes(2) + selection_group_prefixes(2)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, expected, strict=True))
     assert labels[2] == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE

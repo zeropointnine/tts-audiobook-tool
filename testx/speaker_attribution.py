@@ -84,7 +84,6 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from collections.abc import Sequence
-import dataclasses
 from dataclasses import dataclass
 import datetime
 import json
@@ -93,7 +92,6 @@ import re
 import shutil
 import sys
 import tempfile
-import time
 
 import tts_audiobook_tool.app_support  # noqa: F401  # pyright: ignore[reportUnusedImport]  (import order: avoids prefs circular import)
 from tts_audiobook_tool.l import L
@@ -104,24 +102,27 @@ from tts_audiobook_tool.app_types.book_serialization import (
     BOOK_FORMAT,
     load_book_from_project_text_file,
 )
-from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile, UtteranceAttribution
+from tts_audiobook_tool.speaker_assign.assign_plan import AssignPlan, PlannedChunk
+from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile, RangeAttribution, UtteranceAttribution
+from tts_audiobook_tool.speaker_assign.attribution_runner import (
+    AttributionCancelled,
+    AttributionError,
+    AttributionRunListener,
+    AttributionRunner,
+    RunOutcome,
+)
+from tts_audiobook_tool.speaker_assign.attribution_summary import AttributionSummary
 from tts_audiobook_tool.speaker_assign.attribution_prompt_util import (
     ATTRIBUTION_SYSTEM_PROMPT,
     AttributionPromptUtil,
 )
 from tts_audiobook_tool.speaker_assign.attribution_reply_util import AttributionReplyUtil, ParsedReply
 from tts_audiobook_tool.speaker_assign.chunk_plan_util import DEFAULT_CHUNK_WORDS, ChunkPlanUtil
-from tts_audiobook_tool.speaker_assign.roster import (
-    NarrativePerson,
-    Prominence,
-    Roster,
-    RosterCharacter,
-    RosterFile,
-    RosterNarration,
-    name_key,
-)
+from tts_audiobook_tool.speaker_assign.llm_request_util import LlmRequestResult, LlmRequestUtil
+from tts_audiobook_tool.speaker_assign.roster import Roster, RosterFile, RosterNarration
+from tts_audiobook_tool.speaker_assign.roster_util import ROSTER_SYSTEM_PROMPT, RosterUtil
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
-from tts_audiobook_tool.speaker_assign.speaker_assign_types import NOT_SPEECH, RESERVED_SPEAKER_IDS, Utterance
+from tts_audiobook_tool.speaker_assign.speaker_assign_types import NOT_SPEECH, Utterance
 from tts_audiobook_tool.speaker_assign.speaker_label_util import SpeakerLabelUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 
@@ -135,7 +136,6 @@ NOT_SPEECH_VOICE_INDEX = 0
 REST_KEYWORD = "REST"
 DEFAULT_REST_VOICE = 2  # 1-based UI voice number
 
-CHUNK_RETRY_DELAYS = (10, 30)  # seconds before the 2nd and 3rd attempt at a failed chunk
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +219,8 @@ def make_llm(system_prompt: str) -> LlmSession:
     therefore controlled by the prefs' extra params.
 
     The one difference is the transport read timeout: a full-book request can
-    take minutes, so the gap allowed between streamed chunks is longer.
+    take minutes, so the gap allowed between streamed chunks is longer (see
+    LlmRequestUtil.make_session).
     """
     prefs = Prefs.load(save_if_dirty=False)
     if not prefs.llm_url or not prefs.llm_model:
@@ -227,19 +228,11 @@ def make_llm(system_prompt: str) -> LlmSession:
     if not prefs.llm_api_key:
         sys.exit(f"No LLM API key: environment variable {prefs.llm_api_key_env_var!r} is empty.")
     print(f"  LLM: {prefs.llm_model} @ {prefs.llm_url}  extra params: {prefs.llm_extra_params}")
-    return LlmSession(
-        api_endpoint_url=prefs.llm_url,
-        token=prefs.llm_api_key,
-        model=prefs.llm_model,
-        system_prompt=system_prompt,
-        extra_params=prefs.llm_extra_params,
-        timeout=(15.0, 900.0),
-    )
+    return LlmRequestUtil.make_session(prefs, system_prompt)
 
 
 def llm_description() -> dict:
-    prefs = Prefs.load(save_if_dirty=False)
-    return {"url": prefs.llm_url, "model": prefs.llm_model, "extra_params": prefs.llm_extra_params}
+    return LlmRequestUtil.describe_llm(Prefs.load(save_if_dirty=False))
 
 
 REASONING_DUMP_PATH = os.path.join(tempfile.gettempdir(), "speaker_attribution_reasoning.txt")
@@ -268,20 +261,71 @@ def send_streaming(llm: LlmSession, message: str) -> str:
     started = datetime.datetime.now()
     reply = llm.send(message, on_chunk=on_chunk, on_reasoning=on_reasoning)
     seconds = (datetime.datetime.now() - started).total_seconds()
-    print(f"\n  done in {seconds:.0f}s: {received:,} answer chars, {reasoning:,} reasoning chars")
+    print(f"\n  done in {seconds:.0f}s: {received:,} answer chars, {reasoning:,} reasoning chars"
+          f" (finish reason: {llm.last_finish_reason})")
     if reasoning_parts:
         with open(REASONING_DUMP_PATH, "w", encoding="utf-8") as file:
             file.write("".join(reasoning_parts))
         print(f"  reasoning saved to {REASONING_DUMP_PATH}")
     if not reply.strip():
-        hint = (
-            " The model reasoned but never answered: it most likely hit its output-token limit"
-            " while thinking (reasoning counts toward max_tokens; DeepSeek's default in"
-            " thinking mode is 64K)."
-            if reasoning else ""
-        )
+        if llm.hit_output_limit:
+            hint = (f" The model hit its output-token limit while thinking (finish reason:"
+                    f" {llm.last_finish_reason}; reasoning counts toward max_tokens; DeepSeek's default"
+                    f" in thinking mode is 64K).")
+        elif reasoning:
+            hint = (" The model reasoned but never answered: it most likely hit its output-token limit"
+                    " while thinking (reasoning counts toward max_tokens; DeepSeek's default in"
+                    " thinking mode is 64K).")
+        else:
+            hint = ""
         raise RuntimeError(f"Empty reply from the LLM.{hint}")
     return reply
+
+
+def send_result(llm: LlmSession, message: str) -> LlmRequestResult:
+    """send_streaming for AttributionRunner: the same progress output, but
+    errors (including an empty reply) are returned in the result rather
+    than raised, so the runner can retry them. Control-c ends the script."""
+    try:
+        reply = send_streaming(llm, message)
+    except RuntimeError:  # an empty reply: the runner reports it (see finish_reason)
+        return LlmRequestResult(reply="", reasoning="", elapsed=0, finish_reason=llm.last_finish_reason)
+    except Exception as error:
+        return LlmRequestResult(reply="", reasoning="", elapsed=0, error=error)
+    return LlmRequestResult(reply=reply, reasoning="", elapsed=0, finish_reason=llm.last_finish_reason)
+
+
+class PrintListener(AttributionRunListener):
+    def __init__(self, book: Book) -> None:
+        self.book = book
+
+    def chunk_started(self, chunk: PlannedChunk, plan: AssignPlan) -> None:
+        print(f"\n[{chunk.number}/{len(plan.chunks)}] {UtteranceUtil.range_label(self.book, chunk.start, chunk.end)}:"
+              f" {chunk.utterance_count} utterances")
+
+    def note(self, text: str) -> None:
+        print(f"  {text}")
+
+    def retrying(self, attempt: int, delay: float, error: str) -> None:
+        print(f"\n  attempt {attempt} failed ({error}); retrying in {delay:.0f}s")
+
+    def chunk_saved(self, chunk: PlannedChunk, attribution: RangeAttribution, elapsed: float) -> None:
+        print("  " + AttributionSummary.counts_text(
+            Counter(SpeakerLabelUtil.counting_id(u.speaker) for u in attribution.utterances)))
+
+    def chunk_failed(self, chunk: PlannedChunk, error: str) -> None:
+        print(f"  FAILED: {error}")
+
+
+def make_runner(
+        args: argparse.Namespace, book: Book, roster: Roster, attributions: AttributionsFile,
+) -> AttributionRunner:
+    return AttributionRunner(
+        book=book, roster=roster, attributions=attributions, project_dir=args.project_dir,
+        prefs=Prefs.load(save_if_dirty=False), send=send_result, listener=PrintListener(book),
+        make_session=lambda: make_llm(ATTRIBUTION_SYSTEM_PROMPT),
+        chunk_words=getattr(args, "chunk_words", DEFAULT_CHUNK_WORDS),
+    )
 
 
 def maybe_dump_prompt(args: argparse.Namespace, system_prompt: str, message: str) -> bool:
@@ -303,175 +347,6 @@ def read_saved_response(args: argparse.Namespace) -> str | None:
 # ---------------------------------------------------------------------------
 # Step 1: roster (full-book pass)
 
-ROSTER_SYSTEM_PROMPT = """\
-You are a careful literary analyst helping cast a multi-voice audiobook.
-You will receive the full text of a book. Passages that were detected as
-quoted dialog are wrapped in <q>...</q> tags. Identify the characters who
-speak that dialog.\
-"""
-
-ROSTER_INSTRUCTIONS = """\
-Task: produce the roster of characters who speak dialog in this book.
-
-Rules:
-- Include every character who speaks more than a line or two of dialog,
-  minor characters included, up to 40 characters.
-- Order the list by how much dialog the character speaks, most first, based
-  on your overall impression of the book.
-- "prominence" is a coarse tier of how much dialog the character has:
-  "major", "supporting" or "minor".
-- Do not count, tally or list individual dialog passages, and keep your
-  reasoning brief: an approximate ranking is all that is needed.
-- Merge all names, titles, nicknames and descriptions that refer to the same
-  character into one entry ("aliases"); include forms the text uses when
-  attributing dialog (eg "the captain", "Mother", "my brother").
-- If the book is narrated in the first person and the narrator speaks dialog,
-  include the narrator as a character with "is_narrator": true. At most one
-  character may be the narrator.
-- Avoid spoilers in the user-facing fields: "id", "name" and the narration
-  "notes" are shown to someone who may not have read the book. Base them on
-  how the text refers to the character when they first appear and for most of
-  the book, never on identities, names or events revealed later (secret
-  identities, twists, deaths, late reveals). Give the first-person narrator
-  the id "NARRATOR" unless the text names them from early on.
-- "aliases" and "description" are not shown to the user; they are used to
-  attribute dialog in individual chapters. Make them complete, including names
-  and facts revealed later in the book, and anything that helps tell this
-  character's dialog apart from others' (eg relationships, speech habits, other
-  bodies or identities they speak through).
-- "id" must be UPPER_SNAKE_CASE (letters, digits and underscores only; no
-  spaces), unique, and must not be OTHER, UNKNOWN or NOT_SPEECH.
-- Make ids clearly distinct from each other, each one recognizably naming its
-  character. When characters share a role, title or name, disambiguate with a
-  distinguishing word (eg GATE_GUARD and MINE_GUARD, OLD_MARIE and YOUNG_MARIE),
-  not with numbers. Never give the same character two entries or two ids.
-
-Respond with only a JSON object, no commentary, in this shape:
-{
-  "narration": {"person": "first" | "third" | "mixed", "notes": "<one spoiler-free sentence>"},
-  "characters": [
-    {
-      "id": "ELIZABETH",
-      "name": "Elizabeth Bennet",
-      "aliases": ["Lizzy", "Miss Bennet", "her sister"],
-      "gender": "male" | "female" | "unknown",
-      "description": "<one or two sentences: who they are, spoilers allowed>",
-      "is_narrator": false,
-      "prominence": "major" | "supporting" | "minor"
-    }
-  ]
-}\
-"""
-
-
-def build_roster_message(book: Book) -> str:
-    sections = []
-    for section_index, (start, end) in enumerate(book.section_ranges()):
-        sections.append(
-            f"===== {UtteranceUtil.section_label(book, section_index)} =====\n"
-            + UtteranceUtil.annotate_range(book, start, end, lambda _n, _u: "<q>", section_headers=False).strip()
-        )
-    title = book.title.strip() or "(unknown title)"
-    return (
-        f"Book title: {title}\n\n"
-        + ROSTER_INSTRUCTIONS
-        + "\n\n===== BOOK TEXT BEGINS =====\n\n"
-        + "\n\n".join(sections)
-        + "\n\n===== BOOK TEXT ENDS =====\n\n"
-        + "Now respond with the JSON roster."
-    )
-
-
-def normalize_roster(value: dict) -> Roster:
-    """Build a valid Roster from the LLM's reply, printing what was adjusted.
-    Ids: uppercase, no spaces or punctuation (runs of underscores collapse to
-    one), not reserved, unique. An entry whose id duplicates an earlier one is
-    merged into it when it looks like the same character (see
-    same_character), otherwise kept under a suffixed id (GUARD_2). At most one
-    character is the narrator. (To be ported as RosterUtil.normalize_roster.)"""
-    raw_characters = value.get("characters")
-    if not isinstance(raw_characters, list) or not raw_characters:
-        raise ValueError("Roster has no 'characters' list")
-    characters: list[RosterCharacter] = []
-    index_by_id: dict[str, int] = {}
-    for raw in raw_characters:
-        if not isinstance(raw, dict):
-            continue
-        char_id = re.sub(r"[^A-Z0-9_]+", "_", str(raw.get("id", "")).upper())
-        char_id = re.sub(r"_+", "_", char_id).strip("_")
-        if not char_id or char_id in RESERVED_SPEAKER_IDS:
-            print(f"  (skipping roster entry with bad id: {raw.get('id')!r})")
-            continue
-        aliases = raw.get("aliases")
-        character = RosterCharacter(
-            id=char_id,
-            name=str(raw.get("name", char_id)),
-            aliases=tuple(str(a) for a in aliases) if isinstance(aliases, list) else (),
-            gender=str(raw.get("gender", "unknown")),
-            description=str(raw.get("description", "")),
-            is_narrator=bool(raw.get("is_narrator")),
-            prominence=Prominence.from_value(raw.get("prominence")),
-        )
-        existing_index = index_by_id.get(char_id)
-        if existing_index is not None and same_character(characters[existing_index], character):
-            characters[existing_index] = merge_character(characters[existing_index], character)
-            print(f"  (merged duplicate roster entry {char_id}: {character.name!r})")
-            continue
-        if existing_index is not None:
-            suffix = 2
-            while f"{char_id}_{suffix}" in index_by_id:
-                suffix += 1
-            character = dataclasses.replace(character, id=f"{char_id}_{suffix}")
-            print(f"  (duplicate roster id {char_id} for a different character"
-                  f" {character.name!r}; renamed {character.id})")
-        index_by_id[character.id] = len(characters)
-        characters.append(character)
-
-    narrator_seen = False
-    for index, character in enumerate(characters):
-        if character.is_narrator and narrator_seen:
-            characters[index] = dataclasses.replace(character, is_narrator=False)
-        narrator_seen = narrator_seen or character.is_narrator
-
-    raw_narration = value.get("narration")
-    narration = raw_narration if isinstance(raw_narration, dict) else {}
-    return Roster(
-        characters=tuple(characters),
-        narration=RosterNarration(
-            person=NarrativePerson.from_value(narration.get("person")),
-            notes=str(narration.get("notes", "")),
-        ),
-    )
-
-
-def same_character(a: RosterCharacter, b: RosterCharacter) -> bool:
-    """Same name, or one's name among the other's aliases. (Alias-to-alias
-    overlap isn't enough: generic aliases like "madame" are often shared.)"""
-    name_a, name_b = name_key(a.name), name_key(b.name)
-    return (name_a == name_b
-            or name_a in {name_key(alias) for alias in b.aliases}
-            or name_b in {name_key(alias) for alias in a.aliases})
-
-
-def merge_character(target: RosterCharacter, other: RosterCharacter) -> RosterCharacter:
-    """A duplicate entry folded into the first one: union of names/aliases, the
-    first non-empty description and known gender, the higher prominence."""
-    aliases = list(target.aliases)
-    known = target.name_keys()
-    for alias in (other.name, *other.aliases):
-        if name_key(alias) not in known:
-            aliases.append(alias)
-            known.add(name_key(alias))
-    return dataclasses.replace(
-        target,
-        aliases=tuple(aliases),
-        description=target.description or other.description,
-        gender=other.gender if target.gender == "unknown" else target.gender,
-        prominence=max(target.prominence, other.prominence, key=lambda p: p.rank),
-        is_narrator=target.is_narrator or other.is_narrator,
-    )
-
-
 def command_roster(args: argparse.Namespace) -> None:
     book = load_book(args.project_dir)
     if not book.segmentation_settings.dialog_segmentation:
@@ -482,7 +357,7 @@ def command_roster(args: argparse.Namespace) -> None:
     if total_utterances == 0:
         sys.exit("No dialog lines (voice_index >= 1) found.")
 
-    message = build_roster_message(book)
+    message = RosterUtil.build_message(book)
     if maybe_dump_prompt(args, ROSTER_SYSTEM_PROMPT, message):
         return
 
@@ -490,8 +365,11 @@ def command_roster(args: argparse.Namespace) -> None:
     if reply is None:
         llm = make_llm(ROSTER_SYSTEM_PROMPT)
         reply = send_streaming(llm, message)
+    normalized = RosterUtil.normalize_roster(AttributionReplyUtil.extract_json(reply))
+    for note in normalized.notes:
+        print(f"  ({note})")
     roster_file = RosterFile(
-        roster=normalize_roster(AttributionReplyUtil.extract_json(reply)),
+        roster=normalized.roster,
         created=now_iso(),
         llm=llm_description(),
         book_title=book.title,
@@ -580,19 +458,12 @@ def command_counts(args: argparse.Namespace) -> None:
     print_speaker_counts(title, counts, unattributed)
 
 
-def counts_text(counts: Counter[str]) -> str:
-    return ", ".join(f"{label} {count}" for label, count in counts.most_common())
-
-
 def speaker_counts(attributions: AttributionsFile, book: Book, start: int, end: int) -> tuple[Counter[str], int]:
     """Speaker id counts over saved, still-valid utterances whose first line is
     within [start, end), and the number of dialog utterances there that have
     no saved result."""
-    speakers = attributions.speakers_by_line(book)
-    counts = Counter(SpeakerLabelUtil.counting_id(label)
-                     for line, label in speakers.items() if start <= line < end)
-    unattributed = sum(1 for u in UtteranceUtil.find_utterances(book, start, end) if u.first_line not in speakers)
-    return counts, unattributed
+    summary = AttributionSummary.make(attributions, book, start, end)
+    return summary.counts, summary.unattributed
 
 
 def print_speaker_counts(title: str, counts: Counter[str], unattributed: int = 0) -> None:
@@ -606,43 +477,15 @@ def print_speaker_counts(title: str, counts: Counter[str], unattributed: int = 0
 # ---------------------------------------------------------------------------
 # Step 2: assign (attribute each dialog utterance to a roster character)
 
-def attribute(
-        message: str, utterances: list[Utterance], roster_ids: frozenset[str], reply: str | None = None,
-) -> ParsedReply:
-    """A speaker for every utterance (ids 1..n): one fresh LLM session (or a
-    saved reply), plus one follow-up turn for ids missing from the reply.
-    Ids still missing end up UNKNOWN (see make_range_attribution)."""
+def parse_saved_reply(reply: str, utterances: list[Utterance], roster_ids: frozenset[str]) -> ParsedReply:
+    """A speaker for every utterance (ids 1..n) from a saved reply
+    (--from-response); there is no follow-up request, so missing ids end up
+    UNKNOWN (see make_range_attribution)."""
     requested = set(range(1, len(utterances) + 1))
-    llm = None
-    if reply is None:
-        llm = make_llm(ATTRIBUTION_SYSTEM_PROMPT)
-        reply = send_streaming(llm, message)
     parsed = AttributionReplyUtil.parse_reply(AttributionReplyUtil.extract_json(reply), requested, roster_ids)
-    if parsed.missing and llm is not None:
-        print(f"  {len(parsed.missing)} id(s) missing from reply; asking again for those")
-        follow_up = send_streaming(llm, AttributionPromptUtil.missing_ids_message(parsed.missing))
-        parsed = AttributionReplyUtil.merge(parsed, AttributionReplyUtil.parse_reply(
-            AttributionReplyUtil.extract_json(follow_up), set(parsed.missing), roster_ids))
     if parsed.missing:
-        print(f"  {len(parsed.missing)} id(s) still missing; marked UNKNOWN")
+        print(f"  {len(parsed.missing)} id(s) missing from reply; marked UNKNOWN")
     return parsed
-
-
-def attribute_with_retries(
-        message: str, utterances: list[Utterance], roster_ids: frozenset[str],
-) -> ParsedReply | str:
-    """attribute(), retried with a fresh LLM session on any failure (eg a
-    dropped response stream or an unparseable reply), waiting between attempts.
-    Returns the error text of the last attempt if all fail."""
-    for attempt, delay in enumerate((*CHUNK_RETRY_DELAYS, None), 1):
-        try:
-            return attribute(message, utterances, roster_ids)
-        except Exception as error:
-            if delay is None:
-                return f"{type(error).__name__}: {error} (after {attempt} attempts)"
-            print(f"\n  attempt {attempt} failed ({type(error).__name__}: {error}); retrying in {delay}s")
-            time.sleep(delay)
-    raise AssertionError("unreachable")
 
 
 def warn_if_roster_stale(roster_file: RosterFile, book: Book, section_indices: range) -> None:
@@ -678,9 +521,16 @@ def command_assign(args: argparse.Namespace) -> None:
     message = AttributionPromptUtil.build_message(book, start, end, roster, attributions.speakers_by_line(book))
     if maybe_dump_prompt(args, ATTRIBUTION_SYSTEM_PROMPT, message):
         return
-    parsed = attribute(message, utterances, roster.ids, read_saved_response(args))
-    result = AttributionReplyUtil.make_range_attribution(
-        book, start, end, utterances, parsed, created=now_iso(), llm=llm_description())
+    saved_reply = read_saved_response(args)
+    if saved_reply is not None:
+        result = AttributionReplyUtil.make_range_attribution(
+            book, start, end, utterances, parse_saved_reply(saved_reply, utterances, roster.ids),
+            created=now_iso(), llm=llm_description())
+    else:
+        try:
+            result = make_runner(args, book, roster, attributions).attribute_range(start, end)
+        except (AttributionError, AttributionCancelled) as error:
+            sys.exit(f"Error: {error}")
     print_review(result.utterances)
 
     save_attributions(args.project_dir, attributions.with_range(result))
@@ -688,52 +538,28 @@ def command_assign(args: argparse.Namespace) -> None:
 
 
 def assign_all(args: argparse.Namespace, book: Book, roster: Roster, attributions: AttributionsFile) -> None:
-    """Attribute the whole book, chunk by chunk in reading order, one fresh
-    LLM session per chunk. Results are saved after every chunk; chunks that
-    already have valid saved results are skipped, so an interrupted or
-    partly failed run continues where it left off when re-run."""
+    """Attribute the whole book with AttributionRunner: chunk by chunk in
+    reading order, one fresh LLM session per chunk, saving after every
+    chunk; chunks that already have valid saved results are skipped, so an
+    interrupted or partly failed run continues where it left off when re-run."""
     if args.dump_prompt or args.from_response:
         sys.exit("--dump-prompt/--from-response work with --section or a line range, not --all")
-    chunks = ChunkPlanUtil.plan_chunks(book, args.chunk_words)
-    print(f"{book.title or '(untitled)'}: {len(chunks)} chunks of up to {args.chunk_words:,} words")
-
-    failures: list[str] = []
-    for number, (start, end) in enumerate(chunks, 1):
-        utterances = UtteranceUtil.find_utterances(book, start, end)
-        heading = (f"\n[{number}/{len(chunks)}] {UtteranceUtil.range_label(book, start, end)}:"
-                   f" {len(utterances)} utterances")
-        if not utterances:
-            print(heading + " (no dialog; skipped)")
-            continue
-        saved = attributions.get(start, end)
-        if saved is not None and saved.is_valid_for(book):
-            print(heading + " (already done)")
-            continue
-        print(heading)
-        message = AttributionPromptUtil.build_message(book, start, end, roster, attributions.speakers_by_line(book))
-        parsed = attribute_with_retries(message, utterances, roster.ids)
-        if isinstance(parsed, str):  # keep going; failed chunks are retried by the next run
-            failures.append(f"lines {lines_text(start, end)}: {parsed}")
-            print(f"  FAILED: {parsed}")
-            continue
-        result = AttributionReplyUtil.make_range_attribution(
-            book, start, end, utterances, parsed, created=now_iso(), llm=llm_description())
-        attributions = attributions.with_range(result)
-        save_attributions(args.project_dir, attributions)
-        print("  " + counts_text(Counter(SpeakerLabelUtil.counting_id(u.speaker) for u in result.utterances)))
-    print_book_summary(attributions, book, failures)
+    print(f"{book.title or '(untitled)'}: chunks of up to {args.chunk_words:,} words")
+    result = make_runner(args, book, roster, attributions).run()
+    failures = [f"lines {lines_text(chunk.start, chunk.end)}: {error}" for chunk, error in result.failures]
+    print_book_summary(result.attributions, book, failures)
+    if result.outcome == RunOutcome.FAILED:
+        print(f"\nStopped: {result.error}")
 
 
 def print_book_summary(attributions: AttributionsFile, book: Book, failures: list[str]) -> None:
     print("\n===== Summary =====")
     counts, unattributed = speaker_counts(attributions, book, 0, len(book.flat_phrase_groups))
     print_speaker_counts("Speaker counts, all lines", counts, unattributed)
-    current = list(attributions.by_first_line(book).values())
-    others = Counter(name for u in current if (name := SpeakerLabelUtil.other_name(u.speaker)))
-    recurring = Counter({name: count for name, count in others.items() if count >= 3})
-    print(f"\nFlagged uncertain: {sum(1 for u in current if u.uncertain)}")
-    if recurring:
-        print(f"Recurring OTHER speakers (roster candidates): {counts_text(recurring)}")
+    summary = AttributionSummary.make(attributions, book)
+    print(f"\nFlagged uncertain: {summary.uncertain}")
+    if summary.recurring_others:
+        print(f"Recurring OTHER speakers (roster candidates): {AttributionSummary.counts_text(summary.recurring_others)}")
     if failures:
         print(f"\nFailed chunks ({len(failures)}); re-run the same command to retry them:")
         for failure in failures:

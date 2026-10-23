@@ -51,6 +51,26 @@ def is_vocalizable(s: str) -> bool:
     return False
 
 
+# Opening quote characters which mark a non-vocalizable line as diegetic
+# content (eg, a silent beat of dialog such as `"..."`) rather than ornament.
+_DIEGETIC_LINE_OPENERS = frozenset("\"'\u201C\u2018\u201E\u201A\u00AB\u2039\u300C\u300E")
+
+
+def is_ornamental_line(text: str) -> bool:
+    """Whether text (one or more lines) is a typographical separator.
+
+    Ornaments such as ``◇``, ``* * *`` or ``---`` have no vocalizable content
+    and denote a space break between scenes. Non-vocalizable text which opens
+    with a quote mark (eg, ``"..."`` or ``"—"``) is instead diegetic: a silent
+    beat of dialog. It still cannot form a TTS prompt by itself, but it must not
+    be treated as a scene break.
+    """
+    stripped = text.strip()
+    if not stripped or is_vocalizable(stripped):
+        return False
+    return stripped[0] not in _DIEGETIC_LINE_OPENERS
+
+
 def has_trailing_ornamental_line(text: str) -> bool:
     """Whether text ends with a non-vocalizable separator on its own line.
 
@@ -58,13 +78,13 @@ def has_trailing_ornamental_line(text: str) -> bool:
     phrase so they are not sent to TTS by themselves. Older project files may
     therefore contain text like ``"Previous paragraph.\n\n◇\n\n"`` whose saved
     reason is only ``PARAGRAPH``. The trailing line still unambiguously records
-    the stronger space-break boundary.
+    the stronger space-break boundary. A quoted silent beat (``"..."``) is not
+    an ornament; see ``is_ornamental_line``.
     """
     lines = text.rstrip().splitlines()
     if len(lines) < 2:
         return False
-    trailing_line = lines[-1].strip()
-    return bool(trailing_line) and not is_vocalizable(trailing_line)
+    return is_ornamental_line(lines[-1])
 
 
 def normalize_text_general(text: str) -> str:

@@ -89,6 +89,26 @@ class TestBookSerialization(unittest.TestCase):
         assert isinstance(result, Book)
         self.assertEqual(result.phrase_groups[0].last_reason, Reason.SPACE_BREAK)
 
+    def test_load_keeps_paragraph_reason_for_trailing_quoted_beat(self):
+        # The legacy ornament repair must not mistake a trailing silent dialog
+        # beat (`"..."`) for an ornamental scene break.
+        payload = {
+            "format": "book.v2",
+            "book": {
+                "sections": [{
+                    "phrase_groups": [{
+                        "voice_index": -1,
+                        "phrases": [{"text": '"Well?"\n\n"..."\n\n', "reason": "p"}],
+                    }],
+                }],
+            },
+        }
+
+        result = book_from_project_text_json_dict(payload)
+
+        assert isinstance(result, Book)
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.PARAGRAPH)
+
     def test_load_keeps_regular_paragraph_reason(self):
         payload = {
             "format": "book.v2",

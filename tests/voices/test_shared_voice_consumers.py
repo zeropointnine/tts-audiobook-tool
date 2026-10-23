@@ -399,6 +399,7 @@ def test_static_menus_compose_voice_samples_and_model_seed(monkeypatch, module_n
     expected.extend([
         voice_menu_shared.LABEL_VOICE_SELECTION_MODE,
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
+        voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES,
     ])
     assert len(labels) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, expected))

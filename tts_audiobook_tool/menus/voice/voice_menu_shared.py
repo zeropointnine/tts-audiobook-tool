@@ -38,6 +38,7 @@ LABEL_VOICE_SAMPLES_SUPERLABEL = "Select to move, remove, edit properties"
 LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sample-less) voice
 LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
+LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Auto-assign character voices"
 
 # Per-voice submenu labels
 LABEL_VOICE_NAME = "Name"
@@ -606,14 +607,32 @@ class VoiceMenuShared:
     @staticmethod
     def make_voice_selection_items(state: State, tts_type: TtsModelType) -> list[MenuItem]:
         """The closing group of every Voices menu: Voice selection mode (with
-        2+ voices) and Edit voice/line selections. Added by `menu_wrapper`."""
+        2+ voices), Edit voice/line selections and Auto-assign character
+        voices. Added by `menu_wrapper`."""
         voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
         items: list[MenuItem] = []
         if len(voices) > 1:
             items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
         items.append(VoiceMenuShared.make_assign_voice_samples_to_text_lines_item(tts_type))
+        items.append(VoiceMenuShared.make_auto_assign_character_voices_item())
         items[0].blank_line_before = True
         return items
+
+    @staticmethod
+    def make_auto_assign_character_voices_item() -> MenuItem:
+        def on_item(state: State, _: MenuItem) -> None:
+            # Deferred: the feature's modules aren't needed until it's opened
+            from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu import SpeakerAssignMenu
+            SpeakerAssignMenu.menu(state)
+
+        def make_label(state: State) -> str:
+            from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
+            label = LABEL_AUTO_ASSIGN_CHARACTER_VOICES
+            if not SpeakerAssignFileUtil.has_any_data(state.project.dir_path):
+                label += f" {COL_DIM}(optional)"
+            return label
+
+        return MenuItem(make_label, on_item)
 
     @staticmethod
     def make_voice_sample_selection_mode_item() -> MenuItem:

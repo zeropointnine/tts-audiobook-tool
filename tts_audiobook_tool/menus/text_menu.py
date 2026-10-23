@@ -13,6 +13,7 @@ from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
+from tts_audiobook_tool.speaker_assign.attribution_invalidation import AttributionInvalidation
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual.content_textual_app import (
@@ -253,7 +254,9 @@ class TextMenu:
 
 # ---
 
-def make_text_replacement_confirm_message(project: Project) -> str:
+def make_text_replacement_confirm_message(
+        project: Project, assignment_warning: str = "",
+) -> str:
     """
     Builds the confirmation prompt shown before replacing the project text,
     listing the text-dependent project data that would be invalidated.
@@ -274,6 +277,9 @@ def make_text_replacement_confirm_message(project: Project) -> str:
         marker_label = app_text.get_section_marker_label(project, is_title_case=True)
         items_noun = make_noun("item", "items", num_markers)
         lines.append(f"{marker_label} ({COL_ERROR}{num_markers}{COL_DEFAULT} {items_noun})")
+
+    if assignment_warning:
+        lines.append(assignment_warning)
 
     if not lines:
         return ""
@@ -303,12 +309,6 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         case _:
             raise Exception("Bad value")
     MenuUtil.print_screen_heading(state, heading)
-
-    # Confirm before invalidating text-dependent project data
-    confirm_message = make_text_replacement_confirm_message(state.project)
-    if confirm_message:
-        if not ask.ask_confirm(confirm_message):
-            return False
 
     epub_path = ""
     epub_import_result: EpubImportResult | None = None
@@ -364,8 +364,32 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         case _:
             raise ValueError(f"Bad value: {item.data!r}")
 
-    # Delete now-outdated gens
-    state.project.sound_segments.delete_all()
+    # Plan against the actual replacement, including EPUB section boundaries.
+    text_source_kind = "epub" if epub_import_result else (
+        "manual" if item.data == "manual" else "plain_text"
+    )
+    incoming_book = ProjectTextIOUtil.make_import_book(
+        phrase_groups=phrase_groups,
+        strategy=state.project.segmentation_strategy,
+        max_words=state.project.max_words,
+        language_code=state.project.language_code,
+        dialog_segmentation=state.project.dialog_segmentation,
+        title=title,
+        text_source_kind=text_source_kind,
+        section_start_indices=(epub_import_result.section_start_indices
+                               if epub_import_result else None),
+        section_titles=([chapter.title for chapter in epub_import_result.chapters]
+                        if epub_import_result else None),
+    )
+    invalidation = AttributionInvalidation.plan(state.project.dir_path, incoming_book)
+    if isinstance(invalidation, str):
+        ask.ask_error(invalidation)
+        return False
+    confirm_message = make_text_replacement_confirm_message(
+        state.project, invalidation.warning_text,
+    )
+    if confirm_message and not ask.ask_confirm(confirm_message):
+        return False
 
     # Commit
     if epub_import_result:
@@ -373,7 +397,7 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         if err:
             ask.ask_error(err)
             return False
-        ProjectTextIOUtil.set_phrase_groups_chapters_and_save(
+        err = ProjectTextIOUtil.set_phrase_groups_chapters_and_save(
             state.project,
             phrase_groups=phrase_groups,
             section_start_indices=epub_import_result.section_start_indices,
@@ -384,11 +408,12 @@ def on_select_import(state: State, item: MenuItem) -> bool:
             raw_text=raw_text,
             title=title,
             section_titles=[chapter.title for chapter in epub_import_result.chapters],
+            invalidation=invalidation,
         )
 
     else:
         text_source_kind = "manual" if item.data == "manual" else "plain_text"
-        ProjectTextIOUtil.set_phrase_groups_and_save(
+        err = ProjectTextIOUtil.set_phrase_groups_and_save(
             state.project,
             phrase_groups=phrase_groups,
             strategy=state.project.segmentation_strategy,
@@ -398,7 +423,15 @@ def on_select_import(state: State, item: MenuItem) -> bool:
             raw_text=raw_text,
             title=title,
             text_source_kind=text_source_kind,
+            invalidation=invalidation,
         )
+
+    if err:
+        ask.ask_error(err)
+        return False
+
+    # Delete outdated audio only after the import has succeeded.
+    state.project.sound_segments.delete_all()
 
     num_text_lines = len(phrase_groups)
     if epub_import_result:

@@ -16,6 +16,7 @@ from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
@@ -179,9 +180,10 @@ def test_voice_menu_direct_actions_refresh_samples_and_preserve_callbacks(monkey
     assert any(label.startswith(voice_menu_shared.LABEL_CROP_VOICE_SAMPLE) for label in labels)
     remove = find_item(state, menus[-1]["items"](state), voice_menu_shared.LABEL_RESET_VOICE_SAMPLE)
     assert remove.handler(state, remove) is True  # exits the voice submenu, not Voice clone
-    # The only voice was reset: one default voice, Add, and voice/line selections.
+    # The only voice was reset: one default voice, Add, voice/line selections
+    # and auto-assign.
     assert state.project.voice_references == [Voice()]
-    assert len(main["items"](state)) == 3
+    assert len(main["items"](state)) == 4
     assert events == ["before", "set 0", "after", "remove", "clear"]
     # Removing a voice that has no sample must not unload a model again.
     assert remove.handler(state, remove) is True
@@ -527,7 +529,7 @@ def test_voice_menu_duration_warning_tracks_current_model_on_redraw(monkeypatch)
         assert (f"{voice_menu_shared.COL_ERROR}*" in label) == warned
 
 
-@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 3), (1, 3), (2, 5), (9, 11)])
+@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 4), (1, 4), (2, 6), (9, 12)])
 def test_voice_sample_selection_mode_item_requires_multiple_samples(
         monkeypatch,
         voice_count: int,
@@ -552,11 +554,12 @@ def test_voice_sample_selection_mode_item_requires_multiple_samples(
     expected = []
     if voice_count < 9:
         expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
-    assert items[-2 if voice_count > 1 else -1].blank_line_before
+    assert items[-3 if voice_count > 1 else -2].blank_line_before
     if voice_count > 1:
         expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
-        assert VoiceSelectMode.DISABLED.current_label in labels[-2]
+        assert VoiceSelectMode.DISABLED.current_label in labels[-3]
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    expected.append(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
     assert len(labels[voice_count:]) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels[voice_count:], expected))
     assert not any(label.startswith("Add/remove") for label in labels)
@@ -574,6 +577,21 @@ def test_voice_sample_selection_mode_item_label_tracks_project_value() -> None:
     project.voice_select_mode = VoiceSelectMode.USER_DEFINED
 
     assert VoiceSelectMode.USER_DEFINED.current_label in get_string_from(state, item.label)
+
+
+@pytest.mark.parametrize("file_name", ["roster.json", "attributions.json"])
+def test_auto_assign_item_is_optional_until_speaker_assign_data_exists(tmp_path, file_name) -> None:
+    # The "(optional)" hint shows only while the project has no saved
+    # roster or attributions; either file removes it
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
+    item = VoiceMenuShared.make_auto_assign_character_voices_item()
+
+    label = strip_ansi_codes(get_string_from(state, item.label))
+    assert label == f"{voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES} (optional)"
+
+    (tmp_path / "speaker_assign").mkdir()
+    (tmp_path / "speaker_assign" / file_name).write_text("{}", encoding="utf-8")
+    assert get_string_from(state, item.label) == voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES
 
 
 def test_voice_sample_selection_mode_submenu_uses_options_menu_and_saves_selection() -> None:

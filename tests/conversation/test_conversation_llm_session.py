@@ -431,3 +431,67 @@ def test_send_openai_streaming_tolerates_missing_delta_object(
     reply = llm.send("hello", on_chunk=lambda _t: None)
 
     assert reply == "Hey"
+
+
+def test_openai_streaming_records_an_output_limit_hit_during_reasoning(monkeypatch) -> None:
+    # A reasoning model that runs out of output tokens while thinking: the
+    # stream ends normally with finish_reason "length" and no answer.
+    llm = make_openai_llm()
+    lines = sse(
+        '{"choices": [{"delta": {"reasoning_content": "Let me count..."}}]}',
+        '{"choices": [{"delta": {}, "finish_reason": "length"}]}',
+        done=True,
+    )
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(lines=lines),
+    )
+
+    reply = llm.send("hello", on_chunk=lambda _t: None, on_reasoning=lambda _t: None)
+
+    assert reply == ""
+    assert llm.last_finish_reason == "length"
+    assert llm.hit_output_limit
+
+
+def test_finish_reason_is_reset_per_request(monkeypatch) -> None:
+    llm = make_openai_llm()
+    responses = iter([
+        make_response(lines=sse('{"choices": [{"delta": {"content": "x"}, "finish_reason": "length"}]}')),
+        make_response(lines=sse('{"choices": [{"delta": {"content": "y"}}]}')),
+    ])
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: next(responses),
+    )
+    llm.send("one", on_chunk=lambda _t: None)
+    assert llm.hit_output_limit
+    llm.send("two", on_chunk=lambda _t: None)
+    assert llm.last_finish_reason is None and not llm.hit_output_limit
+
+
+def test_anthropic_streaming_records_stop_reason(monkeypatch) -> None:
+    llm = make_anthropic_llm()
+    lines = sse(
+        '{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hi"}}',
+        '{"type": "message_delta", "delta": {"stop_reason": "max_tokens"}}',
+    )
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(lines=lines),
+    )
+
+    assert llm.send("hello", on_chunk=lambda _t: None) == "Hi"
+    assert llm.last_finish_reason == "max_tokens"
+    assert llm.hit_output_limit
+
+
+def test_non_streaming_records_finish_reason(monkeypatch) -> None:
+    llm = make_openai_llm()
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(json_data={
+            "choices": [{"message": {"content": "Hi"}, "finish_reason": "stop"}]}),
+    )
+    llm.send("hello")
+    assert llm.last_finish_reason == "stop" and not llm.hit_output_limit

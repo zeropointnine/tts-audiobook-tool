@@ -6,6 +6,7 @@ import os
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
 from tts_audiobook_tool.speaker_assign.roster import RosterFile
+from tts_audiobook_tool.speaker_assign.voice_map import VoiceMapFile
 from tts_audiobook_tool.util import make_error_string
 
 
@@ -13,6 +14,7 @@ from tts_audiobook_tool.util import make_error_string
 SPEAKER_ASSIGN_DIR_NAME = "speaker_assign"
 ROSTER_FILE_NAME = "roster.json"
 ATTRIBUTIONS_FILE_NAME = "attributions.json"
+VOICES_FILE_NAME = "voices.json"
 
 
 class SpeakerAssignFileUtil:
@@ -24,6 +26,15 @@ class SpeakerAssignFileUtil:
     @staticmethod
     def dir_path(project_dir: str) -> str:
         return os.path.join(project_dir, SPEAKER_ASSIGN_DIR_NAME)
+
+    @staticmethod
+    def has_any_data(project_dir: str) -> bool:
+        """True if the project has any saved speaker assignment file."""
+        return (
+            SpeakerAssignFileUtil.has_roster(project_dir)
+            or os.path.isfile(SpeakerAssignFileUtil.attributions_path(project_dir))
+            or os.path.isfile(SpeakerAssignFileUtil.voices_path(project_dir))
+        )
 
     @staticmethod
     def roster_path(project_dir: str) -> str:
@@ -101,6 +112,37 @@ class SpeakerAssignFileUtil:
         except OSError as e:
             return f"Error deleting speaker attributions: {make_error_string(e)}"
         return ""
+
+    @staticmethod
+    def voices_path(project_dir: str) -> str:
+        return os.path.join(SpeakerAssignFileUtil.dir_path(project_dir), VOICES_FILE_NAME)
+
+    @staticmethod
+    def load_voices_file(project_dir: str) -> VoiceMapFile | str:
+        """The saved character voices (an empty VoiceMapFile if there are none
+        yet), or an error string (unreadable or invalid file)."""
+        path = SpeakerAssignFileUtil.voices_path(project_dir)
+        if not os.path.isfile(path):
+            return VoiceMapFile()
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                value = json.load(file)
+            return VoiceMapFile.from_dict(value)
+        except Exception as e:
+            return f"Error loading character voices {path}: {make_error_string(e)}"
+
+    @staticmethod
+    def save_voices_file(project_dir: str, voices: VoiceMapFile) -> str:
+        """Atomically write the character voices file (creating the directory).
+        Returns an error string on failure, otherwise ""."""
+        error = SpeakerAssignFileUtil._make_dir(project_dir)
+        if error:
+            return error
+        return JsonSaveUtil.save(
+            JsonArtifactType.SPEAKER_VOICES,
+            SpeakerAssignFileUtil.voices_path(project_dir),
+            voices.to_dict,
+        )
 
     @staticmethod
     def _make_dir(project_dir: str) -> str:

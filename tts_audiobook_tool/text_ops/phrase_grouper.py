@@ -85,6 +85,8 @@ class PhraseGrouper:
     def merge_ornamental_groups(groups: list[PhraseGroup]) -> list[PhraseGroup]:
         """
         Folds ornamental-only groups into a vocalizable neighboring group.
+        Quoted silent dialog beats (eg `"..."`) fold the same way, but without
+        being promoted to a space break (see ``app_text.is_ornamental_line``).
 
         A PhraseGroup is the app's atomic TTS prompt unit, and a group whose
         text has no vocalizable content (a lone dinkus or divider line)
@@ -113,11 +115,15 @@ class PhraseGrouper:
                 continue
             # Merge backward, mirroring PhraseSegmenter.merge_ornamental_lines:
             # the ornament joins the previous group's last phrase and promotes
-            # its boundary to a space break.
+            # its boundary to a space break. A silent dialog beat (`"..."`)
+            # is not an ornament and carries its own boundary over instead.
             if result[-1].phrases:
                 last_phrase = result[-1].phrases[-1]
                 last_phrase.text += group.text
-                last_phrase.reason = Reason.SPACE_BREAK
+                if app_text.is_ornamental_line(group.text):
+                    last_phrase.reason = Reason.SPACE_BREAK
+                elif group.phrases:
+                    last_phrase.reason = group.phrases[-1].reason
                 result[-1].invalidate_presentable_memos()
             else:
                 result[-1].phrases.extend(group.phrases)
