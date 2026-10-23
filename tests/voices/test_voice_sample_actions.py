@@ -231,6 +231,7 @@ def test_submenu_items_for_one_and_multiple_samples(monkeypatch, count):
     assert get_string_from(state, captured["breadcrumb"]) == "Voice 1"
     items = captured["items"](state)
     expected = [
+        menu.make_menu_label_optional(menu.LABEL_VOICE_NAME),
         menu.make_menu_label(menu.LABEL_SET_VOICE_SAMPLE, "0"),
         menu.LABEL_CLEAR_VOICE_SAMPLE,
         menu.make_menu_label(menu.LABEL_CROP_VOICE_SAMPLE, "4.0s"),
@@ -246,7 +247,7 @@ def test_submenu_items_for_one_and_multiple_samples(monkeypatch, count):
         menu.make_menu_label(menu.LABEL_ROOM_REVERB, RoomReverb.OFF.label, RoomReverb.OFF.label),
     ])
     assert [get_string_from(state, item.label) for item in items] == expected
-    assert items[2].sublabel is None
+    assert items[3].sublabel is None
     # The Effects group starts at Stereo position
     assert items[-2].superlabel == menu.LABEL_EFFECTS_SUPERLABEL
     assert not items[-1].superlabel
@@ -272,7 +273,7 @@ def test_trim_item_uses_currently_treatment(monkeypatch, trimmed, duration, valu
         menu.make_menu_label(menu.LABEL_CROP_VOICE_SAMPLE, value)
         if value else menu.LABEL_CROP_VOICE_SAMPLE
     )
-    assert get_string_from(state, items[2].label) == expected
+    assert get_string_from(state, items[3].label) == expected
 
 
 @pytest.mark.parametrize("count, confirmed, cleared", [(1, True, True), (2, True, False), (1, False, False)])
@@ -322,8 +323,9 @@ def test_submenu_for_sample_less_voice_hides_sample_items(monkeypatch):
     items = open_submenu(monkeypatch, state, 0)["items"](state)
     labels = [get_string_from(state, item.label) for item in items]
     # OmniVoice does not require a voice clone sample
-    assert labels[0] == menu.make_menu_label(menu.LABEL_SET_VOICE_SAMPLE, "none")
-    assert labels[1:] == [
+    assert labels[0] == menu.make_menu_label_optional(menu.LABEL_VOICE_NAME)
+    assert labels[1] == menu.make_menu_label(menu.LABEL_SET_VOICE_SAMPLE, "none")
+    assert labels[2:] == [
         menu.make_menu_label("Voice design/OmniVoice", "none"),
         menu.LABEL_RESET_VOICE_SAMPLE,
         menu.make_menu_label(menu.LABEL_STEREO_POSITION, "Center", "Center"),
@@ -356,7 +358,7 @@ def test_clear_sample_keeps_voice_and_submenu_open(monkeypatch, model_id, count)
     ]
     assert get_string_from(state, captured["heading"]) == "Voice 1"
     labels = [get_string_from(state, item.label) for item in captured["items"](state)]
-    assert "currently:" in labels[0] and "none" in labels[0]
+    assert "currently:" in labels[1] and "none" in labels[1]
     assert not any(label.startswith(menu.LABEL_CROP_VOICE_SAMPLE) for label in labels)
     assert not any(label.startswith(menu.LABEL_EDIT_VOICE_TRANSCRIPTION) for label in labels)
     assert menu.LABEL_CLEAR_VOICE_SAMPLE not in labels
@@ -396,7 +398,7 @@ def test_submenu_follows_moved_sample(monkeypatch):
     assert [v.file_name for v in state.project.voice_references] == ["1.flac", "2.flac", "0.flac"]
     assert get_string_from(state, captured["heading"]) == "Voice 3"
     assert get_string_from(state, captured["breadcrumb"]) == "Voice 3"
-    edit_label = get_string_from(state, captured["items"](state)[3].label)
+    edit_label = get_string_from(state, captured["items"](state)[4].label)
     assert edit_label == menu.make_menu_label(menu.LABEL_EDIT_VOICE_TRANSCRIPTION, '"text 0"')
     clear = find_item(state, captured["items"](state), menu.LABEL_CLEAR_VOICE_SAMPLE)
     assert clear.handler(state, clear) is None

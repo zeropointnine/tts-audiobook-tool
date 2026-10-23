@@ -36,7 +36,7 @@ The following is illustrative: absent override keys are normal, and these object
   "voice_select_mode": "custom",
   "room_reverb_stereo": "late_w100",
   "voice_references": [
-    {"file_name": "sample.flac", "transcript": "Reference text.", "room_reverb": "small_drr22", "pan": -0.3},
+    {"name": "Narrator", "file_name": "sample.flac", "transcript": "Reference text.", "room_reverb": "small_drr22", "pan": -0.3},
     {"file_name": "second.flac", "transcript": "",
      "crop_file_name": "0f3c…e1.flac", "crop_start": 1.5, "crop_end": 9.0, "crop_transcript": "Trimmed text.",
      "room_reverb": "off"},
@@ -73,6 +73,7 @@ In memory the list is `list[Voice]`. `Voice` and its optional `VoiceCrop` are fr
 
 | Key | In memory | Notes |
 | --- | --- | --- |
+| `name` | `Voice.name: str` | User-facing convenience name only; never affects generation. Shown in the voice list and submenu title (eg "Voice 1 Narrator"). **Written only when non-empty**. Missing or non-string loads as `""`. Set in the voice submenu (Name; must be one word, with no whitespace, and unique among the project's voices, compared case-insensitively; blank/cancel leaves it unchanged, Clear name removes it). The rules are enforced when setting, not on load. Optional, so no version bump. |
 | `file_name` | `Voice.file_name` | Project-local sample path; `""` means the voice has no sample (`Voice.has_sample`). A non-empty unusable path drops the entry with a warning. |
 | `transcript` | `Voice.transcript` | `""` when absent. |
 | `crop_file_name`, `crop_start`, `crop_end`, `crop_transcript` | `Voice.crop: VoiceCrop \| None` | All or none; see below. |

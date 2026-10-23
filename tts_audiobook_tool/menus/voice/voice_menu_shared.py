@@ -40,6 +40,8 @@ LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 
 # Per-voice submenu labels
+LABEL_VOICE_NAME = "Name"
+LABEL_CLEAR_VOICE_NAME = "Clear name"
 LABEL_SET_VOICE_SAMPLE = "Voice sample"
 LABEL_CLEAR_VOICE_SAMPLE = "Clear voice sample"
 LABEL_REMOVE_VOICE_SAMPLE = "Remove"
@@ -797,8 +799,15 @@ class VoiceMenuShared:
         if not parts:
             # Eg Qwen3-TTS CustomVoice without instructions: the speaker's default delivery
             parts.append(ProjectVoiceUtil.make_no_voice_value_text(project))
-        label = f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1}: " + f"{COL_DIM};{COL_DEFAULT} ".join(parts)
+        title = VoiceMenuShared.make_voice_title(voice, index)
+        label = f"{title}: " + f"{COL_DIM};{COL_DEFAULT} ".join(parts)
         return label, is_long
+
+    @staticmethod
+    def make_voice_title(voice: Voice | None, index: int) -> str:
+        """Eg "Voice 1", or "Voice 1 MyName" when the voice has a name."""
+        title = f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1}"
+        return f"{title} {voice.name}" if voice is not None and voice.name else title
 
     @staticmethod
     def make_transcript_preview(project: Project, tts_type: TtsModelType, index: int) -> str:
@@ -840,7 +849,7 @@ class VoiceMenuShared:
             return entries[current[0]] if 0 <= current[0] < len(entries) else None
 
         def make_heading(s: State) -> str:
-            return f"{LABEL_VOICE_SAMPLE_ITEM} {current[0] + 1}"
+            return VoiceMenuShared.make_voice_title(get_voice(s), current[0])
 
         def on_set_sample(s: State, _: MenuItem) -> None:
             if on_before_set_callback:
@@ -861,6 +870,16 @@ class VoiceMenuShared:
             if on_clear_callback and not ProjectVoiceUtil.has_any_voice_sample(s.project):
                 on_clear_callback()
             print_feedback("Voice sample cleared")
+
+        def on_set_name(s: State, _: MenuItem) -> None:
+            VoiceMenuShared.ask_voice_name(s, current[0])
+
+        def on_clear_name(s: State, _: MenuItem) -> None:
+            error = ProjectVoiceUtil.set_voice_name_at_index_and_save(s.project, current[0], "")
+            if error:
+                ask.ask_error(error)
+            else:
+                print_feedback("Name cleared")
 
         def on_set_instructions(s: State, _: MenuItem) -> None:
             VoiceMenuShared.ask_voice_instructions(s, tts_type, current[0])
@@ -912,6 +931,9 @@ class VoiceMenuShared:
             uses_presets = preset_choices is not None and support.can_voice_presets(s.project)
             preset = voice.preset_for(tts_type.id) if uses_presets else ""
             preset_label = get_preset_label(tts_type)
+            items.append(MenuItem(VoiceMenuShared.make_voice_name_menu_label(voice), on_set_name))
+            if voice.name:
+                items.append(MenuItem(LABEL_CLEAR_VOICE_NAME, on_clear_name))
             if can_clone:
                 items.append(MenuItem(
                     VoiceMenuShared.make_set_voice_sample_label(s.project, tts_type, i),
@@ -1049,6 +1071,33 @@ class VoiceMenuShared:
             on_select=on_select,
             breadcrumb=preset_label,
         )
+
+    @staticmethod
+    def make_voice_name_menu_label(voice: Voice) -> str:
+        """Eg 'Name (currently: Narrator)', or 'Name (optional)' (dimmed) when unset."""
+        if not voice.name:
+            return make_menu_label_optional(LABEL_VOICE_NAME)
+        return f"{LABEL_VOICE_NAME} {make_currently_string(voice.name)}"
+
+    @staticmethod
+    def ask_voice_name(state: State, index: int) -> None:
+        """Edit this voice's user-facing name; blank/cancel leaves it unchanged.
+        An invalid name (not one word, or not unique) is reported and not saved."""
+        current = state.project.voice_references[index].name
+        printt("Enter a name for this voice:")
+        printt(f"{COL_DIM}(One word, no spaces)")
+        value = ask.ask_input(lower=False, prefill=current).strip()
+        if not value or value == current:
+            return
+        error = ProjectVoiceUtil.get_voice_name_error(state.project, index, value)
+        if error:
+            print_feedback(error, is_error=True)
+            return
+        error = ProjectVoiceUtil.set_voice_name_at_index_and_save(state.project, index, value)
+        if error:
+            ask.ask_error(error)
+        else:
+            print_feedback(f"{LABEL_VOICE_NAME} set to: {value}")
 
     @staticmethod
     def ask_voice_instructions(state: State, tts_type: TtsModelType, index: int) -> None:

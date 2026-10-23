@@ -160,7 +160,10 @@ def test_voice_menu_direct_actions_refresh_samples_and_preserve_callbacks(monkey
     assert get_string_from(state, main["subheading"]) == "Sample guidance"
     assert items[0].handler(state, items[0]) is None  # opens the voice's submenu
     sub_items = menus[-1]["items"](state)
-    set_item = sub_items[0]
+    set_item = next(
+        item for item in sub_items
+        if get_string_from(state, item.label).startswith(voice_menu_shared.LABEL_SET_VOICE_SAMPLE)
+    )
     assert get_string_from(state, set_item.label).startswith(voice_menu_shared.LABEL_SET_VOICE_SAMPLE)
     labels = [get_string_from(state, item.label) for item in sub_items]
     assert not any(label.startswith(voice_menu_shared.LABEL_CROP_VOICE_SAMPLE) for label in labels)
@@ -234,7 +237,11 @@ def test_voice_menu_canceled_actions_keep_samples_and_clear_callback(monkeypatch
     )
     items[0].handler(state, items[0])
     sub_items = menus[-1]["items"](state)
-    sub_items[0].handler(state, sub_items[0])  # Set voice sample, canceled at the file prompt
+    set_item = next(
+        item for item in sub_items
+        if get_string_from(state, item.label).startswith(voice_menu_shared.LABEL_SET_VOICE_SAMPLE)
+    )
+    set_item.handler(state, set_item)  # Set voice sample, canceled at the file prompt
     remove_label = voice_menu_shared.LABEL_RESET_VOICE_SAMPLE
     remove = find_item(state, sub_items, remove_label)
     assert remove.handler(state, remove) is False  # canceled: stay in the submenu
@@ -1109,7 +1116,7 @@ class TestCropVoiceSampleMenu:
         menus = capture_menus(monkeypatch)
         monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: duration)
         VoiceMenuShared.voice_sample_submenu(state, project.get_tts_model_type(), 0)
-        crop_label = get_string_from(state, menus[-1]["items"](state)[2].label)
+        crop_label = get_string_from(state, menus[-1]["items"](state)[3].label)
         m = voice_menu_shared
         note = (
             f" {m.COL_ERROR}*{m.COL_DIM_ITALICS}exceeds current model's "
