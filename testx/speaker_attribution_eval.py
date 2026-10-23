@@ -51,19 +51,18 @@ from collections import Counter
 from dataclasses import dataclass
 
 from testx.speaker_attribution import (
-    NOT_SPEECH,
-    OTHER,
     PROJECT_TEXT_FILE_NAME,
-    UNKNOWN,
-    find_utterances,
+    load_attributions,
     load_book,
-    load_cache,
-    range_text_hash,
+    require_roster,
 )
 from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings
 from tts_audiobook_tool.app_types.book_serialization import save_book_to_project_text_file
 from tts_audiobook_tool.constants import MAX_WORDS_PER_SEGMENT_DEFAULT
 from tts_audiobook_tool.constants_config import PROJECT_DEFAULT_SEGMENTATION_STRATEGY
+from tts_audiobook_tool.speaker_assign.roster import name_key
+from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
+from tts_audiobook_tool.speaker_assign.speaker_assign_types import NOT_SPEECH, OTHER, UNKNOWN
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 
 
@@ -111,10 +110,6 @@ def load_novel_index(corpus: str) -> dict[str, dict]:
 def read_text(path: str) -> str:
     with open(path, encoding="utf-8") as file:
         return file.read()
-
-
-def name_key(text: str) -> str:
-    return " ".join(text.split()).casefold()
 
 
 def unwrap_lines(text: str) -> str:
@@ -227,7 +222,7 @@ def command_prepare(args: argparse.Namespace) -> None:
     error = save_book_to_project_text_file(path, book)
     if error:
         sys.exit(error)
-    utterances = len(find_utterances(book, 0, len(groups) - 1))
+    utterances = len(UtteranceUtil.find_utterances(book, 0, len(groups)))
     print(f"{title}: {len(groups):,} lines, {utterances:,} dialog utterances -> {path}")
     print("\nNext:")
     print(f"  ./venv-base/bin/python -m testx.speaker_attribution roster {out}")
@@ -241,7 +236,8 @@ def command_score(args: argparse.Namespace) -> None:
     text = read_text(os.path.join(directory, TEXT_FILE))
     quotes, characters, unresolved = load_gold(directory)
     book = load_book(out)
-    cache = load_cache(out)
+    roster = require_roster(out).roster
+    attributions = load_attributions(out)
     lines = book.flat_phrase_groups
     to_ours = offset_map(text, "".join(line.text for line in lines))
     if to_ours is None:
@@ -250,8 +246,8 @@ def command_score(args: argparse.Namespace) -> None:
     for line in lines:
         offsets.append(offsets[-1] + len(line.text))
 
-    def char_span(group_indices: list[int]) -> tuple[int, int]:
-        return offsets[group_indices[0]], offsets[group_indices[-1] + 1]
+    def char_span(line_indices: tuple[int, ...]) -> tuple[int, int]:
+        return offsets[line_indices[0]], offsets[line_indices[-1] + 1]
 
     # Gold sub-quotation spans in our text's offsets, sorted; they don't
     # overlap, so their ends ascend too.
@@ -268,27 +264,22 @@ def command_score(args: argparse.Namespace) -> None:
             j -= 1
         return overlap.most_common(1)[0][0] if overlap else None
 
-    # Our saved, still-valid attributions (newer saves win where ranges overlap)
-    saved: dict[int, tuple[list[int], str, bool]] = {}  # first line -> (lines, label, uncertain)
-    for entry in sorted(cache.get("attributions", {}).values(), key=lambda e: e.get("created") or ""):
-        if entry.get("text_hash") != range_text_hash(book, entry["line_start"], entry["line_end"]):
-            continue
-        for item in entry["utterances"]:
-            saved[item["group_indices"][0]] = (
-                item["group_indices"], item["speaker"], bool(item.get("uncertain")))
+    # Our saved, still-valid attributions by first line (newer saves win where ranges overlap)
+    saved = attributions.by_first_line(book)
     if not saved:
         sys.exit("No saved attributions; run 'speaker_attribution assign ... --all' first.")
 
     # Detection: PDNC quotations vs the dialog the app's segmentation found
-    all_utterances = find_utterances(book, 0, len(lines) - 1)
-    detected = {q for u in all_utterances if (q := best_quote(*char_span(u.group_indices))) is not None}
-    unattributed = sum(1 for u in all_utterances if u.group_indices[0] not in saved)
+    all_utterances = UtteranceUtil.find_utterances(book, 0, len(lines))
+    detected = {q for u in all_utterances if (q := best_quote(*char_span(u.lines))) is not None}
+    unattributed = sum(1 for u in all_utterances if u.first_line not in saved)
 
     rows: list[tuple[str, GoldQuote]] = []   # (our label, gold quote) per matched utterance
     flagged: list[tuple[str, GoldQuote]] = []  # the rows the LLM flagged as uncertain
     unmatched: Counter[str] = Counter()
-    for group_indices, label, uncertain in saved.values():
-        index = best_quote(*char_span(group_indices))
+    for utterance in saved.values():
+        label, uncertain = utterance.speaker, utterance.uncertain
+        index = best_quote(*char_span(utterance.lines))
         if index is None:
             unmatched[label] += 1
             continue
@@ -297,16 +288,15 @@ def command_score(args: argparse.Namespace) -> None:
         if uncertain:
             flagged.append(row)
 
-    roster = {c["id"]: c for c in cache["characters"]}
     agreement: dict[str, Counter[str]] = {}
     for label, quote in rows:
-        if label in roster:
+        if label in roster.ids:
             agreement.setdefault(label, Counter())[quote.speaker] += 1
     mapping = {char_id: counts.most_common(1)[0][0] for char_id, counts in agreement.items()}
     mapped_speakers = set(mapping.values())
 
     def answer_kind(label: str) -> str:
-        if label in roster:
+        if label in roster.ids:
             return "roster id"
         if label.upper().startswith(OTHER):
             return OTHER
@@ -363,14 +353,15 @@ def command_score(args: argparse.Namespace) -> None:
     for char_id, counts in sorted(agreement.items(), key=lambda item: -sum(item[1].values())):
         total = sum(counts.values())
         speaker = mapping[char_id]
-        entry = roster[char_id]
-        ours = {name_key(entry["name"]), *(name_key(a) for a in entry["aliases"])}
+        entry = roster.get(char_id)
+        assert entry is not None
+        ours = entry.name_keys()
         gold = characters.get(speaker)
         theirs = {name_key(speaker), *(name_key(a) for a in gold.aliases)} if gold else {name_key(speaker)}
-        narrator = " [narrator]" if entry["is_narrator"] else ""
+        narrator = " [narrator]" if entry.is_narrator else ""
         print(f"  {char_id:<24} {total:>5} {100 * counts[speaker] / total:5.1f}%  {speaker[:28]:<28} "
               f"{'yes' if ours & theirs else 'NO'}{narrator}")
-    unused = [c for c in roster if c not in agreement]
+    unused = [c.id for c in roster.characters if c.id not in agreement]
     if unused:
         print(f"  (roster ids with no matched utterances: {', '.join(unused)})")
 
