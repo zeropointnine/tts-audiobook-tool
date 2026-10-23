@@ -80,6 +80,30 @@ test("section rendering falls back when a boundary bisects a group", () => {
     assert.deepEqual(plain(ranges), [{ startIndex: 0, endIndex: 4 }]);
 });
 
+test("trailing ornament line splits off as a section-divider candidate", () => {
+    // The whole trailing run (4 line feeds) is rendered as an <hr> divider.
+    const split = BookText._splitTextSegment("He stared at her.\n\n* * *\n\n");
+
+    assert.deepEqual(plain(split), {
+        content: "He stared at her.",
+        after: "\n\n* * *\n\n",
+    });
+});
+
+test("trailing quoted beat stays content instead of becoming a divider", () => {
+    // A silent dialog beat (“…”) must remain visible text within the segment;
+    // only the trailing paragraph whitespace (2 line feeds, no <hr>) is split off.
+    const split = BookText._splitTextSegment(
+        "“like on the alternate audio track.”\n\n“…”\n\n",
+    );
+
+    assert.deepEqual(plain(split), {
+        before: "",
+        content: "“like on the alternate audio track.”\n\n“…”",
+        after: "\n\n",
+    });
+});
+
 test("ordered lookup remains fast and correct for a large leaf sequence", () => {
     const leafCount = 50000;
     const leaves = Array.from(
