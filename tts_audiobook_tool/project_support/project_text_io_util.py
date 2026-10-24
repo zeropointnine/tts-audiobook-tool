@@ -9,7 +9,7 @@ from tts_audiobook_tool.constants import PROJECT_TEXT_FILE_NAME, PROJECT_TEXT_RA
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.util import COL_ERROR, printt
-from tts_audiobook_tool.speaker_assign.attribution_invalidation import AttributionInvalidation
+from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -83,13 +83,12 @@ class ProjectTextIOUtil:
             dialog_segmentation: bool = False,
             title: str = "",
             text_source_kind: str = "plain_text",
-            invalidation: AttributionInvalidation | None = None,
     ) -> str:
         book = ProjectTextIOUtil.make_import_book(
             phrase_groups, strategy, max_words, language_code,
             dialog_segmentation, title, text_source_kind,
         )
-        return ProjectTextIOUtil._save_import(project, book, raw_text, invalidation)
+        return ProjectTextIOUtil._save_import(project, book, raw_text)
 
     @staticmethod
     def set_phrase_groups_chapters_and_save(
@@ -103,26 +102,15 @@ class ProjectTextIOUtil:
             dialog_segmentation: bool = False,
             title: str = "",
             section_titles: list[str] | None = None,
-            invalidation: AttributionInvalidation | None = None,
     ) -> str:
         book = ProjectTextIOUtil.make_import_book(
             phrase_groups, strategy, max_words, language_code,
             dialog_segmentation, title, "epub", section_start_indices, section_titles,
         )
-        return ProjectTextIOUtil._save_import(project, book, raw_text, invalidation)
+        return ProjectTextIOUtil._save_import(project, book, raw_text)
 
     @staticmethod
-    def _save_import(
-            project: Project,
-            book: Book,
-            raw_text: str,
-            invalidation: AttributionInvalidation | None = None,
-    ) -> str:
-        # Planning must succeed before any text or metadata is changed.
-        cleanup = invalidation if invalidation is not None else AttributionInvalidation.plan(project.dir_path, book)
-        if isinstance(cleanup, str):
-            return cleanup
-
+    def _save_import(project: Project, book: Book, raw_text: str) -> str:
         old_state = (project.book, project.markers, project.generate_range_string,
                      project.realtime_line_range)
         project.book = book
@@ -140,11 +128,13 @@ class ProjectTextIOUtil:
         error = ProjectTextIOUtil._save_raw_text(project, raw_text)
         if error:
             return f"Project text was saved, but the raw source text could not be saved: {error}"
-        # Keep roster, voice mappings and valid results; only discard stale ranges
-        # after the replacement text has actually been persisted.
-        error = cleanup.commit()
-        if error:
-            return f"Project text was saved, but outdated dialog assignments could not be cleared: {error}"
+        # Business rule: importing text discards all saved dialog assignments
+        # (unlike text editing, which keeps still-matching ranges). The roster
+        # and voice mappings are kept. Only done once the new text is persisted.
+        if project.dir_path:
+            error = SpeakerAssignFileUtil.delete_attributions_file(project.dir_path)
+            if error:
+                return f"Project text was saved, but saved dialog assignments could not be cleared: {error}"
         return ""
 
     @staticmethod

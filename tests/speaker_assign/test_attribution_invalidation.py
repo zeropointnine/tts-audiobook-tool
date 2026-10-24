@@ -38,7 +38,6 @@ def test_cleanup_is_previewed_then_persisted_without_touching_configuration(tmp_
     plan = AttributionInvalidation.plan(project_dir, changed)
     assert isinstance(plan, AttributionInvalidation)
     assert plan.removed_count == removed
-    assert bool(plan.warning_text) == bool(removed)
     assert SpeakerAssignFileUtil.load_attributions_file(project_dir) == saved
     assert plan.commit() == ""
     assert SpeakerAssignFileUtil.load_attributions_file(project_dir) == AttributionsFile(tuple(saved.valid_ranges(changed)))
@@ -48,7 +47,7 @@ def test_cleanup_is_previewed_then_persisted_without_touching_configuration(tmp_
 def test_no_saved_assignments_does_not_create_a_cache(tmp_path):
     plan = AttributionInvalidation.plan(str(tmp_path), make_book([]))
     assert isinstance(plan, AttributionInvalidation)
-    assert plan.warning_text == ""
+    assert plan.removed_count == 0
     assert plan.commit() == ""
     assert not Path(SpeakerAssignFileUtil.attributions_path(str(tmp_path))).exists()
 

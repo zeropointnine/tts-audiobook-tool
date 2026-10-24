@@ -27,17 +27,6 @@ class AttributionInvalidation:
         kept = AttributionsFile(tuple(saved.valid_ranges(book)))
         return AttributionInvalidation(project_dir, kept, len(saved.ranges) - len(kept.ranges))
 
-    @property
-    def warning_text(self) -> str:
-        if not self.removed_count:
-            return ""
-        chunks = "chunk" if self.removed_count == 1 else "chunks"
-        return (
-            f"This change will clear dialog assignments for {self.removed_count} affected {chunks}. "
-            'Run "Assign dialog to characters" again for those passages. '
-            "Your character roster and voice mappings will be kept."
-        )
-
     def commit(self) -> str:
         if not self.removed_count:
             return ""

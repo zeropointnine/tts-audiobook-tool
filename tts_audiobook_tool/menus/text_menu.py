@@ -10,7 +10,7 @@ from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
-from tts_audiobook_tool.speaker_assign.attribution_invalidation import AttributionInvalidation
+from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual.content_textual_app import (
@@ -251,13 +251,14 @@ class TextMenu:
 
 # ---
 
-def make_text_replacement_confirm_message(
-        project: Project, assignment_warning: str = "",
-) -> str:
+def make_text_replacement_confirm_message(project: Project) -> str:
     """
     Builds the confirmation prompt shown before replacing the project text,
     listing the text-dependent project data that would be invalidated.
     Returns an empty string when nothing would be invalidated (no prompt needed).
+
+    Everything listed is known before the incoming text is chosen: text import
+    discards all generated audio, markers and saved dialog assignments.
     """
     lines: list[str] = []
 
@@ -275,8 +276,18 @@ def make_text_replacement_confirm_message(
         items_noun = make_noun("item", "items", num_markers)
         lines.append(f"{marker_label} ({COL_ERROR}{num_markers}{COL_DEFAULT} {items_noun})")
 
-    if assignment_warning:
-        lines.append(assignment_warning)
+    has_assignments = False
+    if project.dir_path:
+        saved = SpeakerAssignFileUtil.load_attributions_file(project.dir_path)
+        if isinstance(saved, str):
+            # Unreadable, but it gets cleared regardless; just omit the count
+            has_assignments = True
+            lines.append("Saved dialog assignments")
+        elif saved.ranges:
+            has_assignments = True
+            num_chunks = len(saved.ranges)
+            chunks_noun = make_noun("chunk", "chunks", num_chunks)
+            lines.append(f"Saved dialog assignments ({COL_ERROR}{num_chunks}{COL_DEFAULT} {chunks_noun})")
 
     if not lines:
         return ""
@@ -289,6 +300,8 @@ def make_text_replacement_confirm_message(
     if num_substitutions > 0:
         items_noun = make_noun("item", "items", num_substitutions)
         s += f"{COL_DIM}Note: Word substitutions ({num_substitutions} {items_noun}) will be kept.{COL_DEFAULT}\n"
+    if has_assignments:
+        s += f"{COL_DIM}Note: Current character roster and voice mappings will be preserved{COL_DEFAULT}\n"
 
     s += "\nAre you sure? "
     return s
@@ -306,6 +319,11 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         case _:
             raise Exception("Bad value")
     MenuUtil.print_screen_heading(state, heading)
+
+    # Confirm before invalidating text-dependent project data
+    confirm_message = make_text_replacement_confirm_message(state.project)
+    if confirm_message and not ask.ask_confirm(confirm_message):
+        return False
 
     epub_path = ""
     epub_import_result: EpubImportResult | None = None
@@ -361,33 +379,6 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         case _:
             raise ValueError(f"Bad value: {item.data!r}")
 
-    # Plan against the actual replacement, including EPUB section boundaries.
-    text_source_kind = "epub" if epub_import_result else (
-        "manual" if item.data == "manual" else "plain_text"
-    )
-    incoming_book = ProjectTextIOUtil.make_import_book(
-        phrase_groups=phrase_groups,
-        strategy=state.project.segmentation_strategy,
-        max_words=state.project.max_words,
-        language_code=state.project.language_code,
-        dialog_segmentation=state.project.dialog_segmentation,
-        title=title,
-        text_source_kind=text_source_kind,
-        section_start_indices=(epub_import_result.section_start_indices
-                               if epub_import_result else None),
-        section_titles=([chapter.title for chapter in epub_import_result.chapters]
-                        if epub_import_result else None),
-    )
-    invalidation = AttributionInvalidation.plan(state.project.dir_path, incoming_book)
-    if isinstance(invalidation, str):
-        ask.ask_error(invalidation)
-        return False
-    confirm_message = make_text_replacement_confirm_message(
-        state.project, invalidation.warning_text,
-    )
-    if confirm_message and not ask.ask_confirm(confirm_message):
-        return False
-
     # Commit
     if epub_import_result:
         err = EpubExtractor.copy_epub_to_project(epub_path, state.project.dir_path)
@@ -405,7 +396,6 @@ def on_select_import(state: State, item: MenuItem) -> bool:
             raw_text=raw_text,
             title=title,
             section_titles=[chapter.title for chapter in epub_import_result.chapters],
-            invalidation=invalidation,
         )
 
     else:
@@ -420,7 +410,6 @@ def on_select_import(state: State, item: MenuItem) -> bool:
             raw_text=raw_text,
             title=title,
             text_source_kind=text_source_kind,
-            invalidation=invalidation,
         )
 
     if err:
@@ -559,8 +548,7 @@ DIALOG_SEGMENTATION_DESC = \
 f"""Detects and splits dialog from surrounding narration,
 making it easier to assign different voices.
 For example, {COL_DIM}He said, "Hello."{COL_DEFAULT} becomes {COL_DIM}He said,{COL_DEFAULT} and {COL_DIM}"Hello."{COL_DEFAULT}
-Detected dialog lines are marked as such. After import, they can optionally
-be assigned to voice sample 2. Required by "Assign character voices using LLM".
+Is required by the "Assign character voices using LLM" feature.
 
 For single-voice narration, leave this off to preserve natural flow."""
 
