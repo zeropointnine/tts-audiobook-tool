@@ -35,7 +35,7 @@ def test_roster_menu_labels_mark_only_known_stale_data(monkeypatch, status):
     def capture_menu(state, *, items, **kwargs):
         captured.append([
             item.label(state) if callable(item.label) else item.label
-            for item in (items(state)[:1] if kwargs["heading"] == "Assign character voices using LLM" else items(state))
+            for item in (items(state)[:1] if kwargs["heading"] == "Auto-assign character voices" else items(state))
         ])
 
     monkeypatch.setattr(MenuUtil, "menu", capture_menu)

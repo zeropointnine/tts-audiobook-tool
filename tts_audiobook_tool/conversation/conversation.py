@@ -198,7 +198,7 @@ class ConversationRuntime:
                 token=self.prefs.llm_api_key,
                 model=self.prefs.llm_model,
                 system_prompt=get_resolved_system_prompt(self.state),
-                extra_params=self.prefs.llm_extra_params,
+                extra_params=self.prefs.llm_chat_extra_params,
                 verbose=False,
                 anthropic_default_max_tokens=CHAT_ANTHROPIC_MAX_TOKENS,
             )

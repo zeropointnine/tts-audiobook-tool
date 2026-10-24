@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import re
 import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable
@@ -30,6 +31,16 @@ SPEAKER_ASSIGN_ANTHROPIC_MAX_TOKENS = 64_000
 CANCEL_GRACE_SECONDS = 1.0
 
 HTTP_ERROR_BODY_MAX_CHARS = 600
+
+EXTRA_PARAMS_MENU_PATH = "Options > LLM settings > Extra params (Auto-assign character voices)"
+
+# Lowercase phrases in a 400 response body that indicate the request exceeded
+# the model's context window (eg OpenAI/DeepSeek "maximum context length is...",
+# Anthropic "prompt is too long", Gemini "input token count ... exceeds the maximum")
+CONTEXT_ERROR_PHRASES = (
+    "context length", "context window", "context_length", "maximum context",
+    "too long", "too large", "exceeds the maximum",
+)
 
 
 class CancelEvent(Enum):
@@ -96,7 +107,7 @@ class LlmRequestUtil:
             token=prefs.llm_api_key,
             model=prefs.llm_model,
             system_prompt=system_prompt,
-            extra_params=prefs.llm_extra_params,
+            extra_params=prefs.llm_speaker_assign_extra_params,
             timeout=SPEAKER_ASSIGN_LLM_TIMEOUT,
             anthropic_default_max_tokens=SPEAKER_ASSIGN_ANTHROPIC_MAX_TOKENS,
         )
@@ -104,7 +115,7 @@ class LlmRequestUtil:
     @staticmethod
     def describe_llm(prefs: Prefs) -> dict[str, Any]:
         """The LLM settings, as recorded in saved results."""
-        return {"url": prefs.llm_url, "model": prefs.llm_model, "extra_params": prefs.llm_extra_params}
+        return {"url": prefs.llm_url, "model": prefs.llm_model, "extra_params": prefs.llm_speaker_assign_extra_params}
 
     @staticmethod
     def send_cancellable(
@@ -233,7 +244,7 @@ class LlmRequestUtil:
             message = f"LLM request failed: HTTP {status if status is not None else '?'}"
             if body:
                 message += f"\n{ellipsize(body, HTTP_ERROR_BODY_MAX_CHARS)}"
-            hint = LlmRequestUtil._http_error_hint(status, body)
+            hint = LlmRequestUtil._http_error_hint(status, body, prefs.llm_speaker_assign_extra_params)
             if hint:
                 message += f"\n\n{hint}"
             return message
@@ -255,7 +266,8 @@ class LlmRequestUtil:
         return (
             f"The LLM hit its output-token limit {when} (finish reason: {result.finish_reason}).\n"
             f"Reasoning counts toward the limit. A lower reasoning effort, or a higher max tokens\n"
-            f"value if the provider allows it, may help (Options > LLM settings > Extra params)."
+            f"value if the provider allows it, may help.\n"
+            f"See: {EXTRA_PARAMS_MENU_PATH}"
         )
 
     @staticmethod
@@ -270,20 +282,28 @@ class LlmRequestUtil:
         return isinstance(error, requests.RequestException)
 
     @staticmethod
-    def _http_error_hint(status: int | None, body: str) -> str:
+    def _http_error_hint(status: int | None, body: str, extra_params: dict) -> str:
         lower = body.lower()
         # Checked before the context hint: these bodies also mention "tokens"
         if status == 400 and "max_tokens" in lower:
             if "unsupported parameter" in lower:
                 # eg OpenAI's reasoning models, which want max_completion_tokens
-                return ("This model doesn't accept max_tokens; the error may name the parameter to use instead\n"
-                        "(Options > LLM settings > Extra params).")
+                return ("This model doesn't accept max_tokens; the error may name the parameter to use instead.\n"
+                        f"See: {EXTRA_PARAMS_MENU_PATH}")
             # eg Anthropic: "max_tokens: 64000 > 32000, which is the maximum allowed number of output tokens..."
-            return ("The output-token limit (max_tokens) may be too high for this model. Set a lower one in\n"
-                    'Options > LLM settings > Extra params, eg {"max_tokens": 32000}.')
-        if status in (400, 413) and any(
-            word in lower for word in ("context", "token", "too long", "too large", "length")
-        ):
+            return ("The output-token limit (max_tokens) may be too high for this model. Set a lower one,\n"
+                    f'eg {{"max_tokens": 32000}}, in {EXTRA_PARAMS_MENU_PATH}')
+        # An extra param the error names is the likeliest cause, whatever else it says
+        # (as a whole word, so eg a param "n" doesn't match every body)
+        named = [key for key in extra_params if re.search(rf"\b{re.escape(key.lower())}\b", lower)]
+        if status is not None and 400 <= status < 500 and named:
+            keys = ", ".join(f'"{key}"' for key in named)
+            noun = "param" if len(named) == 1 else "params"
+            return (f"The error mentions the extra {noun} {keys}.\n"
+                    f"See: {EXTRA_PARAMS_MENU_PATH}")
+        # Specific phrases only: an error about some token-related param
+        # also mentions "tokens", but has nothing to do with the text's length
+        if status == 413 or (status == 400 and any(phrase in lower for phrase in CONTEXT_ERROR_PHRASES)):
             return "The text may be too long for the model's context window."
         if status in (401, 403):
             return "Check the API key environment variable (Options > LLM settings)."
@@ -291,4 +311,7 @@ class LlmRequestUtil:
             return "Check the endpoint URL and model name (Options > LLM settings)."
         if status == 429:
             return "The provider is rate-limiting requests, or the account is out of credits."
+        if status in (400, 422) and extra_params:
+            return (f"The extra params may be the cause (some providers reject unknown or invalid fields).\n"
+                    f"See: {EXTRA_PARAMS_MENU_PATH}")
         return ""

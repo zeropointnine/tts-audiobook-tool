@@ -227,7 +227,7 @@ def make_llm(system_prompt: str) -> LlmSession:
         sys.exit("LLM URL/model not set in app prefs (Options > LLM settings).")
     if not prefs.llm_api_key:
         sys.exit(f"No LLM API key: environment variable {prefs.llm_api_key_env_var!r} is empty.")
-    print(f"  LLM: {prefs.llm_model} @ {prefs.llm_url}  extra params: {prefs.llm_extra_params}")
+    print(f"  LLM: {prefs.llm_model} @ {prefs.llm_url}  extra params: {prefs.llm_speaker_assign_extra_params}")
     return LlmRequestUtil.make_session(prefs, system_prompt)
 
 

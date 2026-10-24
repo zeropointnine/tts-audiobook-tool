@@ -61,10 +61,10 @@ class SpeakerAssignMenu:
 
         MenuUtil.menu(
             state,
-            heading="Assign character voices using LLM",
+            heading="Auto-assign character voices",
             items=items_maker,
             subheading=subheading,
-            breadcrumb="Assign character voices using LLM",
+            breadcrumb="Auto-assign character voices",
         )
 
 

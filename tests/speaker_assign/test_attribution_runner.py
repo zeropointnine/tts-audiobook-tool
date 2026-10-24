@@ -23,7 +23,7 @@ from types import SimpleNamespace
 CHUNK_WORDS = 30
 
 ROSTER = Roster(characters=(RosterCharacter(id="ANNA", name="Anna"), RosterCharacter(id="BEN", name="Ben")))
-PREFS = SimpleNamespace(llm_url="https://example.test/v1", llm_model="m", llm_extra_params={})
+PREFS = SimpleNamespace(llm_url="https://example.test/v1", llm_model="m", llm_speaker_assign_extra_params={})
 
 
 def make_section(n: int):

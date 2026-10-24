@@ -563,13 +563,13 @@ def test_voice_items_end_with_selection_items(
 
 @pytest.mark.parametrize("file_name", ["roster.json", "attributions.json"])
 def test_auto_assign_item_is_optional_until_speaker_assign_data_exists(tmp_path, file_name) -> None:
-    # The "(optional)" hint shows only while the project has no saved
+    # The "(uses LLM; optional)" hint shows only while the project has no saved
     # roster or attributions; either file removes it
     state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
     item = VoiceMenuShared.make_auto_assign_character_voices_item()
 
     label = strip_ansi_codes(get_string_from(state, item.label))
-    assert label == f"{voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES} (optional)"
+    assert label == f"{voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES} (uses LLM; optional)"
 
     (tmp_path / "speaker_assign").mkdir()
     (tmp_path / "speaker_assign" / file_name).write_text("{}", encoding="utf-8")

@@ -22,8 +22,8 @@ def check_llm_configured(state: State) -> bool:
 
 def print_llm_info(prefs: Prefs) -> None:
     printt(f"{COL_DEFAULT}LLM: {COL_DIM}{prefs.llm_url}, {prefs.llm_model or '(no model name)'}")
-    if prefs.llm_extra_params:
-        printt(f"{COL_DEFAULT}Extra params: {COL_DIM}{prefs.llm_extra_params}")
+    if prefs.llm_speaker_assign_extra_params:
+        printt(f"{COL_DEFAULT}Extra params: {COL_DIM}{prefs.llm_speaker_assign_extra_params}")
 
 
 class StatusLine:

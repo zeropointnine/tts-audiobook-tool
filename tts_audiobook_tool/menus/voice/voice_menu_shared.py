@@ -37,7 +37,7 @@ LABEL_VOICE_SAMPLE_ITEM = "Voice"  # "Voice N: <name> (<duration>); "<instructio
 LABEL_VOICE_SAMPLES_SUPERLABEL = "Voice list"
 LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sample-less) voice
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
-LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Assign character voices using LLM"
+LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Auto-assign character voices"
 
 # Per-voice submenu labels
 LABEL_VOICE_NAME = "Name"
@@ -624,7 +624,7 @@ class VoiceMenuShared:
             from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
             label = LABEL_AUTO_ASSIGN_CHARACTER_VOICES
             if not SpeakerAssignFileUtil.has_any_data(state.project.dir_path):
-                label += f" {COL_DIM}(optional)"
+                label += f" {COL_DIM}(uses LLM; optional)"
             return label
 
         return MenuItem(make_label, on_item)

@@ -138,7 +138,7 @@ def make_http_error(status: int, body: str) -> requests.HTTPError:
 def test_describe_http_error_includes_body_and_hint() -> None:
     # A provider's context-length rejection: the body is shown along with a
     # hint that the book may not fit the model's context window.
-    prefs = SimpleNamespace(llm_url="https://example.test/v1")
+    prefs = SimpleNamespace(llm_url="https://example.test/v1", llm_speaker_assign_extra_params={})
     text = LlmRequestUtil.describe_error(
         make_http_error(400, '{"error": "maximum context length is 131072 tokens"}'), prefs)  # type: ignore[arg-type]
     assert "HTTP 400" in text
@@ -153,7 +153,7 @@ def test_describe_http_error_hints_at_max_tokens_rather_than_context() -> None:
     # Anthropic rejects a max_tokens above the model's output cap (eg the 64K
     # speaker-assign default on a 32K model). The body mentions "tokens", but
     # the fix is a lower max_tokens, not shorter text.
-    prefs = SimpleNamespace(llm_url="https://api.anthropic.com/v1/messages")
+    prefs = SimpleNamespace(llm_url="https://api.anthropic.com/v1/messages", llm_speaker_assign_extra_params={})
     body = ('{"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: 64000 > 32000, '
             'which is the maximum allowed number of output tokens for claude-opus-4-1-20250805"}}')
     text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
@@ -164,6 +164,46 @@ def test_describe_http_error_hints_at_max_tokens_rather_than_context() -> None:
     body = "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."
     text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
     assert "doesn't accept max_tokens" in text
+
+
+def test_describe_http_error_points_at_an_extra_param_the_error_names() -> None:
+    # A 400 naming a user-set extra param points at the extra params setting,
+    # even though the body also mentions "tokens" (not a context-window problem)
+    prefs = SimpleNamespace(llm_url="https://example.test/v1",
+                            llm_speaker_assign_extra_params={"max_completion_tokens": "abc", "n": 1})
+    body = "Invalid type for 'max_completion_tokens': expected an integer, but got a string instead."
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert 'mentions the extra param "max_completion_tokens".' in text
+    assert "Extra params (Auto-assign character voices)" in text
+    assert "context window" not in text
+
+
+def test_describe_http_error_without_context_phrases_has_no_context_hint() -> None:
+    # Bare "token"/"length" in a 400 body no longer implies the text is too long
+    prefs = SimpleNamespace(llm_url="https://example.test/v1", llm_speaker_assign_extra_params={})
+    body = "Invalid value for 'logprobs': token length must be positive."
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert "context window" not in text
+
+    # Gemini-style wording still counts
+    body = "The input token count (2000000) exceeds the maximum number of tokens allowed (1048576)."
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert "context window" in text
+
+
+def test_describe_http_error_suggests_extra_params_only_when_set() -> None:
+    # An unexplained 400 suggests the extra params as a possible cause only
+    # if any are set
+    body = "Unrecognized request argument supplied: thinkng"
+    no_params = SimpleNamespace(llm_url="https://example.test/v1", llm_speaker_assign_extra_params={})
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), no_params)  # type: ignore[arg-type]
+    assert "Extra params" not in text
+
+    with_params = SimpleNamespace(llm_url="https://example.test/v1",
+                                  llm_speaker_assign_extra_params={"thinking": {"type": "enabled"}})
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), with_params)  # type: ignore[arg-type]
+    assert "The extra params may be the cause" in text
+    assert "mentions the extra param" not in text  # "thinkng" isn't "thinking"
 
 
 def test_without_deferral_a_cancel_before_streaming_abandons_at_once() -> None:
