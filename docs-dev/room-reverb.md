@@ -32,7 +32,7 @@ new design key. An unknown id loads as `OFF`.
 (always written; new voices default to `OFF`; v4 projects' project-wide value was copied onto every
 voice). In concat and realtime playback, each segment's narration goes into the room of the voice
 that spoke it (`VoiceSpatialPolicy.room_reverb_for_voice_index`): its phrase group's
-`voice_index`, clamped like generation (`-1` = voice 0, a stale too-large index = the last voice).
+`voice_index`, clamped like generation (a stale too-large index = the last voice).
 
 There is no reverb with no voices, or while a Pocket predefined voice is in use. The lookup is
 independent of the selected model's voice-clone support, so existing audio keeps its rooms. If a
@@ -99,7 +99,7 @@ Direct narration uses center-unity equal-power panning: `theta = (pan + 1) * pi/
 `L = sqrt(2)*cos(theta)`, `R = sqrt(2)*sin(theta)`. Center therefore preserves the existing
 unit gain in both channels and the existing dry/reverb balance.
 `VoiceSpatialPolicy.pan_for_voice_index` picks the speaking voice like the room lookup: the
-phrase group's `voice_index`'s position, clamped like generation (`-1` = voice 0).
+phrase group's `voice_index`'s position, clamped like generation.
 
 Like rooms, positions are independent of the selected model's voice-clone support, and all centered
 while a Pocket predefined voice is in use.

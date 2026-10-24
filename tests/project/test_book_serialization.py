@@ -18,7 +18,7 @@ class TestBookSerialization(unittest.TestCase):
             self,
             text: str,
             reason: Reason = Reason.SENTENCE,
-            voice_index: int = -1,
+            voice_index: int = 0,
     ) -> PhraseGroup:
         return PhraseGroup([Phrase(text, reason)], voice_index=voice_index)
 
@@ -63,7 +63,7 @@ class TestBookSerialization(unittest.TestCase):
         self.assertEqual(result.segmentation_settings.dialog_segmentation, True)
         self.assertEqual([section.title for section in result.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([group.text for group in result.phrase_groups], ["Opening prose.", "Next chapter.\n\n"])
-        self.assertEqual([group.voice_index for group in result.phrase_groups], [-1, 2])
+        self.assertEqual([group.voice_index for group in result.phrase_groups], [0, 2])
         self.assertEqual(result.phrase_groups[1].last_reason, Reason.PARAGRAPH)
         self.assertEqual(result.section_start_indices(), [0, 1])
 
@@ -128,10 +128,10 @@ class TestBookSerialization(unittest.TestCase):
         assert isinstance(result, Book)
         self.assertEqual(result.phrase_groups[0].last_reason, Reason.PARAGRAPH)
 
-    def test_phrase_group_voice_index_defaults_to_negative_one_and_has_setter(self):
-        group = self.make_phrase_group("One.")
+    def test_phrase_group_voice_index_defaults_to_first_voice_and_has_setter(self):
+        group = PhraseGroup([Phrase("One.", Reason.SENTENCE)])
 
-        self.assertEqual(group.voice_index, -1)
+        self.assertEqual(group.voice_index, 0)
         group.voice_index = 3
         self.assertEqual(group.voice_index, 3)
 
@@ -214,10 +214,12 @@ class TestBookSerialization(unittest.TestCase):
         self.assertIsInstance(result, Book)
         assert isinstance(result, Book)
         self.assertEqual(result.phrase_groups[0].text, "Old.")
-        self.assertEqual(result.phrase_groups[0].voice_index, -1)
+        self.assertEqual(result.phrase_groups[0].voice_index, 0)
 
-    def test_invalid_or_missing_voice_index_defaults_to_negative_one(self):
-        values = [None, True, -2, 1.5, "2"]
+    def test_legacy_unassigned_invalid_or_missing_voice_index_loads_as_zero(self):
+        # Earlier versions stored -1 for "unassigned", which always meant the
+        # first voice; it loads as 0, as do invalid and missing values.
+        values = [-1, None, True, -2, 1.5, "2"]
         group_payloads = [
             {"phrases": [{"text": f"Value {index}.", "reason": "s"}], "voice_index": value}
             for index, value in enumerate(values)
@@ -228,7 +230,7 @@ class TestBookSerialization(unittest.TestCase):
 
         self.assertIsInstance(result, list)
         assert isinstance(result, list)
-        self.assertEqual([group.voice_index for group in result], [-1] * len(group_payloads))
+        self.assertEqual([group.voice_index for group in result], [0] * len(group_payloads))
 
     def test_phrase_groups_v1_deserializes_to_legacy_flat_book(self):
         phrase_groups = [

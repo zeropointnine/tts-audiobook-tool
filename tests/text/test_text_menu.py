@@ -230,8 +230,8 @@ def make_dialog_import_state(
 ) -> tuple[State, SimpleNamespace]:
     """A fake project whose imported text has the given number of dialog lines."""
     phrase_groups = [
-        SimpleNamespace(voice_index=-1, is_dialog=False),
-        *[SimpleNamespace(voice_index=-1, is_dialog=True) for _ in range(dialog_line_count)],
+        SimpleNamespace(voice_index=0, is_dialog=False),
+        *[SimpleNamespace(voice_index=0, is_dialog=True) for _ in range(dialog_line_count)],
     ]
     project = SimpleNamespace(
         sound_segments=SimpleNamespace(num_generated=lambda: 0, delete_all=lambda: None),
@@ -306,7 +306,7 @@ def test_import_summary_reports_dialog_lines_and_prompts_only_when_found(
     assert detected == ([f"  Dialog lines detected: {COL_ACCENT}{dialog_line_count}"] if dialog_segmentation else [])
     if dialog_line_count:
         assert record["prompts"][0].startswith(f"Assign the {dialog_line_count} dialog lines to voice sample 2?")
-    assert [group.voice_index for group in project.phrase_groups] == [-1] * (1 + dialog_line_count)
+    assert [group.voice_index for group in project.phrase_groups] == [0] * (1 + dialog_line_count)
     assert record["book_saves"] == [] and project.save_calls == []
     assert (HINT_DIALOG_VOICE in record["hints"]) is bool(dialog_line_count)
 
@@ -317,7 +317,7 @@ def test_accepting_dialog_voice_prompt_assigns_voice_2(monkeypatch) -> None:
     state, project = make_dialog_import_state(True, 2)
     record = run_dialog_import(monkeypatch, state, [True])
 
-    assert [group.voice_index for group in project.phrase_groups] == [-1, 1, 1]
+    assert [group.voice_index for group in project.phrase_groups] == [0, 1, 1]
     assert record["book_saves"] == [project]
     assert len(record["prompts"]) == 1
     assert project.save_calls == []
@@ -334,7 +334,7 @@ def test_dialog_voice_prompt_rolls_back_when_saving_fails(monkeypatch) -> None:
 
     text_menu_module.ask_assign_dialog_voice(state, 1)
 
-    assert [group.voice_index for group in project.phrase_groups] == [-1, -1]
+    assert [group.voice_index for group in project.phrase_groups] == [0, 0]
     assert errors == ["disk full"]
 
 
@@ -386,7 +386,7 @@ def run_manual_import(
     monkeypatch.setattr(
         text_menu_module.ask_phrase_groups,
         "get_from_std_in",
-        lambda *args, **kwargs: ([SimpleNamespace(voice_index=-1)], "Raw text"),
+        lambda *args, **kwargs: ([SimpleNamespace(voice_index=0)], "Raw text"),
     )
     monkeypatch.setattr(
         text_menu_module.ProjectTextIOUtil,

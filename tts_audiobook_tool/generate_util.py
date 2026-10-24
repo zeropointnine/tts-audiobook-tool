@@ -1187,8 +1187,8 @@ def effective_voice_indices(
     Maps each item index to the voice sample index that `GenerateUtil.generate`
     will actually use for that line.
 
-    A per-line selection of -1 (no explicit assignment) or any stale
-    out-of-range value is clamped to the nearest valid voice sample index.
+    A stale out-of-range per-line selection is clamped to the nearest valid
+    voice sample index.
     """
     return {
         index: ProjectVoiceUtil.get_effective_voice_index(phrase_groups[index].voice_index, num_voice_values)

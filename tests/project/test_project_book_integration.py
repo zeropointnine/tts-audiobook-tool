@@ -482,7 +482,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertIsInstance(result, Project)
         self.assertEqual(migrated_payload["format"], "book.v3")
         group_payload = migrated_payload["book"]["sections"][0]["phrase_groups"][0]
-        self.assertEqual(group_payload["voice_index"], -1)
+        self.assertEqual(group_payload["voice_index"], 0)
         self.assertEqual(group_payload["phrases"][0]["text"], "Bare list.")
 
     def test_project_load_migrates_book_v1_project_text_to_current_book_format(self):
@@ -514,7 +514,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertIsInstance(result, Project)
         self.assertEqual(payload["format"], "book.v3")
         self.assertEqual(payload["book"]["title"], "Already Book")
-        self.assertEqual(payload["book"]["sections"][0]["phrase_groups"][0]["voice_index"], -1)
+        self.assertEqual(payload["book"]["sections"][0]["phrase_groups"][0]["voice_index"], 0)
 
     def test_project_save_writes_current_book_format_project_text(self):
         book = Book(
@@ -674,7 +674,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertIsInstance(reloaded, Project)
         assert isinstance(reloaded, Project)
         self.assertEqual([group.is_dialog for group in reloaded.phrase_groups], [False, True, False])
-        self.assertEqual([group.voice_index for group in reloaded.phrase_groups], [-1, -1, -1])
+        self.assertEqual([group.voice_index for group in reloaded.phrase_groups], [0, 0, 0])
         self.assertTrue(reloaded.book.segmentation_settings.dialog_segmentation)
 
     def test_project_load_migrates_book_v2_dialog_voices_to_dialog_flags(self):
@@ -708,7 +708,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(payload["format"], "book.v3")
         groups_payload = payload["book"]["sections"][0]["phrase_groups"]
         self.assertEqual([group.get("is_dialog", False) for group in groups_payload], [False, True, False])
-        self.assertEqual([group["voice_index"] for group in groups_payload], [-1, 1, -1])
+        self.assertEqual([group["voice_index"] for group in groups_payload], [0, 1, 0])
 
     def test_set_phrase_groups_and_save_clears_markers_and_keeps_substitutions_for_plain_text_import(self):
         with tempfile.TemporaryDirectory() as project_dir:

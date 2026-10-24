@@ -11,7 +11,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from project_settings_test_support import set_setting
 
 
-def make_phrase_group(voice_index: int = -1) -> PhraseGroup:
+def make_phrase_group(voice_index: int = 0) -> PhraseGroup:
     return PhraseGroup([Phrase("Hello.", Reason.SENTENCE)], voice_index=voice_index)
 
 

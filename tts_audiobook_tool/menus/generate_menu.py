@@ -230,7 +230,6 @@ def count_out_of_range_voice_indices(
 ) -> int:
     """
     Count per-line voice selections that are stale (past the end of the voice sample list) and will be clamped.
-    `voice_index == -1` is the "no explicit assignment" default (the first voice sample), not an out-of-range selection.
     """
     return sum(
         1 for index in indices

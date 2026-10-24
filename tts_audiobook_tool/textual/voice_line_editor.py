@@ -13,10 +13,11 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
     EditorSaved,
 )
-from tts_audiobook_tool.textual.select_by_voice_dialog import (
+from tts_audiobook_tool.textual.multi_select_dialog import (
+    DIALOG_LINES,
     MANUAL_ENTRY,
-    SelectByVoiceDialog,
-    SelectByVoiceResult,
+    MultiSelectDialog,
+    MultiSelectResult,
 )
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
@@ -28,6 +29,7 @@ from tts_audiobook_tool.util import make_error_string
 TITLE_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 
 # Voice column: number, truncated/padded voice name, then a dialog marker
+# (the marker column only when the text was segmented with dialog detection)
 VOICE_NAME_WIDTH = 5
 DIALOG_MARKER = "💬"
 # Two spaces match the emoji's two terminal cells, keeping text aligned
@@ -70,7 +72,9 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             Binding(str(number), f"assign_voice({number - 1})", show=False)
             for number in range(1, 10)
         ),
-        Binding("s", "show_select_by_voice", show=False),
+        # Shares the "m" key with the base manual-selection binding, which
+        # check_action disables, so this one runs instead
+        Binding("m", "show_multi_select", show=False),
     ]
 
     def __init__(
@@ -81,6 +85,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         self.original_voice_indices: list[int] = []
         self.staged_voice_indices: list[int] = []
         self.list_items: list[VoiceLineListItem] = []
+        self.show_dialog_markers = False
         self.voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
         if voice_sample_count is None:
             voice_sample_count = len(self.voice_values)
@@ -90,7 +95,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         header_lines = [
             f"{COL_ACCENT}{TITLE_EDIT_VOICE_SELECTIONS}",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
-            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [S] Select by voice",
+            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Multi-select",
             f"{COL_DIM}- Use number keys [{COL_ACCENT}1{COL_DIM}] to [{COL_ACCENT}{highest_voice_key}{COL_DIM}] to set voice sample for selected text line/s",
             f"{COL_DIM}- Press [ESC] to finish",
         ]
@@ -104,9 +109,9 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
     def check_action(
         self, action: str, parameters: tuple[object, ...]
     ) -> bool | None:
-        """Unbind the base "m" manual-selection key.
+        """Unbind the base "m" manual-selection key, leaving "m" to multi-select.
 
-        Manual entry is offered from the select-by-voice dialog instead, which
+        Manual entry is offered from the multi-select dialog instead, which
         calls the action method directly (bypassing this check). Textual merges
         BINDINGS across base classes, so the binding cannot be filtered out.
         """
@@ -120,8 +125,21 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             phrase_group.voice_index for phrase_group in self.project.phrase_groups
         ]
         self.staged_voice_indices = list(self.original_voice_indices)
+        self.show_dialog_markers = self.has_dialog_detection()
         self.list_items = self.make_list_items()
         return range(len(self.list_items))
+
+    def has_dialog_detection(self) -> bool:
+        """Whether the text was segmented with dialog detection.
+
+        Without it, no line can be dialog, so the marker column is omitted
+        rather than reserved. Any dialog-flagged line also counts, as a guard
+        against settings that do not reflect the phrase groups.
+        """
+        book = getattr(self.project, "book", None)
+        if book is not None and book.segmentation_settings.dialog_segmentation:
+            return True
+        return any(phrase_group.is_dialog for phrase_group in self.project.phrase_groups)
 
     def make_list_items(self) -> list[VoiceLineListItem]:
         """Project non-empty book sections and phrase groups into visible rows."""
@@ -175,7 +193,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         when any voice is named) by the voice name's first VOICE_NAME_WIDTH
         characters, blank when unnamed.
         """
-        voice_number = max(voice_index + 1, 1)
+        voice_number = voice_index + 1
         # Keep showing the stored number, but flag stale selections after voices change.
         if voice_index >= self.voice_sample_count:
             return f"#{voice_number} *OUT OF RANGE*"
@@ -197,11 +215,15 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         style = f"{STYLE_DIM} reverse" if is_find_match else ""
         phrase_index = list_item.phrase_index
         phrase_group = self.project.phrase_groups[phrase_index]
-        dialog_marker = DIALOG_MARKER if phrase_group.is_dialog else NON_DIALOG_MARKER
+        if self.show_dialog_markers:
+            dialog_marker = DIALOG_MARKER if phrase_group.is_dialog else NON_DIALOG_MARKER
+            dialog_column = f"{dialog_marker}  "
+        else:
+            dialog_column = ""
         prefix_ansi = (
             f"{COL_DIM}[{self.format_line_number(phrase_index + 1)}] "
             f"{COL_ACCENT}[{self.voice_label(self.staged_voice_indices[phrase_index])}] "
-            f"{COL_DEFAULT}{dialog_marker}  "
+            f"{COL_DEFAULT}{dialog_column}"
         )
         return HangingIndentText.from_ansi(
             ansi_text=f"{prefix_ansi}{COL_DEFAULT}{phrase_group.presentable_text_lf_ansi}",
@@ -229,8 +251,16 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             return None
         return item.phrase_index
 
-    def action_show_select_by_voice(self) -> None:
-        """Show the dialog listing voices to select by, plus manual entry."""
+    def dialog_phrase_indices(self) -> set[int]:
+        return {
+            phrase_index
+            for phrase_index, phrase_group in enumerate(self.project.phrase_groups)
+            if phrase_group.is_dialog
+        }
+
+    def action_show_multi_select(self) -> None:
+        """Show the multi-select dialog: select by voice, all dialog lines
+        (only with dialog detection), or manual entry."""
         if (
             not self.multi_select_enabled
             or not self.content_initialized
@@ -242,17 +272,23 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             self.staged_voice_indices.count(voice_index)
             for voice_index in range(self.voice_sample_count)
         ]
+        dialog_line_count = (
+            len(self.dialog_phrase_indices()) if self.show_dialog_markers else None
+        )
         self.push_screen(
-            SelectByVoiceDialog(voice_line_counts, self.voice_names),
-            self.handle_select_by_voice,
+            MultiSelectDialog(voice_line_counts, self.voice_names, dialog_line_count),
+            self.handle_multi_select,
         )
 
-    def handle_select_by_voice(self, result: SelectByVoiceResult) -> None:
-        """Select every line of the chosen voice, or open manual selection."""
+    def handle_multi_select(self, result: MultiSelectResult) -> None:
+        """Select the chosen voice's or dialog lines, or open manual selection."""
         if result is None:
             return
         if result == MANUAL_ENTRY:
             self.action_show_manual_selection()
+            return
+        if result == DIALOG_LINES:
+            self.handle_manual_selection(self.dialog_phrase_indices())
             return
         self.handle_manual_selection(
             {

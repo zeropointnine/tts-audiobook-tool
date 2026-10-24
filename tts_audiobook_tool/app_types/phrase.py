@@ -105,7 +105,7 @@ class PhraseGroup:
     def __init__(
             self,
             phrases: list[Phrase] | None = None,
-            voice_index: int = -1,
+            voice_index: int = 0,
             is_dialog: bool = False,
     ):
         self._presentable_text_memo: str | None = None
@@ -239,18 +239,20 @@ class PhraseGroup:
                 if "phrases" not in value:
                     return f"Phrase group missing 'phrases': {value}"
                 phrase_dicts = value["phrases"]
-                raw_voice_index = value.get("voice_index", -1)
+                raw_voice_index = value.get("voice_index", 0)
+                # Earlier versions defaulted to -1 ("unassigned"), which always
+                # meant the first voice; it and any other invalid value load as 0
                 voice_index = (
                     raw_voice_index
                     if isinstance(raw_voice_index, int)
                     and not isinstance(raw_voice_index, bool)
-                    and raw_voice_index >= -1
-                    else -1
+                    and raw_voice_index >= 0
+                    else 0
                 )
                 is_dialog = value.get("is_dialog", False) is True
             else:
                 phrase_dicts = value
-                voice_index = -1
+                voice_index = 0
                 is_dialog = False
 
             if not isinstance(phrase_dicts, list):

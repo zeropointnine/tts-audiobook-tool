@@ -141,7 +141,7 @@ class ProjectVoiceUtil:
 
     @staticmethod
     def get_effective_voice_index(requested_index: int, num_voices: int) -> int:
-        """Clamp a per-line assignment, including unassigned (-1), as inference does."""
+        """Clamp a per-line assignment (eg one left stale by a removed voice), as inference does."""
         return min(max(requested_index, 0), num_voices - 1)
 
     @staticmethod

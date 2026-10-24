@@ -30,7 +30,7 @@ For single-voice projects a round holds exactly one sub-batch, so the shape dege
 
 Before submission, `ProjectVoiceUtil.get_job_voice_indices(project, phrase_indices)`
 resolves the voice slots needed by the actual queued lines: the distinct effective
-assignments (including the usual clamp of unassigned/stale indices via
+assignments (including the usual clamp of stale indices via
 `ProjectVoiceUtil.get_effective_voice_index`). Chat and literal previews
 (`phrase_indices=None`) need voice 1 only; an empty job needs none. The same pure
 clamp is used by `GenerateUtil.generate()` and `effective_voice_indices()`, so
@@ -51,7 +51,7 @@ batch_size > 1  AND  model has a voice binding?
 
 The gate is `ProjectVoiceUtil.get_voice_values()` being non-empty, ie the model has a voice binding (every batchable model does); the voice list is never empty (`ensure_voice_slot`), and it has one entry per slot whether or not that slot has a sample. Sample-less voices therefore still get per-voice sub-batches — required, since they can differ by instructions alone (eg several Qwen3-TTS VoiceDesign voices).
 
-`voice_of_index` comes from [`effective_voice_indices()`](../tts_audiobook_tool/generate_util.py:1028), which maps each queued line to the voice sample index the call will actually use: a per-line selection of `-1` (no explicit assignment) or a stale out-of-range value is clamped to the nearest valid sample index.
+`voice_of_index` comes from [`effective_voice_indices()`](../tts_audiobook_tool/generate_util.py:1028), which maps each queued line to the voice sample index the call will actually use: a stale out-of-range per-line selection is clamped to the nearest valid sample index.
 
 ### The single-voice shape (`make_single_voice_rounds` + `bucket_items`)
 

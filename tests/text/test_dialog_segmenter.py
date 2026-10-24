@@ -8,7 +8,7 @@ from tts_audiobook_tool.text_ops.dialog_segmenter import (
 )
 
 
-def make_group(text: str, voice_index: int = -1) -> PhraseGroup:
+def make_group(text: str, voice_index: int = 0) -> PhraseGroup:
     return PhraseGroup(
         [Phrase(text, Reason.SENTENCE)],
         voice_index=voice_index,
@@ -81,7 +81,7 @@ class TestDialogSegmenter(unittest.TestCase):
             [False, True, False, True, False],
         )
         # Dialog flagging leaves voices alone
-        self.assertEqual([group.voice_index for group in groups], [-1] * 5)
+        self.assertEqual([group.voice_index for group in groups], [0] * 5)
 
     def test_accepts_leading_dialog_punctuation_before_capital(self):
         groups = segment_one('He paused. "...Well, yes." Then he left.')
@@ -400,7 +400,7 @@ class TestDialogSegmenter(unittest.TestCase):
             [group.is_dialog for group in with_option],
             [False, True, False],
         )
-        self.assertEqual([group.voice_index for group in with_option], [-1, -1, -1])
+        self.assertEqual([group.voice_index for group in with_option], [0, 0, 0])
 
 
 class TestPhraseQuoteEnd(unittest.TestCase):

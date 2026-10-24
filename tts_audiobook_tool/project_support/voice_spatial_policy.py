@@ -52,7 +52,7 @@ class VoiceSpatialPolicy:
         """The stereo position of the voice that generated a phrase group with this `voice_index`."""
         if not self.voice_pans:
             return 0.0
-        # Same clamp as generation: -1 (and other stale indices) use the nearest voice
+        # Same clamp as generation: stale indices use the nearest voice
         return self.voice_pans[min(max(index, 0), len(self.voice_pans) - 1)]
 
     @property
@@ -67,7 +67,7 @@ class VoiceSpatialPolicy:
         """The room reverb of the voice that generated a phrase group with this `voice_index`."""
         if not self.voice_reverbs:
             return RoomReverb.OFF
-        # Same clamp as generation: -1 (and other stale indices) use the nearest voice
+        # Same clamp as generation: stale indices use the nearest voice
         return self.voice_reverbs[min(max(index, 0), len(self.voice_reverbs) - 1)]
 
     @property
