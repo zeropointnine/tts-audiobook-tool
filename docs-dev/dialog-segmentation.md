@@ -257,7 +257,6 @@ The import-time dialog-segmentation path sets `PhraseGroup.is_dialog` on every r
 The flag is independent of `voice_index`: assigning any voice, including voice sample 1, leaves a dialog line flagged. The flag is carried over when the text editor splits a line or edits its text. Other consumers:
 
 - "Assign character voices using LLM" attributes the flagged lines (grouped into utterances by opening quote marks) to characters, and requires text imported with dialog segmentation enabled; otherwise the user must re-import.
-- The voice line editor's `[D]` key selects all dialog lines, so a voice can be set for them in one step.
 
 Detection assigns no voice. At the end of an import that found dialog, the user is asked (default no) whether to assign the dialog lines to zero-based `voice_index = 1`—voice sample 2 in the UI. The assignment takes effect directly; every line always uses its own (clamped) `voice_index`. Multi-item batching honors line assignments: each generation round is split into per-voice sub-batches (groups of batches), so every line is generated with its own voice sample.
 

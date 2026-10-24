@@ -117,7 +117,7 @@ def ask_enter_to_continue(value: str="", is_replacement: bool=False) -> None:
     if is_replacement:
         message = value
     else:
-        message = f"{value}\nPress enter: "
+        message = f"{value}\n{COL_DEFAULT}Press enter: "
 
     if can_hotkey:
         while True:

@@ -335,8 +335,8 @@ def attribution_counts(attribution: RangeAttribution) -> Counter[str]:
 def print_assign_results(state: State) -> bool:
     """
     Prints the saved speaker ids: per-speaker counts (roster characters by
-    count, then the reserved answers), flagged uncertain lines, and recurring
-    speakers not in the roster. Shows an error and returns False if the saved
+    count, then the reserved answers) and recurring speakers not in the
+    roster. Shows an error and returns False if the saved
     data can't be loaded.
     """
     data = load_assign_data(state)
@@ -374,8 +374,6 @@ def print_assign_results(state: State) -> bool:
         printt(f"{count:>6,}  {COL_ACCENT}{label:<{id_width}}{COL_DEFAULT}  {name}")
     printt()
 
-    if summary.uncertain:
-        printt(f"Flagged uncertain by the LLM: {summary.uncertain:,}")
     if summary.recurring_others:
         printt(f"Frequent speakers not in the roster: {AttributionSummary.counts_text(summary.recurring_others)}")
         printt(f"{COL_DIM}(counted under {OTHER}; re-creating the roster may pick them up)")

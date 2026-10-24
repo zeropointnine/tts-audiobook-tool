@@ -34,7 +34,7 @@ from tts_audiobook_tool.transcriber import Transcriber
 
 # Menu item labels shared by per-model voice menus; tests reference these.
 LABEL_VOICE_SAMPLE_ITEM = "Voice"  # "Voice N: <name> (<duration>); "<instructions>""
-LABEL_VOICE_SAMPLES_SUPERLABEL = "Select to move, remove, edit properties"
+LABEL_VOICE_SAMPLES_SUPERLABEL = "Voice list"
 LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sample-less) voice
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Assign character voices using LLM"

@@ -2,9 +2,10 @@ from typing import cast
 
 import pytest
 from rich.text import Text
-from textual.widgets import Button, Input
+from textual.widgets import Button, Input, OptionList
 from tts_audiobook_tool.app_types import BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.textual import voice_line_editor
@@ -13,6 +14,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaved,
 )
 from tts_audiobook_tool.textual.manual_selection_dialog import ManualSelectionDialog
+from tts_audiobook_tool.textual.select_by_voice_dialog import SelectByVoiceDialog
 from tts_audiobook_tool.textual.textual_shared import NonWrappingOptionList
 from tts_audiobook_tool.textual.voice_line_editor import (
     VoiceLineEditorTextualApp,
@@ -118,10 +120,47 @@ def test_single_section_lists_only_phrase_group_rows() -> None:
 
     assert all(isinstance(item, VoiceLinePhraseGroupItem) for item in app.list_items)
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
-        "[00001] [Voice 1] One.",
-        "[00002] [Voice 1] Two.",
+        "[00001] [#1]     One.",
+        "[00002] [#1]     Two.",
     ]
     assert app.find_match_indices("only section") == []
+
+
+def test_voice_column_shows_truncated_name_and_dialog_marker() -> None:
+    # Once any voice is named, the voice column holds the first 5 characters of
+    # each voice's name (padded blank when unnamed), then a 💬 for dialog lines
+    # or matching-width blanks. Unnamed projects omit the name column entirely.
+    project = StubProject(
+        [
+            StubPhraseGroup("Narration.", voice_index=0),
+            StubPhraseGroup('"Hi."', voice_index=1, is_dialog=True),
+            StubPhraseGroup('"Yo."', voice_index=2, is_dialog=True),
+        ],
+        voice_references=[Voice(name="Alexander"), Voice(name="Bo"), Voice()],
+    )
+    app = make_editor(project, voice_sample_count=3)
+
+    assert [str(app.format_line(index)) for index in range(3)] == [
+        "[00001] [#1 Alexa]     Narration.",
+        '[00002] [#2 Bo   ] 💬  "Hi."',
+        '[00003] [#3      ] 💬  "Yo."',
+    ]
+    # Search uses the displayed label without its padding
+    assert app.find_text_strings(1) == ["00002", "#2 Bo", '"Hi."']
+    assert app.find_match_indices("alexa") == [0]
+
+
+def test_voice_number_pads_to_two_digits_only_beyond_nine_voices() -> None:
+    # With 10+ voices, single-digit numbers are padded so labels stay aligned.
+    project = StubProject(
+        [StubPhraseGroup("One.", voice_index=0), StubPhraseGroup("Ten.", voice_index=9)]
+    )
+    app = make_editor(project, voice_sample_count=10)
+
+    assert [str(app.format_line(index)) for index in range(2)] == [
+        "[00001] [#1 ]     One.",
+        "[00002] [#10]     Ten.",
+    ]
 
 
 def test_multiple_sections_insert_generated_section_rows() -> None:
@@ -147,10 +186,10 @@ def test_multiple_sections_insert_generated_section_rows() -> None:
     ]
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
         "\nSection 1/2: Opening (2 lines)\n\n",
-        "[00001] [Voice 1] One.",
-        "[00002] [Voice 1] Two.",
+        "[00001] [#1]     One.",
+        "[00002] [#1]     Two.",
         "\nSection 2/2: Middle (1 line)\n\n",
-        "[00003] [Voice 1] Three.",
+        "[00003] [#1]     Three.",
     ]
 
 
@@ -170,7 +209,7 @@ def test_empty_sections_are_hidden_and_all_empty_sections_show_empty_state() -> 
 
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
         "\nSection 2/2: Text (1 line)\n\n",
-        "[00001] [Voice 1] One.",
+        "[00001] [#1]     One.",
     ]
     assert empty_app.list_items == []
 
@@ -212,10 +251,10 @@ def test_find_text_strings_expose_voice_label_separately_from_phrase_text() -> N
     )
 
     # Rows: [section, One.(v0), Two.(v1), section, Three.(v5 with 2 samples)]
-    assert app.find_text_strings(1) == ["00001", "Voice 1", "One."]
-    assert app.find_text_strings(2) == ["00002", "Voice 2", "Two."]
+    assert app.find_text_strings(1) == ["00001", "#1", "One."]
+    assert app.find_text_strings(2) == ["00002", "#2", "Two."]
     assert app.find_text_strings(3) == ["Section 2/2: Ending (1 line)"]
-    assert app.find_text_strings(4) == ["00003", "Voice 6 *OUT OF RANGE*", "Three."]
+    assert app.find_text_strings(4) == ["00003", "#6 *OUT OF RANGE*", "Three."]
 
     # Fields are searched separately, so voice-label metadata matches even
     # when it is not part of the phrase text.
@@ -233,12 +272,12 @@ def test_find_text_strings_expose_voice_label_separately_from_phrase_text() -> N
         voice_sample_count=2,
     )
 
-    # Rows: One. is "Voice 1", Two. is "Voice 2", Three. defaults to "Voice 1".
-    assert app.find_match_indices("voice 2") == [2]
-    assert app.find_match_indices("VOICE 1") == [1, 4]
-    assert app.find_match_indices("voice 3") == []
+    # Rows: One. is "#1", Two. is "#2", Three. defaults to "#1".
+    assert app.find_match_indices("#2") == [2]
+    assert app.find_match_indices("#1") == [1, 4]
+    assert app.find_match_indices("#3") == []
     # Fields are tested separately, so no match can span the label/content join.
-    assert app.find_match_indices("voice 1o") == []
+    assert app.find_match_indices("#1o") == []
     # The displayed line number is searchable; section rows carry no number.
     assert app.find_match_indices("00003") == [4]
     assert app.find_match_indices("00004") == []
@@ -255,10 +294,10 @@ def test_find_text_strings_expose_voice_label_separately_from_phrase_text() -> N
         voice_sample_count=2,
     )
 
-    # Rows: [section, One.(v5 -> "Voice 6 *OUT OF RANGE*"), section, Two.(v-1)]
+    # Rows: [section, One.(v5 -> "#6 *OUT OF RANGE*"), section, Two.(v-1)]
     assert app.find_match_indices("out of range") == [1]
-    assert app.find_match_indices("voice 6") == [1]
-    assert app.find_match_indices("voice 2") == []
+    assert app.find_match_indices("#6") == [1]
+    assert app.find_match_indices("#2") == []
 
 
 def test_find_metadata_tracks_reassigned_voice() -> None:
@@ -270,15 +309,15 @@ def test_find_metadata_tracks_reassigned_voice() -> None:
         voice_sample_count=2,
     )
 
-    assert app.find_match_indices("voice 2") == []
+    assert app.find_match_indices("#2") == []
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("down", "2")
             # Row 1 (One.) is now staged with voice index 1.
             assert app.staged_voice_indices == [1, -1]
-            assert app.find_match_indices("voice 2") == [1]
-            assert app.find_match_indices("voice 1") == [3]
+            assert app.find_match_indices("#2") == [1]
+            assert app.find_match_indices("#1") == [3]
 
     run(exercise())
 
@@ -296,7 +335,10 @@ def test_manual_selection_uses_project_line_numbers_and_excludes_section_rows() 
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("m")
+            # Manual entry is the last item of the select-by-voice dialog
+            await pilot.press("s")
+            assert isinstance(app.screen, SelectByVoiceDialog)
+            await pilot.press("end", "enter")
             assert isinstance(app.screen, ManualSelectionDialog)
             app.screen.query_one("#manual-selection-input", Input).value = "1, 3"
             await pilot.press("enter")
@@ -465,25 +507,150 @@ def test_reverting_staged_values_makes_editor_clean(monkeypatch) -> None:
     run(exercise())
 
 
-def test_d_key_selects_dialog_lines_for_voice_assignment() -> None:
-    # [D] selects every dialog-flagged line (across sections), so a number key
-    # then sets their voice; the header advertises the key only when the
-    # project has dialog lines.
-    dialog_lines = [
-        PhraseGroup([Phrase('"Hi."', Reason.SENTENCE)], is_dialog=True),
-        PhraseGroup([Phrase('"Bye."', Reason.SENTENCE)], is_dialog=True),
+def make_voiced_app() -> tuple[VoiceLineEditorTextualApp, StubProject]:
+    project = StubProject(
+        [
+            StubPhraseGroup("One.", voice_index=0),
+            StubPhraseGroup("Two.", voice_index=1),
+            StubPhraseGroup("Three.", voice_index=0),
+            StubPhraseGroup("Four."),
+        ],
+        voice_references=[Voice(name="Alice"), Voice()],
+    )
+    return make_editor(project, voice_sample_count=2), project
+
+
+def option_texts(dialog: SelectByVoiceDialog) -> list[str]:
+    option_list = dialog.query_one("#select-by-voice-list", OptionList)
+    return [
+        str(option_list.get_option_at_index(index).prompt)
+        for index in range(option_list.option_count)
     ]
-    app = make_sectioned_editor([
-        BookSection(phrase_groups=[make_phrase_group("Narration."), dialog_lines[0]]),
-        BookSection(phrase_groups=[make_phrase_group("More."), dialog_lines[1]]),
-    ])
-    assert "[D] Dialog lines" in Text.from_ansi(app.header_lines[2]).plain
-    assert "[D]" not in Text.from_ansi(make_app()[0].header_lines[2]).plain
+
+
+def test_header_advertises_select_by_voice_and_old_keys_are_unbound() -> None:
+    app, _ = make_voiced_app()
+    select_line = Text.from_ansi(app.header_lines[2]).plain
+    assert select_line.endswith("- [S] Select by voice")
+    assert "[M]" not in select_line and "[D]" not in select_line
+    assert "Enter manually" not in select_line
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("d", "2")
-            assert app.staged_voice_indices == [-1, 1, -1, 1]
+            await pilot.press("m", "d")
+            assert len(app.screen_stack) == 1
+
+    run(exercise())
+
+
+def test_select_by_voice_dialog_lists_voices_with_line_counts() -> None:
+    # One item per voice sample (name only when set, singular/plural count
+    # from staged assignments), then manual entry; the first item starts
+    # highlighted.
+    app, _ = make_voiced_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("s")
+            dialog = app.screen
+            assert isinstance(dialog, SelectByVoiceDialog)
+            title = dialog.query_one("#select-by-voice-title")
+            assert str(title.render()).startswith("Select by voice")
+            assert option_texts(dialog) == [
+                "[1] Voice 1 Alice (2 lines)",
+                "[2] Voice 2 (1 line)",
+                "Enter manually...",
+            ]
+            option_list = dialog.query_one("#select-by-voice-list", OptionList)
+            assert option_list.highlighted == 0
+            assert option_list.has_focus
+            # The highlight must reuse the editor's (visible) cursor style;
+            # reverse over default-on-default colors renders as no highlight
+            highlight_class = "option-list--option-highlighted"
+            dialog_style = option_list.get_component_rich_style(highlight_class)
+            editor_style = app.query_one(
+                "#line-list", NonWrappingOptionList
+            ).get_component_rich_style(highlight_class)
+            assert dialog_style == editor_style
+            assert dialog_style.bgcolor is not None
+            assert not dialog_style.bgcolor.is_default
+
+    run(exercise())
+
+
+@pytest.mark.parametrize(
+    "keys",
+    [("down", "enter"), ("down", "space"), ("2",)],
+)
+def test_choosing_voice_selects_all_its_lines(keys: tuple[str, ...]) -> None:
+    # Enter, space or the item's number key choose a voice; its lines become
+    # the multi-selection, so a number key then reassigns all of them.
+    app, _ = make_voiced_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("s", "down")
+            await pilot.press("up", *keys)
+            assert len(app.screen_stack) == 1
+            assert app.selected_indices == {1}
+
+            await pilot.press("s", "enter")
+            assert app.selected_indices == {0, 2}
+            await pilot.press("2")
+            assert app.staged_voice_indices == [1, 1, 1, -1]
+
+    run(exercise())
+
+
+def test_select_by_voice_dialog_closes_on_escape_or_outside_click() -> None:
+    app, _ = make_voiced_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("s")
+            await pilot.press("escape")
+            assert len(app.screen_stack) == 1
+            assert app.selected_indices == {0}
+
+            await pilot.press("s")
+            dialog = app.screen
+            # Clicking inside the dialog keeps it open
+            await pilot.click("#select-by-voice-title")
+            assert app.screen is dialog
+            await pilot.click(offset=(0, 0))
+            assert len(app.screen_stack) == 1
+            assert app.selected_indices == {0}
+
+    run(exercise())
+
+
+def test_select_by_voice_list_scrolls_when_dialog_reaches_max_height() -> None:
+    project = StubProject([StubPhraseGroup("One.", voice_index=0)])
+    app = make_editor(project, voice_sample_count=20)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(80, 16)) as pilot:
+            await pilot.press("s")
+            dialog = app.screen
+            assert isinstance(dialog, SelectByVoiceDialog)
+            await pilot.pause()
+            box = dialog.query_one("#select-by-voice-dialog")
+            assert box.region.height <= 16
+            option_list = dialog.query_one("#select-by-voice-list", OptionList)
+            assert option_list.scroll_y == 0
+            await pilot.press("end")
+            await pilot.pause()
+            assert option_list.highlighted == 20
+            assert option_list.scroll_y > 0
+            # The list is capped to the dialog's space rather than clipped by it,
+            # so the scrolled-to last item is actually visible
+            assert option_list.region.bottom <= box.content_region.bottom
+            assert (
+                option_list.scroll_y + option_list.scrollable_content_region.height
+                >= option_list.option_count
+            )
+            await pilot.press("enter")
+            assert isinstance(app.screen, ManualSelectionDialog)
 
     run(exercise())
 

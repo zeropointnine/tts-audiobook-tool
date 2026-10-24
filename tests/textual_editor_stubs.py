@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -44,6 +45,7 @@ def make_project_with_markers(
 class StubPhraseGroup:
     presentable_text: str
     voice_index: int = -1
+    is_dialog: bool = False
 
     @property
     def presentable_text_lf_ansi(self) -> str:
@@ -98,6 +100,7 @@ class StubProject:
     save_calls: list[str] = field(default_factory=list)
     save_error: str = ""
     book: Book | None = None
+    voice_references: list[Voice] = field(default_factory=list)
 
     def get_tts_model_type(self) -> TtsModelType:
         return TtsModelType.require_by_id("none")

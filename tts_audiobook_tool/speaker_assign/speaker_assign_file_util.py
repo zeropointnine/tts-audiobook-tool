@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
@@ -143,6 +144,32 @@ class SpeakerAssignFileUtil:
             SpeakerAssignFileUtil.voices_path(project_dir),
             voices.to_dict,
         )
+
+    @staticmethod
+    def copy_files(source_project_dir: str, dest_project_dir: str) -> list[str]:
+        """
+        Copy the source project's speaker assignment files (those that exist)
+        into the destination project, eg when making a new project from the
+        current project's settings. The files reference characters and
+        utterance ranges rather than project file paths, so they stay valid
+        alongside an identical copy of the project text.
+
+        Returns error strings for files that could not be copied.
+        """
+        errors: list[str] = []
+        for file_name in (ROSTER_FILE_NAME, ATTRIBUTIONS_FILE_NAME, VOICES_FILE_NAME):
+            source_path = os.path.join(SpeakerAssignFileUtil.dir_path(source_project_dir), file_name)
+            if not os.path.isfile(source_path):
+                continue
+            error = SpeakerAssignFileUtil._make_dir(dest_project_dir)
+            if error:
+                return [error]
+            dest_path = os.path.join(SpeakerAssignFileUtil.dir_path(dest_project_dir), file_name)
+            try:
+                shutil.copy(source_path, dest_path)
+            except OSError as e:
+                errors.append(f"Error copying {source_path}: {make_error_string(e)}")
+        return errors
 
     @staticmethod
     def _make_dir(project_dir: str) -> str:

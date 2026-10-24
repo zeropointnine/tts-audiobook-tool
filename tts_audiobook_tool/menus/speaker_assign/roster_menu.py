@@ -85,11 +85,10 @@ def create_roster(state: State) -> None:
 
     utterance_count = len(UtteranceUtil.find_utterances(book, 0, len(book.flat_phrase_groups)))
     if utterance_count == 0:
-        message = "No dialog found in the project text."
+        message = "No dialog text found"
         if not book.segmentation_settings.dialog_segmentation:
             message += (
-                "\nDialog is detected on import when dialog segmentation is enabled "
-                "(Text > Segmentation settings > Dialog segmentation)."
+                "\nDialog segmentation must be enabled when importing text."
             )
         ask.ask_error(message)
         return

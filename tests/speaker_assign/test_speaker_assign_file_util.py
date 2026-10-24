@@ -118,3 +118,33 @@ def test_invalid_voices_file_is_an_error_string(tmp_path) -> None:
         with open(path, "w", encoding="utf-8") as file:
             json.dump(payload, file)
         assert isinstance(SpeakerAssignFileUtil.load_voices_file(project_dir), str)
+
+
+def test_copy_files_copies_existing_files_only(tmp_path) -> None:
+    # Making a new project from the current one carries over whichever
+    # speaker assignment files exist; absent ones are skipped, not errors.
+    source_dir = str(tmp_path / "source")
+    dest_dir = str(tmp_path / "dest")
+    os.makedirs(dest_dir)
+    roster_file = make_roster_file()
+    voice_map = VoiceMapFile({"HELENE": 1})
+    SpeakerAssignFileUtil.save_roster_file(source_dir, roster_file)
+    SpeakerAssignFileUtil.save_voices_file(source_dir, voice_map)
+
+    assert SpeakerAssignFileUtil.copy_files(source_dir, dest_dir) == []
+
+    assert SpeakerAssignFileUtil.load_roster_file(dest_dir) == roster_file
+    assert SpeakerAssignFileUtil.load_voices_file(dest_dir) == voice_map
+    assert not os.path.exists(SpeakerAssignFileUtil.attributions_path(dest_dir))
+
+
+def test_copy_files_without_source_data_creates_nothing(tmp_path) -> None:
+    # A source project with no speaker assignment data leaves the destination
+    # without a speaker_assign/ subdirectory.
+    source_dir = str(tmp_path / "source")
+    dest_dir = str(tmp_path / "dest")
+    os.makedirs(source_dir)
+    os.makedirs(dest_dir)
+
+    assert SpeakerAssignFileUtil.copy_files(source_dir, dest_dir) == []
+    assert not os.path.exists(SpeakerAssignFileUtil.dir_path(dest_dir))
