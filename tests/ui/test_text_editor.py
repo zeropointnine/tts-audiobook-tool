@@ -494,8 +494,7 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             1,
             ["segment-1.flac", "segment-2.flac"],
             [1],
-            "Saving these changes requires deleting 2 generated sound segments "
-            "from line 2 onward.",
+            ["• 2 generated audio segments from line 2 onward."],
             id="plural-segments-from-first-affected-line",
         ),
         pytest.param(
@@ -504,8 +503,7 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             0,
             ["segment.flac"],
             [0],
-            "Saving these changes requires deleting 1 generated sound segment "
-            "from line 1 onward.",
+            ["• 1 generated audio segment from line 1 onward."],
             id="singular-segment",
         ),
         pytest.param(
@@ -523,8 +521,7 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             1,
             [],
             [1],
-            "Saving these changes requires deleting 2 section markers "
-            "from line 2 onward.",
+            ["• 2 section markers from line 2 onward."],
             id="markers-only",
         ),
         pytest.param(
@@ -533,8 +530,8 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             1,
             ["segment-1.flac", "segment-2.flac"],
             [1],
-            "Saving these changes requires deleting 2 generated sound segments "
-            "and 1 section marker from line 2 onward.",
+            ["• 2 generated audio segments from line 2 onward.",
+             "• 1 section marker from line 2 onward."],
             id="segments-and-singular-marker",
         ),
         pytest.param(
@@ -543,8 +540,8 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             2,
             ["segment.flac"],
             [2],
-            "Saving these changes requires deleting 1 generated sound segment "
-            "and 2 split points from line 3 onward.",
+            ["• 1 generated audio segment from line 3 onward.",
+             "• 2 split points from line 3 onward."],
             id="multi-section-split-points",
         ),
     ],
@@ -556,7 +553,7 @@ def test_confirmation_warns_about_generated_segments_from_first_affected_line(
     delete_original_index: int,
     snapshot_paths: list[str],
     expected_requested_indices: list[int],
-    expected_copy: str | None,
+    expected_copy: list[str] | None,
 ) -> None:
     project = make_project(
         [
@@ -591,7 +588,11 @@ def test_confirmation_warns_about_generated_segments_from_first_affected_line(
     if expected_copy is None:
         assert dialog.copy_lines == ["Save changes before exiting?"]
     else:
-        assert dialog.copy_lines[2].endswith(expected_copy)
+        assert dialog.copy_lines[2] == (
+            "The text edits made are structural changes which will result in the removal of:"
+        )
+        assert [Text.from_ansi(line).plain for line in dialog.copy_lines[3:]] == expected_copy
+        assert dialog.left_align_from_line == 3
 
 
 def test_finish_confirm_calls_commit_with_staged_book(monkeypatch) -> None:
@@ -1457,10 +1458,14 @@ def test_confirmation_previews_assignment_cleanup_without_clearing_it(tmp_path, 
     )
     dialog = app.make_confirmation_dialog()
     copy = "\n".join(dialog.copy_lines)
-    assert "clear dialog assignments for 1 affected chunk" in copy
-    assert 'Run "Assign dialog to characters" again' in copy
-    assert "roster and voice mappings will be kept" in copy
-    assert ("generated sound segment" in copy) == has_audio
+    assert Text.from_ansi(dialog.copy_lines[-1]).plain == (
+        "• Saved dialog assignments for affected passages"
+    )
+    assert 'Run "Assign dialog to characters" again' not in copy
+    assert "roster and voice mappings" not in copy
+    assert ("• 1 generated audio segment." in copy) == has_audio
+    assert dialog.copy_lines[2] == "The text edits made will result in the removal of:"
+    assert len(dialog.copy_lines[3:]) == 1 + has_audio
     assert dialog.confirmation_enabled
     assert SpeakerAssignFileUtil.load_attributions_file(project.dir_path) == saved
 
@@ -1508,9 +1513,8 @@ def test_edit_confirmation_warns_only_about_edited_segment(monkeypatch) -> None:
 
     assert requested == [{0}]
     assert isinstance(dialog, SaveChangesDialog)
-    assert dialog.copy_lines[2].endswith(
-        "Saving these changes requires deleting 1 generated sound segment."
-    )
+    assert dialog.copy_lines[2] == "The text edits made will result in the removal of:"
+    assert Text.from_ansi(dialog.copy_lines[3]).plain == "• 1 generated audio segment."
 
 
 def test_finish_confirm_commit_edit_uses_narrow_invalidation(monkeypatch) -> None:

@@ -1,7 +1,7 @@
 from tts_audiobook_tool.constants import COL_DIM, COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.speaker_assign import assign_menu, voices_menu
-from tts_audiobook_tool.menus.speaker_assign.roster_menu import roster_menu
+from tts_audiobook_tool.menus.speaker_assign.roster_menu import make_roster_stale_marker, roster_menu
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 from tts_audiobook_tool.state import State
@@ -33,10 +33,12 @@ class SpeakerAssignMenu:
         )
 
         def make_roster_label(_: State) -> str:
-            label = "Step 1: Create character roster"
             if SpeakerAssignFileUtil.has_roster(state.project.dir_path):
-                label += f" {COL_DIM}(completed)"
-            return label
+                return (
+                    f"Step 1: Create/view character roster {COL_DIM}(completed)"
+                    + make_roster_stale_marker(state)
+                )
+            return "Step 1: Create character roster"
 
         def items_maker(_: State) -> list[MenuItem]:
             return [
@@ -47,17 +49,17 @@ class SpeakerAssignMenu:
 
         MenuUtil.menu(
             state,
-            heading="Auto-assign character voices",
+            heading="Assign character voices using LLM",
             items=items_maker,
             subheading=subheading,
-            breadcrumb="Auto-assign character voices",
+            breadcrumb="Assign character voices using LLM",
         )
 
 
 SPEAKER_ASSIGN_DESC = \
-"""Uses an LLM to work out which character speaks each line of dialog, so that
-main characters can each get their own voice, with a shared voice for the rest.
+"""Uses an LLM to determine which character speaks each line of dialog,
+so that main characters can each get their own voice.
 
-Step 1 identifies the book's speaking characters, step 2 assigns a character
-to each line of dialog, and step 3 maps characters to voices. Only step 3
-changes the project."""
+Step 1 identifies the book's speaking characters.
+Step 2 assigns a character to each line of dialog.
+Step 3 is where you map characters to voices and apply them to the project."""

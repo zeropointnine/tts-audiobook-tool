@@ -5,7 +5,7 @@ import os
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types import Book
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_DIM_ITALICS, COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
     CHARS_PER_TOKEN,
@@ -38,7 +38,7 @@ def roster_menu(state: State) -> None:
     def items_maker(_: State) -> list[MenuItem]:
         items = [MenuItem("Start", on_select_roster_start)]
         if SpeakerAssignFileUtil.has_roster(state.project.dir_path):
-            items.append(MenuItem("View roster data", on_select_roster_view))
+            items.append(MenuItem("View roster data" + make_roster_stale_marker(state), on_select_roster_view))
         return items
 
     MenuUtil.menu(
@@ -48,6 +48,14 @@ def roster_menu(state: State) -> None:
         subheading=subheading,
         breadcrumb="Create character roster",
     )
+
+
+def make_roster_stale_marker(state: State) -> str:
+    """Mark known stale roster data; unreadable data has no known provenance."""
+    roster_file = SpeakerAssignFileUtil.load_roster_file(state.project.dir_path)
+    if not isinstance(roster_file, str) and RosterUtil.is_stale(roster_file.section_text_hashes, state.project.book):
+        return f"{COL_ERROR}*"
+    return ""
 
 
 def on_select_roster_start(state: State, _item: MenuItem) -> None:
@@ -230,7 +238,7 @@ def print_roster_info(state: State) -> bool:
     if provenance:
         printt(f"{COL_DIM}Created {', '.join(provenance)}")
     if RosterUtil.is_stale(roster_file.section_text_hashes, state.project.book):
-        printt(f"{COL_ERROR}Warning: The project text has changed since this roster was created")
+        printt(f"{COL_ERROR}* {COL_DIM_ITALICS}The project text has changed since this roster was created")
 
     narration = roster.narration
     if narration != RosterNarration():
@@ -253,6 +261,7 @@ def print_roster_info(state: State) -> bool:
     path = SpeakerAssignFileUtil.roster_path(project_dir)
     printt(f"{COL_DIM}Full roster data (aliases and descriptions may contain spoilers):")
     printt(f"{COL_DIM}{text_util.make_terminal_hyperlink(path, path, is_file=True)}")
+    printt()
     return True
 
 
@@ -280,5 +289,4 @@ is the list of speakers used by steps 2 and 3. The project text is not changed.
 
 Requires an LLM with a context window large enough for the whole book.
 Depending on the model, this may take a minute or more.
-{LLM_DATA_NOTICE}
-{COL_DIM}Re-creating the roster discards any dialog assignments from step 2.{COL_DEFAULT}"""
+{LLM_DATA_NOTICE}"""

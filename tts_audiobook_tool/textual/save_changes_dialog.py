@@ -49,6 +49,10 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
         content-align: center middle;
     }
 
+    .save-changes-copy-left {
+        content-align: left middle;
+    }
+
     #save-changes-buttons {
         height: 3;
         align-horizontal: center;
@@ -79,12 +83,15 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
         self,
         copy_lines: list[str] | None = None,
         confirmation_enabled: bool = True,
+        left_align_from_line: int | None = None,
     ) -> None:
         super().__init__()
         self.copy_lines = (
             ["Save changes before exiting?"] if copy_lines is None else copy_lines
         )
         self.confirmation_enabled = confirmation_enabled
+        # One-based copy line; other callers keep the default centered layout.
+        self.left_align_from_line = left_align_from_line
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -92,7 +99,12 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
                 Static(
                     Text.from_ansi(copy_line),
                     id=f"save-changes-copy-line-{index + 1}",
-                    classes="save-changes-copy",
+                    classes=(
+                        "save-changes-copy save-changes-copy-left"
+                        if self.left_align_from_line is not None
+                        and index + 1 >= self.left_align_from_line
+                        else "save-changes-copy"
+                    ),
                     markup=False,
                 )
                 for index, copy_line in enumerate(self.copy_lines)

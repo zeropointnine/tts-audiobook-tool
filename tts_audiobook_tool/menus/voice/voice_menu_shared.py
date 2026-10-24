@@ -38,7 +38,7 @@ LABEL_VOICE_SAMPLES_SUPERLABEL = "Select to move, remove, edit properties"
 LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sample-less) voice
 LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
-LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Auto-assign character voices"
+LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Assign character voices using LLM"
 
 # Per-voice submenu labels
 LABEL_VOICE_NAME = "Name"

@@ -729,43 +729,57 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
 
     def make_confirmation_dialog(self) -> SaveChangesDialog:
         """Preview all derived data removed when the staged text is saved."""
-        dialog = self._make_audio_confirmation_dialog()
         edit_session = self.edit_session_or_none
         if edit_session is None:
-            return dialog
+            return SaveChangesDialog()
         cleanup = AttributionInvalidation.plan(self.project.dir_path, edit_session.to_book())
         if isinstance(cleanup, str):
             return SaveChangesDialog(
                 ["Cannot save changes until dialog assignments can be checked.", "", f"{COL_ERROR}{cleanup}"],
                 confirmation_enabled=False,
             )
-        if cleanup.warning_text:
-            dialog.copy_lines.extend(["", f"{COL_ERROR}{cleanup.warning_text}"])
-        return dialog
+        removals = self._make_audio_removal_items()
+        if cleanup.removed_count:
+            removals.append("Saved dialog assignments for affected passages")
+        if not removals:
+            return SaveChangesDialog()
+        heading = (
+            "The text edits made are structural changes which will result in the removal of:"
+            if edit_session.did_structural_change
+            else "The text edits made will result in the removal of:"
+        )
+        return SaveChangesDialog(
+            [
+                "Save changes before exiting?",
+                "",
+                heading,
+                *(f"{COL_ERROR}• {item}" for item in removals),
+            ],
+            left_align_from_line=3,
+        )
 
-    def _make_audio_confirmation_dialog(self) -> SaveChangesDialog:
-        """Warn about generated audio and markers invalidated by the staged edit."""
+    def _make_audio_removal_items(self) -> list[str]:
+        """List generated audio and markers invalidated by the staged edit."""
         edit_session = self.edit_session_or_none
         if edit_session is None:
-            return SaveChangesDialog()
+            return []
 
         if edit_session.did_structural_change:
             first_index = edit_session.earliest_affected_original_index
             if first_index is None:
-                return SaveChangesDialog()
+                return []
             segment_count = len(
                 self.project.sound_segments.snapshot_paths_from_index(first_index)
             )
             marker_count = len(
                 [marker for marker in self.project.markers if marker >= first_index]
             )
-            if segment_count == 0 and marker_count == 0:
-                return SaveChangesDialog()
             deletion_parts: list[str] = []
             if segment_count > 0:
                 segment_word = "segment" if segment_count == 1 else "segments"
                 deletion_parts.append(
-                    f"{segment_count} generated sound {segment_word}"
+                    f"{segment_count} generated audio {segment_word} "
+                    f"from line {first_index + 1} onward."
                 )
             if marker_count > 0:
                 marker_label = app_text.get_section_marker_label(
@@ -773,19 +787,10 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
                     is_title_case=False,
                     is_singular=marker_count == 1,
                 )
-                deletion_parts.append(f"{marker_count} {marker_label}")
-            warning_text = (
-                f"Saving these changes requires deleting "
-                f"{' and '.join(deletion_parts)} "
-                f"from line {first_index + 1} onward."
-            )
-            return SaveChangesDialog(
-                [
-                    "Save changes before exiting?",
-                    "",
-                    f"{COL_ERROR}{warning_text}",
-                ]
-            )
+                deletion_parts.append(
+                    f"{marker_count} {marker_label} from line {first_index + 1} onward."
+                )
+            return deletion_parts
 
         # Edit-only: only the edited segments' audio is invalidated; markers
         # and later segments are untouched.
@@ -795,19 +800,9 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             )
         )
         if segment_count == 0:
-            return SaveChangesDialog()
+            return []
         segment_word = "segment" if segment_count == 1 else "segments"
-        warning_text = (
-            f"Saving these changes requires deleting "
-            f"{segment_count} generated sound {segment_word}."
-        )
-        return SaveChangesDialog(
-            [
-                "Save changes before exiting?",
-                "",
-                f"{COL_ERROR}{warning_text}",
-            ]
-        )
+        return [f"{segment_count} generated audio {segment_word}."]
 
     def commit_changes_and_exit(self) -> None:
         """Commit the detached Book and remove generated audio invalidated by it."""
