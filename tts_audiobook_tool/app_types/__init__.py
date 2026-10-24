@@ -455,55 +455,6 @@ class Strictness(tuple[str, int, str], Enum):
 
 # ---
 
-class VoiceSelectMode(tuple[str, str, str, str], Enum):
-    USER_DEFINED = (
-        "custom",
-        "user-defined",
-        "User-defined",
-        "User-defined voice/line selections",
-    )
-    AUTO_ADVANCE = (
-        "auto_advance",
-        "auto-advance",
-        "Auto-advance",
-        "On each TTS batch generation, cycles through voices in order\n      Uses the reverb settings of voice sample 1",
-    )
-    DISABLED = (
-        "disabled",
-        "disabled - always Voice 1",
-        "Disabled",
-        "Uses voice sample 1 for every TTS generation\n      Uses the reverb settings of voice sample 1",
-    )
-
-    @property
-    def id(self) -> str:
-        return self.value[0]
-
-    @property
-    def current_label(self) -> str:
-        return self.value[1]
-
-    @property
-    def label(self) -> str:
-        return self.value[2]
-
-    @property
-    def description(self) -> str:
-        return self.value[3]
-
-    @staticmethod
-    def get_by_id(id: str) -> VoiceSelectMode | None:
-        for item in VoiceSelectMode:
-            if id == item.id:
-                return item
-        return None
-
-    @staticmethod
-    def get_default() -> VoiceSelectMode:
-        return VoiceSelectMode.DISABLED
-
-# ---
-
 @dataclass
 class ReadinessIssue:
     """

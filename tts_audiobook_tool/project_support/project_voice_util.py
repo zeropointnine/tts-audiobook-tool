@@ -148,26 +148,21 @@ class ProjectVoiceUtil:
     def get_job_voice_indices(project: Project, phrase_indices: Iterable[int] | None = None) -> list[int]:
         """Voice slots to pre-flight, without changing the list or advancing rotation.
 
-        Disabled uses slot 0; user-defined uses the job's clamped line
-        assignments; auto-advance checks every slot, including sample-less
-        ones. None denotes a literal prompt/chat with no line assignment
-        (slot 0 unless auto-advancing); an explicitly empty job uses no voices.
+        Uses the job's clamped line assignments. None denotes a literal
+        prompt/chat with no line assignment (slot 0); an explicitly empty job
+        uses no voices.
         """
-        from tts_audiobook_tool.app_types import VoiceSelectMode
-
         num_voices = len(ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type()))
         indices = None if phrase_indices is None else list(phrase_indices)
         if not num_voices or indices == []:
             return []
-        if project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE:
-            return list(range(num_voices))
-        if project.voice_select_mode == VoiceSelectMode.USER_DEFINED and indices is not None:
-            phrase_groups = project.phrase_groups
-            return sorted({
-                ProjectVoiceUtil.get_effective_voice_index(phrase_groups[index].voice_index, num_voices)
-                for index in indices
-            })
-        return [0]
+        if indices is None:
+            return [0]
+        phrase_groups = project.phrase_groups
+        return sorted({
+            ProjectVoiceUtil.get_effective_voice_index(phrase_groups[index].voice_index, num_voices)
+            for index in indices
+        })
 
     @staticmethod
     def get_voice_transcript_values(project: Project, tts_model_type: TtsModelType) -> list[str]:

@@ -12,7 +12,7 @@ import pytest
 from textual.app import App
 from textual.widgets import Static
 
-from tts_audiobook_tool.app_types import Sound, VoiceSelectMode
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.generation_events import GenerationTimedOut, ModelUnhealthy
 from tts_audiobook_tool.model_worker import ModelWorker
@@ -548,19 +548,16 @@ def test_exit_during_reset_finishes_existing_reset_once(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize(
-    ("kind", "phrase_index", "mode", "expected_scope", "problem_count"),
+    ("kind", "phrase_index", "expected_scope", "problem_count"),
     [
-        ("generation", 1, VoiceSelectMode.USER_DEFINED, [0], 0),
-        ("generation", 0, VoiceSelectMode.USER_DEFINED, [1], 1),
-        ("generation", 2, VoiceSelectMode.USER_DEFINED, [2], 1),
-        ("preview", None, VoiceSelectMode.USER_DEFINED, [0], 0),
-        ("generation", 0, VoiceSelectMode.DISABLED, [0], 0),
-        ("generation", 1, VoiceSelectMode.AUTO_ADVANCE, [0, 1, 2], 2),
-        ("preview", None, VoiceSelectMode.AUTO_ADVANCE, [0, 1, 2], 2),
+        ("generation", 1, [0], 0),
+        ("generation", 0, [1], 1),
+        ("generation", 2, [2], 1),
+        ("preview", None, [0], 0),
     ],
 )
 def test_quick_job_preflight_checks_only_job_voices(
-    monkeypatch, tmp_path, kind, phrase_index, mode, expected_scope, problem_count
+    monkeypatch, tmp_path, kind, phrase_index, expected_scope, problem_count
 ) -> None:
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
     from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
@@ -578,7 +575,6 @@ def test_quick_job_preflight_checks_only_job_voices(
             Voice(),
             Voice(file_name="missing.flac", transcript="Missing file."),
         ],
-        voice_select_mode=mode,
         # Selected line 1 is not line 0; the final assignment must clamp.
         phrase_groups=[SimpleNamespace(voice_index=index) for index in (1, 0, 99)],
     )

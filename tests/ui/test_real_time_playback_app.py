@@ -9,7 +9,7 @@ from textual.geometry import Size
 from textual.widgets import Input, Rule, Static
 
 from tts_audiobook_tool import real_time_playback
-from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo, RoomTone, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo, RoomTone, SttVariant
 from tts_audiobook_tool.app_types.validation_result import SkippedResult
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.app_support.interrupts import Interrupts
@@ -844,9 +844,6 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
     )
     monkeypatch.setattr(real_time_playback.Tts, "clear_continuation", lambda: None)
     monkeypatch.setattr(
-        real_time_playback.Tts, "reset_voice_selection_index", lambda: None
-    )
-    monkeypatch.setattr(
         real_time_playback.Tts,
         "get_instance",
         lambda: SimpleNamespace(get_warning_issues=lambda project: None),
@@ -874,7 +871,6 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
                 realtime_save=False,
                 get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
                 voice_references=[],
-                voice_select_mode=VoiceSelectMode.USER_DEFINED,
                 room_tone=RoomTone.OFF,
                 room_reverb_stereo=RoomReverbStereo.MONO,
             ),
@@ -1049,9 +1045,6 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
     )
     monkeypatch.setattr(real_time_playback.Tts, "clear_continuation", lambda: None)
     monkeypatch.setattr(
-        real_time_playback.Tts, "reset_voice_selection_index", lambda: None
-    )
-    monkeypatch.setattr(
         real_time_playback.Tts,
         "get_instance",
         lambda: SimpleNamespace(get_warning_issues=lambda project: None),
@@ -1078,7 +1071,6 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
                 realtime_save=False,
                 get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
                 voice_references=[],
-                voice_select_mode=VoiceSelectMode.USER_DEFINED,
                 room_tone=RoomTone.OFF,
                 room_reverb_stereo=RoomReverbStereo.MONO,
             ),
@@ -1434,7 +1426,6 @@ def test_realtime_save_writes_exactly_what_was_played(
     monkeypatch.setattr(real_time_playback.readiness, "get_generate_blocker_text", lambda state, verbose=False: None)
     monkeypatch.setattr(real_time_playback.app_memory, "show_vram_memory_warning_if_necessary", lambda: False)
     monkeypatch.setattr(real_time_playback.Tts, "clear_continuation", lambda: None)
-    monkeypatch.setattr(real_time_playback.Tts, "reset_voice_selection_index", lambda: None)
     monkeypatch.setattr(
         real_time_playback.Tts, "get_instance",
         lambda: SimpleNamespace(get_warning_issues=lambda project: None),
@@ -1463,7 +1454,6 @@ def test_realtime_save_writes_exactly_what_was_played(
                     ))
                     for i in range(voice_count)
                 ],
-                voice_select_mode=VoiceSelectMode.USER_DEFINED,
                 room_tone=RoomTone.HIGH,
                 room_reverb_stereo=room_reverb_stereo,
             ),

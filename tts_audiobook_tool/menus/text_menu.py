@@ -1,5 +1,5 @@
 from tts_audiobook_tool.app_support import app_text, hints
-from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
+from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.constants_config import PROJECT_DEFAULT_SEGMENTATION_STRATEGY
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
@@ -464,8 +464,7 @@ DIALOG_VOICE_INDEX = 1
 def ask_assign_dialog_voice(state: State, dialog_line_count: int) -> None:
     """
     Opt-in convenience at the end of text import: assigns every detected
-    dialog line to voice sample 2 and offers to switch the voice selection
-    mode to user-defined, so that the assignment takes effect.
+    dialog line to voice sample 2.
     """
     lines_noun = make_noun("line", "lines", dialog_line_count)
     prompt = (
@@ -488,22 +487,6 @@ def ask_assign_dialog_voice(state: State, dialog_line_count: int) -> None:
     printt(f"Assigned {len(dialog_groups)} dialog {lines_noun} to voice sample 2")
     printt()
 
-    if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
-        return
-    prompt = (
-        f"Voice selection mode is: {COL_ACCENT}{state.project.voice_select_mode.current_label}{COL_DEFAULT}\n"
-        f"Set it to {COL_ACCENT}{VoiceSelectMode.USER_DEFINED.current_label}{COL_DEFAULT} "
-        f"so that lines use their assigned voices? "
-        f"Press {make_hotkey_string('Y')} to confirm: "
-    )
-    if ask.ask_confirm(prompt):
-        state.project.voice_select_mode = VoiceSelectMode.USER_DEFINED
-        err = state.project.save()
-        if err:
-            ask.ask_error(err)
-            return
-        printt(f"Voice selection mode set to: {VoiceSelectMode.USER_DEFINED.current_label}")
-    printt()
 
 def on_ask_max_size(state: State, _) -> None:
 

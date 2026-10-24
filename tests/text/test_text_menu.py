@@ -4,7 +4,7 @@ from typing import cast
 import pytest
 
 import tts_audiobook_tool.menus.text_menu as text_menu_module
-from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
+from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.constants import COL_DIM
 from tts_audiobook_tool.constants_hints import HINT_DIALOG_VOICE, HINT_TOLERANCE_FIRST_CLASS
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
@@ -227,7 +227,6 @@ def test_text_import_does_not_show_tolerance_hint_for_other_language(monkeypatch
 def make_dialog_import_state(
     dialog_segmentation: bool,
     dialog_line_count: int,
-    voice_select_mode: VoiceSelectMode = VoiceSelectMode.AUTO_ADVANCE,
 ) -> tuple[State, SimpleNamespace]:
     """A fake project whose imported text has the given number of dialog lines."""
     phrase_groups = [
@@ -240,7 +239,6 @@ def make_dialog_import_state(
         segmentation_strategy=SegmentationStrategy.MULTI_SENTENCE,
         language_code="fr",
         dialog_segmentation=dialog_segmentation,
-        voice_select_mode=voice_select_mode,
         dir_path="/tmp/project",
         markers=set(),
         word_substitutions={},
@@ -297,7 +295,7 @@ def test_import_summary_reports_dialog_lines_and_prompts_only_when_found(
 ) -> None:
     # Dialog is no longer assigned a voice on import: the summary reports the
     # detected lines, and the voice-2 assignment is an opt-in prompt (declined
-    # here, which leaves voices and the voice selection mode as they were).
+    # here, which leaves voices as they were).
     from tts_audiobook_tool.constants import COL_ACCENT
 
     state, project = make_dialog_import_state(dialog_segmentation, dialog_line_count)
@@ -310,33 +308,19 @@ def test_import_summary_reports_dialog_lines_and_prompts_only_when_found(
         assert record["prompts"][0].startswith(f"Assign the {dialog_line_count} dialog lines to voice sample 2?")
     assert [group.voice_index for group in project.phrase_groups] == [-1] * (1 + dialog_line_count)
     assert record["book_saves"] == [] and project.save_calls == []
-    assert project.voice_select_mode is VoiceSelectMode.AUTO_ADVANCE
     assert (HINT_DIALOG_VOICE in record["hints"]) is bool(dialog_line_count)
 
 
-@pytest.mark.parametrize("switch_mode", [True, False])
-def test_accepting_dialog_voice_prompt_assigns_voice_2_and_offers_mode_switch(
-    monkeypatch, switch_mode: bool,
-) -> None:
+def test_accepting_dialog_voice_prompt_assigns_voice_2(monkeypatch) -> None:
     # Accepting assigns only the dialog lines to voice sample 2 (index 1) and
-    # saves the text; a second prompt offers user-defined voice selection.
+    # saves the text; no further prompt follows.
     state, project = make_dialog_import_state(True, 2)
-    record = run_dialog_import(monkeypatch, state, [True, switch_mode])
+    record = run_dialog_import(monkeypatch, state, [True])
 
     assert [group.voice_index for group in project.phrase_groups] == [-1, 1, 1]
     assert record["book_saves"] == [project]
-    assert "Set it to user-defined" in record["prompts"][1]
-    expected_mode = VoiceSelectMode.USER_DEFINED if switch_mode else VoiceSelectMode.AUTO_ADVANCE
-    assert project.voice_select_mode is expected_mode
-    assert project.save_calls == (["project"] if switch_mode else [])
-
-
-def test_dialog_voice_prompt_skips_mode_switch_when_already_user_defined(monkeypatch) -> None:
-    state, project = make_dialog_import_state(True, 1, VoiceSelectMode.USER_DEFINED)
-    record = run_dialog_import(monkeypatch, state, [True])
-
-    assert [group.voice_index for group in project.phrase_groups] == [-1, 1]
     assert len(record["prompts"]) == 1
+    assert project.save_calls == []
 
 
 def test_dialog_voice_prompt_rolls_back_when_saving_fails(monkeypatch) -> None:
@@ -352,7 +336,6 @@ def test_dialog_voice_prompt_rolls_back_when_saving_fails(monkeypatch) -> None:
 
     assert [group.voice_index for group in project.phrase_groups] == [-1, -1]
     assert errors == ["disk full"]
-    assert project.voice_select_mode is VoiceSelectMode.AUTO_ADVANCE
 
 
 def make_import_project(
@@ -375,7 +358,6 @@ def make_import_project(
         markers=markers if markers is not None else set(),
         word_substitutions=substitutions if substitutions is not None else {},
         has_multiple_book_sections=lambda: multi_section,
-        voice_select_mode=VoiceSelectMode.AUTO_ADVANCE,
         book=SimpleNamespace(
             segmentation_settings=SimpleNamespace(
                 language_code="en",

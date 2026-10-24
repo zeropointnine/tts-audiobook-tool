@@ -19,7 +19,6 @@ from tts_audiobook_tool.app_types import (
     SectionMarkerMode,
     SegmentationStrategy,
     Strictness,
-    VoiceSelectMode,
 )
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import *
@@ -498,7 +497,8 @@ class ProjectSerializationUtil:
 
         d['chapter_mode'] = value
 
-        normalize_by_id('voice_select_mode', VoiceSelectMode.get_by_id, VoiceSelectMode.get_default())
+        # Removed setting: lines now always use their assigned voice
+        d.pop('voice_select_mode', None)
 
         s = d.get('chatterbox_type', '')
         chatterbox_type = ChatterboxType.get_by_id(s)
@@ -980,7 +980,6 @@ class ProjectSerializationUtil:
             "strictness": project.strictness.id,
             "max_retries": project.max_retries,
             "chapter_mode": project.chapter_mode.id,
-            "voice_select_mode": project.voice_select_mode.id,
 
             "none_voice_file_name": project.none_voice_file_name,
 

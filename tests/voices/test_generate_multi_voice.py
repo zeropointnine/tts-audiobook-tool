@@ -2,10 +2,11 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
 
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.voice import Voice
-from tts_audiobook_tool.generate_util import GenerateUtil
+from tts_audiobook_tool.generate_util import (
+    GenerateUtil, SubBatch, bucket_items, make_multi_voice_rounds, make_single_voice_rounds,
+)
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 
@@ -19,7 +20,6 @@ def make_phrase_group(num_words: int, voice_index: int) -> PhraseGroup:
 
 
 def run_generate_files(
-        voice_select_mode: VoiceSelectMode,
         voice_indices: list[int],
         num_words: int,
         batch_size: int,
@@ -40,7 +40,6 @@ def run_generate_files(
     project.phrase_groups = phrase_groups
     project._sound_segments = sound_segments
     project.generate_range_string = "all"
-    project.voice_select_mode = voice_select_mode
     if voices is None:
         set_setting(project, "mira_voice_file_name", ["voice-a.flac", "voice-b.flac"])
     else:
@@ -80,7 +79,7 @@ def run_generate_files(
 def test_multi_voice_batches_are_voice_homogeneous_and_cover_all_lines() -> None:
     voice_indices = [0, 1, 0, 1, 0, 1, 0, 1]
     did_interrupt, calls = run_generate_files(
-        VoiceSelectMode.USER_DEFINED, voice_indices, num_words=5,
+        voice_indices, num_words=5,
         batch_size=2, max_retries=1, failing_indices=set(),
     )
 
@@ -99,7 +98,7 @@ def test_multi_voice_batches_are_voice_homogeneous_and_cover_all_lines() -> None
 def test_multi_voice_retries_reuse_line_voice_and_run_at_head() -> None:
     voice_indices = [0, 1, 0, 1]
     did_interrupt, calls = run_generate_files(
-        VoiceSelectMode.USER_DEFINED, voice_indices, num_words=5,
+        voice_indices, num_words=5,
         batch_size=2, max_retries=1, failing_indices={1},
     )
 
@@ -111,25 +110,54 @@ def test_multi_voice_retries_reuse_line_voice_and_run_at_head() -> None:
     ]
 
 
-def test_single_voice_projects_pass_no_explicit_voice() -> None:
-    voice_indices = [0, 0, 0, 0]
+def test_unassigned_lines_batch_with_the_first_voice() -> None:
+    # Unassigned lines (-1) clamp to voice 0, so they are batched with it explicitly.
+    voice_indices = [-1, 0, -1, -1]
     did_interrupt, calls = run_generate_files(
-        VoiceSelectMode.AUTO_ADVANCE, voice_indices, num_words=5,
+        voice_indices, num_words=5,
         batch_size=2, max_retries=1, failing_indices=set(),
     )
 
     assert not did_interrupt
-    for indices, voice in calls:
-        assert voice is None
-    assert sorted(index for indices, _ in calls for index in indices) == [0, 1, 2, 3]
+    assert calls == [([0, 1], 0), ([2, 3], 0)]
+
+
+def test_unbatched_lines_leave_voice_resolution_to_generate() -> None:
+    # Batch size 1 keeps the flat book-order queue; generate() resolves each line's voice.
+    did_interrupt, calls = run_generate_files(
+        [1, 0, 1], num_words=5,
+        batch_size=1, max_retries=1, failing_indices=set(),
+    )
+
+    assert not did_interrupt
+    assert calls == [([0], None), ([1], None), ([2], None)]
+
+
+def test_one_voice_multi_voice_rounds_match_flat_bucketed_queue() -> None:
+    # With a single distinct voice, per-voice scheduling reproduces the flat
+    # word-count-bucketed order (only the explicit voice index differs).
+    phrase_groups = [make_phrase_group((index * 7) % 11 + 1, -1) for index in range(53)]
+    items = [(index, 0) for index in range(len(phrase_groups))]
+    batch_size = 3
+
+    multi = make_multi_voice_rounds(
+        items, phrase_groups, {index: 0 for index, _ in items}, batch_size, sort_by_words=True,
+    )
+    flat = make_single_voice_rounds(bucket_items(items, phrase_groups, batch_size), batch_size)
+
+    multi_batches = [sub.items for round_ in multi for sub in round_]
+    flat_batches = [sub.items for round_ in flat for sub in round_]
+    assert multi_batches == flat_batches
+    assert all(sub.voice_selection_index == 0 for round_ in multi for sub in round_)
+    assert all(isinstance(sub, SubBatch) for round_ in flat for sub in round_)
 
 def test_sample_less_voices_still_batch_per_voice() -> None:
     # Voices without samples can differ by instructions alone (eg Qwen3-TTS
-    # VoiceDesign), so user-defined lines must still be split per voice slot.
+    # VoiceDesign), so lines must still be split per voice slot.
     voices = [Voice(instructions={"mira_local": "a"}), Voice(instructions={"mira_local": "b"})]
     voice_indices = [0, 1, 0, 1]
     did_interrupt, calls = run_generate_files(
-        VoiceSelectMode.USER_DEFINED, voice_indices, num_words=5,
+        voice_indices, num_words=5,
         batch_size=2, max_retries=1, failing_indices=set(), voices=voices,
     )
 

@@ -6,7 +6,7 @@ import pytest
 
 from dataclasses import replace
 
-from tts_audiobook_tool.app_types import Book, BookSection, RoomReverb, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection, RoomReverb
 from tts_audiobook_tool.app_types.voice import Voice, VoiceCrop, stereo_position_label
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.menus.menu_util import get_string_from
@@ -466,15 +466,10 @@ def test_stereo_position_label(pan, label):
     assert stereo_position_label(pan) == label
 
 
-@pytest.mark.parametrize("mode, noted", [
-    (VoiceSelectMode.USER_DEFINED, False), (VoiceSelectMode.DISABLED, False), (VoiceSelectMode.AUTO_ADVANCE, True),
-])
-def test_stereo_position_item_notes_auto_advance(monkeypatch, mode, noted):
+def test_stereo_position_item_has_no_sublabel(monkeypatch):
     state = make_state(2)
-    state.project.voice_select_mode = mode
     item = open_submenu(monkeypatch, state, 0)["items"](state)[-2]
-    assert (item.sublabel == "No effect in auto-advance voice selection mode") is noted
-    assert noted or item.sublabel is None
+    assert item.sublabel is None
 
 
 @pytest.mark.parametrize("save_error", ["", "disk full"])

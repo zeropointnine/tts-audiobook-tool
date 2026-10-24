@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tts_audiobook_tool.app_types import Book, BookSection, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types import (
     ExportType,
     HighShelfEq,
@@ -14,7 +14,6 @@ from tts_audiobook_tool.app_types import (
     RoomReverbStereo,
     RoomTone,
     SectionMarkerMode,
-    VoiceSelectMode,
 )
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.voice import Voice
@@ -186,21 +185,16 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Channel output: Stereo",
     ]
     project.voice_references = [Voice("a.flac", pan=-0.3), Voice("b.flac")]
-    project.voice_select_mode = VoiceSelectMode.USER_DEFINED
     assert plain_option_lines(state) == [
         "  - Stereo position: Varies by voice", "  - Channel output: Stereo",
     ]
 
     # Each voice's own room is applied; differing voices are summarized
-    project.voice_select_mode = VoiceSelectMode.USER_DEFINED
     project.voice_references = [Voice("a.flac", room_reverb=RoomReverb.SMALL_DRR22), Voice("b.flac")]
     assert plain_option_lines(state) == [
         "  - Room reverb: Varies by voice", "  - Room reverb stereo effect: Wide", "  - Channel output: Stereo",
     ]
-    # ... but only voice 0 is heard outside user-defined voice selection
-    project.voice_select_mode = VoiceSelectMode.AUTO_ADVANCE
-    assert plain_option_lines(state)[0] == "  - Room reverb: Small room, light"
-    project.voice_references = [Voice("a.flac"), Voice("b.flac", room_reverb=RoomReverb.SMALL_DRR22)]
+    project.voice_references = [Voice("a.flac"), Voice("b.flac")]
     assert plain_option_lines(state) == ["  - Channel output: Mono"]
 
 

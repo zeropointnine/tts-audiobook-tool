@@ -5,7 +5,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.voice import Voice, VoiceCrop
 from tts_audiobook_tool.generate_util import GenerateUtil
@@ -15,11 +14,10 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
-def make_project(tmp_path, mode=VoiceSelectMode.USER_DEFINED):
+def make_project(tmp_path):
     project = Project(
         dir_path=str(tmp_path),
         tts_model_type="glm_local",
-        voice_select_mode=mode.id,
         voice_references=[Voice("ok.flac", "text"), Voice(), Voice("gone.flac", "text"), Voice("empty.flac")],
     )
     project.phrase_groups = [
@@ -29,21 +27,15 @@ def make_project(tmp_path, mode=VoiceSelectMode.USER_DEFINED):
     return project
 
 
-@pytest.mark.parametrize("mode, lines, expected", [
-    (VoiceSelectMode.DISABLED, [1, 2, 3], [0]),
-    (VoiceSelectMode.USER_DEFINED, [0, 4, 0], [0]),
-    (VoiceSelectMode.USER_DEFINED, [1, 3], [1, 3]),
-    (VoiceSelectMode.USER_DEFINED, [4, 5], [0, 3]),
-    (VoiceSelectMode.AUTO_ADVANCE, [0], [0, 1, 2, 3]),
-    (VoiceSelectMode.DISABLED, None, [0]),
-    (VoiceSelectMode.USER_DEFINED, None, [0]),
-    (VoiceSelectMode.AUTO_ADVANCE, None, [0, 1, 2, 3]),
-    (VoiceSelectMode.DISABLED, [], []),
-    (VoiceSelectMode.USER_DEFINED, [], []),
-    (VoiceSelectMode.AUTO_ADVANCE, [], []),
+@pytest.mark.parametrize("lines, expected", [
+    ([0, 4, 0], [0]),
+    ([1, 3], [1, 3]),
+    ([4, 5], [0, 3]),
+    (None, [0]),
+    ([], []),
 ])
-def test_job_voice_indices_follow_inference_without_dropping_empty_slots(tmp_path, mode, lines, expected):
-    project = make_project(tmp_path, mode)
+def test_job_voice_indices_follow_inference_without_dropping_empty_slots(tmp_path, lines, expected):
+    project = make_project(tmp_path)
     voices = list(project.voice_references)
     assignments = [group.voice_index for group in project.phrase_groups]
     # Also accept generators without losing their first entry during emptiness checks.
@@ -55,17 +47,14 @@ def test_job_voice_indices_follow_inference_without_dropping_empty_slots(tmp_pat
 
 
 def test_job_voice_indices_no_sample_binding(tmp_path):
-    project = make_project(tmp_path, VoiceSelectMode.AUTO_ADVANCE)
+    project = make_project(tmp_path)
     project.tts_model_type = "none"
     assert ProjectVoiceUtil.get_job_voice_indices(project, [0]) == []
 
 
-@pytest.mark.parametrize("mode, lines", [
-    (VoiceSelectMode.DISABLED, [1, 2, 3]),
-    (VoiceSelectMode.USER_DEFINED, [0, 4]),
-])
-def test_preflight_ignores_unused_missing_samples_files_and_transcripts(tmp_path, monkeypatch, mode, lines):
-    project = make_project(tmp_path, mode)
+def test_preflight_ignores_unused_missing_samples_files_and_transcripts(tmp_path, monkeypatch):
+    project = make_project(tmp_path)
+    lines = [0, 4]
     (tmp_path / "ok.flac").write_bytes(b"sample")
     # This file exists, but must not be loaded or auto-transcribed for this job.
     (tmp_path / "empty.flac").write_bytes(b"sample")
@@ -86,13 +75,13 @@ def test_preflight_ignores_unused_missing_samples_files_and_transcripts(tmp_path
     assert not (tmp_path / "project.json").exists()
 
 
-def test_auto_advance_preflight_checks_all_voices_even_for_one_line(tmp_path, monkeypatch):
-    project = make_project(tmp_path, VoiceSelectMode.AUTO_ADVANCE)
+def test_preflight_checks_every_voice_the_job_lines_use(tmp_path, monkeypatch):
+    project = make_project(tmp_path)
     (tmp_path / "ok.flac").write_bytes(b"sample")
     (tmp_path / "empty.flac").write_bytes(b"sample")
     monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda _: object())
     state = SimpleNamespace(project=project)
-    scope = ProjectVoiceUtil.get_job_voice_indices(project, [0])
+    scope = ProjectVoiceUtil.get_job_voice_indices(project, [0, 1, 2, 3])
 
     assert VoiceMenuShared.get_voice_problems(state, voice_indices=scope) == [
         "Voice 2 has no voice sample (set a sample or remove the voice)",
@@ -124,9 +113,8 @@ def test_selected_sample_less_voice_is_allowed_when_model_does_not_require_sampl
     assert VoiceMenuShared.validate_voices(state, voice_indices=scope) is True
 
 
-@pytest.mark.parametrize("mode", list(VoiceSelectMode))
-def test_empty_job_does_not_require_any_sample(tmp_path, monkeypatch, mode):
-    project = make_project(tmp_path, mode)
+def test_empty_job_does_not_require_any_sample(tmp_path, monkeypatch):
+    project = make_project(tmp_path)
     state = SimpleNamespace(project=project)
     monkeypatch.setattr(voice_menu_shared.SoundFileUtil, "load", lambda _: pytest.fail("no files should be loaded"))
     scope = ProjectVoiceUtil.get_job_voice_indices(project, [])

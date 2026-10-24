@@ -2,7 +2,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -63,20 +62,15 @@ def test_echo_override_is_orthogonal_to_chat_input_mode(monkeypatch) -> None:
     assert saves == [True, True]
 
 
-@pytest.mark.parametrize(
-    ("mode", "expected_scope"),
-    [(VoiceSelectMode.DISABLED, [0]), (VoiceSelectMode.USER_DEFINED, [0]),
-     (VoiceSelectMode.AUTO_ADVANCE, [0, 1])],
-)
 @pytest.mark.parametrize("valid", [True, False])
-def test_chat_preflight_uses_literal_scope(monkeypatch, mode, expected_scope, valid) -> None:
+def test_chat_preflight_uses_literal_scope(monkeypatch, valid) -> None:
+    expected_scope = [0]
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 
     state = SimpleNamespace(
         project=SimpleNamespace(
             get_tts_model_type=lambda: TtsModelType.require_by_id("qwen3tts_local"),
             voice_references=[Voice(), Voice()],
-            voice_select_mode=mode,
             # Chat must not inherit the project's per-line voice assignment.
             phrase_groups=[SimpleNamespace(voice_index=1)],
         ),

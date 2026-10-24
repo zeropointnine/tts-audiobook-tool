@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Callable
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.app_types import RoomReverb, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types import RoomReverb, SttVariant
 from tts_audiobook_tool.app_types.voice import Voice, stereo_position_label, stereo_position_to_percent
 from tts_audiobook_tool import ask
 
@@ -36,7 +36,6 @@ from tts_audiobook_tool.transcriber import Transcriber
 LABEL_VOICE_SAMPLE_ITEM = "Voice"  # "Voice N: <name> (<duration>); "<instructions>""
 LABEL_VOICE_SAMPLES_SUPERLABEL = "Select to move, remove, edit properties"
 LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sample-less) voice
-LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Assign character voices using LLM"
 
@@ -606,13 +605,9 @@ class VoiceMenuShared:
 
     @staticmethod
     def make_voice_selection_items(state: State, tts_type: TtsModelType) -> list[MenuItem]:
-        """The closing group of every Voices menu: Voice selection mode (with
-        2+ voices), Edit voice/line selections and Auto-assign character
-        voices. Added by `menu_wrapper`."""
-        voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+        """The closing group of every Voices menu: Edit voice/line selections
+        and Auto-assign character voices. Added by `menu_wrapper`."""
         items: list[MenuItem] = []
-        if len(voices) > 1:
-            items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
         items.append(VoiceMenuShared.make_assign_voice_samples_to_text_lines_item(tts_type))
         items.append(VoiceMenuShared.make_auto_assign_character_voices_item())
         items[0].blank_line_before = True
@@ -635,27 +630,12 @@ class VoiceMenuShared:
         return MenuItem(make_label, on_item)
 
     @staticmethod
-    def make_voice_sample_selection_mode_item() -> MenuItem:
-        def make_label(state: State) -> str:
-            return make_menu_label(
-                LABEL_VOICE_SELECTION_MODE,
-                state.project.voice_select_mode.current_label,
-            )
-
-        return MenuItem(
-            make_label,
-            lambda state, _: VoiceMenuShared.voice_sample_selection_mode_submenu(state),
-        )
-
-    @staticmethod
     def make_assign_voice_samples_to_text_lines_item(tts_type: TtsModelType) -> MenuItem:
         def make_label(state: State) -> str:
             label = LABEL_EDIT_VOICE_SELECTIONS
             voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
             if len(voices) < 2:
                 label += f" {COL_DIM}(optional; requires 2+ voice samples)"
-            elif state.project.voice_select_mode is not VoiceSelectMode.USER_DEFINED:
-                label += f" {COL_DIM}(optional; requires \"voice selection mode: user-defined\")"
             return label
 
         def on_item(state: State, _: MenuItem) -> None:
@@ -682,26 +662,6 @@ class VoiceMenuShared:
             ask.ask_error(run_result.result.error)
         elif isinstance(run_result.result, EditorSaved):
             print_feedback("Saved changes", long_pause=True)
-
-    @staticmethod
-    def voice_sample_selection_mode_submenu(state: State) -> None:
-        modes = list(VoiceSelectMode)
-
-        def on_select(value: VoiceSelectMode) -> None:
-            state.project.voice_select_mode = value
-            state.project.save()
-            print_feedback("Voice selection mode set to:", value.id)
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text="Voice selection mode",
-            labels=[mode.label for mode in modes],
-            values=modes,
-            current_value=state.project.voice_select_mode,
-            default_value=VoiceSelectMode.get_default(),
-            on_select=on_select,
-            sublabels=[mode.description for mode in modes],
-        )
 
     @staticmethod
     def get_voice_sample_duration(project: Project, voice: Voice) -> float | None:
@@ -1025,11 +985,6 @@ class VoiceMenuShared:
                 ),
                 lambda s2, _: VoiceMenuShared.ask_stereo_position(s2, i),
                 superlabel=LABEL_EFFECTS_SUPERLABEL,
-                # Auto-advance doesn't record which voice spoke a line, so output stays centered
-                sublabel=(
-                    "No effect in auto-advance voice selection mode"
-                    if s.project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE else None
-                ),
             ))
             items.append(MenuItem(
                 make_menu_label(LABEL_ROOM_REVERB, voice.room_reverb.label, RoomReverb.get_default().label),

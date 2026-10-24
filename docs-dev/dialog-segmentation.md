@@ -259,7 +259,7 @@ The flag is independent of `voice_index`: assigning any voice, including voice s
 - "Assign character voices using LLM" attributes the flagged lines (grouped into utterances by opening quote marks) to characters, and requires text imported with dialog segmentation enabled; otherwise the user must re-import.
 - The voice line editor's `[D]` key selects all dialog lines, so a voice can be set for them in one step.
 
-Detection assigns no voice. At the end of an import that found dialog, the user is asked (default no) whether to assign the dialog lines to zero-based `voice_index = 1`—voice sample 2 in the UI—and, if the project is not using User-defined voice selection, whether to switch to it so that the assignment takes effect. Multi-item batching honors user-defined line assignments: each generation round is split into per-voice sub-batches (groups of batches), so every line is generated with its own voice sample.
+Detection assigns no voice. At the end of an import that found dialog, the user is asked (default no) whether to assign the dialog lines to zero-based `voice_index = 1`—voice sample 2 in the UI. The assignment takes effect directly; every line always uses its own (clamped) `voice_index`. Multi-item batching honors line assignments: each generation round is split into per-voice sub-batches (groups of batches), so every line is generated with its own voice sample.
 
 ### Pre-v3 books
 

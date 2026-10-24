@@ -3,7 +3,6 @@ from collections import Counter
 from collections.abc import Callable
 
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
@@ -122,8 +121,7 @@ def run_apply(
         state: State, characters: list[RosterCharacter], attributions: AttributionsFile, voice_map: VoiceMapFile,
 ) -> None:
     """Previews the voices to apply, asks to confirm, then sets them on the
-    dialog lines and saves the project text. Also switches the project to
-    user-defined voice selection, without which line voices aren't used."""
+    dialog lines and saves the project text."""
     project = state.project
     book = project.book
     roster_ids = {character.id for character in characters}
@@ -140,15 +138,14 @@ def run_apply(
         print_feedback("No dialog has been assigned to the chosen characters (step 2)")
         return
     changed = plan.changed_lines(book)
-    switch_mode = project.voice_select_mode is not VoiceSelectMode.USER_DEFINED
-    if not changed and not switch_mode:
+    if not changed:
         print_feedback("Nothing to change: the dialog lines already have these voices")
         return
 
     segments = project.sound_segments
     generated = set(segments.sound_segments_map.keys()) if segments is not None else set()
     MenuUtil.print_screen_heading(state, "Apply voices", breadcrumb="Apply")
-    for line in make_apply_preview(state, characters, voice_map, plan, changed, generated, switch_mode):
+    for line in make_apply_preview(state, characters, voice_map, plan, changed, generated):
         printt(line)
     printt()
     if not ask.ask_confirm(f"Apply? Press {make_hotkey_string('Y')} to confirm: "):
@@ -161,15 +158,7 @@ def run_apply(
             VoiceApplyPlan.restore(book, previous)
             ask.ask_error(f"Couldn't save the project text: {error}")
             return
-    feedback = f"Updated {len(previous):,} {make_noun('line', 'lines', len(previous))}"
-    if switch_mode:
-        project.voice_select_mode = VoiceSelectMode.USER_DEFINED
-        error = project.save()
-        if error:
-            ask.ask_error(f"{feedback}, but couldn't save the voice selection mode: {error}")
-            return
-        feedback += "; voice selection mode set to user-defined"
-    print_feedback(feedback)
+    print_feedback(f"Updated {len(previous):,} {make_noun('line', 'lines', len(previous))}")
 
 
 def make_apply_preview(
@@ -179,7 +168,6 @@ def make_apply_preview(
         plan: VoiceApplyPlan,
         changed: list[int],
         generated: set[int],
-        switch_mode: bool,
 ) -> list[str]:
     """The confirmation text: characters grouped by voice (with their dialog
     passage counts), what's left unchanged, and any warnings."""
@@ -200,11 +188,8 @@ def make_apply_preview(
     lines = ["Dialog passages per character:", ""]
     lines += [f"  {title:<{width}}  {names}" for title, names in rows]
     lines.append("")
-    if changed:
-        lines.append(f"{len(changed):,} {make_noun('line changes', 'lines change', len(changed))} voice. "
-                     f"Voices already set on these lines are replaced.")
-    else:
-        lines.append("The dialog lines already have these voices.")
+    lines.append(f"{len(changed):,} {make_noun('line changes', 'lines change', len(changed))} voice. "
+                 f"Voices already set on these lines are replaced.")
     if plan.skipped:
         lines.append(f"{COL_DIM}{plan.skipped:,} {make_noun('passage', 'passages', plan.skipped)} skipped: "
                      f"the project text changed after they were assigned (re-run step 2).")
@@ -212,10 +197,6 @@ def make_apply_preview(
     if with_audio:
         lines.append(f"{COL_DIM}{with_audio:,} of these lines already have generated audio, "
                      f"which keeps its old voice until regenerated.")
-    if switch_mode:
-        mode = state.project.voice_select_mode
-        lines.append(f"Voice selection mode will be set to {COL_ACCENT}user-defined{COL_DEFAULT} "
-                     f"(currently: {mode.current_label}); line voices are only used in that mode.")
     return lines
 
 

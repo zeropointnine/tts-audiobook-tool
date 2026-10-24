@@ -154,7 +154,7 @@ HINT_BATCH = Hint(
     "Batching",
     "Note",
 """When batching is active, lines will get processed slightly out of sequence
-to maximize throughput. For projects with user-defined voice selections,
+to maximize throughput. For projects that assign multiple voices to lines,
 even more so."""
 )
 
@@ -228,7 +228,7 @@ HINT_DIALOG_VOICE = Hint(
 detected dialog lines have been marked as dialog.
 
 To generate dialog using voices other than the narrator's:
-(1) Add more voice samples and set Voice selection mode to User-defined
+(1) Add more voice samples
 (2) Assign voices to the dialog lines: in Voices > Edit voice/line selections
     (press [D] to select all dialog lines), or per character using
     Voices > Assign character voices using LLM."""

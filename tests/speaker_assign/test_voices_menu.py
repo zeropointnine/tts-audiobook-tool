@@ -4,7 +4,6 @@ from typing import cast
 
 import pytest
 
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.menu_util import MenuUtil, get_string_from
 from tts_audiobook_tool.menus.speaker_assign import voices_menu
@@ -75,13 +74,12 @@ def test_voice_submenu_lists_voices_then_clear_and_reports_choice(monkeypatch) -
     assert chosen == [0, 1, None]
 
 
-def make_apply_state(voice_select_mode: VoiceSelectMode = VoiceSelectMode.USER_DEFINED):
+def make_apply_state():
     book, attributions = make_fixture()
     saved = []
     project = SimpleNamespace(
         book=book,
         voice_references=[Voice(name="general"), Voice(name="narrator"), Voice(name="bob")],
-        voice_select_mode=voice_select_mode,
         sound_segments=None,
         save=lambda: saved.append("project") or "",
     )
@@ -105,14 +103,13 @@ def quiet_apply(monkeypatch):
 
 def test_apply_preview_groups_by_voice_and_warns() -> None:
     # Characters sharing a voice share a row; unchosen speakers are listed as
-    # unchanged; stale results, existing audio and a non-user-defined voice
-    # mode each add a note.
-    state, attributions, _ = make_apply_state(VoiceSelectMode.DISABLED)
+    # unchanged; stale results and existing audio each add a note.
+    state, attributions, _ = make_apply_state()
     voice_map = VoiceMapFile({"ALICE": 2, "CAROL": 2, "BOB": 0})
     plan = VoiceApplyPlan.make(state.project.book, ROSTER_IDS, attributions, voice_map)
     changed = plan.changed_lines(state.project.book)
     lines = [strip_ansi_codes(line) for line in make_apply_preview(
-        state, characters("ALICE", "BOB", "CAROL"), voice_map, plan, changed, generated={1}, switch_mode=True)]
+        state, characters("ALICE", "BOB", "CAROL"), voice_map, plan, changed, generated={1})]
 
     assert "  Voice 1 general  BOB (1)" in lines
     assert "  Voice 3 bob      ALICE (1), CAROL (1)" in lines
@@ -122,20 +119,18 @@ def test_apply_preview_groups_by_voice_and_warns() -> None:
     text = "\n".join(lines)
     assert "1 passage skipped" in text
     assert "1 of these lines already have generated audio" in text
-    assert "currently: disabled - always Voice 1" in text
 
 
-def test_run_apply_sets_voices_saves_and_switches_mode(monkeypatch, quiet_apply) -> None:
-    state, attributions, saved = make_apply_state(VoiceSelectMode.AUTO_ADVANCE)
+def test_run_apply_sets_voices_and_saves_text(monkeypatch, quiet_apply) -> None:
+    state, attributions, saved = make_apply_state()
     monkeypatch.setattr(ProjectTextIOUtil, "save_book", lambda project: saved.append("text") or "")
 
     run_apply(state, characters("ALICE", "BOB", "CAROL"), attributions, VoiceMapFile({"ALICE": 2}))
 
     groups = state.project.book.flat_phrase_groups
     assert [groups[line].voice_index for line in (1, 2, 3)] == [2, 2, 1]
-    assert saved == ["text", "project"]
-    assert state.project.voice_select_mode is VoiceSelectMode.USER_DEFINED
-    assert quiet_apply == ["Updated 2 lines; voice selection mode set to user-defined"]
+    assert saved == ["text"]
+    assert quiet_apply == ["Updated 2 lines"]
 
 
 def test_run_apply_rolls_back_when_saving_fails(monkeypatch, quiet_apply) -> None:

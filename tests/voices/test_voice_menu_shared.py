@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 import pytest
 
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.voice import Voice, VoiceCrop
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.voice import voice_menu_shared
@@ -529,8 +528,8 @@ def test_voice_menu_duration_warning_tracks_current_model_on_redraw(monkeypatch)
         assert (f"{voice_menu_shared.COL_ERROR}*" in label) == warned
 
 
-@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 4), (1, 4), (2, 6), (9, 12)])
-def test_voice_sample_selection_mode_item_requires_multiple_samples(
+@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 4), (1, 4), (2, 5), (9, 11)])
+def test_voice_items_end_with_selection_items(
         monkeypatch,
         voice_count: int,
         expected_item_count: int,
@@ -554,29 +553,12 @@ def test_voice_sample_selection_mode_item_requires_multiple_samples(
     expected = []
     if voice_count < 9:
         expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
-    assert items[-3 if voice_count > 1 else -2].blank_line_before
-    if voice_count > 1:
-        expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
-        assert VoiceSelectMode.DISABLED.current_label in labels[-3]
+    assert items[-2].blank_line_before
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     expected.append(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
     assert len(labels[voice_count:]) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels[voice_count:], expected))
     assert not any(label.startswith("Add/remove") for label in labels)
-
-
-def test_voice_sample_selection_mode_item_label_tracks_project_value() -> None:
-    project = Project.model_validate({
-        "mira_voice_file_name": ["voice-a.flac", "voice-b.flac"],
-    })
-    state = cast(State, SimpleNamespace(project=project))
-    item = VoiceMenuShared.make_voice_selection_items(state, TtsModelType.require_by_id("mira_local"))[0]
-
-    assert VoiceSelectMode.DISABLED.current_label in get_string_from(state, item.label)
-
-    project.voice_select_mode = VoiceSelectMode.USER_DEFINED
-
-    assert VoiceSelectMode.USER_DEFINED.current_label in get_string_from(state, item.label)
 
 
 @pytest.mark.parametrize("file_name", ["roster.json", "attributions.json"])
@@ -592,28 +574,6 @@ def test_auto_assign_item_is_optional_until_speaker_assign_data_exists(tmp_path,
     (tmp_path / "speaker_assign").mkdir()
     (tmp_path / "speaker_assign" / file_name).write_text("{}", encoding="utf-8")
     assert get_string_from(state, item.label) == voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES
-
-
-def test_voice_sample_selection_mode_submenu_uses_options_menu_and_saves_selection() -> None:
-    project = Project.model_validate({
-        "mira_voice_file_name": ["voice-a.flac", "voice-b.flac"],
-    })
-    state = cast(State, SimpleNamespace(project=project))
-
-    with patch.object(Project, "save") as save, \
-            patch("tts_audiobook_tool.menus.voice.voice_menu_shared.MenuUtil.options_menu") as options_menu:
-        VoiceMenuShared.voice_sample_selection_mode_submenu(state)
-        kwargs = options_menu.call_args.kwargs
-        kwargs["on_select"](VoiceSelectMode.USER_DEFINED)
-
-    assert kwargs["heading_text"] == voice_menu_shared.LABEL_VOICE_SELECTION_MODE
-    assert kwargs["labels"] == [mode.label for mode in VoiceSelectMode]
-    assert kwargs["values"] == list(VoiceSelectMode)
-    assert kwargs["current_value"] == VoiceSelectMode.DISABLED
-    assert kwargs["default_value"] == VoiceSelectMode.get_default()
-    assert kwargs["sublabels"] == [mode.description for mode in VoiceSelectMode]
-    assert project.voice_select_mode == VoiceSelectMode.USER_DEFINED
-    save.assert_called_once_with()
 
 
 @pytest.mark.parametrize("transcript", ["Transcribed sample text.", ""])

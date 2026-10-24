@@ -31,19 +31,14 @@ new design key. An unknown id loads as `OFF`.
 **Which voice's setting applies.** Each voice in `voice_references` stores its own `room_reverb`
 (always written; new voices default to `OFF`; v4 projects' project-wide value was copied onto every
 voice). In concat and realtime playback, each segment's narration goes into the room of the voice
-that spoke it (`VoiceSpatialPolicy.room_reverb_for_voice_index`):
-
-| Voice-select mode | Room used for a segment |
-|---|---|
-| User-defined | Its phrase group's `voice_index`, clamped like generation (`-1` = voice 0) |
-| Disabled | Voice 0's |
-| Auto-advance | Voice 0's (stored audio doesn't record which voice generated it) |
+that spoke it (`VoiceSpatialPolicy.room_reverb_for_voice_index`): its phrase group's
+`voice_index`, clamped like generation (`-1` = voice 0, a stale too-large index = the last voice).
 
 There is no reverb with no voices, or while a Pocket predefined voice is in use. The lookup is
 independent of the selected model's voice-clone support, so existing audio keeps its rooms. If a
 line's `voice_index` changes after its audio was generated, the new voice's room is used (as for
 pan). Voice chat uses voice 0's room (`Project.get_voice_chat_room_reverb()`): chat lines have no
-assigned voice, and auto-advance rotates voices per chunk. Each voice's preset is set in its
+assigned voice. Each voice's preset is set in its
 Voice submenu (select the voice sample, then Effects > Room reverb).
 
 **Several rooms in one run** (`VoiceSpatialProcessor`): one room per preset, made the first time a
@@ -68,8 +63,8 @@ chat stays centered.
 | `LATE_W100` | `late_w100` | late tail, full width | Wide |
 | `ALL_W100` | `all_w100` | early reflections and late tail, full width | Wider |
 
-Ids name the processing, like `RoomReverb`'s. With anything but `MONO` and reverb on for any voice
-that can be heard (any voice in user-defined mode, otherwise voice 0), the whole export is stereo,
+Ids name the processing, like `RoomReverb`'s. With anything but `MONO` and reverb on for any voice, the
+whole export is stereo,
 including dry voices' segments (centered): the reverb processor outputs `(n, 2)`, the noise bed adds the same bed to both channels
 (so room tone stays centered), and the ffmpeg stream is opened with `-ac 2`. With reverb off the
 spread setting does nothing. Stereo output is requested by active stereo reverb or by an
@@ -103,13 +98,8 @@ prompts for -100 to 100, stored as hundredths, and displays `Center`, `Left 30`,
 Direct narration uses center-unity equal-power panning: `theta = (pan + 1) * pi/4`,
 `L = sqrt(2)*cos(theta)`, `R = sqrt(2)*sin(theta)`. Center therefore preserves the existing
 unit gain in both channels and the existing dry/reverb balance.
-`VoiceSpatialPolicy.pan_for_voice_index` picks the speaking voice like the room lookup:
-
-| Voice-select mode | Stereo position used for a segment |
-|---|---|
-| User-defined | Its phrase group's `voice_index`'s, clamped like generation (`-1` = voice 0) |
-| Disabled | Voice 0's |
-| Auto-advance | Centered: saved phrase metadata does not identify the voice actually used, and guessing from render order would make export and realtime disagree (the menu item notes "No effect") |
+`VoiceSpatialPolicy.pan_for_voice_index` picks the speaking voice like the room lookup: the
+phrase group's `voice_index`'s position, clamped like generation (`-1` = voice 0).
 
 Like rooms, positions are independent of the selected model's voice-clone support, and all centered
 while a Pocket predefined voice is in use.
@@ -121,7 +111,7 @@ Appended break effects remain dry and centered; room tone remains centered. At e
 reflections can still be heard in the ear receiving no direct speech. Position-dependent room
 responses/early reflections are deliberately not modeled.
 
-The shared policy requests stereo if any voice that can be heard (by the table above) is off-center,
+The shared policy requests stereo if any voice is off-center,
 or if stereo reverb is active. This is independent of the selected output range; channels never switch per segment. Stereo output
 does not itself turn on reverb spread. Actual mono
 playback after device fallback retains original mono speech/reverb, rather than folding down pan

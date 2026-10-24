@@ -157,7 +157,6 @@ def _start_impl(
     # normally within one paragraph, there may be no phrase-level break reason to
     # clear rolling continuation state, so force a fresh context at run start.
     Tts.clear_continuation()
-    Tts.reset_voice_selection_index()
 
     # Outer loop
 
@@ -233,7 +232,7 @@ def _start_impl(
         printt()
         GenerateUtil.print_batch_heading(
             indices=[index],
-            voice_index=GenerateUtil.get_user_defined_voice_index(
+            voice_index=GenerateUtil.get_line_voice_index(
                 state.project, phrase_groups, index
             ),
         )

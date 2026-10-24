@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, 
 
 from tts_audiobook_tool.app_support import path_norm
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
-from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomReverb, RoomReverbStereo, RoomTone, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomReverb, RoomReverbStereo, RoomTone, SegmentationStrategy, StreamEndCallback, Strictness
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -127,8 +127,7 @@ class Project(BaseModel):
     def get_voice_chat_room_reverb(self) -> RoomReverb:
         """The room reverb applied to voice chat output: voice 0's setting.
 
-        Chat lines have no assigned voice (and auto-advance rotates per
-        chunk), so chat uses one room. Off with no voices (not normally
+        Chat lines have no assigned voice, so chat uses one room. Off with no voices (not normally
         possible). Concat and realtime playback instead use
         each segment's voice (`VoiceSpatialPolicy.room_reverb_for_voice_index`).
         """
@@ -232,7 +231,6 @@ class Project(BaseModel):
 
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
     chapter_mode: SectionMarkerMode = list(SectionMarkerMode)[0]
-    voice_select_mode: VoiceSelectMode = VoiceSelectMode.get_default()
 
     # Placeholder attribute used when no TTS model exists
     none_voice_file_name: str = ""

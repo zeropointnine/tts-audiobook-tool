@@ -597,12 +597,10 @@ def test_do_generate_aborts_when_queue_save_fails(monkeypatch) -> None:
 @pytest.mark.parametrize("selected", [None, {2}])
 @pytest.mark.parametrize("valid", [True, False])
 def test_generation_preflight_scopes_actual_submitted_lines(monkeypatch, selected, valid) -> None:
-    from tts_audiobook_tool.app_types import VoiceSelectMode
     from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 
     state, calls = make_empty_queue_env(monkeypatch, num_groups=4, generated_indices={0, 3})
     state.project.phrase_groups = [make_phrase_group(index) for index in (0, 1, 9, 0)]
-    state.project.voice_select_mode = VoiceSelectMode.USER_DEFINED
     monkeypatch.setattr(
         generate_menu_module.ProjectVoiceUtil, "get_voice_values",
         lambda _project, _tts_type: ["first.flac", "second.flac", "third.flac"],

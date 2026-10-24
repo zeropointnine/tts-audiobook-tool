@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 from tts_audiobook_tool import app_support, ask, text_util
-from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_support import app_hint_util, app_memory
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.model_manager import ModelManager
@@ -57,9 +57,9 @@ class SubBatch:
     One model-inference call's worth of items, all of which use a single
     voice sample.
 
-    `voice_selection_index` is None when the existing voice logic inside
-    `GenerateUtil.generate()` applies (auto-advance rotation, disabled mode,
-    or a single-item user-defined selection).
+    `voice_selection_index` is None when `GenerateUtil.generate()` resolves
+    the voice itself (a single line's assignment, or a model without voice
+    samples).
     """
     voice_selection_index: int | None
     items: tuple[tuple[int, int], ...]
@@ -163,15 +163,14 @@ class GenerateUtil:
         # "batch of batches"); each sub-batch is sent to the model as a single
         # call that can use only one voice sample.
         #
-        # For user-defined voice selections, lines are grouped into per-voice
-        # sub-batches (see make_multi_voice_rounds). Otherwise the queue
-        # degenerates to the single-voice shape: a flat, optionally
-        # word-count-bucketed list of items chunked into sub-batches of
-        # batch_size, and the voice is resolved by the existing logic inside
-        # generate() (auto-advance rotation or disabled mode).
+        # When batching with voice samples, lines are grouped into per-voice
+        # sub-batches by their assigned voice (see make_multi_voice_rounds).
+        # Otherwise the queue degenerates to the single-voice shape: a flat,
+        # optionally word-count-bucketed list of items chunked into
+        # sub-batches of batch_size, and generate() resolves each voice.
         is_cjk = ProjectVoiceUtil.is_language_cjk(state.project)
         voice_of_index: dict[int, int] | None = None
-        if batch_size > 1 and project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
+        if batch_size > 1:
             voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
             if voice_values:
                 voice_of_index = effective_voice_indices(
@@ -216,7 +215,6 @@ class GenerateUtil:
         # Audiobook generation is a top-level generation run. Start from a
         # fresh rolling-continuation context, independent of any prior run.
         Tts.clear_continuation()
-        Tts.reset_voice_selection_index()
 
         # Loop through the queue of rounds. Retries (re-added items) are
         # collected and processed at the head of the queue, as their own
@@ -289,7 +287,7 @@ class GenerateUtil:
             )
             heading_voice_index = sub.voice_selection_index
             if heading_voice_index is None and len(indices) == 1:
-                heading_voice_index = GenerateUtil.get_user_defined_voice_index(
+                heading_voice_index = GenerateUtil.get_line_voice_index(
                     project, project.phrase_groups, indices[0]
                 )
             GenerateUtil.print_batch_heading(
@@ -774,8 +772,8 @@ class GenerateUtil:
             Use a one-element list to not generate in batch mode
         param voice_selection_index:
             When set, all items are generated with this voice sample (the
-            batch must be voice-homogeneous). When None, the voice is
-            resolved from the project's voice selection mode.
+            batch must be voice-homogeneous). When None, a single item uses
+            its line's assigned voice.
         """
 
         if len(indices) == 0:
@@ -795,30 +793,20 @@ class GenerateUtil:
             result = "No active TTS model"
         else:
             voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
-            has_voice_values = bool(voice_values)
-            is_user_defined_voice_mode = project.voice_select_mode == VoiceSelectMode.USER_DEFINED
-            use_custom_voice_index = (
-                len(indices) == 1
-                and is_user_defined_voice_mode
-                and has_voice_values
-            )
             if voice_selection_index is None:
-                if len(indices) > 1 and is_user_defined_voice_mode and has_voice_values:
+                if not voice_values:
+                    voice_selection_index = 0
+                elif len(indices) > 1:
                     raise ValueError(
-                        "Logic error - A user-defined multi-item batch must be "
-                        "split into per-voice sub-batches with explicit "
+                        "Logic error - A multi-item batch must be split into "
+                        "per-voice sub-batches with explicit "
                         "voice_selection_index values (see make_multi_voice_rounds)"
                     )
-                if project.voice_select_mode == VoiceSelectMode.DISABLED:
-                    voice_selection_index = 0
-                elif use_custom_voice_index:
-                    requested_voice_index = phrase_groups[indices[0]].voice_index
+                else:
                     # Silently clamp invalid (presumably stale) index to the nearest valid voice index
                     voice_selection_index = ProjectVoiceUtil.get_effective_voice_index(
-                        requested_voice_index, len(voice_values),
+                        phrase_groups[indices[0]].voice_index, len(voice_values),
                     )
-                else:
-                    voice_selection_index = Tts.get_next_voice_selection_index()
             voice_tag = Tts.get_voice_tag_for_selection_index(project, voice_selection_index)
             result = Tts.generate_using_project(
                 project,
@@ -981,17 +969,13 @@ class GenerateUtil:
         return "", sound_path
 
     @staticmethod
-    def get_user_defined_voice_index(
+    def get_line_voice_index(
         project: Project, phrase_groups: list[PhraseGroup], index: int
     ) -> int | None:
         """
-        The voice sample index a single line will be generated with when the
-        project uses user-defined voice selections (same clamping as
-        `generate()`), or None otherwise (disabled mode, auto-advance, or no
-        voice samples), where the voice is not a fixed per-line property.
+        The voice sample index a single line will be generated with (same
+        clamping as `generate()`), or None for a model without voice samples.
         """
-        if project.voice_select_mode != VoiceSelectMode.USER_DEFINED:
-            return None
         voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
         if not voice_values:
             return None
@@ -1201,7 +1185,7 @@ def effective_voice_indices(
 ) -> dict[int, int]:
     """
     Maps each item index to the voice sample index that `GenerateUtil.generate`
-    will actually use for that line, given a user-defined voice selection mode.
+    will actually use for that line.
 
     A per-line selection of -1 (no explicit assignment) or any stale
     out-of-range value is clamped to the nearest valid voice sample index.
@@ -1218,8 +1202,8 @@ def make_single_voice_rounds(
     """
     Wraps a flat (possibly word-count-bucketed) queue into a list of rounds,
     each holding a single voice-less sub-batch of up to `batch_size` items.
-    The voice is resolved by the existing logic inside
-    `GenerateUtil.generate()` (auto-advance rotation or disabled mode).
+    The voice is resolved inside `GenerateUtil.generate()` (the single line's
+    assignment, or voice 1 for a model without voice samples).
     """
     return [
         [SubBatch(voice_selection_index=None, items=tuple(items[i:i + batch_size]))]
@@ -1234,7 +1218,7 @@ def make_multi_voice_rounds(
         sort_by_words: bool,
 ) -> list[list[SubBatch]]:
     """
-    Builds a queue of rounds for a project with user-defined voice selections.
+    Builds a queue of rounds for a batched project with voice samples.
     Each round is a group of per-voice sub-batches ("batches of batches");
     each sub-batch holds at most `batch_size` items that all share one voice
     sample, so each can be sent to the model as a single call.
@@ -1298,8 +1282,8 @@ def make_retry_round(
 ) -> list[SubBatch]:
     """
     Builds a single round from pending retries (re-added items). Items keep
-    the order they were produced in and are grouped by voice sample (when the
-    project uses user-defined voice selections); no word-count re-bucketing is
+    the order they were produced in and are grouped by voice sample (when
+    `voice_of_index` is set); no word-count re-bucketing is
     done, matching the single-speaker behavior of processing re-adds promptly.
     """
     if voice_of_index is None:

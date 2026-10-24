@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SectionMarkerMode, SegmentationStrategy, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SectionMarkerMode, SegmentationStrategy, SttVariant
 from tts_audiobook_tool.app_types.book_serialization import book_to_project_text_json_dict
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.voice import Voice
@@ -658,7 +658,6 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir)
-            project.voice_select_mode = VoiceSelectMode.DISABLED
             ProjectTextIOUtil.set_phrase_groups_and_save(
                 project,
                 phrase_groups=phrase_groups,
@@ -668,7 +667,6 @@ class TestProjectBookIntegration(unittest.TestCase):
                 dialog_segmentation=True,
                 raw_text=raw_text,
             )
-            self.assertEqual(project.voice_select_mode, VoiceSelectMode.DISABLED)
 
             with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 reloaded = ProjectUtil.load_using_dir_path(project_dir)

@@ -600,7 +600,6 @@ def _run_tts_preview_command(
         # below checks the type this command will actually use.
         state = _make_worker_state(command)
         Tts.clear_continuation()
-        Tts.reset_voice_selection_index()
         watch_inference = _should_watch_preview_inference()
         # Preview deliberately skips full warm-up (STT/YAMNet), but should
         # still explain a cold server model before the speech request.
@@ -895,8 +894,6 @@ def _model_worker_main(
                 from tts_audiobook_tool.tts import Tts
 
                 Tts.clear_continuation()
-                if command.reset_voice_selection:
-                    Tts.reset_voice_selection_index()
                 model = Tts.get_instance_if_exists()
                 if model is not None:
                     model.clear_stream_state()
@@ -1678,7 +1675,6 @@ class ModelWorker:
     def reset_chat_session_blocking(
         cls,
         *,
-        reset_voice_selection: bool = True,
         console_handler: ConsoleEventHandler | None = None,
     ) -> str:
         error = cls._start_with_console_handler(console_handler)
@@ -1692,9 +1688,7 @@ class ModelWorker:
             if cls._command_queue is None:
                 cls._active_operation_id = None
                 return "Model worker is unavailable"
-            cls._command_queue.put(
-                ResetChatSessionCommand(operation_id, reset_voice_selection)
-            )
+            cls._command_queue.put(ResetChatSessionCommand(operation_id))
         t0 = time.monotonic()
         result = cls._wait_for_blocking_result_with_handler(
             operation_id, ChatSessionReset, console_handler

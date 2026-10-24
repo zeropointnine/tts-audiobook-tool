@@ -5,14 +5,13 @@ from enum import Enum
 from importlib import metadata
 from importlib import util
 import os
-import threading
 from typing import TYPE_CHECKING, Callable, cast
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsSnapshot
     from tts_audiobook_tool.project import Project
 
-from tts_audiobook_tool.app_types import DeviceType, ReadinessIssue, StreamChunkCallback, StreamEndCallback, VoiceSelectMode
+from tts_audiobook_tool.app_types import DeviceType, ReadinessIssue, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_types.phrase import Reason
 
 from tts_audiobook_tool.tts_models.breeze_base_model import BreezeBaseModel
@@ -134,30 +133,6 @@ class Tts:
 
     _model_params: dict = {}
     _force_cpu: bool = False
-    _voice_auto_advance_counter: int = 0
-    _voice_auto_advance_lock = threading.Lock()
-
-    @staticmethod
-    def get_next_voice_selection_index() -> int:
-        with Tts._voice_auto_advance_lock:
-            index = Tts._voice_auto_advance_counter
-            Tts._voice_auto_advance_counter += 1
-        return index
-
-    @staticmethod
-    def reset_voice_selection_index() -> None:
-        with Tts._voice_auto_advance_lock:
-            Tts._voice_auto_advance_counter = 0
-
-    @staticmethod
-    def get_voice_value_count(project: Project) -> int:
-        """Number of configured voice samples for this project's selection."""
-        model_type = project.get_tts_model_type()
-        if REGISTRY.voice_binding(model_type.id) is None:
-            return 0
-
-        from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-        return len(ProjectVoiceUtil.get_voice_values(project, model_type))
 
     @staticmethod
     def get_voice_tag_for_selection_index(project: Project, voice_selection_index: int) -> str:
@@ -672,18 +647,9 @@ class Tts:
             return str(exc)
         instance = Tts.get_instance()
         if voice_selection_index is None:
-            # Rotate voices only in auto-advance mode with more than one
-            # voice sample configured; every other condition (including
-            # single-voice auto-advance, e.g. LLM chat synthesis) always
-            # uses the first voice when the caller does not pass an
-            # explicit index.
-            if (
-                project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE
-                and Tts.get_voice_value_count(project) > 1
-            ):
-                voice_selection_index = Tts.get_next_voice_selection_index()
-            else:
-                voice_selection_index = 0
+            # Callers without a per-line assignment (e.g. LLM chat synthesis)
+            # use the first voice.
+            voice_selection_index = 0
         L.i(
             f"Tts.generate_using_project dispatch: type={Tts._type.value.id} "
             f"instance={type(instance).__name__} prompts={len(prompts)} "

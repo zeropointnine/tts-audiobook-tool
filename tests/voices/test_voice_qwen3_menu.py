@@ -148,8 +148,6 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
     if sample_count < 9:
         expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
     # Speakers are per voice (voice submenu), not Voices menu items
-    if sample_count > 1:
-        expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     expected.append(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
     assert len(rendered_labels) == len(expected)

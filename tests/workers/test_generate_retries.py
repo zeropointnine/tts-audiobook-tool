@@ -3,10 +3,10 @@ from typing import cast
 from unittest.mock import MagicMock, call, patch
 
 from tts_audiobook_tool import generate_util
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from generate_files_test_support import StubValidationResult, generate_files_mock_stack
 
@@ -30,7 +30,7 @@ def test_clean_quick_generation_retries_then_omits_metrics_summary(monkeypatch) 
     sound_segments = MagicMock()
     sound_segments.get_word_error_counts_in_generate_range.return_value = {}
     project = SimpleNamespace(
-        voice_select_mode=VoiceSelectMode.DISABLED,
+        get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
         max_retries=2,
         phrase_groups=[phrase_group],
         sound_segments=sound_segments,
@@ -81,7 +81,7 @@ def test_staged_generation_leaves_project_segments_and_range_alone(monkeypatch) 
     sound_segments = MagicMock()
     sound_segments.get_word_error_counts_in_generate_range.return_value = {}
     project = SimpleNamespace(
-        voice_select_mode=VoiceSelectMode.DISABLED,
+        get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
         max_retries=1,
         phrase_groups=[phrase_group],
         sound_segments=sound_segments,
@@ -122,7 +122,7 @@ def test_failed_quick_generation_keeps_metrics_summary(monkeypatch) -> None:
     sound_segments = MagicMock()
     sound_segments.get_word_error_counts_in_generate_range.return_value = {}
     project = SimpleNamespace(
-        voice_select_mode=VoiceSelectMode.DISABLED,
+        get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
         max_retries=0,
         phrase_groups=[phrase_group],
         sound_segments=sound_segments,

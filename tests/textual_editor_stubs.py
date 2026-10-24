@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
-from tts_audiobook_tool.app_types import Book, BookSection, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -95,7 +95,6 @@ class StubProject:
     sound_segments_path: str = "/project/segments"
     generate_range_string: str = "none"
     gen_auto_concat: bool = False
-    voice_select_mode: VoiceSelectMode = VoiceSelectMode.AUTO_ADVANCE
     save_calls: list[str] = field(default_factory=list)
     save_error: str = ""
     book: Book | None = None
