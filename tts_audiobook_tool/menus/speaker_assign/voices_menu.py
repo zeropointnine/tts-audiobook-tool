@@ -205,9 +205,6 @@ def make_apply_preview(
                      f"Voices already set on these lines are replaced.")
     else:
         lines.append("The dialog lines already have these voices.")
-    if 0 in by_voice:
-        lines.append(f"{COL_ERROR}Note: dialog set to Voice 1 looks like narration afterwards, "
-                     f"so step 2 won't see it again.")
     if plan.skipped:
         lines.append(f"{COL_DIM}{plan.skipped:,} {make_noun('passage', 'passages', plan.skipped)} skipped: "
                      f"the project text changed after they were assigned (re-run step 2).")

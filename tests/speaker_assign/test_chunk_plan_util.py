@@ -39,7 +39,7 @@ def test_oversized_pieces_split_away_from_conversations() -> None:
     chunks = ChunkPlanUtil.plan_chunks(book, chunk_words=300)
     groups = book.flat_phrase_groups
     for _, end in chunks[:-1]:
-        assert not (groups[end - 1].voice_index >= 1 and groups[end].voice_index >= 1)
+        assert not (groups[end - 1].is_dialog and groups[end].is_dialog)
 
 
 def test_empty_book_has_no_chunks() -> None:

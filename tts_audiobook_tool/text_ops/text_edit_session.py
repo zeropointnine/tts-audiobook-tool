@@ -276,10 +276,12 @@ class TextEditSession:
                 left_group = PhraseGroup(
                     phrases=phrase_group.phrases[:boundary],
                     voice_index=phrase_group.voice_index,
+                    is_dialog=phrase_group.is_dialog,
                 )
                 right_group = PhraseGroup(
                     phrases=phrase_group.phrases[boundary:],
                     voice_index=phrase_group.voice_index,
+                    is_dialog=phrase_group.is_dialog,
                 )
                 right_item = StagedPhraseGroup(
                     item_id=self.take_item_id(),
@@ -312,11 +314,11 @@ class TextEditSession:
         The edited text is passed through ``PhraseSegmenter.text_to_phrases``,
         the same phrase-building layer automatic import uses, and the resulting
         phrases are wrapped in a single new ``PhraseGroup``. This re-creates
-        only the associated phrase group; its structure (voice_index) and the
-        original group's trailing whitespace are preserved.
+        only the associated phrase group; its structure (voice_index, is_dialog)
+        and the original group's trailing whitespace are preserved.
 
         Preserves:
-        - voice_index of the PhraseGroup.
+        - voice_index and is_dialog of the PhraseGroup.
         - ``SECTION_BREAK`` and ``PHRASE_QUOTE_END`` on the original group's
           last phrase, because these semantic reasons cannot be recovered from
           the isolated spot-edit text.
@@ -375,6 +377,7 @@ class TextEditSession:
                 new_group = PhraseGroup(
                     phrases=phrases,
                     voice_index=voice_index,
+                    is_dialog=original_group.is_dialog,
                 )
 
                 # A change which only affected trailing whitespace re-creates

@@ -9,6 +9,10 @@ from tests.speaker_assign.speaker_assign_test_support import DIALOG, NARRATION, 
 
 ROSTER_IDS = {"ALICE", "BOB", "CAROL"}
 
+# The voice given to the fixture's dialog lines (as by the import's opt-in
+# "assign dialog to voice sample 2"); line 6 has voice 2 instead
+DIALOG_VOICE = 1
+
 
 def make_fixture():
     # Chapter 1: lines 0-6; ALICE's passage spans lines 1-2.
@@ -21,13 +25,16 @@ def make_fixture():
             ("“Hi.” ", Reason.PARAGRAPH, DIALOG),
             ("“Who?” ", Reason.PARAGRAPH, DIALOG),
             ("“Exit,” ", Reason.PARAGRAPH, DIALOG),
-            ("“Quiet.” ", Reason.PARAGRAPH, 2),
+            ("“Quiet.” ", Reason.PARAGRAPH, DIALOG),
         ],
         [
             ("Later. ", Reason.SENTENCE, NARRATION),
             ("“Bye.” ", Reason.PARAGRAPH, DIALOG),
         ],
     )
+    for line in book.dialog_line_indices():
+        book.flat_phrase_groups[line].voice_index = DIALOG_VOICE
+    book.flat_phrase_groups[6].voice_index = 2
     chapter_1 = RangeAttribution(0, 7, UtteranceUtil.range_text_hash(book, 0, 7), (
         UtteranceAttribution((1, 2), "ALICE"),
         UtteranceAttribution((3,), "BOB"),
@@ -69,9 +76,19 @@ def test_apply_changes_only_differing_lines_and_restore_reverts() -> None:
 
     previous = plan.apply(book)
     groups = book.flat_phrase_groups
-    assert previous == {1: DIALOG, 2: DIALOG}
-    assert [groups[line].voice_index for line in (1, 2, 3, 6)] == [2, 2, DIALOG, 2]
+    assert previous == {1: DIALOG_VOICE, 2: DIALOG_VOICE}
+    assert [groups[line].voice_index for line in (1, 2, 3, 6)] == [2, 2, DIALOG_VOICE, 2]
     assert plan.changed_lines(book) == []
 
     VoiceApplyPlan.restore(book, previous)
-    assert [groups[line].voice_index for line in (1, 2)] == [DIALOG, DIALOG]
+    assert [groups[line].voice_index for line in (1, 2)] == [DIALOG_VOICE, DIALOG_VOICE]
+
+
+def test_dialog_given_voice_1_is_still_dialog() -> None:
+    # Dialog status is independent of the voice: dialog mapped to the first
+    # voice (index 0, the narrator's) is still found as dialog afterwards.
+    book, attributions = make_fixture()
+    plan = VoiceApplyPlan.make(book, ROSTER_IDS, attributions, VoiceMapFile({"ALICE": 0}))
+    plan.apply(book)
+    assert book.flat_phrase_groups[1].voice_index == 0
+    assert UtteranceUtil.find_utterances(book, 0, 7)[0].lines == (1, 2)

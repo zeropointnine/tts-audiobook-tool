@@ -395,7 +395,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(result.markers, {1})
         self.assertEqual([len(section.phrase_groups) for section in result.book.sections], [2])
 
-    def test_project_load_migrates_phrase_groups_v1_project_text_to_book_v2(self):
+    def test_project_load_migrates_phrase_groups_v1_project_text_to_current_book_format(self):
         phrase_groups = [self.make_phrase_group("One."), self.make_phrase_group("Two.")]
         text_payload = {
             "format": "phrase_groups.v1",
@@ -417,7 +417,7 @@ class TestProjectBookIntegration(unittest.TestCase):
                 migrated_project_payload = json.load(file)
 
         self.assertIsInstance(result, Project)
-        self.assertEqual(migrated_payload["format"], "book.v2")
+        self.assertEqual(migrated_payload["format"], "book.v3")
         self.assertEqual(migrated_payload["book"]["text_source_kind"], "legacy_flat")
         self.assertEqual(len(migrated_payload["book"]["sections"]), 1)
         self.assertEqual(migrated_project_payload["markers"], [1])
@@ -427,7 +427,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertNotIn("applied_max_words", migrated_project_payload)
         self.assertNotIn("applied_dialog_segmentation", migrated_project_payload)
 
-    def test_project_load_removes_stale_applied_fields_from_project_json_with_book_v2_text(self):
+    def test_project_load_removes_stale_applied_fields_from_project_json_with_current_book_text(self):
         book = Book(
             title="Already Book",
             text_source_kind="epub",
@@ -455,7 +455,7 @@ class TestProjectBookIntegration(unittest.TestCase):
                 text_project_payload = json.load(file)
 
         self.assertIsInstance(result, Project)
-        self.assertEqual(text_project_payload["format"], "book.v2")
+        self.assertEqual(text_project_payload["format"], "book.v3")
         self.assertIn("markers", migrated_project_payload)
         self.assertNotIn("chapter_indices", migrated_project_payload)
         self.assertNotIn("applied_language_code", migrated_project_payload)
@@ -463,7 +463,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertNotIn("applied_max_words", migrated_project_payload)
         self.assertNotIn("applied_dialog_segmentation", migrated_project_payload)
 
-    def test_project_load_migrates_bare_list_project_text_to_book_v2(self):
+    def test_project_load_migrates_bare_list_project_text_to_current_book_format(self):
         phrase_groups = [self.make_phrase_group("Bare list.")]
         text_payload = self.legacy_phrase_groups_json(phrase_groups)
 
@@ -480,12 +480,12 @@ class TestProjectBookIntegration(unittest.TestCase):
                 migrated_payload = json.load(file)
 
         self.assertIsInstance(result, Project)
-        self.assertEqual(migrated_payload["format"], "book.v2")
+        self.assertEqual(migrated_payload["format"], "book.v3")
         group_payload = migrated_payload["book"]["sections"][0]["phrase_groups"][0]
         self.assertEqual(group_payload["voice_index"], -1)
         self.assertEqual(group_payload["phrases"][0]["text"], "Bare list.")
 
-    def test_project_load_migrates_book_v1_project_text_to_book_v2(self):
+    def test_project_load_migrates_book_v1_project_text_to_current_book_format(self):
         book = Book(
             title="Already Book",
             text_source_kind="epub",
@@ -512,11 +512,11 @@ class TestProjectBookIntegration(unittest.TestCase):
                 payload = json.load(file)
 
         self.assertIsInstance(result, Project)
-        self.assertEqual(payload["format"], "book.v2")
+        self.assertEqual(payload["format"], "book.v3")
         self.assertEqual(payload["book"]["title"], "Already Book")
         self.assertEqual(payload["book"]["sections"][0]["phrase_groups"][0]["voice_index"], -1)
 
-    def test_project_save_writes_book_v2_project_text(self):
+    def test_project_save_writes_current_book_format_project_text(self):
         book = Book(
             title="Saved Book",
             text_source_kind="epub",
@@ -545,7 +545,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
                 project_payload = json.load(file)
 
-        self.assertEqual(payload["format"], "book.v2")
+        self.assertEqual(payload["format"], "book.v3")
         self.assertEqual(payload["book"]["title"], "Saved Book")
         self.assertEqual(payload["book"]["sections"][1]["title"], "Chapter 2")
         self.assertEqual(payload["book"]["segmentation_settings"]["language_code"], "en")
@@ -641,11 +641,12 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.book.segmentation_settings.dialog_segmentation, True)
         self.assertEqual(payload["book"]["segmentation_settings"]["dialog_segmentation"], True)
         self.assertEqual(project.markers, set())
-        self.assertEqual(payload["format"], "book.v2")
+        self.assertEqual(payload["format"], "book.v3")
         self.assertEqual(payload["book"]["title"], "Manual Title")
         self.assertEqual(payload["book"]["text_source_kind"], "manual")
 
-    def test_dialog_voice_preassignments_survive_project_save_and_reload(self):
+    def test_dialog_flags_survive_project_save_and_reload(self):
+        # Import-time dialog segmentation flags dialog without assigning it a voice
         raw_text = 'He said "Hello." Then left.'
         phrase_groups = PhraseGrouper.text_to_groups(
             raw_text,
@@ -673,11 +674,43 @@ class TestProjectBookIntegration(unittest.TestCase):
                 reloaded = ProjectUtil.load_using_dir_path(project_dir)
 
         self.assertIsInstance(reloaded, Project)
-        self.assertEqual(
-            [group.voice_index for group in reloaded.phrase_groups],
-            [-1, 1, -1],
-        )
+        assert isinstance(reloaded, Project)
+        self.assertEqual([group.is_dialog for group in reloaded.phrase_groups], [False, True, False])
+        self.assertEqual([group.voice_index for group in reloaded.phrase_groups], [-1, -1, -1])
         self.assertTrue(reloaded.book.segmentation_settings.dialog_segmentation)
+
+    def test_project_load_migrates_book_v2_dialog_voices_to_dialog_flags(self):
+        # A v2 book marked dialog only by voice index (>= 1); loading rewrites
+        # the file in the current format with explicit flags, keeping voices.
+        book = Book(
+            segmentation_settings=BookSegmentationSettings(dialog_segmentation=True),
+            sections=[BookSection(phrase_groups=[
+                self.make_phrase_group("He said "),
+                PhraseGroup([Phrase('"Hello." ', Reason.PHRASE)], voice_index=1),
+                self.make_phrase_group("Then left."),
+            ])],
+        )
+
+        with tempfile.TemporaryDirectory() as project_dir:
+            self.write_minimal_project_json(project_dir)
+            text_path = os.path.join(project_dir, PROJECT_TEXT_FILE_NAME)
+            payload = book_to_project_text_json_dict(book)
+            payload["format"] = "book.v2"
+            with open(text_path, "w", encoding="utf-8") as file:
+                json.dump(payload, file)
+
+            with patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+                result = ProjectUtil.load_using_dir_path(project_dir)
+
+            with open(text_path, "r", encoding="utf-8") as file:
+                payload = json.load(file)
+
+        assert isinstance(result, Project)
+        self.assertEqual([group.is_dialog for group in result.phrase_groups], [False, True, False])
+        self.assertEqual(payload["format"], "book.v3")
+        groups_payload = payload["book"]["sections"][0]["phrase_groups"]
+        self.assertEqual([group.get("is_dialog", False) for group in groups_payload], [False, True, False])
+        self.assertEqual([group["voice_index"] for group in groups_payload], [-1, 1, -1])
 
     def test_set_phrase_groups_and_save_clears_markers_and_keeps_substitutions_for_plain_text_import(self):
         with tempfile.TemporaryDirectory() as project_dir:

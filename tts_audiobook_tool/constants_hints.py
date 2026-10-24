@@ -222,14 +222,16 @@ then refresh the server listing."""
 )
 
 HINT_DIALOG_VOICE = Hint(
-    "dialog_voice",
+    "dialog_lines",
     "Dialog voices",
 """Because dialog segmentation was enabled for this import,
-detected dialog lines have been assigned to voice 2.
+detected dialog lines have been marked as dialog.
 
-To generate dialog using a different voice from the narrator/default:
-(1) Make sure to add a second voice clone and
-(2) Set Voice selection mode to User-defined."""
+To generate dialog using voices other than the narrator's:
+(1) Add more voice samples and set Voice selection mode to User-defined
+(2) Assign voices to the dialog lines: in Voices > Edit voice/line selections
+    (press [D] to select all dialog lines), or per character using
+    Voices > Assign character voices using LLM."""
 )
 
 HINT_LLM_API_KEY_REMOVED = Hint(

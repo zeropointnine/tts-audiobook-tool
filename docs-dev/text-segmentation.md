@@ -8,7 +8,7 @@ The system has three principal layers:
 
 1. `PhraseSegmenter` discovers sentence, phrase, paragraph, and length boundaries and produces `Phrase` objects.
 2. `PhraseGrouper` combines phrases into `PhraseGroup` objects according to the selected segmentation strategy. A phrase group is the atomic TTS prompt.
-3. When enabled, `DialogSegmenter` subdivides those groups at accepted dialog boundaries and assigns the dialog voice.
+3. When enabled, `DialogSegmenter` subdivides those groups at accepted dialog boundaries and flags the dialog groups (`is_dialog`).
 
 The strict text-preservation rule applies to sentence discovery:
 
@@ -32,7 +32,7 @@ source text
   → normalize ornamental separators and repeated space breaks
   → group phrases according to the selected strategy
   → enforce max_words at group boundaries
-  → optional dialog segmentation and voice assignment
+  → optional dialog segmentation (dialog flagging)
   → final ornamental-group normalization
   → PhraseGroup list used as TTS prompts
 ```
@@ -248,7 +248,7 @@ The responsibilities are deliberately separate:
 | Find grammatical sentences inside quotes | Yes | No |
 | Decide whether a quote is probable dialog | No | Yes |
 | Split narration from accepted dialog at quote edges | No | Yes |
-| Assign dialog voice sample 2 | No | Yes |
+| Flag dialog groups (`is_dialog`) | No | Yes |
 | Detect attribution continuations | Only enough to avoid a premature final sentence boundary | Yes |
 | Apply `PHRASE_QUOTE_END` | No | Yes |
 | Recombine existing groups | Depending on grouping strategy | Never |
@@ -262,9 +262,9 @@ For:
 using the `SENTENCE` strategy with dialog segmentation enabled, the final groups are conceptually:
 
 ```text
-"One?       dialog voice; SENTENCE
-Two!"       dialog voice; PHRASE_QUOTE_END
-she said.   narration voice; SENTENCE
+"One?       dialog; SENTENCE
+Two!"       dialog; PHRASE_QUOTE_END
+she said.   narration; SENTENCE
 ```
 
 For `SENTENCE_PLUS`, `MULTI_SENTENCE`, or `MAX_LEN`, the first two quoted sentence phrases may share a group before the dialog pass because those strategies intentionally create larger TTS prompts. The dialog pass still prevents accepted dialog and narration from sharing a final group.
@@ -275,7 +275,7 @@ Quote pairing is shared, but quote interpretation is not. Dialog segmentation cu
 
 Whether a quote crosses existing phrase groups is not evidence that it is dialog. This prevents the new quote-interior sentence boundaries—or a different grouping strategy—from changing dialog classification accidentally.
 
-Dialog pairing remains physical-line scoped, while sentence segmentation can inspect a broader set of balanced quote styles. Expanding dialog voice assignment to guillemets, single quotes, or other language-specific conventions is a separate policy decision.
+Dialog pairing remains physical-line scoped, while sentence segmentation can inspect a broader set of balanced quote styles. Expanding dialog detection to guillemets, single quotes, or other language-specific conventions is a separate policy decision.
 
 ## Important invariants
 
@@ -298,12 +298,12 @@ Changes to segmentation should preserve these properties:
 | `tts_audiobook_tool/text_ops/quote_spans.py` | Shared balanced quote-span detection |
 | `tts_audiobook_tool/text_ops/phrase_segmenter.py` | Sentence offsets, quote-interior boundaries, phrases, reasons, and structural cleanup |
 | `tts_audiobook_tool/text_ops/phrase_grouper.py` | Strategy-based prompt grouping and max-word enforcement |
-| `tts_audiobook_tool/text_ops/dialog_segmenter.py` | Optional dialog qualification, quote-edge splitting, voice assignment, and attribution reason |
+| `tts_audiobook_tool/text_ops/dialog_segmenter.py` | Optional dialog qualification, quote-edge splitting, dialog flagging, and attribution reason |
 | `tts_audiobook_tool/app_types/phrase.py` | `Phrase`, `PhraseGroup`, and ordered `Reason` definitions |
 | `tests/text/test_quote_spans.py` | Quote-pairing behavior |
 | `tests/text/test_phrase_segmenter.py` | Sentence and phrase boundary behavior and source preservation |
 | `tests/text/test_phrase_grouper.py` | Grouping strategies and end-to-end dialog composition |
-| `tests/text/test_dialog_segmenter.py` | Dialog qualification, splitting, reasons, and voice assignment |
+| `tests/text/test_dialog_segmenter.py` | Dialog qualification, splitting, reasons, and dialog flagging |
 
 ## Limitations and extension points
 
@@ -316,7 +316,7 @@ The system remains heuristic rather than a full parser.
 - A quotation can contain multiple sentences without representing spoken dialog.
 - The phrase delimiter list is intentionally small and may not capture ideal prosody in every language.
 
-The shared structural quote detector should be extended independently from dialog policy. Supporting a new delimiter for sentence discovery must not automatically assign that style a dialog voice.
+The shared structural quote detector should be extended independently from dialog policy. Supporting a new delimiter for sentence discovery must not automatically make that style detected dialog.
 
 ## Old vs. new
 
@@ -405,4 +405,4 @@ Adjacent quote ownership is deterministic:
 
 Nested and additional literary quote styles can contribute sentence boundaries without automatically becoming dialog. Exact source reconstruction is enforced by design rather than relying on pySBD's returned strings.
 
-Finally, dialog classification no longer uses group crossing as evidence. Sentence discovery, grouping strategy, and dialog voice qualification can therefore evolve without silently redefining one another.
+Finally, dialog classification no longer uses group crossing as evidence. Sentence discovery, grouping strategy, and dialog qualification can therefore evolve without silently redefining one another.

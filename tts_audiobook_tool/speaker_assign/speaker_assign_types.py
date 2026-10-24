@@ -22,7 +22,7 @@ RESERVED_SPEAKER_IDS = frozenset({NOT_SPEECH, OTHER, UNKNOWN})
 @dataclass(frozen=True)
 class Utterance:
     """
-    One quotation's dialog lines: a dialog line (voice_index >= 1) that starts
+    One quotation's dialog lines: a dialog line (is_dialog) that starts
     with an opening quote mark, plus any directly following dialog lines that
     don't (continuation pieces of the same quotation). See UtteranceUtil.
     """

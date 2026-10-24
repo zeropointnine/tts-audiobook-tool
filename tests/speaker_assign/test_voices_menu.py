@@ -105,8 +105,8 @@ def quiet_apply(monkeypatch):
 
 def test_apply_preview_groups_by_voice_and_warns() -> None:
     # Characters sharing a voice share a row; unchosen speakers are listed as
-    # unchanged; Voice 1, stale results, existing audio and a non-user-defined
-    # voice mode each add a note.
+    # unchanged; stale results, existing audio and a non-user-defined voice
+    # mode each add a note.
     state, attributions, _ = make_apply_state(VoiceSelectMode.DISABLED)
     voice_map = VoiceMapFile({"ALICE": 2, "CAROL": 2, "BOB": 0})
     plan = VoiceApplyPlan.make(state.project.book, ROSTER_IDS, attributions, voice_map)
@@ -120,7 +120,6 @@ def test_apply_preview_groups_by_voice_and_warns() -> None:
                for line in lines)
     assert "3 lines change voice. Voices already set on these lines are replaced." in lines
     text = "\n".join(lines)
-    assert "Voice 1 looks like narration" in text
     assert "1 passage skipped" in text
     assert "1 of these lines already have generated audio" in text
     assert "currently: disabled - always Voice 1" in text

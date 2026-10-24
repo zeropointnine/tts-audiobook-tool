@@ -135,15 +135,69 @@ class TestBookSerialization(unittest.TestCase):
         group.voice_index = 3
         self.assertEqual(group.voice_index, 3)
 
-    def test_book_v2_serializes_phrase_groups_as_objects(self):
+    def test_book_v3_serializes_phrase_groups_as_objects(self):
         book = Book(sections=[BookSection(phrase_groups=[self.make_phrase_group("One.", voice_index=4)])])
 
         payload = book_to_project_text_json_dict(book)
 
-        self.assertEqual(payload["format"], "book.v2")
+        self.assertEqual(payload["format"], "book.v3")
         group_payload = payload["book"]["sections"][0]["phrase_groups"][0]
         self.assertEqual(group_payload["voice_index"], 4)
         self.assertEqual(group_payload["phrases"][0]["text"], "One.")
+        # The dialog flag is written only when set
+        self.assertNotIn("is_dialog", group_payload)
+
+    def test_dialog_flag_round_trips_independently_of_voice_index(self):
+        dialog = PhraseGroup([Phrase('"Hi."', Reason.SENTENCE)], voice_index=0, is_dialog=True)
+        narration = PhraseGroup([Phrase("Narration.", Reason.SENTENCE)], voice_index=2)
+        book = Book(sections=[BookSection(phrase_groups=[dialog, narration])])
+
+        payload = book_to_project_text_json_dict(book)
+        result = book_from_project_text_json_dict(payload)
+
+        self.assertIs(payload["book"]["sections"][0]["phrase_groups"][0]["is_dialog"], True)
+        assert isinstance(result, Book)
+        self.assertEqual([group.is_dialog for group in result.phrase_groups], [True, False])
+        self.assertEqual([group.voice_index for group in result.phrase_groups], [0, 2])
+
+    def test_pre_v3_books_derive_dialog_flags_from_voice_index(self):
+        # Before v3, dialog segmentation marked dialog by preassigning voice
+        # index 1, and any voice index >= 1 counted as dialog. Loading derives
+        # the flags the same way, but only for books segmented with dialog
+        # segmentation; a stray is_dialog key in an old book is ignored.
+        def payload(dialog_segmentation: bool) -> dict:
+            return {
+                "format": "book.v2",
+                "book": {
+                    "segmentation_settings": {"dialog_segmentation": dialog_segmentation},
+                    "sections": [{"phrase_groups": [
+                        {"voice_index": -1, "is_dialog": True, "phrases": [{"text": "A. ", "reason": "s"}]},
+                        {"voice_index": 1, "phrases": [{"text": '"B." ', "reason": "s"}]},
+                        {"voice_index": 3, "phrases": [{"text": '"C."', "reason": "s"}]},
+                    ]}],
+                },
+            }
+
+        with_dialog = book_from_project_text_json_dict(payload(True))
+        without_dialog = book_from_project_text_json_dict(payload(False))
+
+        assert isinstance(with_dialog, Book) and isinstance(without_dialog, Book)
+        self.assertEqual([group.is_dialog for group in with_dialog.phrase_groups], [False, True, True])
+        self.assertEqual([group.is_dialog for group in without_dialog.phrase_groups], [False, False, False])
+
+    def test_legacy_phrase_groups_derive_dialog_flags_from_applied_settings(self):
+        payload = {
+            "format": "phrase_groups.v1",
+            "phrase_groups": [
+                {"voice_index": -1, "phrases": [{"text": "A. ", "reason": "s"}]},
+                {"voice_index": 1, "phrases": [{"text": '"B."', "reason": "s"}]},
+            ],
+        }
+
+        result = book_from_project_text_json_dict(payload, BookSegmentationSettings(dialog_segmentation=True))
+
+        assert isinstance(result, Book)
+        self.assertEqual([group.is_dialog for group in result.phrase_groups], [False, True])
 
     def test_book_v1_deserializes_legacy_group_arrays_with_default_voice_index(self):
         payload = {

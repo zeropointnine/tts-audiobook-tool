@@ -5,9 +5,6 @@ from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
-from tts_audiobook_tool.text_ops.dialog_segmenter import (
-    DIALOG_VOICE_INDEX,
-)
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
@@ -448,30 +445,21 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         printt(f"- Text segmenter max_words_per_segment: {COL_ACCENT}{segmentation_settings.max_words_per_segment}")
     printt(f"- Text segmenter strategy: {COL_ACCENT}{segmentation_settings.strategy.label}")
     printt(f"- Dialog segmentation: {COL_ACCENT}{segmentation_settings.dialog_segmentation}")
+    dialog_line_count = 0
     if segmentation_settings.dialog_segmentation:
-        dialog_segment_count = sum(
-            group.voice_index == DIALOG_VOICE_INDEX
-            for group in phrase_groups
-        )
-        printt(
-            f"  Text segments preassigned to voice sample 2: "
-            f"{COL_ACCENT}{dialog_segment_count}"
-        )
-        if (
-            dialog_segment_count
-            and state.project.voice_select_mode != VoiceSelectMode.USER_DEFINED
-        ):
-            printt(
-                f"{COL_DIM}  Voice selection mode must be set to: user-defined{COL_DEFAULT}"
-            )
+        dialog_line_count = sum(group.is_dialog for group in phrase_groups)
+        printt(f"  Dialog lines detected: {COL_ACCENT}{dialog_line_count}")
     printt()
+
+    if dialog_line_count:
+        ask_assign_dialog_voice(state, dialog_line_count)
 
     if state.project.language_code in ("en", "es"):
         hints.show_hint_if_necessary(
             state.prefs,
             HINT_TOLERANCE_FIRST_CLASS
         )
-    if state.project.dialog_segmentation:
+    if dialog_line_count:
         hints.show_hint_if_necessary(
             state.prefs,
             HINT_DIALOG_VOICE,
@@ -480,6 +468,53 @@ def on_select_import(state: State, item: MenuItem) -> bool:
     ask.ask_enter_to_continue()
 
     return False
+
+# Zero-based; voice sample 2 in the UI
+DIALOG_VOICE_INDEX = 1
+
+def ask_assign_dialog_voice(state: State, dialog_line_count: int) -> None:
+    """
+    Opt-in convenience at the end of text import: assigns every detected
+    dialog line to voice sample 2 and offers to switch the voice selection
+    mode to user-defined, so that the assignment takes effect.
+    """
+    lines_noun = make_noun("line", "lines", dialog_line_count)
+    prompt = (
+        f"Assign the {dialog_line_count} dialog {lines_noun} to voice sample 2? "
+        f"Press {make_hotkey_string('Y')} to confirm: "
+    )
+    if not ask.ask_confirm(prompt):
+        return
+
+    dialog_groups = [group for group in state.project.phrase_groups if group.is_dialog]
+    previous = [group.voice_index for group in dialog_groups]
+    for group in dialog_groups:
+        group.voice_index = DIALOG_VOICE_INDEX
+    err = ProjectTextIOUtil.save_book(state.project)
+    if err:
+        for group, voice_index in zip(dialog_groups, previous, strict=True):
+            group.voice_index = voice_index
+        ask.ask_error(err)
+        return
+    printt(f"Assigned {len(dialog_groups)} dialog {lines_noun} to voice sample 2")
+    printt()
+
+    if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
+        return
+    prompt = (
+        f"Voice selection mode is: {COL_ACCENT}{state.project.voice_select_mode.current_label}{COL_DEFAULT}\n"
+        f"Set it to {COL_ACCENT}{VoiceSelectMode.USER_DEFINED.current_label}{COL_DEFAULT} "
+        f"so that lines use their assigned voices? "
+        f"Press {make_hotkey_string('Y')} to confirm: "
+    )
+    if ask.ask_confirm(prompt):
+        state.project.voice_select_mode = VoiceSelectMode.USER_DEFINED
+        err = state.project.save()
+        if err:
+            ask.ask_error(err)
+            return
+        printt(f"Voice selection mode set to: {VoiceSelectMode.USER_DEFINED.current_label}")
+    printt()
 
 def on_ask_max_size(state: State, _) -> None:
 
@@ -524,7 +559,8 @@ DIALOG_SEGMENTATION_DESC = \
 f"""Detects and splits dialog from surrounding narration,
 making it easier to assign different voices.
 For example, {COL_DIM}He said, "Hello."{COL_DEFAULT} becomes {COL_DIM}He said,{COL_DEFAULT} and {COL_DIM}"Hello."{COL_DEFAULT}
-Dialog segments are preassigned to voice sample 2.
+Detected dialog lines are marked as such. After import, they can optionally
+be assigned to voice sample 2. Required by "Assign character voices using LLM".
 
 For single-voice narration, leave this off to preserve natural flow."""
 

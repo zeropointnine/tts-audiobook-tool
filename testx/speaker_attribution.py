@@ -2,9 +2,9 @@
 Prototype: LLM-based speaker attribution for dialog lines.
 
 Builds on the app's existing dialog segmentation (a project imported with
-"dialog segmentation" enabled has every dialog phrase group preassigned
-voice_index 1). Nothing here re-runs the dialog detector; the stored
-project text is the source of truth.
+"dialog segmentation" enabled has every dialog phrase group flagged
+is_dialog). Nothing here re-runs the dialog detector; the stored project
+text is the source of truth.
 
 The core logic lives in the app package tts_audiobook_tool/speaker_assign
 (roster and attribution types and files, utterances, chunk planning, prompts,
@@ -72,12 +72,11 @@ Voice mapping ('apply --characters'; UI "voice N" = voice_index N - 1):
     listed ids      the given voice; the narrator's dialog only gets its own
                     voice if NARRATOR (or the narrator's id) is listed
     REST            everything else spoken: unlisted characters, OTHER, UNKNOWN
-                    (default voice 2, the app's dialog-detection voice)
+                    (default voice 2)
     NOT_SPEECH      voice 1, with narration
-Narration (voice_index -1 / 0) is never touched. Because narration is never
->= 1 and every dialog voice normally is, a range can be re-attributed after
-applying (not so for dialog mapped to voice 1). Hand-edited dialog voice
-assignments are overwritten.
+Narration (lines not flagged is_dialog) is never touched. Dialog stays flagged
+whatever voice it is given, so a range can be re-attributed after applying.
+Hand-edited dialog voice assignments are overwritten.
 """
 from __future__ import annotations
 
@@ -100,6 +99,7 @@ from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.app_types import Book
 from tts_audiobook_tool.app_types.book_serialization import (
     BOOK_FORMAT,
+    BOOK_V2_FORMAT,
     load_book_from_project_text_file,
 )
 from tts_audiobook_tool.speaker_assign.assign_plan import AssignPlan, PlannedChunk
@@ -130,8 +130,7 @@ from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 PROJECT_TEXT_FILE_NAME = "project_text.json"
 
 # 'apply' voice mapping: NOT_SPEECH lines go to the narration voice; REST (in
-# --characters) is everything spoken that isn't listed, defaulting to voice 2
-# (the voice the app's dialog detection preassigns).
+# --characters) is everything spoken that isn't listed, defaulting to voice 2.
 NOT_SPEECH_VOICE_INDEX = 0
 REST_KEYWORD = "REST"
 DEFAULT_REST_VOICE = 2  # 1-based UI voice number
@@ -350,12 +349,11 @@ def read_saved_response(args: argparse.Namespace) -> str | None:
 def command_roster(args: argparse.Namespace) -> None:
     book = load_book(args.project_dir)
     if not book.segmentation_settings.dialog_segmentation:
-        print("Warning: this book was not segmented with dialog segmentation enabled;"
-              " dialog lines may not be marked.")
+        sys.exit("This book was not segmented with dialog segmentation enabled, so no dialog is marked.")
     total_utterances = len(UtteranceUtil.find_utterances(book, 0, len(book.flat_phrase_groups)))
     print(f"{book.title or '(untitled)'}: {len(book.sections)} sections, {total_utterances:,} utterances")
     if total_utterances == 0:
-        sys.exit("No dialog lines (voice_index >= 1) found.")
+        sys.exit("No dialog lines (is_dialog) found.")
 
     message = RosterUtil.build_message(book)
     if maybe_dump_prompt(args, ROSTER_SYSTEM_PROMPT, message):
@@ -614,11 +612,7 @@ def parse_voice_mapping(text: str, roster: Roster) -> VoiceMapping:
             by_id[key] = int(value) - 1
         else:
             sys.exit(f"Unknown character id in --characters: {key} (see 'list'; roster ids: {', '.join(sorted(known))})")
-    mapping = VoiceMapping(by_id, DEFAULT_REST_VOICE - 1 if rest is None else rest)
-    if NOT_SPEECH_VOICE_INDEX in (*mapping.by_id.values(), mapping.rest):
-        print("Note: dialog mapped to voice 1 looks like narration afterwards, so later"
-              " 'assign' runs won't see those lines as dialog.")
-    return mapping
+    return VoiceMapping(by_id, DEFAULT_REST_VOICE - 1 if rest is None else rest)
 
 
 def print_voice_map(
@@ -652,18 +646,27 @@ def write_voices(
     """Set voice_index on the given (book-wide) lines, in place (backup
     first). Edits the raw JSON rather than re-serializing the Book: a Book
     round trip can re-derive unrelated fields (eg phrase reasons) elsewhere
-    in the file."""
+    in the file. A book.v2 file is upgraded to the current format on the way,
+    by writing the dialog flags the loaded book derived from it (as the app
+    does on load): its dialog is otherwise marked only by voice index, which
+    writing voices would change."""
     text_path = os.path.join(project_dir, PROJECT_TEXT_FILE_NAME)
     with open(text_path, "r", encoding="utf-8") as file:
         raw = json.load(file)
-    if not isinstance(raw, dict) or raw.get("format") != BOOK_FORMAT:
-        sys.exit(f"Writing supports only '{BOOK_FORMAT}' project text files")
+    if not isinstance(raw, dict) or raw.get("format") not in (BOOK_FORMAT, BOOK_V2_FORMAT):
+        sys.exit(f"Writing supports only '{BOOK_FORMAT}' and '{BOOK_V2_FORMAT}' project text files")
     raw_groups = [group for section in raw["book"]["sections"] for group in section["phrase_groups"]]
     groups = book.flat_phrase_groups
     if len(raw_groups) != len(groups) or any(
             "".join(p["text"] for p in raw_group["phrases"]) != group.text
             for raw_group, group in zip(raw_groups, groups)):
         sys.exit("Raw project text doesn't match the loaded book; not writing.")
+    if raw["format"] == BOOK_V2_FORMAT:
+        for raw_group, group in zip(raw_groups, groups):
+            if group.is_dialog:
+                raw_group["is_dialog"] = True
+        raw["format"] = BOOK_FORMAT
+        print(f"Upgrading {PROJECT_TEXT_FILE_NAME} from {BOOK_V2_FORMAT} to {BOOK_FORMAT}")
     changed = 0
     for lines, new_index in line_voices:
         for line in lines:

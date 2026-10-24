@@ -6,7 +6,7 @@ Related documents:
 
 - [`tts-validation-architecture.md`](tts-validation-architecture.md) — what happens *after* each call returns (transcription, word-error validation, retry criteria)
 - [`tts-rolling-continuation-clear-architecture.md`](tts-rolling-continuation-clear-architecture.md) — rolling-continuation reset points, including the voice-sample-switch reset used by the loop described here
-- [`dialog-segmentation.md`](dialog-segmentation.md) — how dialog lines get pre-assigned voice indices (`DIALOG_VOICE_INDEX`)
+- [`dialog-segmentation.md`](dialog-segmentation.md) — how dialog lines are detected and flagged (`is_dialog`); voices are assigned separately
 - [Project Spec v5](<project-spec-v5.md>) — project-wide voice selection mode and shared ordered voice-reference pairs
 
 ## The hard constraint

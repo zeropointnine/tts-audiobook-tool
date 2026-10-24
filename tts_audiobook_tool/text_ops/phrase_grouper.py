@@ -4,10 +4,7 @@ from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.text_ops.phrase_segmenter import Reason, Phrase, PhraseSegmenter
-from tts_audiobook_tool.text_ops.dialog_segmenter import (
-    DIALOG_VOICE_INDEX,
-    DialogSegmenter,
-)
+from tts_audiobook_tool.text_ops.dialog_segmenter import DialogSegmenter
 from tts_audiobook_tool.util import printt
 
 class PhraseGrouper:
@@ -30,8 +27,8 @@ class PhraseGrouper:
         One PhraseGroup gets transformed into one TTS prompt.
 
         When dialog_segmentation is enabled, a final pass subdivides groups so
-        accepted dialog and narration do not share a group, preassigns dialog
-        to voice sample 2, and marks close-quote pieces followed by an
+        accepted dialog and narration do not share a group, flags dialog
+        groups with is_dialog, and marks close-quote pieces followed by an
         attribution with reason PHRASE_QUOTE_END (a lowercase continuation, or
         for language code "en" a speaker name followed by a whitelisted verb).
         It does not recombine groups created by the normal segmentation passes.
@@ -71,11 +68,7 @@ class PhraseGrouper:
         groups = results
 
         if dialog_segmentation:
-            groups = DialogSegmenter.segment_groups(
-                groups,
-                dialog_voice_index=DIALOG_VOICE_INDEX,
-                language_code=pysbd_lang,
-            )
+            groups = DialogSegmenter.segment_groups(groups, language_code=pysbd_lang)
 
         groups = PhraseGrouper.merge_ornamental_groups(groups)
 

@@ -20,7 +20,7 @@ class UtteranceUtil:
     def find_utterances(book: Book, start: int, end: int) -> list[Utterance]:
         """
         The utterances whose lines lie within [start, end). Dialog lines are
-        phrase groups with voice_index >= 1 (as preassigned by the app's dialog
+        phrase groups flagged is_dialog (by the app's import-time dialog
         segmentation). A new utterance starts at a dialog line that begins
         with an opening quote mark or follows a non-dialog line; other dialog
         lines continue the previous utterance. Utterances never continue
@@ -34,7 +34,7 @@ class UtteranceUtil:
             group = groups[line]
             if line in section_starts:
                 previous_was_dialog = False
-            is_dialog = group.voice_index >= 1
+            is_dialog = group.is_dialog
             if is_dialog:
                 starts_quote = group.text.lstrip().startswith(OPENING_QUOTES)
                 if previous_was_dialog and not starts_quote:

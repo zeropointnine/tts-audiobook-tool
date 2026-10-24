@@ -102,12 +102,21 @@ class PhraseGroup:
     Ie, add 'phrase-level granularity' to the timing metadata.
     """
 
-    def __init__(self, phrases: list[Phrase] | None = None, voice_index: int = -1):
+    def __init__(
+            self,
+            phrases: list[Phrase] | None = None,
+            voice_index: int = -1,
+            is_dialog: bool = False,
+    ):
         self._presentable_text_memo: str | None = None
         self._presentable_text_lf_ansi_memo: str | None = None
         # Route through the property so memos are cleared on assignment
         self.phrases = phrases or []
         self.voice_index = voice_index
+        # Whether the group is detected dialog (set by import-time dialog
+        # segmentation, which isolates dialog into groups of its own).
+        # Independent of voice_index. See docs-dev/dialog-segmentation.md
+        self.is_dialog = is_dialog
 
     @property
     def phrases(self) -> list[Phrase]:
@@ -211,10 +220,12 @@ class PhraseGroup:
         return [phrase.to_json_dict() for phrase in self.phrases]
 
     def to_json_dict(self) -> dict:
-        return {
-            "voice_index": self.voice_index,
-            "phrases": self.to_json_dict_list(),
-        }
+        result: dict[str, Any] = {"voice_index": self.voice_index}
+        if self.is_dialog:
+            # Written only when set
+            result["is_dialog"] = True
+        result["phrases"] = self.to_json_dict_list()
+        return result
 
     @staticmethod
     def phrase_groups_from_json_list(values: list[Any]) -> list[PhraseGroup] | str:
@@ -236,9 +247,11 @@ class PhraseGroup:
                     and raw_voice_index >= -1
                     else -1
                 )
+                is_dialog = value.get("is_dialog", False) is True
             else:
                 phrase_dicts = value
                 voice_index = -1
+                is_dialog = False
 
             if not isinstance(phrase_dicts, list):
                 return f"Expected phrase list: {phrase_dicts}"
@@ -260,7 +273,7 @@ class PhraseGroup:
                 return err
 
             phrases = result
-            group = PhraseGroup(phrases, voice_index=voice_index)
+            group = PhraseGroup(phrases, voice_index=voice_index, is_dialog=is_dialog)
             text_groups.append(group)
 
         return text_groups

@@ -18,9 +18,6 @@ _CURLY_OPEN_QUOTE = "“"
 _CURLY_CLOSE_QUOTE = "”"
 _QUOTE_CHARS = {_STRAIGHT_QUOTE, _CURLY_OPEN_QUOTE, _CURLY_CLOSE_QUOTE}
 
-# PhraseGroup voice indices are zero-based; this is voice sample 2 in the UI.
-DIALOG_VOICE_INDEX = 1
-
 # English attribution verbs that may follow a close-quote + speaker name
 # (eg, "Some dialog," John said.). Matched case-insensitively, only when the
 # language code is "en", as a STARTS-WITH test: the verb word in the text
@@ -67,7 +64,6 @@ class DialogSegmenter:
     @staticmethod
     def segment_groups(
             groups: list[PhraseGroup],
-            dialog_voice_index: int | None = None,
             language_code: str | None = None,
     ) -> list[PhraseGroup]:
         """
@@ -77,9 +73,9 @@ class DialogSegmenter:
         attribution) when its continuation (a) starts with a lowercase
         alphabetic (eg, "Hello," she said.) or (b) when language_code is
         "en", starts with a capital-initial word whose next word is a
-        whitelisted attribution verb (eg, "Some dialog," John said.). When
-        dialog_voice_index is provided, assign it to every resulting group
-        inside detected dialog.
+        whitelisted attribution verb (eg, "Some dialog," John said.). Every
+        resulting group inside detected dialog is flagged is_dialog; voice
+        indices are left as they are.
         """
         if not groups:
             return []
@@ -138,13 +134,7 @@ class DialogSegmenter:
             result.extend(parts)
             group_start = group_end
 
-        if dialog_voice_index is None:
-            return result
-        return DialogSegmenter._assign_dialog_voice(
-            result,
-            dialog_spans,
-            dialog_voice_index,
-        )
+        return DialogSegmenter._flag_dialog_groups(result, dialog_spans)
 
     @staticmethod
     def _find_dialog_spans(
@@ -316,12 +306,11 @@ class DialogSegmenter:
         return index
 
     @staticmethod
-    def _assign_dialog_voice(
+    def _flag_dialog_groups(
             groups: list[PhraseGroup],
             dialog_spans: list[tuple[int, int]],
-            dialog_voice_index: int,
     ) -> list[PhraseGroup]:
-        """Assign dialog groups without mutating source groups that were reused."""
+        """Flag dialog groups without mutating source groups that were reused."""
         result: list[PhraseGroup] = []
         span_index = 0
         group_start = 0
@@ -339,10 +328,11 @@ class DialogSegmenter:
                 and dialog_spans[span_index][0] <= group_start
                 and group_end <= dialog_spans[span_index][1]
             )
-            if is_dialog and group.voice_index != dialog_voice_index:
+            if is_dialog and not group.is_dialog:
                 result.append(PhraseGroup(
                     list(group.phrases),
-                    voice_index=dialog_voice_index,
+                    voice_index=group.voice_index,
+                    is_dialog=True,
                 ))
             else:
                 result.append(group)
@@ -410,6 +400,7 @@ class DialogSegmenter:
                         PhraseGroup(
                             current_phrases,
                             voice_index=group.voice_index,
+                            is_dialog=group.is_dialog,
                         )
                     )
                     current_phrases = []
@@ -424,7 +415,9 @@ class DialogSegmenter:
             group_position = phrase_end
 
         if current_phrases:
-            result.append(PhraseGroup(current_phrases, voice_index=group.voice_index))
+            result.append(PhraseGroup(
+                current_phrases, voice_index=group.voice_index, is_dialog=group.is_dialog,
+            ))
 
         return result
 
@@ -540,4 +533,4 @@ class DialogSegmenter:
             return group
         phrases = list(group.phrases[:-1])
         phrases.append(Phrase(group.phrases[-1].text, Reason.PHRASE_QUOTE_END))
-        return PhraseGroup(phrases, voice_index=group.voice_index)
+        return PhraseGroup(phrases, voice_index=group.voice_index, is_dialog=group.is_dialog)

@@ -13,8 +13,11 @@ Workflow, per novel (names as in the corpus's data/ folder; see 'novels'):
     ./venv-base/bin/python -m testx.speaker_attribution_eval score TheSunAlsoRises
 
 'prepare' segments the novel text the way the app's plain-text import does
-(new-project defaults, dialog segmentation on) into <out>/project_text.json;
-<out> defaults to pdnc_eval/<novel> next to the corpus folder. PDNC texts are
+(new-project defaults, dialog segmentation on, so dialog lines are flagged
+is_dialog; no voices are assigned) into <out>/project_text.json; <out>
+defaults to pdnc_eval/<novel> next to the corpus folder. Outputs prepared
+before dialog flags existed (book.v2, dialog marked by voice index) still
+load: their flags are derived from the voice indices. PDNC texts are
 hard-wrapped (a line break every ~70 chars), which the app treats as paragraph
 breaks, so quotes spanning wrapped lines would never pair; 'prepare' therefore
 first replaces single line breaks with spaces (--keep-line-breaks disables
@@ -223,7 +226,8 @@ def command_prepare(args: argparse.Namespace) -> None:
     if error:
         sys.exit(error)
     utterances = len(UtteranceUtil.find_utterances(book, 0, len(groups)))
-    print(f"{title}: {len(groups):,} lines, {utterances:,} dialog utterances -> {path}")
+    dialog_lines = len(book.dialog_line_indices())
+    print(f"{title}: {len(groups):,} lines ({dialog_lines:,} dialog), {utterances:,} dialog utterances -> {path}")
     print("\nNext:")
     print(f"  ./venv-base/bin/python -m testx.speaker_attribution roster {out}")
     print(f"  ./venv-base/bin/python -m testx.speaker_attribution assign {out} --all")

@@ -88,7 +88,7 @@ class ChunkPlanUtil:
         total = sum(words[start:end])
 
         def is_dialog(line: int) -> bool:
-            return groups[line].voice_index >= 1
+            return groups[line].is_dialog
 
         def ends_with(line: int, reasons: tuple[Reason, ...]) -> bool:
             return groups[line].phrases[-1].reason in reasons

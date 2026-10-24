@@ -626,6 +626,8 @@ class BookSegmentationSettings(NamedTuple):
     language_code: str = ""
     max_words_per_segment: int = 0
     strategy: SegmentationStrategy = SegmentationStrategy.SENTENCE_PLUS
+    # Dialog was detected and isolated into groups of its own, which are
+    # flagged with PhraseGroup.is_dialog
     dialog_segmentation: bool = False
 
 
@@ -654,6 +656,10 @@ class Book:
     @property
     def phrase_groups(self) -> list[PhraseGroup]:
         return self.flat_phrase_groups
+
+    def dialog_line_indices(self) -> list[int]:
+        """Book-wide indices of the phrase groups flagged as dialog."""
+        return [index for index, group in enumerate(self.flat_phrase_groups) if group.is_dialog]
 
     def section_start_indices(self) -> list[int]:
         result: list[int] = []

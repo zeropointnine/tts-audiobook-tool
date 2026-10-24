@@ -4,6 +4,7 @@ import pytest
 from rich.text import Text
 from textual.widgets import Button, Input
 from tts_audiobook_tool.app_types import BookSection
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.textual import voice_line_editor
@@ -460,6 +461,29 @@ def test_reverting_staged_values_makes_editor_clean(monkeypatch) -> None:
             await pilot.press("1")
             assert app.has_changes is False
             assert project.phrase_groups[0].voice_index == 0
+
+    run(exercise())
+
+
+def test_d_key_selects_dialog_lines_for_voice_assignment() -> None:
+    # [D] selects every dialog-flagged line (across sections), so a number key
+    # then sets their voice; the header advertises the key only when the
+    # project has dialog lines.
+    dialog_lines = [
+        PhraseGroup([Phrase('"Hi."', Reason.SENTENCE)], is_dialog=True),
+        PhraseGroup([Phrase('"Bye."', Reason.SENTENCE)], is_dialog=True),
+    ]
+    app = make_sectioned_editor([
+        BookSection(phrase_groups=[make_phrase_group("Narration."), dialog_lines[0]]),
+        BookSection(phrase_groups=[make_phrase_group("More."), dialog_lines[1]]),
+    ])
+    assert "[D] Dialog lines" in Text.from_ansi(app.header_lines[2]).plain
+    assert "[D]" not in Text.from_ansi(make_app()[0].header_lines[2]).plain
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("d", "2")
+            assert app.staged_voice_indices == [-1, 1, -1, 1]
 
     run(exercise())
 

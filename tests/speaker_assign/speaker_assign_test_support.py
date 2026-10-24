@@ -4,18 +4,21 @@ from __future__ import annotations
 from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 
-# Line spec: (text, ending reason, voice_index); voice_index >= 1 marks a dialog line.
-LineSpec = tuple[str, Reason, int]
+# Line spec: (text, ending reason, is_dialog)
+LineSpec = tuple[str, Reason, bool]
 
-NARRATION = -1
-DIALOG = 1
+NARRATION = False
+DIALOG = True
 
 
 def make_book(*sections: list[LineSpec], titles: list[str] | None = None) -> Book:
     titles = titles or [f"Chapter {i + 1}" for i in range(len(sections))]
     return Book(sections=[
         BookSection(
-            phrase_groups=[PhraseGroup([Phrase(text, reason)], voice_index=voice) for text, reason, voice in lines],
+            phrase_groups=[
+                PhraseGroup([Phrase(text, reason)], is_dialog=is_dialog)
+                for text, reason, is_dialog in lines
+            ],
             title=title,
         )
         for lines, title in zip(sections, titles)

@@ -59,6 +59,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             Binding(str(number), f"assign_voice({number - 1})", show=False)
             for number in range(1, 10)
         ),
+        Binding("d", "select_dialog_lines", show=False),
     ]
 
     def __init__(
@@ -74,10 +75,15 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             voice_sample_count = len(self.voice_values)
         self.voice_sample_count = voice_sample_count
         highest_voice_key = min(max(self.voice_sample_count, 1), 9)
+        book = getattr(project, "book", None)
+        self.dialog_line_indices: set[int] = set(book.dialog_line_indices()) if book else set()
+        select_line = f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually"
+        if self.dialog_line_indices:
+            select_line += "  - [D] Dialog lines"
         header_lines = [
             f"{COL_ACCENT}{TITLE_EDIT_VOICE_SELECTIONS}",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
-            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
+            select_line,
             f"{COL_DIM}- Use number keys [{COL_ACCENT}1{COL_DIM}] to [{COL_ACCENT}{highest_voice_key}{COL_DIM}] to set voice sample for selected text line/s",
             f"{COL_DIM}- Press [ESC] to finish",
         ]
@@ -189,6 +195,17 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         if isinstance(item, VoiceLineSectionItem):
             return None
         return item.phrase_index
+
+    def action_select_dialog_lines(self) -> None:
+        """Select every line flagged as dialog (eg, to then assign them a voice)."""
+        if (
+            not self.multi_select_enabled
+            or not self.content_initialized
+            or self.find_active
+            or not self.dialog_line_indices
+        ):
+            return
+        self.handle_manual_selection(self.dialog_line_indices)
 
     def action_assign_voice(self, voice_index: int) -> None:
         """Assign an available voice sample to all selected phrase groups."""

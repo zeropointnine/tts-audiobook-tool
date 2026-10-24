@@ -104,7 +104,7 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertTrue(result.phrase_groups[0].phrases[-1].text.endswith("one."))
         self.assertTrue(result.phrase_groups[1].phrases[-1].text.endswith("two."))
 
-    def test_import_epub_preassigns_detected_dialog_to_voice_sample_two(self):
+    def test_import_epub_flags_detected_dialog(self):
         source_chapters = [
             EpubSourceChapter(
                 "Chapter 1",
@@ -133,8 +133,8 @@ class TestEpubExtractor(unittest.TestCase):
             ["He said ", '"Hello." ', "Then left."],
         )
         self.assertEqual(
-            [group.voice_index for group in result.phrase_groups],
-            [-1, 1, -1],
+            [group.is_dialog for group in result.phrase_groups],
+            [False, True, False],
         )
 
     def test_import_epub_heading_replaces_only_matching_opening_space_break(self):
@@ -220,8 +220,8 @@ class TestEpubExtractor(unittest.TestCase):
             ["✦\n\n“Hello,” ", "she said.\n\n", "More prose follows here."],
         )
         self.assertEqual(
-            [group.voice_index for group in result.phrase_groups],
-            [1, -1, -1],
+            [group.is_dialog for group in result.phrase_groups],
+            [True, False, False],
         )
         self.assertTrue(app_text.is_vocalizable(result.phrase_groups[0].text))
 

@@ -417,6 +417,21 @@ def test_update_preserves_voice_index() -> None:
     assert session.phrase_groups[0].phrase_group.voice_index == 42
 
 
+def test_split_and_update_preserve_dialog_flag() -> None:
+    # A dialog line stays dialog when split or when its text is edited.
+    source = PhraseGroup(
+        [Phrase("“First. ", Reason.SENTENCE), Phrase("Second.”", Reason.SENTENCE)],
+        is_dialog=True,
+    )
+    session = TextEditSession(Book(sections=[BookSection(phrase_groups=[source])]))
+    session.split_phrase_group(session.phrase_groups[0].item_id, PhraseGroupSplitPoint(1))
+    session.update_phrase_group_text(
+        session.phrase_groups[1].item_id, "Changed.”", max_words=10, pysbd_lang="en"
+    )
+
+    assert [item.phrase_group.is_dialog for item in session.phrase_groups] == [True, True]
+
+
 def test_update_trailing_whitespace_only_change_is_noop() -> None:
     session = make_single_group_session("Hello.")
     item = session.phrase_groups[0]

@@ -224,168 +224,135 @@ def test_text_import_does_not_show_tolerance_hint_for_other_language(monkeypatch
     assert hint_calls == []
 
 
-@pytest.mark.parametrize("dialog_segmentation", [True, False])
-def test_text_import_shows_dialog_voice_hint_when_dialog_segmentation_enabled(
-    monkeypatch, dialog_segmentation: bool
-) -> None:
-    hint_calls: list[object] = []
-    project = SimpleNamespace(
-        sound_segments=SimpleNamespace(num_generated=lambda: 0, delete_all=lambda: None),
-        max_words=40,
-        segmentation_strategy=SegmentationStrategy.SENTENCE,
-        language_code="fr",
-        dialog_segmentation=dialog_segmentation,
-        dir_path="/tmp/project",
-        markers=set(),
-        word_substitutions={},
-        has_multiple_book_sections=lambda: False,
-        book=SimpleNamespace(
-            segmentation_settings=SimpleNamespace(
-                language_code="fr",
-                max_words_per_segment=40,
-                strategy=SegmentationStrategy.SENTENCE,
-                dialog_segmentation=dialog_segmentation,
-            )
-        ),
-    )
-    state = cast(
-        State,
-        SimpleNamespace(
-            project=project,
-            prefs=object(),
-        ),
-    )
-    monkeypatch.setattr(
-        text_menu_module.ask_phrase_groups,
-        "get_from_std_in",
-        lambda *args, **kwargs: ([SimpleNamespace(voice_index=-1)], "Raw text"),
-    )
-    monkeypatch.setattr(
-        text_menu_module.ProjectTextIOUtil,
-        "set_phrase_groups_and_save",
-        lambda *args, **kwargs: None,
-    )
-    monkeypatch.setattr(text_menu_module, "printt", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        text_menu_module.MenuUtil, "print_screen_heading", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(text_menu_module.ask, "ask_enter_to_continue", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        text_menu_module.hints,
-        "show_hint_if_necessary",
-        lambda *args, **kwargs: hint_calls.append(args),
-    )
-
-    on_select_import(state, MenuItem("Import", lambda *_: None, data="manual"))
-
-    if dialog_segmentation:
-        assert hint_calls == [(state.prefs, HINT_DIALOG_VOICE)]
-    else:
-        assert hint_calls == []
-
-
-@pytest.mark.parametrize(
-    (
-        "dialog_segmentation",
-        "voice_select_mode",
-        "dialog_segment_count",
-        "expect_inactive_note",
-    ),
-    [
-        (False, VoiceSelectMode.AUTO_ADVANCE, 0, False),
-        (True, VoiceSelectMode.AUTO_ADVANCE, 1, True),
-        (True, VoiceSelectMode.USER_DEFINED, 1, False),
-        (True, VoiceSelectMode.AUTO_ADVANCE, 0, False),
-    ],
-)
-def test_import_summary_reports_dialog_preassignments_without_changing_mode(
-    monkeypatch,
+def make_dialog_import_state(
     dialog_segmentation: bool,
-    voice_select_mode: VoiceSelectMode,
-    dialog_segment_count: int,
-    expect_inactive_note: bool,
-) -> None:
-    from tts_audiobook_tool.constants import COL_ACCENT
-
+    dialog_line_count: int,
+    voice_select_mode: VoiceSelectMode = VoiceSelectMode.AUTO_ADVANCE,
+) -> tuple[State, SimpleNamespace]:
+    """A fake project whose imported text has the given number of dialog lines."""
     phrase_groups = [
-        SimpleNamespace(voice_index=-1),
-        *[
-            SimpleNamespace(voice_index=1)
-            for _ in range(dialog_segment_count)
-        ],
+        SimpleNamespace(voice_index=-1, is_dialog=False),
+        *[SimpleNamespace(voice_index=-1, is_dialog=True) for _ in range(dialog_line_count)],
     ]
-    segmentation_settings = SimpleNamespace(
-        language_code="en",
-        max_words_per_segment=80,
-        strategy=SegmentationStrategy.MULTI_SENTENCE,
-        dialog_segmentation=dialog_segmentation,
-    )
     project = SimpleNamespace(
         sound_segments=SimpleNamespace(num_generated=lambda: 0, delete_all=lambda: None),
         max_words=80,
         segmentation_strategy=SegmentationStrategy.MULTI_SENTENCE,
-        language_code="en",
+        language_code="fr",
         dialog_segmentation=dialog_segmentation,
         voice_select_mode=voice_select_mode,
         dir_path="/tmp/project",
         markers=set(),
         word_substitutions={},
         has_multiple_book_sections=lambda: False,
-        book=SimpleNamespace(segmentation_settings=segmentation_settings),
+        phrase_groups=phrase_groups,
+        save_calls=[],
+        book=SimpleNamespace(segmentation_settings=SimpleNamespace(
+            language_code="fr",
+            max_words_per_segment=80,
+            strategy=SegmentationStrategy.MULTI_SENTENCE,
+            dialog_segmentation=dialog_segmentation,
+        )),
     )
-    state = cast(
-        State,
-        SimpleNamespace(
-            project=project,
-            prefs=object(),
-        ),
-    )
+    project.save = lambda: project.save_calls.append("project") or ""
+    state = cast(State, SimpleNamespace(project=project, prefs=object()))
+    return state, project
 
-    printed: list[str] = []
-    monkeypatch.setattr(text_menu_module, "printt", lambda *args: printed.extend(str(a) for a in args))
-    monkeypatch.setattr(
-        text_menu_module.MenuUtil, "print_screen_heading", lambda *args, **kwargs: None
-    )
+
+def run_dialog_import(
+    monkeypatch, state: State, answers: list[bool],
+) -> dict[str, list]:
+    """Run the manual import, answering yes/no prompts in order; records output."""
+    record: dict[str, list] = {"printed": [], "prompts": [], "hints": [], "book_saves": []}
+    project = cast(SimpleNamespace, state.project)
+    remaining = list(answers)
+
+    def fake_confirm(message: str) -> bool:
+        record["prompts"].append(strip_ansi_codes(message))
+        return remaining.pop(0)
+
+    monkeypatch.setattr(text_menu_module.ask, "ask_confirm", fake_confirm)
+    monkeypatch.setattr(text_menu_module, "printt", lambda *args: record["printed"].extend(str(a) for a in args))
+    monkeypatch.setattr(text_menu_module.MenuUtil, "print_screen_heading", lambda *args, **kwargs: None)
     monkeypatch.setattr(text_menu_module.ask, "ask_enter_to_continue", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        text_menu_module.hints,
-        "show_hint_if_necessary",
-        lambda *args, **kwargs: None,
-    )
+        text_menu_module.hints, "show_hint_if_necessary", lambda *args, **kwargs: record["hints"].append(args[1]))
+    monkeypatch.setattr(text_menu_module.ProjectTextIOUtil, "set_phrase_groups_and_save", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        text_menu_module.ProjectTextIOUtil,
-        "set_phrase_groups_and_save",
-        lambda *args, **kwargs: None,
-    )
+        text_menu_module.ProjectTextIOUtil, "save_book", lambda project: record["book_saves"].append(project) or "")
     monkeypatch.setattr(
-        text_menu_module.ask_phrase_groups,
-        "get_from_std_in",
-        lambda *args, **kwargs: (phrase_groups, "Raw text"),
-    )
+        text_menu_module.ask_phrase_groups, "get_from_std_in", lambda *args, **kwargs: (project.phrase_groups, "Raw text"))
 
     on_select_import(state, MenuItem("Import", lambda *_: None, data="manual"))
+    assert not remaining
+    return record
 
-    expected = f"- Dialog segmentation: {COL_ACCENT}{dialog_segmentation}"
-    assert expected in printed
-    assert printed.index(expected) > printed.index(
-        f"- Text segmenter strategy: {COL_ACCENT}Multiple sentences"
-    )
 
-    assignment_lines = [
-        line
-        for line in printed
-        if line.startswith("  Text segments preassigned to voice sample 2:")
-    ]
-    assert assignment_lines == (
-        [
-            f"  Text segments preassigned to voice sample 2: "
-            f"{COL_ACCENT}{dialog_segment_count}"
-        ]
-        if dialog_segmentation
-        else []
-    )
-    assert any("Voice selection mode must be set" in line for line in printed) is expect_inactive_note
-    assert project.voice_select_mode is voice_select_mode
+@pytest.mark.parametrize(
+    ("dialog_segmentation", "dialog_line_count"),
+    [(False, 0), (True, 0), (True, 2)],
+)
+def test_import_summary_reports_dialog_lines_and_prompts_only_when_found(
+    monkeypatch, dialog_segmentation: bool, dialog_line_count: int,
+) -> None:
+    # Dialog is no longer assigned a voice on import: the summary reports the
+    # detected lines, and the voice-2 assignment is an opt-in prompt (declined
+    # here, which leaves voices and the voice selection mode as they were).
+    from tts_audiobook_tool.constants import COL_ACCENT
+
+    state, project = make_dialog_import_state(dialog_segmentation, dialog_line_count)
+    record = run_dialog_import(monkeypatch, state, [False] if dialog_line_count else [])
+
+    assert f"- Dialog segmentation: {COL_ACCENT}{dialog_segmentation}" in record["printed"]
+    detected = [line for line in record["printed"] if line.startswith("  Dialog lines detected:")]
+    assert detected == ([f"  Dialog lines detected: {COL_ACCENT}{dialog_line_count}"] if dialog_segmentation else [])
+    if dialog_line_count:
+        assert record["prompts"][0].startswith(f"Assign the {dialog_line_count} dialog lines to voice sample 2?")
+    assert [group.voice_index for group in project.phrase_groups] == [-1] * (1 + dialog_line_count)
+    assert record["book_saves"] == [] and project.save_calls == []
+    assert project.voice_select_mode is VoiceSelectMode.AUTO_ADVANCE
+    assert (HINT_DIALOG_VOICE in record["hints"]) is bool(dialog_line_count)
+
+
+@pytest.mark.parametrize("switch_mode", [True, False])
+def test_accepting_dialog_voice_prompt_assigns_voice_2_and_offers_mode_switch(
+    monkeypatch, switch_mode: bool,
+) -> None:
+    # Accepting assigns only the dialog lines to voice sample 2 (index 1) and
+    # saves the text; a second prompt offers user-defined voice selection.
+    state, project = make_dialog_import_state(True, 2)
+    record = run_dialog_import(monkeypatch, state, [True, switch_mode])
+
+    assert [group.voice_index for group in project.phrase_groups] == [-1, 1, 1]
+    assert record["book_saves"] == [project]
+    assert "Set it to user-defined" in record["prompts"][1]
+    expected_mode = VoiceSelectMode.USER_DEFINED if switch_mode else VoiceSelectMode.AUTO_ADVANCE
+    assert project.voice_select_mode is expected_mode
+    assert project.save_calls == (["project"] if switch_mode else [])
+
+
+def test_dialog_voice_prompt_skips_mode_switch_when_already_user_defined(monkeypatch) -> None:
+    state, project = make_dialog_import_state(True, 1, VoiceSelectMode.USER_DEFINED)
+    record = run_dialog_import(monkeypatch, state, [True])
+
+    assert [group.voice_index for group in project.phrase_groups] == [-1, 1]
+    assert len(record["prompts"]) == 1
+
+
+def test_dialog_voice_prompt_rolls_back_when_saving_fails(monkeypatch) -> None:
+    # In-memory voices must match the file on disk after a failed save.
+    state, project = make_dialog_import_state(True, 1)
+    errors: list[str] = []
+    monkeypatch.setattr(text_menu_module.ask, "ask_error", errors.append)
+    monkeypatch.setattr(text_menu_module.ProjectTextIOUtil, "save_book", lambda project: "disk full")
+    monkeypatch.setattr(text_menu_module.ask, "ask_confirm", lambda message: True)
+    monkeypatch.setattr(text_menu_module, "printt", lambda *args, **kwargs: None)
+
+    text_menu_module.ask_assign_dialog_voice(state, 1)
+
+    assert [group.voice_index for group in project.phrase_groups] == [-1, -1]
+    assert errors == ["disk full"]
+    assert project.voice_select_mode is VoiceSelectMode.AUTO_ADVANCE
 
 
 def make_import_project(

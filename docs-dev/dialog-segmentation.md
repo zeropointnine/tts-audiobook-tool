@@ -19,7 +19,7 @@ the man said.
 
 The same separation also supports accurate real-time text highlighting. Segment text must continue to correspond exactly to the source, including quote marks, punctuation, and structural whitespace.
 
-This feature identifies useful dialog boundaries and preassigns every detected dialog segment to voice sample 2. It does not determine the speaker or attempt a complete grammatical interpretation of the passage; users can edit the resulting line-by-line voice selections.
+This feature identifies useful dialog boundaries and flags every detected dialog segment with `PhraseGroup.is_dialog`. Detection and isolation are one combined, import-time operation: the flag exists only for text imported with the option enabled. It does not determine the speaker or attempt a complete grammatical interpretation of the passage, and it does not assign voices (see [Dialog flag and voices](#dialog-flag-and-voices)).
 
 ---
 
@@ -29,7 +29,7 @@ Dialog segmentation is an optional second pass after the normal sentence, phrase
 
 The second pass may subdivide an existing segment when it contains both quoted dialog and surrounding text. It must not merge segments that were already separated by the normal pass.
 
-Detected dialog may therefore span multiple existing segments. The opening segment, interior segments, and closing segment remain separate; only segments that contain a dialog boundary alongside other text need to be divided. All detected dialog segments receive the same voice-sample-2 preassignment.
+Detected dialog may therefore span multiple existing segments. The opening segment, interior segments, and closing segment remain separate; only segments that contain a dialog boundary alongside other text need to be divided. All detected dialog segments are flagged as dialog.
 
 For example, these existing segments:
 
@@ -215,8 +215,8 @@ Dialog boundaries are phrase-level boundaries. When the second pass divides an e
 - a fragment that ends at a newly introduced dialog boundary receives `Reason.PHRASE`;
 - the final fragment retains the original phrase's terminal reason, such as `SENTENCE`, `PARAGRAPH`, or `SPACE_BREAK`;
 - if a dialog boundary already coincides with an existing phrase boundary, the existing reason is preserved;
-- narration pieces retain the selected voice index of the segment from which they were derived;
-- detected dialog pieces override that inherited value with voice index `1` (voice sample 2).
+- every piece retains the voice index (and dialog flag) of the segment from which it was derived;
+- detected dialog pieces are additionally flagged `is_dialog`.
 
 For example, an original sentence-level phrase:
 
@@ -246,19 +246,24 @@ I told them,             [PHRASE]
 
 There is no dedicated `Reason.DIALOG`. Using `Reason.PHRASE` reflects that the quote mark creates an intra-sentence boundary while allowing the original structural reason to remain attached to the text that reaches the original phrase ending.
 
-This also means that `Reason` alone does not classify a segment as dialog. Dialog status must be inferred from quote context or represented separately if explicit segment roles are added in the future.
+This also means that `Reason` alone does not classify a segment as dialog; the explicit `is_dialog` flag does.
 
 ---
 
-## Voice preassignment
+## Dialog flag and voices
 
-The import-time dialog-segmentation path assigns zero-based `voice_index = 1`—voice sample 2 in the UI—to every resulting segment wholly inside an accepted dialog span. This includes dialog that already occupies an entire segment and interior dialog segments spanning several existing groups.
+The import-time dialog-segmentation path sets `PhraseGroup.is_dialog` on every resulting segment wholly inside an accepted dialog span. This includes dialog that already occupies an entire segment and interior dialog segments spanning several existing groups. `project_text.json` stores `"is_dialog": true` only on flagged groups (format `book.v3`).
 
-Narration retains its inherited voice index. With the normal default of `-1`, narration resolves to voice sample 1 under user-defined voice selection.
+The flag is independent of `voice_index`: assigning any voice, including voice sample 1, leaves a dialog line flagged. The flag is carried over when the text editor splits a line or edits its text. Other consumers:
 
-The preassignment is stored even when a second voice sample has not been configured. It takes effect only when the project uses User-defined voice selection; dialog segmentation does not change the project's voice-selection mode. Multi-item batching honors user-defined line assignments: each generation round is split into per-voice sub-batches (groups of batches), so every line is generated with its own voice sample.
+- "Assign character voices using LLM" attributes the flagged lines (grouped into utterances by opening quote marks) to characters, and requires text imported with dialog segmentation enabled; otherwise the user must re-import.
+- The voice line editor's `[D]` key selects all dialog lines, so a voice can be set for them in one step.
 
-This is a narration-versus-dialog default, not speaker detection. All detected dialog receives voice sample 2 until the user edits individual line selections.
+Detection assigns no voice. At the end of an import that found dialog, the user is asked (default no) whether to assign the dialog lines to zero-based `voice_index = 1`—voice sample 2 in the UI—and, if the project is not using User-defined voice selection, whether to switch to it so that the assignment takes effect. Multi-item batching honors user-defined line assignments: each generation round is split into per-voice sub-batches (groups of batches), so every line is generated with its own voice sample.
+
+### Pre-v3 books
+
+Before `book.v3`, there was no flag: detected dialog was always preassigned voice index `1`, and the LLM feature treated any `voice_index >= 1` as dialog (so dialog later given voice sample 1 was lost, and narration given another voice counted as dialog). Loading an older book reproduces that interpretation exactly: when its segmentation settings record dialog segmentation, every group with `voice_index >= 1` is flagged; otherwise nothing is. A project's text is rewritten in the current format on load.
 
 ---
 
@@ -271,9 +276,9 @@ Dialog segmentation must preserve the following properties:
 - Existing segment boundaries are never eliminated.
 - Paragraph boundaries are never crossed while searching for an ordinary in-paragraph pair; a chained multi-paragraph quote must be re-affirmed by an opening quote mark at the start of each subsequent paragraph, otherwise pairing does not cross the paragraph boundary.
 - Ignored or unmatched quote pairs leave segmentation unchanged.
-- Existing per-segment properties remain associated with narration pieces subdivided from that segment.
-- Accepted quoted pieces receive voice index `1` without mutating reused source groups.
-- When the option is disabled, normal segmentation and voice-assignment behavior are unchanged.
+- Existing per-segment properties (including the voice index) remain associated with pieces subdivided from that segment.
+- Accepted quoted pieces are flagged `is_dialog` without mutating reused source groups.
+- When the option is disabled, normal segmentation is unchanged and no group is flagged.
 
 ---
 
@@ -354,7 +359,7 @@ The examples above omit boundary whitespace from the visual presentation. The un
 
 ### Heuristic recognition
 
-The lowercase dialog signals reduce false negatives for dialog continuations, brief replies, and writing systems or content without an uppercase opening. Because the rules intentionally favor likely dialog, long quoted labels or lowercase quoted passages near dialog-like punctuation may occasionally be assigned the dialog voice.
+The lowercase dialog signals reduce false negatives for dialog continuations, brief replies, and writing systems or content without an uppercase opening. Because the rules intentionally favor likely dialog, long quoted labels or lowercase quoted passages near dialog-like punctuation may occasionally be flagged as dialog.
 
 Conversely, capitalization alone cannot prove that text is dialog. Capitalized quoted titles, interface terms, and quoted names are filtered when they complement a preceding word (the `playing "Fly Me to the Moon."` pattern), but may still be treated as dialog when they follow a comma, colon, dash, or sentence end. Short lowercase inline quotes remain unassigned only when they have no structural dialog signal.
 
@@ -364,15 +369,19 @@ Ordinary pairing stops at every paragraph boundary, which limits the effect of m
 
 ### Multi-paragraph dialog
 
-Dialog that follows the published multi-paragraph convention is recognized across paragraphs, and every dialog piece receives the dialog voice. Because normal first-pass segmentation keeps paragraph boundaries, the paragraphs of one speech remain separate segments; the chain ends at the first paragraph that does not begin with an opening quote mark.
+Dialog that follows the published multi-paragraph convention is recognized across paragraphs, and every dialog piece is flagged as dialog. Because normal first-pass segmentation keeps paragraph boundaries, the paragraphs of one speech remain separate segments; the chain ends at the first paragraph that does not begin with an opening quote mark.
 
 ### No recombination
 
 Preserving normal first-pass boundaries protects maximum-length, sentence, and phrase-group decisions. A long dialog passage may consequently remain divided among several dialog segments rather than becoming one segment.
 
-### Fixed automatic voice
+### Detection only at import
 
-Every detected dialog passage is preassigned to voice sample 2, regardless of speaker. This provides a useful two-voice narration/dialog default, but books with multiple speaking characters still require manual line-by-line voice editing.
+Because detection also splits segments, which renumbers lines (and so invalidates generated audio), it is not offered as a separate pass over existing text. Text imported without the option has no flagged dialog and must be re-imported to use dialog-dependent features.
+
+### Voices are a separate step
+
+Detection marks dialog but assigns no voice. The import's opt-in voice-sample-2 assignment gives a two-voice narration/dialog default regardless of speaker; per-character voices come from "Assign character voices using LLM" or manual line editing.
 
 ### Punctuation after the closing quote
 
@@ -398,9 +407,9 @@ Additional grammatical hints could distinguish spoken dialog from titles, labels
 
 Single quotes, guillemets, and language-specific quote marks could be added as explicit, configurable conventions rather than being folded into the default rules.
 
-### Explicit segment roles
+### Richer segment roles
 
-A future text model could record whether a segment is dialog, narration, or unknown. Explicit roles would make voice assignment easier and would preserve quote context for interior segments that do not themselves contain an opening or closing mark.
+The `is_dialog` flag is binary. A future text model could distinguish further roles (eg unknown, or a segment mixing dialog and narration), or record utterance boundaries explicitly instead of inferring them from opening quote marks.
 
 ### Preview and diagnostics
 

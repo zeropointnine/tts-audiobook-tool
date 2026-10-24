@@ -85,11 +85,13 @@ def create_roster(state: State) -> None:
 
     utterance_count = len(UtteranceUtil.find_utterances(book, 0, len(book.flat_phrase_groups)))
     if utterance_count == 0:
-        ask.ask_error(
-            "No dialog found in the project text.\n"
-            "Dialog is detected on import when dialog segmentation is enabled "
-            "(Text > Segmentation settings > Dialog segmentation)."
-        )
+        message = "No dialog found in the project text."
+        if not book.segmentation_settings.dialog_segmentation:
+            message += (
+                "\nDialog is detected on import when dialog segmentation is enabled "
+                "(Text > Segmentation settings > Dialog segmentation)."
+            )
+        ask.ask_error(message)
         return
 
     # Replacing an existing roster invalidates speaker ids assigned with it
@@ -116,9 +118,6 @@ def create_roster(state: State) -> None:
 
     title = book.title.strip() or "(untitled)"
     printt(f"{title}: {len(book.sections)} sections, {utterance_count:,} dialog passages")
-    if not book.segmentation_settings.dialog_segmentation:
-        printt(f"{COL_DIM}Note: the text was not imported with dialog segmentation enabled; "
-               f"dialog may not be marked completely.")
     print_llm_info(prefs)
     printt(f"Sending {input_chars:,} chars (~{format_token_count(input_chars // CHARS_PER_TOKEN)} tokens)")
     printt(f"{COL_DIM}Press control-c to cancel")

@@ -22,6 +22,7 @@ from tts_audiobook_tool.app_types import Book, Word
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.app_types.book_serialization import (
     BOOK_FORMAT,
+    BOOK_V2_FORMAT,
     book_from_project_text_json_dict,
     book_to_project_text_json_dict,
 )
@@ -105,7 +106,8 @@ def load_book(artifacts: EnhanceArtifacts) -> tuple[Book | None, str]:
             payload = json.load(file)
     except Exception as exception:
         return None, f"Error loading source book: {make_error_string(exception)}"
-    if not isinstance(payload, dict) or payload.get("format") != BOOK_FORMAT:
+    # v2 differs from v3 only in lacking dialog flags; it is converted on load
+    if not isinstance(payload, dict) or payload.get("format") not in (BOOK_FORMAT, BOOK_V2_FORMAT):
         return None, f"Source book must use the {BOOK_FORMAT} format"
     try:
         result = book_from_project_text_json_dict(payload)

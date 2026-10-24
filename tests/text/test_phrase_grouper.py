@@ -89,13 +89,13 @@ class TestPhraseGrouper(unittest.TestCase):
             [group.text for group in groups],
             ['"One? ', 'Two!" ', 'she said.'],
         )
-        self.assertEqual([group.voice_index for group in groups], [1, 1, -1])
+        self.assertEqual([group.is_dialog for group in groups], [True, True, False])
         self.assertEqual(
             [group.last_reason for group in groups],
             [Reason.SENTENCE, Reason.PHRASE_QUOTE_END, Reason.SENTENCE],
         )
 
-    def test_dialog_pass_voices_each_embedded_quoted_sentence(self):
+    def test_dialog_pass_flags_each_embedded_quoted_sentence(self):
         text = 'He said, "One. Two." Then left.'
 
         groups = PhraseGrouper.text_to_groups(
@@ -110,7 +110,7 @@ class TestPhraseGrouper(unittest.TestCase):
             [group.text for group in groups],
             ['He said, ', '"One. ', 'Two." ', 'Then left.'],
         )
-        self.assertEqual([group.voice_index for group in groups], [-1, 1, 1, -1])
+        self.assertEqual([group.is_dialog for group in groups], [False, True, True, False])
         self.assertEqual("".join(group.text for group in groups), text)
 
     def test_dialog_segmentation_marks_quote_end_pieces_with_phrase_quote_end_reason(self):
@@ -132,7 +132,7 @@ class TestPhraseGrouper(unittest.TestCase):
             [[phrase.reason for phrase in group.phrases] for group in groups],
             [[Reason.PHRASE], [Reason.PHRASE_QUOTE_END], [Reason.SENTENCE]],
         )
-        self.assertEqual([group.voice_index for group in groups], [-1, 1, -1])
+        self.assertEqual([group.is_dialog for group in groups], [False, True, False])
 
     def test_trailing_ornamental_line_merges_into_last_group(self):
         # A trailing ornament has no trailing line breaks, so its reason stays
@@ -236,7 +236,7 @@ class TestPhraseGrouper(unittest.TestCase):
             [group.text for group in groups],
             ["✦\n\n“Hello,” ", "she said.\n\n", "More prose follows here."],
         )
-        self.assertEqual([group.voice_index for group in groups], [1, -1, -1])
+        self.assertEqual([group.is_dialog for group in groups], [True, False, False])
         self.assertEqual("".join(group.text for group in groups), text)
 
     def test_merge_ornamental_groups_keeps_groups_when_no_content_exists(self):

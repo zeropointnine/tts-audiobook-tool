@@ -25,12 +25,16 @@ class SpeakerAssignMenu:
         # can't change while in this menu
         book = state.project.book
         has_dialog = bool(UtteranceUtil.find_utterances(book, 0, len(book.flat_phrase_groups)))
-        subheading = SPEAKER_ASSIGN_DESC + "\n\n" + (
-            f"{COL_DIM}Requires text imported with dialog segmentation enabled."
-            if has_dialog else
-            f"{COL_ERROR}No dialog found in the project text: re-import with dialog segmentation enabled\n"
-            f"(Text > Segmentation settings)."
-        )
+        if has_dialog:
+            requirement = f"{COL_DIM}Requires text imported with dialog segmentation enabled."
+        elif book.segmentation_settings.dialog_segmentation:
+            requirement = f"{COL_ERROR}No dialog found in the project text."
+        else:
+            requirement = (
+                f"{COL_ERROR}The project text was imported without dialog segmentation:\n"
+                f"re-import it with dialog segmentation enabled (Text > Segmentation settings)."
+            )
+        subheading = SPEAKER_ASSIGN_DESC + "\n\n" + requirement
 
         def make_roster_label(_: State) -> str:
             if SpeakerAssignFileUtil.has_roster(state.project.dir_path):
