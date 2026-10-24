@@ -29,6 +29,30 @@ OptionReconcileItem = tuple[str, Any, bool]
 """An option ID, optional replacement prompt, and whether its height may change."""
 
 
+# Marker shown in line editors' dialog column for dialog-tagged lines
+DIALOG_MARKER = "💬"
+# Two spaces match the emoji's two terminal cells, keeping text aligned
+NON_DIALOG_MARKER = "  "
+
+
+def has_dialog_detection(
+    dialog_segmentation: bool, is_dialog_flags: Iterable[bool]
+) -> bool:
+    """Whether a line editor should show its dialog-marker column.
+
+    True when the text was segmented with dialog detection. Without it, no
+    line can be dialog, so editors omit the column rather than reserve it.
+    Any dialog-flagged line also counts, as a guard against segmentation
+    settings that do not reflect the phrase groups.
+    """
+    return dialog_segmentation or any(is_dialog_flags)
+
+
+def dialog_marker(is_dialog: bool) -> str:
+    """Return a dialog line's marker, or matching-width blanks otherwise."""
+    return DIALOG_MARKER if is_dialog else NON_DIALOG_MARKER
+
+
 # Single source of truth for scrollbar colors across all Textual apps.
 # Appended to TEXTUAL_SHARED_CSS and injected into worker apps' CSS, since
 # the worker apps deliberately do not load the shared stylesheet. The

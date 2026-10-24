@@ -113,6 +113,27 @@ def test_run_resumes_after_done_chunks(tmp_path) -> None:
     assert AssignPlan.make(BOOK, result.attributions, CHUNK_WORDS).is_complete
 
 
+def test_starting_over_replaces_saved_results_only_at_the_first_new_save(tmp_path) -> None:
+    # "Start over" runs from empty attributions over a complete saved run: the
+    # saved results survive a run that saves nothing, and the first new save
+    # replaces all of them.
+    make_runner(tmp_path, ScriptedSend(reply, reply, reply)).run()
+
+    failed = make_runner(tmp_path, ScriptedSend(lambda _: error_result(http_error(401)))).run()
+    assert failed.outcome == RunOutcome.FAILED and failed.saved_count == 0
+    saved = SpeakerAssignFileUtil.load_attributions_file(str(tmp_path))
+    assert isinstance(saved, AttributionsFile) and len(saved.ranges) == 3
+
+    runner = make_runner(tmp_path, ScriptedSend(lambda m: reply(m, "BEN")))
+    runner.stop_requested = lambda: runner.attributions.ranges != ()
+    partial = runner.run()
+    assert partial.outcome == RunOutcome.STOPPED and partial.saved_count == 1
+    saved = SpeakerAssignFileUtil.load_attributions_file(str(tmp_path))
+    assert isinstance(saved, AttributionsFile)
+    [only] = saved.ranges
+    assert {u.speaker for u in only.utterances} == {"BEN"}
+
+
 def test_missing_ids_get_one_follow_up_then_become_unknown(tmp_path) -> None:
     send = ScriptedSend(
         lambda m: reply(m, skip=("2",)),   # chunk 1: id 2 missing...

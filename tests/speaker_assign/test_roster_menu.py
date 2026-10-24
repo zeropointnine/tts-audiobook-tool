@@ -73,6 +73,7 @@ def test_step_one_checks_dialog_segmentation_on_selection(monkeypatch, dialog_se
     menu = captured[0]
     assert "imported without dialog segmentation" not in menu["subheading"]
     assert "Re-import it" not in menu["subheading"]
+    assert "Requires text imported with dialog segmentation enabled." not in menu["subheading"]
     assert not warnings
     step_one = menu["items"](state)[0]
     expected_label = "Step 1: Create character roster"

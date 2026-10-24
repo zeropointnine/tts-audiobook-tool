@@ -46,6 +46,8 @@ from tts_audiobook_tool.textual.textual_shared import (
     NonWrappingOptionList,
     OptionReconcileItem,
     STYLE_DIM,
+    dialog_marker,
+    has_dialog_detection,
 )
 
 
@@ -163,6 +165,8 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         self.edit_session_or_none: TextEditSession | None = None
         self.section_items: list[TextEditorSectionItem] = []
         self.list_items: list[TextEditorListItem] = []
+        # Fixed at load so the column doesn't vanish if every dialog line is deleted
+        self.show_dialog_markers = False
 
         # State of manual line editing (in-place with TextArea).
         self.editor_widget: BaseTextArea | None = None
@@ -216,6 +220,10 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         list_items = self.make_list_items(section_items)
 
         self.edit_session_or_none = edit_session
+        self.show_dialog_markers = has_dialog_detection(
+            self.project.book.segmentation_settings.dialog_segmentation,
+            (phrase_group.is_dialog for phrase_group in self.project.book.phrase_groups),
+        )
         self.section_items = section_items
         self.list_items = list_items
         return range(len(list_items))
@@ -299,11 +307,19 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
                 style = "reverse"
             else:
                 style = ""
-            prefix_text = f"{self.format_line_number(list_item.ordinal)}  "
-            ansi_text = f"{COL_DIM}{prefix_text}{COL_DEFAULT}{list_item.phrase_group.presentable_text_lf_ansi}"
+            phrase_group = list_item.phrase_group
+            if self.show_dialog_markers:
+                dialog_column = f"{dialog_marker(phrase_group.is_dialog)}  "
+            else:
+                dialog_column = ""
+            prefix_ansi = (
+                f"{COL_DIM}{self.format_line_number(list_item.ordinal)}  "
+                f"{COL_DEFAULT}{dialog_column}"
+            )
+            ansi_text = f"{prefix_ansi}{COL_DEFAULT}{phrase_group.presentable_text_lf_ansi}"
             return HangingIndentText.from_ansi(
                 ansi_text=ansi_text,
-                content_start=len(prefix_text),
+                content_start=len(prefix_ansi),
                 max_lines=3,
                 style=style,
             )

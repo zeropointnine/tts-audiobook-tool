@@ -22,6 +22,8 @@ from tts_audiobook_tool.textual.multi_select_dialog import (
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
     STYLE_DIM,
+    dialog_marker,
+    has_dialog_detection,
 )
 from tts_audiobook_tool.util import make_error_string
 
@@ -31,9 +33,6 @@ TITLE_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 # Voice column: number, truncated/padded voice name, then a dialog marker
 # (the marker column only when the text was segmented with dialog detection)
 VOICE_NAME_WIDTH = 5
-DIALOG_MARKER = "💬"
-# Two spaces match the emoji's two terminal cells, keeping text aligned
-NON_DIALOG_MARKER = "  "
 
 
 @dataclass(frozen=True)
@@ -130,16 +129,12 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         return range(len(self.list_items))
 
     def has_dialog_detection(self) -> bool:
-        """Whether the text was segmented with dialog detection.
-
-        Without it, no line can be dialog, so the marker column is omitted
-        rather than reserved. Any dialog-flagged line also counts, as a guard
-        against settings that do not reflect the phrase groups.
-        """
+        """Whether the dialog-marker column is shown (see has_dialog_detection)."""
         book = getattr(self.project, "book", None)
-        if book is not None and book.segmentation_settings.dialog_segmentation:
-            return True
-        return any(phrase_group.is_dialog for phrase_group in self.project.phrase_groups)
+        return has_dialog_detection(
+            book is not None and book.segmentation_settings.dialog_segmentation,
+            (phrase_group.is_dialog for phrase_group in self.project.phrase_groups),
+        )
 
     def make_list_items(self) -> list[VoiceLineListItem]:
         """Project non-empty book sections and phrase groups into visible rows."""
@@ -216,8 +211,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         phrase_index = list_item.phrase_index
         phrase_group = self.project.phrase_groups[phrase_index]
         if self.show_dialog_markers:
-            dialog_marker = DIALOG_MARKER if phrase_group.is_dialog else NON_DIALOG_MARKER
-            dialog_column = f"{dialog_marker}  "
+            dialog_column = f"{dialog_marker(phrase_group.is_dialog)}  "
         else:
             dialog_column = ""
         prefix_ansi = (

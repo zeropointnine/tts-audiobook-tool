@@ -20,6 +20,11 @@ if TYPE_CHECKING:
 # timeout is much longer than voice chat's.
 SPEAKER_ASSIGN_LLM_TIMEOUT = (15.0, 900.0)
 
+# Output-token limit for the Anthropic API (which requires one) when the
+# prefs' extra params don't set max_tokens. Generous, since reasoning counts
+# toward it and the roster reply for a whole book can be long.
+SPEAKER_ASSIGN_ANTHROPIC_MAX_TOKENS = 64_000
+
 # How long to wait for the request thread to finish after closing a streaming
 # response (it's a daemon thread; see send_cancellable).
 CANCEL_GRACE_SECONDS = 1.0
@@ -82,7 +87,8 @@ class LlmRequestUtil:
         A session configured from the app prefs (url, key, model, extra params),
         the same way voice chat builds its session; reasoning, effort etc are
         therefore controlled by the prefs' extra params. Only the transport
-        timeout differs (see SPEAKER_ASSIGN_LLM_TIMEOUT).
+        timeout and the Anthropic default output limit differ (see
+        SPEAKER_ASSIGN_LLM_TIMEOUT, SPEAKER_ASSIGN_ANTHROPIC_MAX_TOKENS).
         Raises ValueError for an unusable configuration.
         """
         return LlmSession(
@@ -92,6 +98,7 @@ class LlmRequestUtil:
             system_prompt=system_prompt,
             extra_params=prefs.llm_extra_params,
             timeout=SPEAKER_ASSIGN_LLM_TIMEOUT,
+            anthropic_default_max_tokens=SPEAKER_ASSIGN_ANTHROPIC_MAX_TOKENS,
         )
 
     @staticmethod
@@ -265,6 +272,15 @@ class LlmRequestUtil:
     @staticmethod
     def _http_error_hint(status: int | None, body: str) -> str:
         lower = body.lower()
+        # Checked before the context hint: these bodies also mention "tokens"
+        if status == 400 and "max_tokens" in lower:
+            if "unsupported parameter" in lower:
+                # eg OpenAI's reasoning models, which want max_completion_tokens
+                return ("This model doesn't accept max_tokens; the error may name the parameter to use instead\n"
+                        "(Options > LLM settings > Extra params).")
+            # eg Anthropic: "max_tokens: 64000 > 32000, which is the maximum allowed number of output tokens..."
+            return ("The output-token limit (max_tokens) may be too high for this model. Set a lower one in\n"
+                    'Options > LLM settings > Extra params, eg {"max_tokens": 32000}.')
         if status in (400, 413) and any(
             word in lower for word in ("context", "token", "too long", "too large", "length")
         ):

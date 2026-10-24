@@ -1,5 +1,5 @@
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.constants import COL_DIM, COL_ERROR
+from tts_audiobook_tool.constants import COL_DIM, COL_DIM_ITALICS, COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.speaker_assign import assign_menu, voices_menu
 from tts_audiobook_tool.menus.speaker_assign.roster_menu import make_roster_stale_marker, roster_menu
@@ -26,9 +26,7 @@ class SpeakerAssignMenu:
         # can't change while in this menu
         book = state.project.book
         has_dialog = bool(UtteranceUtil.find_utterances(book, 0, len(book.flat_phrase_groups)))
-        if has_dialog:
-            requirement = f"{COL_DIM}Requires text imported with dialog segmentation enabled."
-        elif book.segmentation_settings.dialog_segmentation:
+        if not has_dialog and book.segmentation_settings.dialog_segmentation:
             requirement = f"{COL_ERROR}No dialog found in the project text."
         else:
             requirement = ""
@@ -71,9 +69,10 @@ class SpeakerAssignMenu:
 
 
 SPEAKER_ASSIGN_DESC = \
-"""Uses an LLM to determine which character speaks each line of dialog,
+f"""Automatically determine which character speaks each line of dialog,
 so that main characters can each get their own voice.
 
-Step 1 identifies the book's speaking characters.
-Step 2 assigns a character to each line of dialog.
-Step 3 is where you map characters to voices and apply them to the project."""
+{COL_DIM_ITALICS}* A capable LLM with plenty of context and reasoning turned on is recommended.
+{COL_DIM_ITALICS}* The full book text is sent to the configured LLM provider, so the usual
+  considerations about token costs and privacy apply.
+"""

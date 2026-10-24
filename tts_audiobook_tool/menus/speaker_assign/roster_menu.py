@@ -1,5 +1,6 @@
 """Step 1: the full-book roster request (see plans/llm-speaker-attribution.md)."""
 import datetime
+import math
 import os
 
 from tts_audiobook_tool import ask, text_util
@@ -9,10 +10,8 @@ from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_D
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
     CHARS_PER_TOKEN,
-    LLM_DATA_NOTICE,
     StatusLine,
     check_llm_configured,
-    format_elapsed,
     format_token_count,
     print_llm_info,
     save_temp_text,
@@ -24,15 +23,22 @@ from tts_audiobook_tool.speaker_assign.roster_util import ROSTER_SYSTEM_PROMPT, 
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.util import make_error_string, printt
+from tts_audiobook_tool.util import (
+    duration_string,
+    make_error_string,
+    make_hotkey_string,
+    print_accent_separator,
+    printt,
+)
 
 
 def roster_menu(state: State) -> None:
 
     # Computed once on entry (walks the whole book), not on every redraw
     tokens = estimate_roster_input_tokens(state.project.book)
-    subheading = ROSTER_DESC + (
-        f"\n\nEstimated input size: {COL_ACCENT}~{format_token_count(tokens)} tokens{COL_DEFAULT}"
+    # Always in thousands, rounded up, as it's a requirement
+    subheading = ROSTER_DESC.replace(
+        "%1", f"{COL_ACCENT}{math.ceil(tokens / 1000):,}k{COL_DEFAULT}"
     )
 
     def items_maker(_: State) -> list[MenuItem]:
@@ -61,7 +67,9 @@ def make_roster_stale_marker(state: State) -> str:
 def on_select_roster_start(state: State, _item: MenuItem) -> None:
     if not check_llm_configured(state):
         return
-    MenuUtil.print_screen_heading(state, "Creating character roster", breadcrumb="Creating character roster")
+    # Same heading and breadcrumbs as the roster menu: the run screen takes its
+    # place rather than nesting under it
+    MenuUtil.print_heading(state, "Create character roster", breadcrumb_text=MenuUtil.make_breadcrumb_text(state))
     create_roster(state)
 
 
@@ -97,13 +105,12 @@ def create_roster(state: State) -> None:
     has_roster = SpeakerAssignFileUtil.has_roster(project_dir)
     has_attributions = os.path.isfile(SpeakerAssignFileUtil.attributions_path(project_dir))
     if has_roster or has_attributions:
-        message = ""
         if has_roster:
-            message += "A roster already exists and will be replaced.\n"
+            printt("A roster already exists and will be replaced.")
         if has_attributions:
-            message += f"Dialog assignments from step 2 will be {COL_ERROR}discarded{COL_DEFAULT}.\n"
-        message += "\nAre you sure? "
-        if not ask.ask_confirm(message):
+            printt(f"Dialog assignments from step 2 will be {COL_ERROR}discarded{COL_DEFAULT}.")
+        printt()
+        if not ask.ask_confirm(""):
             return
 
     try:
@@ -115,11 +122,12 @@ def create_roster(state: State) -> None:
     message = RosterUtil.build_message(book)
     input_chars = len(ROSTER_SYSTEM_PROMPT) + len(message)
 
-    title = book.title.strip() or "(untitled)"
-    printt(f"{title}: {len(book.sections)} sections, {utterance_count:,} dialog passages")
+    printt(f"{COL_DEFAULT}Book text: {COL_DIM}{len(book.sections)} sections, {utterance_count:,} dialog passages")
     print_llm_info(prefs)
-    printt(f"Sending {input_chars:,} chars (~{format_token_count(input_chars // CHARS_PER_TOKEN)} tokens)")
-    printt(f"{COL_DIM}Press control-c to cancel")
+    printt(f"{COL_DEFAULT}Input size: {COL_DIM}{input_chars:,} chars "
+           f"(~{format_token_count(input_chars // CHARS_PER_TOKEN)} tokens)")
+    printt()
+    printt(f"Press {make_hotkey_string('CTRL-C')} to cancel")
     printt()
 
     status = StatusLine()
@@ -138,7 +146,11 @@ def create_roster(state: State) -> None:
         )
     finally:
         Interrupts().clear()
-    status.end()
+    if result.cancelled or result.error is not None:
+        status.end()
+    else:
+        # The "Done" line below takes the progress line's place
+        status.clear()
 
     if result.cancelled:
         feedback = "Cancelled. Nothing was saved."
@@ -151,12 +163,12 @@ def create_roster(state: State) -> None:
         ask.ask_error(LlmRequestUtil.describe_error(result.error, prefs))
         return
 
-    printt(f"Done in {format_elapsed(result.elapsed)}: "
-           f"{len(result.reply):,} answer chars, {len(result.reasoning):,} reasoning chars")
+    printt(f"{COL_DEFAULT}Done: {COL_DIM}{len(result.reply):,} answer chars, "
+           f"{len(result.reasoning):,} reasoning chars, elapsed: {duration_string(result.elapsed)}")
     if result.reasoning:
         path = save_temp_text(REASONING_FILE_NAME, result.reasoning)
         if path:
-            printt(f"{COL_DIM}Reasoning saved to: {text_util.make_terminal_hyperlink(path, path, is_file=True)}")
+            printt(f"{COL_DEFAULT}Reasoning log: {COL_DIM}{text_util.make_terminal_hyperlink(path, is_file=True)}")
     printt()
 
     if result.hit_output_limit:
@@ -210,6 +222,7 @@ def create_roster(state: State) -> None:
         printt(f"{COL_DIM}Discarded dialog assignments made with the previous roster")
         printt()
 
+    print_accent_separator("Roster summary")
     if print_roster_info(state):
         ask.ask_enter_to_continue()
 
@@ -228,8 +241,6 @@ def print_roster_info(state: State) -> bool:
     roster_file = result
     roster = roster_file.roster
 
-    count = len(roster.characters)
-    printt(f"{COL_ACCENT}{count}{COL_DEFAULT} speaking {'character' if count == 1 else 'characters'}")
     provenance = [roster_file.created.replace("T", " ")[:16]] if roster_file.created else []
     if roster_file.llm.get("model"):
         provenance.append(f"model: {roster_file.llm['model']}")
@@ -242,7 +253,9 @@ def print_roster_info(state: State) -> bool:
     if narration != RosterNarration():
         person = f"{narration.person.value} person" if narration.person.value else "Unknown person"
         printt()
-        printt(f"Narration: {person}. {COL_DIM}{narration.notes}")
+        printt(f"Narration: {person}")
+        if narration.notes.strip():
+            printt(f"{COL_DIM_ITALICS}{narration.notes.strip()}")
 
     id_width = max(len("id"), *(len(character.id) for character in roster.characters))
     printt()
@@ -257,8 +270,8 @@ def print_roster_info(state: State) -> bool:
     printt()
 
     path = SpeakerAssignFileUtil.roster_path(project_dir)
-    printt(f"{COL_DIM}Full roster data (aliases and descriptions may contain spoilers):")
-    printt(f"{COL_DIM}{text_util.make_terminal_hyperlink(path, path, is_file=True)}")
+    printt(f"{COL_DEFAULT}Full roster data: "
+           f"{COL_DIM}{text_util.make_terminal_hyperlink(path, is_file=True)} (may contain spoilers)")
     printt()
     return True
 
@@ -281,10 +294,7 @@ def estimate_roster_input_tokens(book: Book) -> int:
 
 
 ROSTER_DESC = \
-f"""Sends the entire book text to the LLM in a single request, which identifies
-the characters who speak dialog. The resulting roster (character ids, names, etc)
-is the list of speakers used by steps 2 and 3. The project text is not changed.
+"""Sends the full book text to the LLM in a single request, which identifies
+and saves the roster of speaking characters.
 
-Requires an LLM with a context window large enough for the whole book.
-Depending on the model, this may take a minute or more.
-{LLM_DATA_NOTICE}"""
+Requires an LLM with ~%1 context or more."""

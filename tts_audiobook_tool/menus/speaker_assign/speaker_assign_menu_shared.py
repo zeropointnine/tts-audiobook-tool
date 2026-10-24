@@ -2,11 +2,12 @@
 import os
 import tempfile
 
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM
+from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.speaker_assign.llm_request_util import LlmRequestProgress
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.util import print_feedback, printt
+from tts_audiobook_tool.text_util import strip_ansi_codes
+from tts_audiobook_tool.util import duration_string, print_feedback, printt
 
 
 def check_llm_configured(state: State) -> bool:
@@ -20,9 +21,9 @@ def check_llm_configured(state: State) -> bool:
 
 
 def print_llm_info(prefs: Prefs) -> None:
-    printt(f"LLM: {COL_ACCENT}{prefs.llm_model or '(no model name)'}{COL_DEFAULT} @ {prefs.llm_url}")
+    printt(f"{COL_DEFAULT}LLM: {COL_DIM}{prefs.llm_url}, {prefs.llm_model or '(no model name)'}")
     if prefs.llm_extra_params:
-        printt(f"{COL_DIM}Extra params: {prefs.llm_extra_params}")
+        printt(f"{COL_DEFAULT}Extra params: {COL_DIM}{prefs.llm_extra_params}")
 
 
 class StatusLine:
@@ -33,16 +34,18 @@ class StatusLine:
 
     def update_progress(self, progress: LlmRequestProgress) -> None:
         if progress.answer_chars:
-            text = f"Receiving... {progress.answer_chars:,} chars"
+            text = f"{COL_DEFAULT}Receiving: {COL_DIM}{progress.answer_chars:,} chars{COL_DEFAULT}"
         elif progress.reasoning_chars:
-            text = f"Thinking... {progress.reasoning_chars:,} chars"
+            text = f"{COL_DEFAULT}Thinking: {COL_DIM}{progress.reasoning_chars:,} chars{COL_DEFAULT}"
         else:
-            text = f"Waiting for response... {format_elapsed(progress.elapsed)}"
+            text = f"{COL_DEFAULT}Waiting for response: {COL_DIM}{duration_string(progress.elapsed)}"
             if progress.cancel_pending:
                 text += " (cancel pending)"
+            text += COL_DEFAULT
         if text == self._text:
             return
-        padding = " " * max(0, len(self._text) - len(text))
+        # Padding erases the previous text's tail; widths exclude color codes
+        padding = " " * max(0, visible_len(self._text) - visible_len(text))
         print(f"\r{text}{padding}", end="", flush=True)
         self._text = text
 
@@ -55,8 +58,12 @@ class StatusLine:
     def clear(self) -> None:
         """Erases the status line, if one was printed (the cursor stays at its start)."""
         if self._text:
-            print(f"\r{' ' * len(self._text)}\r", end="", flush=True)
+            print(f"\r{' ' * visible_len(self._text)}\r", end="", flush=True)
             self._text = ""
+
+
+def visible_len(text: str) -> int:
+    return len(strip_ansi_codes(text))
 
 
 def save_temp_text(file_name: str, text: str) -> str:
@@ -80,20 +87,3 @@ def format_token_count(tokens: int) -> str:
     if tokens < 10_000:
         return f"{tokens:,}"
     return f"{round(tokens / 1000):,}k"
-
-
-def format_elapsed(seconds: float) -> str:
-    """eg "48s", "12m 05s", "1h 02m 09s"."""
-    minutes, secs = divmod(int(round(seconds)), 60)
-    hours, minutes = divmod(minutes, 60)
-    if hours:
-        return f"{hours}h {minutes:02d}m {secs:02d}s"
-    if minutes:
-        return f"{minutes}m {secs:02d}s"
-    return f"{secs}s"
-
-
-# Shared by the steps that send book text to the LLM
-LLM_DATA_NOTICE = \
-"""The full book text is sent to the configured LLM provider, so the usual
-considerations about privacy and token costs apply."""

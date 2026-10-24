@@ -125,6 +125,7 @@ from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAs
 from tts_audiobook_tool.speaker_assign.speaker_assign_types import NOT_SPEECH, Utterance
 from tts_audiobook_tool.speaker_assign.speaker_label_util import SpeakerLabelUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
+from tts_audiobook_tool.util import duration_string
 
 
 PROJECT_TEXT_FILE_NAME = "project_text.json"
@@ -817,18 +818,7 @@ def main() -> None:
         sys.exit(f"Error: {error}")
     finally:
         if uses_llm:
-            print(f"\nTotal elapsed: {format_elapsed((datetime.datetime.now() - started).total_seconds())}")
-
-
-def format_elapsed(seconds: float) -> str:
-    """eg "48s", "12m 05s", "1h 02m 09s"."""
-    minutes, secs = divmod(int(round(seconds)), 60)
-    hours, minutes = divmod(minutes, 60)
-    if hours:
-        return f"{hours}h {minutes:02d}m {secs:02d}s"
-    if minutes:
-        return f"{minutes}m {secs:02d}s"
-    return f"{secs}s"
+            print(f"\nTotal elapsed: {duration_string((datetime.datetime.now() - started).total_seconds())}")
 
 
 if __name__ == "__main__":

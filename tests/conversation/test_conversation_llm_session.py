@@ -68,6 +68,45 @@ def test_anthropic_requires_max_tokens() -> None:
         )
 
 
+def make_anthropic_llm_without_max_tokens(**kwargs) -> LlmSession:
+    return LlmSession(api_endpoint_url="https://api.anthropic.com/v1/messages", token="t", model="m", **kwargs)
+
+
+def test_anthropic_falls_back_to_default_max_tokens() -> None:
+    # The app's callers configure no max_tokens; Anthropic requires one, so
+    # the caller-supplied default fills in.
+    llm = make_anthropic_llm_without_max_tokens(anthropic_default_max_tokens=32_000)
+
+    payload = llm.build_anthropic_payload([{"role": "user", "content": "Hi"}])
+
+    assert payload["max_tokens"] == 32_000
+
+
+def test_anthropic_max_tokens_in_extra_params_wins_over_default() -> None:
+    # A user-set max_tokens in extra params satisfies the requirement on its
+    # own and overrides the default in the request.
+    llm = make_anthropic_llm_without_max_tokens(
+        extra_params={"max_tokens": 8_000}, anthropic_default_max_tokens=32_000)
+
+    payload = llm.build_anthropic_payload([{"role": "user", "content": "Hi"}])
+
+    assert payload["max_tokens"] == 8_000
+
+
+def test_anthropic_max_tokens_in_extra_params_alone_is_enough() -> None:
+    llm = make_anthropic_llm_without_max_tokens(extra_params={"max_tokens": 8_000})
+
+    assert llm.build_anthropic_payload([{"role": "user", "content": "Hi"}])["max_tokens"] == 8_000
+
+
+def test_anthropic_default_max_tokens_is_not_sent_to_openai() -> None:
+    # OpenAI's reasoning models reject max_tokens, so the Anthropic-only
+    # default must not leak into OpenAI-format requests.
+    llm = make_openai_llm(anthropic_default_max_tokens=32_000)
+
+    assert "max_tokens" not in llm.build_openai_payload([{"role": "user", "content": "Hi"}])
+
+
 def test_system_prompt_is_immutable_session_configuration() -> None:
     llm = make_openai_llm(system_prompt="captured")
 

@@ -1,10 +1,15 @@
 import pytest
 from pathlib import Path
 
+from rich.console import Console
 from rich.text import Text
 from textual.widgets import Button, Input, OptionList, Static, TextArea
 
-from tts_audiobook_tool.app_types import BookSection, SegmentationStrategy
+from tts_audiobook_tool.app_types import (
+    BookSection,
+    BookSegmentationSettings,
+    SegmentationStrategy,
+)
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile, RangeAttribution
@@ -65,6 +70,67 @@ def test_single_section_lists_only_phrase_groups() -> None:
         "00002  Two.",
     ]
     assert app.find_match_indices("only section") == []
+
+
+@pytest.mark.parametrize(
+    ("dialog_segmentation", "expected_rows"),
+    [
+        (False, ["00001  Narration.", '00002  "Hi."']),
+        (True, ["00001      Narration.", '00002  💬  "Hi."']),
+    ],
+)
+def test_dialog_marker_column_is_shown_only_with_dialog_detection(
+    dialog_segmentation: bool, expected_rows: list[str]
+) -> None:
+    # With dialog detection, a column after the line number marks dialog lines
+    # with 💬 and reserves matching blanks on other lines; without it the
+    # column is omitted entirely rather than reserved.
+    dialog_group = make_phrase_group('"Hi."')
+    dialog_group.is_dialog = dialog_segmentation
+    project = make_project(
+        [BookSection(phrase_groups=[make_phrase_group("Narration."), dialog_group])]
+    )
+    project.book.segmentation_settings = BookSegmentationSettings(
+        dialog_segmentation=dialog_segmentation
+    )
+
+    app = make_loaded_editor(project)
+
+    assert [str(app.format_line(index)) for index in range(2)] == expected_rows
+    assert app.find_text_strings(1) == ["00002", '"Hi."']
+
+
+def test_dialog_marker_column_survives_deleting_every_dialog_line() -> None:
+    # The column is decided at load, so deleting the only dialog line keeps
+    # remaining rows aligned instead of collapsing the column mid-session.
+    dialog_group = make_phrase_group('"Hi."')
+    dialog_group.is_dialog = True
+    project = make_project(
+        [BookSection(phrase_groups=[make_phrase_group("Narration."), dialog_group])]
+    )
+    app = make_loaded_editor(project)
+
+    app.apply_mutation_result(
+        app.edit_session.delete_phrase_groups({app.list_items[1].item_id})
+    )
+
+    assert str(app.format_line(0)) == "00001      Narration."
+
+
+def test_dialog_marker_column_keeps_hanging_indent_aligned() -> None:
+    # Wrapped lines indent past the marker column (the emoji is two cells wide).
+    dialog_group = make_phrase_group('"One two three four five six seven."')
+    dialog_group.is_dialog = True
+    app = make_loaded_editor(make_project([BookSection(phrase_groups=[dialog_group])]))
+
+    console = Console(width=30, color_system=None)
+    with console.capture() as capture:
+        console.print(app.format_line(0))
+
+    assert capture.get().splitlines() == [
+        '00001  💬  "One two three four',
+        '           five six seven."',
+    ]
 
 
 def test_phrase_rows_show_line_feeds_as_dim_nonbreaking_tokens() -> None:

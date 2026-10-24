@@ -54,6 +54,10 @@ OUTPUT_TAIL_POLL_INTERVAL_S = 0.02
 OUTPUT_TAIL_WAIT_TIMEOUT_S = 1.0
 OUTPUT_TAIL_SETTLE_MARGIN_S = 0.15
 
+# Output-token limit for the Anthropic API (which requires one) when the
+# prefs' extra params don't set max_tokens
+CHAT_ANTHROPIC_MAX_TOKENS = 32_000
+
 STEREO_FALLBACK_WARNING = (
     "Couldn't open the sound output in stereo, playing in mono "
     "(room reverb stereo effect off)"
@@ -196,6 +200,7 @@ class ConversationRuntime:
                 system_prompt=get_resolved_system_prompt(self.state),
                 extra_params=self.prefs.llm_extra_params,
                 verbose=False,
+                anthropic_default_max_tokens=CHAT_ANTHROPIC_MAX_TOKENS,
             )
         reset_error = ModelWorker.reset_chat_session_blocking(
             console_handler=console_handler

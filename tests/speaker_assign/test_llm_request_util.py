@@ -149,6 +149,23 @@ def test_describe_http_error_includes_body_and_hint() -> None:
     assert "API key" in text
 
 
+def test_describe_http_error_hints_at_max_tokens_rather_than_context() -> None:
+    # Anthropic rejects a max_tokens above the model's output cap (eg the 64K
+    # speaker-assign default on a 32K model). The body mentions "tokens", but
+    # the fix is a lower max_tokens, not shorter text.
+    prefs = SimpleNamespace(llm_url="https://api.anthropic.com/v1/messages")
+    body = ('{"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: 64000 > 32000, '
+            'which is the maximum allowed number of output tokens for claude-opus-4-1-20250805"}}')
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert "Set a lower one" in text
+    assert "context window" not in text
+
+    # An OpenAI reasoning model given max_tokens via extra params
+    body = "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert "doesn't accept max_tokens" in text
+
+
 def test_without_deferral_a_cancel_before_streaming_abandons_at_once() -> None:
     # Step 2 uses its first control-c for "stop after this chunk", so the
     # next press must stop the request immediately, even before streaming.

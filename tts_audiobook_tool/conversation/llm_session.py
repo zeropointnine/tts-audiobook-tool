@@ -42,6 +42,7 @@ class LlmSession:
         api_type: str | None = None,
         timeout: float | tuple[float, float] = (15.0, 120.0),
         verbose: bool = False,
+        anthropic_default_max_tokens: int | None = None,
     ) -> None:
         """
         Args:
@@ -50,13 +51,18 @@ class LlmSession:
             model: Model identifier string.
             system_prompt: System message injected on every request (not stored in history).
             temperature: Sampling temperature. Overridden to 1.0 by Anthropic when thinking is enabled.
-            max_tokens: Maximum tokens in the response; is optional for OpenAI but required for Anthropic.
+            max_tokens: Maximum tokens in the response; is optional for OpenAI but required for Anthropic
+                (see anthropic_default_max_tokens).
             extra_params: Provider-specific params merged into the request payload as-is (e.g.
                 {"reasoning_effort": "high"} for OpenAI, {"thinking": {"type": "enabled"}} for Anthropic).
+                They override same-named payload values, including max_tokens.
             api_type: Force "openai" or "anthropic" format. None = auto-detect from URL.
             timeout: HTTP request timeout. A single float sets both the connection and read
                 timeout in seconds. A (connect, read) tuple sets them independently
                 (default: (15.0, 120.0) — a fast connection failure with a lenient read window).
+            anthropic_default_max_tokens: For the Anthropic API only, the max_tokens to use when
+                neither max_tokens nor extra_params sets one (Anthropic requires it). Never applied
+                to OpenAI-format requests, which then send no output limit at all.
         """
         self.api_endpoint_url = api_endpoint_url
         self.token = token
@@ -79,8 +85,11 @@ class LlmSession:
         self.resolved_api_type = (
             api_type if api_type is not None else self.detect_api_type()
         )
-        if self.resolved_api_type == "anthropic" and max_tokens is None:
-            raise ValueError("max_tokens is required for Anthropic API")
+        if self.resolved_api_type == "anthropic" and "max_tokens" not in self.extra_params:
+            if self.max_tokens is None:
+                self.max_tokens = anthropic_default_max_tokens
+            if self.max_tokens is None:
+                raise ValueError("max_tokens is required for Anthropic API")
 
     @property
     def system_prompt(self) -> str:
