@@ -1171,6 +1171,16 @@ def test_multi_select_under_filter_shows_visible_counts_and_selects_visible_line
     run(exercise())
 
 
+def test_multi_select_labels_only_voices_reachable_by_number_key() -> None:
+    # Keys 1-9 choose the first nine voices, so only those show a "[n]"
+    # label; voice 10 onward is padded to the same width instead of showing
+    # a "[10]" label no key can choose.
+    dialog = MultiSelectDialog([1] * 10, [""] * 10)
+    texts = [dialog.voice_option_text(index).plain for index in range(10)]
+    assert texts[8] == "[9] Voice 9 (1 line)"
+    assert texts[9] == "    Voice 10 (1 line)"
+
+
 def test_filter_dialog_escape_cancels_without_changing_display() -> None:
     app, _ = make_app(3, {1})
 

@@ -26,6 +26,11 @@ LABEL_MANUAL_ENTRY = "Enter line selections manually"
 # title plus its trailing blank line (2)
 DIALOG_CHROME_HEIGHT = 6
 
+# Voices reachable by number key ([1] to [9]); later voices are unlabeled
+VOICE_HOTKEY_COUNT = 9
+# Width of a "[n] " hotkey label, which unlabeled voices pad to for alignment
+VOICE_HOTKEY_LABEL_WIDTH = len(f"[{VOICE_HOTKEY_COUNT}] ")
+
 
 class MultiSelectDialog(ModalScreen[MultiSelectResult]):
     """List the voice samples (with line counts), an optional dialog-lines
@@ -46,7 +51,7 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         Binding("space", "select_highlighted", show=False),
         *(
             Binding(str(number), f"choose_voice({number - 1})", show=False)
-            for number in range(1, 10)
+            for number in range(1, VOICE_HOTKEY_COUNT + 1)
         ),
     ]
 
@@ -141,7 +146,14 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         return f"{COL_DIM}({visible_text}{count} {line_noun})"
 
     def voice_option_text(self, voice_index: int) -> Text:
+        """Only voices with a number key get a "[n]" label; later ones are
+        padded to the same width so the voice labels stay aligned."""
         number = voice_index + 1
+        hotkey_text = (
+            f"[{number}] "
+            if number <= VOICE_HOTKEY_COUNT
+            else " " * VOICE_HOTKEY_LABEL_WIDTH
+        )
         name = (
             self.voice_names[voice_index].strip()
             if voice_index < len(self.voice_names)
@@ -155,7 +167,7 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
             else None
         )
         return Text.from_ansi(
-            f"[{number}] {COL_ACCENT}Voice {number}{name_text} "
+            f"{hotkey_text}{COL_ACCENT}Voice {number}{name_text} "
             f"{self.line_count_text(count, visible_count)}"
         )
 
