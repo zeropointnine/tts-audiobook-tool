@@ -141,12 +141,10 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
         assert voice_menu_shared.COL_ERROR in raw_labels[0]
     else:
         assert rendered_labels[0] == f"{first}voice_0"
-    assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in rendered_labels) == (sample_count < 9)
     assert not any(label.startswith(("Select Qwen3-TTS model", "Temperature", "Seed",
                                      "Add/remove voice samples")) for label in rendered_labels)
     expected = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(max(sample_count, 1))]
-    if sample_count < 9:
-        expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
+    expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
     # Speakers are per voice (voice submenu), not Voices menu items
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     expected.append(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)

@@ -36,6 +36,7 @@ from tts_audiobook_tool.transcriber import Transcriber
 LABEL_VOICE_SAMPLE_ITEM = "Voice"  # "Voice N: <name> (<duration>); "<instructions>""
 LABEL_VOICE_SAMPLES_SUPERLABEL = "Voice list"
 LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sample-less) voice
+LABEL_MORE_VOICES = "More voices..."  # Opens the next page of voices
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Auto-assign character voices"
 
@@ -72,6 +73,29 @@ def format_instructions_message(message: str) -> str:
         f"{COL_DIM}{line}{COL_DEFAULT}" if line.lstrip().startswith("(") else line
         for line in message.split("\n")
     )
+
+# Voices listed per page, both in the Voices menu and in the character voice
+# picker (speaker_assign/voices_menu.py), so page boundaries match. Fixed
+# rather than fitted to each model's extra items so they don't shift between
+# models; leaves the Voices menu's first page room for "More voices...", the
+# model's items and the selection controls within the 35 auto hotkeys.
+VOICES_PER_PAGE = 20
+
+
+def make_more_voices_label(remaining: int) -> str:
+    """Eg "More voices... (5)"."""
+    return f"{LABEL_MORE_VOICES} {COL_DIM}({remaining:,})"
+
+
+def make_page_range_text(start: int, end: int, count: int) -> str:
+    """Eg "(21-40 of 45)", for a later page's heading."""
+    return f"({start + 1:,}-{end:,} of {count:,})"
+
+
+def make_page_breadcrumb(start: int, end: int) -> str:
+    """Eg "Voices 21-40"."""
+    return f"Voices {start + 1:,}-{end:,}"
+
 
 # Minimum duration of an imported voice sample, checked before and after silence trim
 VOICE_SAMPLE_MIN_DURATION_S = 2.0
@@ -566,7 +590,10 @@ class VoiceMenuShared:
         The selection controls close the menu; `menu_wrapper` adds them.
 
         Built on every redraw, so labels and indices are those of the current
-        list. A project always has at least one voice. The set callbacks run
+        list. A project always has at least one voice. The list is paged to
+        stay within the hotkeys: past `VOICES_PER_PAGE` voices, "More
+        voices..." replaces Add and opens the next page as a submenu (see
+        `voices_page_menu`); Add follows the last page's voices. The set callbacks run
         around a voice's "Set voice sample"; `on_clear_callback` runs when a
         removal leaves no voice with a sample. `preset_choices` enables each
         voice's preset item (while the model uses presets, `can_voice_presets`).
@@ -588,20 +615,61 @@ class VoiceMenuShared:
                 return
             open_submenu(s, index)
 
-        voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
-        items: list[MenuItem] = []
-        for index in range(len(voices)):
-            label, _ = VoiceMenuShared.make_voice_sample_item_label(state.project, tts_type, index)
-            items.append(MenuItem(
-                label,
-                lambda s, item: open_submenu(s, item.data),
-                data=index,
-                superlabel=LABEL_VOICE_SAMPLES_SUPERLABEL if index == 0 else "",
-                superlabel_no_blank_line=True,
-            ))
-        if len(voices) < 9:
-            items.append(MenuItem(LABEL_ADD_VOICE_SAMPLE, add_voice))
-        return items
+        def make_page_items(s: State, start: int) -> list[MenuItem]:
+            """The page of voices from `start`, then "More voices..." when any
+            follow, else Add."""
+            count = len(ProjectVoiceUtil.get_voice_values(s.project, tts_type))
+            end = min(start + VOICES_PER_PAGE, count)
+
+            def on_voice(s2: State, item: MenuItem) -> bool:
+                open_submenu(s2, item.data)
+                # A later page closes once removals have emptied it
+                return start >= len(s2.project.voice_references)
+
+            items: list[MenuItem] = []
+            for index in range(start, end):
+                label, _ = VoiceMenuShared.make_voice_sample_item_label(s.project, tts_type, index)
+                items.append(MenuItem(
+                    label,
+                    on_voice,
+                    data=index,
+                    superlabel=LABEL_VOICE_SAMPLES_SUPERLABEL if index == 0 else "",
+                    superlabel_no_blank_line=True,
+                ))
+            if end < count:
+                items.append(MenuItem(
+                    make_more_voices_label(count - end),
+                    lambda s2, _: VoiceMenuShared.voices_page_menu(s2, end, make_page_items),
+                ))
+            else:
+                items.append(MenuItem(LABEL_ADD_VOICE_SAMPLE, add_voice))
+            return items
+
+        return make_page_items(state, 0)
+
+    @staticmethod
+    def voices_page_menu(
+            state: State, start: int, make_page_items: Callable[[State, int], list[MenuItem]],
+    ) -> None:
+        """A later page of the Voices menu's voice list: just its voices, then
+        "More voices..." or Add (the model's items and the selection controls
+        stay on the first page). Recomputed on every redraw, since voices can
+        be added, moved and removed from here."""
+        def make_range(s: State) -> tuple[int, int]:
+            count = len(s.project.voice_references)
+            return min(start + VOICES_PER_PAGE, count), count
+
+        def make_heading(s: State) -> str:
+            end, count = make_range(s)
+            return f"Voices {COL_DIM}{make_page_range_text(start, end, count)}"
+
+        MenuUtil.menu(
+            state=state,
+            heading=make_heading,
+            items=lambda s: make_page_items(s, start),
+            on_exit=lambda: PlaySoundUtil.stop_sound_async(),
+            breadcrumb=lambda s: make_page_breadcrumb(start, make_range(s)[0]),
+        )
 
     @staticmethod
     def make_voice_selection_items(state: State, tts_type: TtsModelType) -> list[MenuItem]:

@@ -5,7 +5,13 @@ from collections.abc import Callable
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+from tts_audiobook_tool.menus.voice.voice_menu_shared import (
+    VOICES_PER_PAGE,
+    VoiceMenuShared,
+    make_more_voices_label,
+    make_page_breadcrumb,
+    make_page_range_text,
+)
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
 from tts_audiobook_tool.speaker_assign.attribution_summary import AttributionSummary
@@ -238,15 +244,54 @@ def voice_submenu(
         on_select: Callable[[int | None], None],
 ) -> None:
     """One item per project voice, then `clear_label`; selecting one calls
-    `on_select` with the voice index (None for clear) and returns."""
-    items = []
-    for index, voice in enumerate(state.project.voice_references):
-        label = VoiceMenuShared.make_voice_title(voice, index)
-        if index == current:
-            label += f" {COL_ACCENT}(selected)"
-        items.append(MenuItem(label, lambda _, item: on_select(item.data), data=index))
-    items.append(MenuItem(clear_label, lambda _, __: on_select(None)))
-    MenuUtil.menu(state, heading=heading, items=items, one_shot=True, breadcrumb=heading)
+    `on_select` with the voice index (None for clear) and returns.
+    Paged like the Voices menu: past VOICES_PER_PAGE voices, "More voices..."
+    opens the next page as a submenu; every page repeats `clear_label`."""
+    voice_picker_page(state, heading, current, clear_label, on_select, 0)
+
+
+def voice_picker_page(
+        state: State, heading: str, current: int | None, clear_label: str,
+        on_select: Callable[[int | None], None], start: int,
+) -> bool:
+    """One page of `voice_submenu`. Returns whether a choice was made, so that
+    a choice closes every page, while going back returns to the previous one."""
+    chosen = False
+
+    def choose(index: int | None) -> bool:
+        nonlocal chosen
+        on_select(index)
+        chosen = True
+        return True  # Closes this page
+
+    def make_range() -> tuple[int, int]:
+        count = len(state.project.voice_references)
+        return min(start + VOICES_PER_PAGE, count), count
+
+    def items_maker(_: State) -> list[MenuItem]:
+        end, count = make_range()
+        items = []
+        for index in range(start, end):
+            label = VoiceMenuShared.make_voice_title(state.project.voice_references[index], index)
+            if index == current:
+                label += f" {COL_ACCENT}(selected)"
+            items.append(MenuItem(label, lambda _, item: choose(item.data), data=index))
+        if end < count:
+            items.append(MenuItem(
+                make_more_voices_label(count - end),
+                lambda _, __: voice_picker_page(state, heading, current, clear_label, on_select, end),
+            ))
+        items.append(MenuItem(clear_label, lambda _, __: choose(None)))
+        return items
+
+    if start == 0:
+        page_heading = breadcrumb = heading
+    else:
+        end, count = make_range()
+        page_heading = f"{heading} {COL_DIM}{make_page_range_text(start, end, count)}"
+        breadcrumb = make_page_breadcrumb(start, end)
+    MenuUtil.menu(state, heading=page_heading, items=items_maker, breadcrumb=breadcrumb)
+    return chosen
 
 
 def sort_characters(

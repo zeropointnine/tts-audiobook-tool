@@ -39,9 +39,7 @@ def make_state(model_id="mira_local", voice_count=0, dir_path="/example/book"):
 def sample_group_prefixes(voice_count):
     """Expected (ANSI-stripped) label prefixes of the shared voice list (voices and Add)."""
     prefixes = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(voice_count)]
-    if voice_count < 9:
-        prefixes.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
-    return prefixes
+    return [*prefixes, voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]  # One page (see VOICES_PER_PAGE)
 
 
 def selection_group_prefixes(voice_count):
@@ -138,7 +136,6 @@ def test_all_local_voice_menus_keep_sample_selection_group(
         # The requirement replaces "no sample set" when the model requires a voice
         required = VoiceMenuShared.get_voice_sample_required_label(state.project, 0)
         assert labels[0].startswith(f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: {required or 'no sample set'}")
-    assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in labels) == (voice_count < 9)
     expected = sample_group_prefixes(max(voice_count, 1))
     assert len(labels) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, expected))

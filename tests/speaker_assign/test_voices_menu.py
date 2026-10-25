@@ -72,13 +72,46 @@ def test_voice_submenu_lists_voices_then_clear_and_reports_choice(monkeypatch) -
     chosen = []
     voice_submenu(state, heading="Assign ALICE to...", current=1, clear_label="Clear", on_select=chosen.append)
 
-    items = captured["items"]
-    assert captured["heading"] == "Assign ALICE to..." and captured["one_shot"]
+    items = captured["items"](state)
+    assert captured["heading"] == "Assign ALICE to..."
     assert [strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
         "Voice 1 general", "Voice 2 narrator (selected)", "Clear"]
     for item in items:
-        item.handler(state, item)
+        assert item.handler(state, item) is True  # A choice closes the picker
     assert chosen == [0, 1, None]
+
+
+def test_voice_picker_pages_chain_through_more_and_repeat_clear(monkeypatch) -> None:
+    # Past a page's worth of voices, "More voices..." opens the next page;
+    # every page ends with the clear item. A choice on a later page closes the
+    # earlier pages too, while backing out of it returns to the previous page.
+    menus = []
+    monkeypatch.setattr(MenuUtil, "menu", lambda state, **kwargs: menus.append(kwargs))
+    monkeypatch.setattr(voices_menu, "VOICES_PER_PAGE", 2)
+    state = make_state("a", "b", "c", "d", "e")
+    chosen = []
+    voice_submenu(state, heading="Assign ALICE to...", current=4, clear_label="Clear", on_select=chosen.append)
+
+    def labels(menu: dict) -> list[str]:
+        return [strip_ansi_codes(get_string_from(state, item.label)) for item in menu["items"](state)]
+
+    assert labels(menus[0]) == ["Voice 1 a", "Voice 2 b", "More voices... (3)", "Clear"]
+    more = menus[0]["items"](state)[2]
+    assert more.handler(state, more) is False  # Backed out of page 2 (stubbed menu)
+    assert labels(menus[1]) == ["Voice 3 c", "Voice 4 d", "More voices... (1)", "Clear"]
+    assert strip_ansi_codes(menus[1]["heading"]) == "Assign ALICE to... (3-4 of 5)"
+    assert menus[1]["breadcrumb"] == "Voices 3-4"
+
+    # Choosing on page 3 reports True up through page 2's "More voices..."
+    def choose_on_page_3(state, **kwargs):
+        menus.append(kwargs)
+        last = kwargs["items"](state)[0]
+        last.handler(state, last)
+    monkeypatch.setattr(MenuUtil, "menu", choose_on_page_3)
+    more = menus[1]["items"](state)[2]
+    assert more.handler(state, more) is True
+    assert labels(menus[2]) == ["Voice 5 e (selected)", "Clear"]
+    assert chosen == [4]
 
 
 def test_character_pages_chain_through_more_and_repeat_actions(monkeypatch) -> None:

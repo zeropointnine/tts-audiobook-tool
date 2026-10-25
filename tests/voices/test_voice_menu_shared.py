@@ -158,7 +158,7 @@ def test_voice_menu_direct_actions_refresh_samples_and_preserve_callbacks(monkey
     assert get_string_from(state, items[0].label).startswith("Voice 1: ")
     assert get_string_from(state, items[1].label) == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
     assert get_string_from(state, main["subheading"]) == "Sample guidance"
-    assert items[0].handler(state, items[0]) is None  # opens the voice's submenu
+    assert items[0].handler(state, items[0]) is False  # opens the voice's submenu; the menu stays
     sub_items = menus[-1]["items"](state)
     set_item = next(
         item for item in sub_items
@@ -207,12 +207,45 @@ def test_add_appends_default_voice_and_opens_its_submenu(monkeypatch):
     assert opened == [1]
 
 
-def test_add_is_hidden_at_nine_voices(monkeypatch):
-    project = Project(tts_model_type="mira_local", voice_references=[{"file_name": ""}] * 9)
+def test_voice_list_pages_through_more_voices_with_add_on_last_page(monkeypatch):
+    # Past a page's worth of voices, "More voices..." replaces Add and opens
+    # the next page, which lists only voices (no model items or selection
+    # controls); Add follows the last page's voices.
+    project = Project(tts_model_type="mira_local", voice_references=[{"file_name": ""}] * 5)
     state = cast(State, SimpleNamespace(project=project))
+    monkeypatch.setattr(voice_menu_shared, "VOICES_PER_PAGE", 2)
+    menus = capture_menus(monkeypatch)
+
+    def labels(items) -> list[str]:
+        return [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+
     items = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())
-    labels = [get_string_from(state, item.label) for item in items]
-    assert voice_menu_shared.LABEL_ADD_VOICE_SAMPLE not in labels
+    assert [label.split(":")[0] for label in labels(items)] == ["Voice 1", "Voice 2", "More voices... (3)"]
+    items[-1].handler(state, items[-1])
+    page_2 = menus[-1]["items"](state)
+    assert [label.split(":")[0] for label in labels(page_2)] == ["Voice 3", "Voice 4", "More voices... (1)"]
+    assert strip_ansi_codes(get_string_from(state, menus[-1]["heading"])) == "Voices (3-4 of 5)"
+    assert get_string_from(state, menus[-1]["breadcrumb"]) == "Voices 3-4"
+    page_2[-1].handler(state, page_2[-1])
+    page_3 = menus[-1]["items"](state)
+    assert [label.split(":")[0] for label in labels(page_3)] == ["Voice 5", voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]
+
+
+def test_later_voice_page_closes_when_removals_empty_it(monkeypatch):
+    # Pages are recomputed on redraw; a page whose voices were all removed
+    # (from a voice's submenu) closes instead of showing an empty list.
+    project = Project(tts_model_type="mira_local", voice_references=[{"file_name": ""}] * 3)
+    state = cast(State, SimpleNamespace(project=project))
+    monkeypatch.setattr(voice_menu_shared, "VOICES_PER_PAGE", 2)
+    menus = capture_menus(monkeypatch)
+    monkeypatch.setattr(VoiceMenuShared, "voice_sample_submenu",
+                        lambda s, *_args, **_kwargs: setattr(s.project, "voice_references",
+                                                             s.project.voice_references[:-1]))
+    items = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())
+    items[-1].handler(state, items[-1])
+    voice_3 = menus[-1]["items"](state)[0]
+    assert voice_3.handler(state, voice_3) is True  # Voice 3 removed: page 2 is empty
+    assert items[0].handler(state, items[0]) is False  # The first page never closes this way
 
 
 @pytest.mark.parametrize("voice_count", [0, 1])
@@ -528,7 +561,7 @@ def test_voice_menu_duration_warning_tracks_current_model_on_redraw(monkeypatch)
         assert (f"{voice_menu_shared.COL_ERROR}*" in label) == warned
 
 
-@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 4), (1, 4), (2, 5), (9, 11)])
+@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 4), (1, 4), (2, 5), (9, 12)])
 def test_voice_items_end_with_selection_items(
         monkeypatch,
         voice_count: int,
@@ -550,9 +583,7 @@ def test_voice_items_end_with_selection_items(
     voice_count = max(voice_count, 1)
     for index, label in enumerate(labels[:voice_count]):
         assert f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {index + 1}: " in label
-    expected = []
-    if voice_count < 9:
-        expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
+    expected = [voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]
     assert items[-2].blank_line_before
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     expected.append(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
