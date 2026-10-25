@@ -35,6 +35,13 @@ def test_characters_sort_by_dialog_count_with_ties_in_roster_order() -> None:
     assert [c.id for c in sort_characters(characters, counts)] == ["BOB", "DAVE", "CAROL", "ALICE"]
 
 
+def test_characters_without_dialog_can_be_omitted() -> None:
+    # Once dialog has been assigned, characters with no passages aren't listed
+    characters = tuple(RosterCharacter(id=id, name=id.title()) for id in ("ALICE", "BOB", "CAROL"))
+    counts = Counter({"BOB": 3, "CAROL": 0})
+    assert [c.id for c in sort_characters(characters, counts, omit_unused=True)] == ["BOB"]
+
+
 def test_character_label_shows_count_and_chosen_voice() -> None:
     # The chosen voice is shown by its title (number plus name, if any); a
     # voice index past the project's voices is flagged as missing.

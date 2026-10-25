@@ -572,7 +572,8 @@ def test_header_advertises_multi_select_and_m_opens_it() -> None:
 def test_multi_select_dialog_lists_voices_with_line_counts() -> None:
     # One item per voice sample (name only when set, singular/plural count
     # from staged assignments; a line never explicitly assigned counts as
-    # voice 1), then manual entry; the first item starts highlighted.
+    # voice 1), then a blank row, then manual entry; the first item starts
+    # highlighted, and the cursor skips over the blank row.
     app, _ = make_voiced_app()
 
     async def exercise() -> None:
@@ -585,10 +586,16 @@ def test_multi_select_dialog_lists_voices_with_line_counts() -> None:
             assert option_texts(dialog) == [
                 "[1] Voice 1 Alice (3 lines)",
                 "[2] Voice 2 (1 line)",
+                "",
                 "Enter line selections manually",
             ]
             option_list = dialog.query_one("#multi-select-list", OptionList)
             assert option_list.highlighted == 0
+            await pilot.press("down", "down")
+            assert option_list.highlighted == 3
+            await pilot.press("up")
+            assert option_list.highlighted == 1
+            await pilot.press("home")
             assert option_list.has_focus
             # The highlight must reuse the editor's (visible) cursor style;
             # reverse over default-on-default colors renders as no highlight
@@ -646,7 +653,8 @@ def test_dialog_lines_item_selects_every_dialog_line() -> None:
             await pilot.press("m")
             dialog = app.screen
             assert isinstance(dialog, MultiSelectDialog)
-            assert option_texts(dialog)[-2:] == [
+            assert option_texts(dialog)[-3:] == [
+                "",
                 "All lines tagged as dialog (2 lines)",
                 "Enter line selections manually",
             ]
@@ -708,7 +716,8 @@ def test_multi_select_list_scrolls_when_dialog_reaches_max_height() -> None:
             assert option_list.scroll_y == 0
             await pilot.press("end")
             await pilot.pause()
-            assert option_list.highlighted == 20
+            # 20 voices, the blank row, then manual entry
+            assert option_list.highlighted == 21
             assert option_list.scroll_y > 0
             # The list is capped to the dialog's space rather than clipped by it,
             # so the scrolled-to last item is actually visible

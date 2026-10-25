@@ -63,13 +63,18 @@ def voices_menu(state: State) -> None:
     # Counts walk the whole book: computed once on entry (neither the roster
     # nor the attributions can change while in this menu)
     counts = AttributionSummary.make(attributions, state.project.book).counts
-    characters = sort_characters(roster_file.roster.characters, counts)
+    roster_characters = roster_file.roster.characters
+    # Before step 2 has run, every count is zero, so the whole roster is listed
+    characters = sort_characters(roster_characters, counts, omit_unused=bool(attributions.ranges))
 
     subheading = VOICES_DESC
-    if not characters:
+    if not roster_characters:
         subheading += f"\n\n{COL_ERROR}The roster has no characters"
     elif not attributions.ranges:
         subheading += f"\n\n{COL_DIM}No dialog has been assigned to characters yet (step 2)."
+    elif hidden_count := len(roster_characters) - len(characters):
+        subheading += (f"\n\n{COL_DIM}{hidden_count} {make_noun('character', 'characters', hidden_count)} "
+                       f"with no assigned dialog not shown.")
 
     def on_character(_: State, item: MenuItem) -> None:
         character_id: str = item.data
@@ -216,8 +221,13 @@ def voice_submenu(
     MenuUtil.menu(state, heading=heading, items=items, one_shot=True, breadcrumb=heading)
 
 
-def sort_characters(characters: tuple[RosterCharacter, ...], counts: Counter[str]) -> list[RosterCharacter]:
-    """Most dialog passages first; ties keep roster order."""
+def sort_characters(
+        characters: tuple[RosterCharacter, ...], counts: Counter[str], omit_unused: bool = False,
+) -> list[RosterCharacter]:
+    """Most dialog passages first; ties keep roster order. With omit_unused,
+    characters with no dialog passages are left out."""
+    if omit_unused:
+        characters = tuple(character for character in characters if counts[character.id])
     return sorted(characters, key=lambda character: -counts[character.id])
 
 
@@ -235,7 +245,5 @@ def make_character_label(state: State, character_id: str, count: int, voice_inde
 
 
 VOICES_DESC = \
-"""Choose a project voice for each character in the roster. The number after each
-character is how many dialog passages were assigned to them in step 2. Apply sets
-the voice of each character's dialog lines in the project text. Narration, and the
-dialog of characters without a chosen voice, is not changed."""
+"""Choose voices for whichever characters you like (the rest are left as-is).
+Then choose \"Apply\" to set those voices on their dialog lines in the project text."""

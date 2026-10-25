@@ -223,6 +223,27 @@ def test_send_openai_streaming_streams_content_and_reasoning_chunks(monkeypatch)
     ]
 
 
+def test_send_openai_streaming_reads_openrouter_reasoning_field(monkeypatch) -> None:
+    # OpenRouter streams thinking as delta.reasoning rather than delta.reasoning_content
+    llm = make_openai_llm(api_endpoint_url="https://openrouter.ai/api/v1/chat/completions")
+    lines = sse(
+        '{"choices": [{"delta": {"reasoning": "Let me "}}]}',
+        '{"choices": [{"delta": {"reasoning": "think."}}]}',
+        '{"choices": [{"delta": {"content": "Answer"}}]}',
+        done=True,
+    )
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *args, **kwargs: make_response(lines=lines),
+    )
+
+    reasoning: list[str] = []
+    reply = llm.send("Hi", on_chunk=lambda _t: None, on_reasoning=reasoning.append)
+
+    assert reply == "Answer"
+    assert reasoning == ["Let me ", "think."]
+
+
 def test_send_openai_error_rolls_back_user_message(monkeypatch) -> None:
     llm = make_openai_llm()
     monkeypatch.setattr(

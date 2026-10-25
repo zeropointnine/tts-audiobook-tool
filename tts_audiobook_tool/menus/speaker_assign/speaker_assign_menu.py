@@ -72,7 +72,7 @@ SPEAKER_ASSIGN_DESC = \
 f"""Automatically determine which character speaks each line of dialog,
 so that main characters can each get their own voice.
 
-{COL_DIM_ITALICS}* A capable LLM with plenty of context and reasoning turned on is recommended.
+{COL_DIM_ITALICS}* A capable LLM with plenty of context and reasoning enabled is recommended.
 {COL_DIM_ITALICS}* The full book text is sent to the configured LLM provider, so the usual
   considerations about token costs and privacy apply.
 """

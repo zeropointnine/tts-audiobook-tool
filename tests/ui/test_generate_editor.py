@@ -6,13 +6,15 @@ from unittest.mock import patch
 
 import pytest
 from rich.style import Style
+from rich.text import Text
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
-from textual.widgets import Input, Static
+from textual.widgets import Input, OptionList, Static
 
 import tts_audiobook_tool.textual.generate_editor as generate_editor_module
 from tts_audiobook_tool.app_types import Book, BookSection, SttVariant
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project_support.segment_transcript_util import (
     SegmentTranscriptUtil,
 )
@@ -30,6 +32,7 @@ from tts_audiobook_tool.textual.generate_editor import (
     GenerateSectionItem,
 )
 from tts_audiobook_tool.textual.manual_selection_dialog import ManualSelectionDialog
+from tts_audiobook_tool.textual.multi_select_dialog import MultiSelectDialog
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
 from tts_audiobook_tool.textual.segment_info_dialog import SegmentInfoDialog
 from tts_audiobook_tool.textual.textual_shared import NonWrappingOptionList
@@ -1019,11 +1022,14 @@ def test_f_opens_filter_dialog_with_current_filter_and_all_options() -> None:
 
 
 def test_m_opens_focused_manual_selection_dialog_and_escape_cancels() -> None:
+    # Manual entry is reached through the multi-select dialog's last item
     app, _ = make_app(8)
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("m")
+            assert isinstance(app.screen, MultiSelectDialog)
+            await pilot.press("end", "enter")
             assert isinstance(app.screen, ManualSelectionDialog)
             assert app.screen.query_one("#manual-selection-input", Input).has_focus
 
@@ -1039,7 +1045,7 @@ def test_manual_selection_dialog_shows_syntax_errors_and_stays_open() -> None:
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("m")
+            await pilot.press("m", "end", "enter")
             app.screen.query_one("#manual-selection-input", Input).value = "0, bad, 20"
             await pilot.press("enter")
 
@@ -1061,7 +1067,7 @@ def test_manual_selection_uses_project_lines_and_ignores_filtered_out_lines() ->
             await pilot.press("f", "2")
             assert app.phrase_indices == [0, 2, 4, 6]
 
-            await pilot.press("m")
+            await pilot.press("m", "end", "enter")
             app.screen.query_one("#manual-selection-input", Input).value = "2-7"
             await pilot.press("enter")
 
@@ -1069,6 +1075,98 @@ def test_manual_selection_uses_project_lines_and_ignores_filtered_out_lines() ->
             assert app.selected_index == 3
             assert app.selection_anchor_index == 3
             assert app.query_one("#line-list", NonWrappingOptionList).highlighted == 3
+
+    run(exercise())
+
+
+def make_voiced_app() -> GenerateEditor:
+    """Lines 1 and 3 are generated; voice 1 has lines 1, 2, 4 and voice 2 has
+    line 3; lines 2 and 3 are dialog."""
+    project = StubProject(
+        [
+            StubPhraseGroup("Narration."),
+            StubPhraseGroup('"Hi."', is_dialog=True),
+            StubPhraseGroup('"Yo."', voice_index=1, is_dialog=True),
+            StubPhraseGroup("More narration."),
+        ],
+        StubSoundSegments(
+            {index: [StubSoundSegment(f"segment-{index}.flac")] for index in (0, 2)}
+        ),
+        voice_references=[Voice(name="Alice"), Voice()],
+    )
+    app = GenerateEditor(make_state(project))
+    # The stub's model type supports no voice samples; pretend both have one
+    app.voice_sample_count = 2
+    app.load_content()
+    return app
+
+
+def multi_select_option_texts(dialog: MultiSelectDialog) -> list[str]:
+    option_list = dialog.query_one("#multi-select-list", OptionList)
+    return [
+        str(option_list.get_option_at_index(index).prompt)
+        for index in range(option_list.option_count)
+    ]
+
+
+def test_multi_select_lists_voice_editor_items_with_total_counts() -> None:
+    # Unfiltered, the dialog lists the voice editor's items (voices, dialog
+    # lines, manual entry) with plain total counts. A subheading introduces
+    # the voices, and a blank row (skipped by the cursor) precedes the
+    # trailing items.
+    app = make_voiced_app()
+    assert Text.from_ansi(app.header_lines[2]).plain.endswith("- [M] Multi-select")
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("m")
+            dialog = app.screen
+            assert isinstance(dialog, MultiSelectDialog)
+            subheading = dialog.query_one("#multi-select-subheading", Static)
+            assert str(subheading.render()) == "Select lines currently assigned to..."
+            assert multi_select_option_texts(dialog) == [
+                "[1] Voice 1 Alice (3 lines)",
+                "[2] Voice 2 (1 line)",
+                "",
+                "All lines tagged as dialog (2 lines)",
+                "Enter line selections manually",
+            ]
+            option_list = dialog.query_one("#multi-select-list", OptionList)
+            await pilot.press("down", "down")
+            assert option_list.highlighted == 3
+            await pilot.press("up")
+            assert option_list.highlighted == 1
+            await pilot.press("up", "1")
+            assert app.selected_indices == {0, 1, 3}
+
+    run(exercise())
+
+
+def test_multi_select_under_filter_shows_visible_counts_and_selects_visible_lines() -> None:
+    # With a filter active, each item shows "(visible/total lines)" and
+    # choosing it selects only the matching lines that remain visible.
+    app = make_voiced_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("f", "2")  # ungenerated: lines 2 and 4
+            assert app.phrase_indices == [1, 3]
+            await pilot.press("m")
+            dialog = app.screen
+            assert isinstance(dialog, MultiSelectDialog)
+            assert multi_select_option_texts(dialog) == [
+                "[1] Voice 1 Alice (2/3 lines)",
+                "[2] Voice 2 (0/1 line)",
+                "",
+                "All lines tagged as dialog (1/2 lines)",
+                "Enter line selections manually",
+            ]
+            await pilot.press("1")
+            assert len(app.screen_stack) == 1
+            assert app.selected_indices == {0, 1}
+
+            await pilot.press("m", "down", "down", "enter")
+            assert app.selected_indices == {0}
 
     run(exercise())
 

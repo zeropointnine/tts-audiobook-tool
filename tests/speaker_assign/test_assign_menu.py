@@ -3,11 +3,18 @@ from typing import cast
 
 import pytest
 
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types.phrase import Reason
 from tts_audiobook_tool.constants import COL_DIM, COL_ERROR
-from tts_audiobook_tool.menus.speaker_assign.assign_menu import AssignData, ROSTER_TEXT_NOTICE, make_subheading
+from tts_audiobook_tool.menus.speaker_assign.assign_menu import (
+    AssignData,
+    ROSTER_TEXT_NOTICE,
+    make_subheading,
+    play_outcome_sound,
+)
 from tts_audiobook_tool.speaker_assign.assign_plan import AssignPlan
 from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
+from tts_audiobook_tool.speaker_assign.attribution_runner import RunOutcome
 from tts_audiobook_tool.speaker_assign.roster import Roster, RosterFile
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 from tts_audiobook_tool.state import State
@@ -28,3 +35,19 @@ def test_roster_notice_explains_reuse_without_implying_assignments_were_deleted(
     if stale:
         assert f"{COL_DIM}{ROSTER_TEXT_NOTICE}" in heading
         assert f"{COL_ERROR}{ROSTER_TEXT_NOTICE}" not in heading
+
+
+@pytest.mark.parametrize("outcome, has_failures, expected", [
+    (RunOutcome.FINISHED, False, "done"),
+    (RunOutcome.FINISHED, True, "error"),
+    (RunOutcome.FAILED, False, "error"),
+    (RunOutcome.STOPPED, False, None),
+    (RunOutcome.CANCELLED, False, None),
+])
+def test_outcome_sound(monkeypatch, outcome, has_failures, expected):
+    # Success plays the done sound, errors the error sound; a user stop plays nothing.
+    played: list[str] = []
+    monkeypatch.setattr(app_support, "play_done_sound", lambda: played.append("done"))
+    monkeypatch.setattr(app_support, "play_fatal_gen_sound", lambda: played.append("error"))
+    play_outcome_sound(outcome, has_failures)
+    assert played == ([expected] if expected else [])

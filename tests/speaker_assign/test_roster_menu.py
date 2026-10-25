@@ -3,13 +3,17 @@ from typing import cast
 
 import pytest
 
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types.phrase import Reason
 from tts_audiobook_tool.constants import COL_DIM, COL_ERROR
 from tts_audiobook_tool.menus.speaker_assign import speaker_assign_menu
-from tts_audiobook_tool.menus.speaker_assign.roster_menu import roster_menu
+from tts_audiobook_tool.menus.speaker_assign import roster_menu as roster_menu_module
+from tts_audiobook_tool.menus.speaker_assign.roster_menu import create_roster, roster_menu
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu import SpeakerAssignMenu
 from tts_audiobook_tool.menus.menu_util import MenuUtil
+from tts_audiobook_tool.speaker_assign.llm_request_util import LlmRequestResult, LlmRequestUtil
 from tts_audiobook_tool.speaker_assign.roster import Roster, RosterFile
+from tts_audiobook_tool.speaker_assign.roster_util import NormalizedRoster, RosterUtil
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 from tts_audiobook_tool.state import State
@@ -116,3 +120,42 @@ def test_roster_menu_omits_discard_notice(monkeypatch, tmp_path, has_assignments
 
     notice = "Re-creating the roster discards any dialog assignments from step 2."
     assert notice not in captured[0]
+
+
+@pytest.mark.parametrize("outcome, expected", [
+    ("success", ["done"]),
+    ("error", ["error"]),
+    ("bad_reply", ["error"]),
+    ("cancelled", []),
+])
+def test_create_roster_outcome_sound(monkeypatch, tmp_path, outcome, expected):
+    # A saved roster plays the done sound, a request or reply error the error sound;
+    # a user cancel plays nothing.
+    book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
+    state = cast(State, SimpleNamespace(
+        prefs=None, project=SimpleNamespace(book=book, dir_path=str(tmp_path)),
+    ))
+    played: list[str] = []
+    monkeypatch.setattr(app_support, "play_done_sound", lambda: played.append("done"))
+    monkeypatch.setattr(app_support, "play_fatal_gen_sound", lambda: played.append("error"))
+    monkeypatch.setattr(roster_menu_module, "print_llm_info", lambda _: None)
+    monkeypatch.setattr(roster_menu_module, "print_roster_info", lambda _: False)
+    monkeypatch.setattr(roster_menu_module.ask, "ask_error", lambda *_: None)
+    monkeypatch.setattr(roster_menu_module.ask, "ask_enter_to_continue", lambda *_: None)
+    monkeypatch.setattr(LlmRequestUtil, "make_session", lambda *_: None)
+    monkeypatch.setattr(LlmRequestUtil, "describe_llm", lambda _: {})
+    monkeypatch.setattr(LlmRequestUtil, "describe_error", lambda *_: "error")
+    monkeypatch.setattr(SpeakerAssignFileUtil, "save_roster_file", lambda *_: "")
+    monkeypatch.setattr(RosterUtil, "normalize_roster", lambda _: NormalizedRoster(Roster(())))
+    reply = "not json" if outcome == "bad_reply" else '{"characters": []}'
+    result = LlmRequestResult(
+        reply=reply, reasoning="", elapsed=1.0,
+        cancelled=outcome == "cancelled",
+        error=RuntimeError("boom") if outcome == "error" else None,
+        finish_reason="stop",
+    )
+    monkeypatch.setattr(LlmRequestUtil, "send_cancellable", lambda *_, **__: result)
+
+    create_roster(state)
+
+    assert played == expected

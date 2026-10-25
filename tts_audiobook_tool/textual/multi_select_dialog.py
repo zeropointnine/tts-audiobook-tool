@@ -8,8 +8,9 @@ from textual.binding import Binding, BindingType
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import OptionList, Static
+from textual.widgets.option_list import Option
 
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM, COL_DIM_ITALICS
 
 # Dialog result requesting every line tagged as dialog
 DIALOG_LINES: Literal["dialog"] = "dialog"
@@ -29,6 +30,11 @@ DIALOG_CHROME_HEIGHT = 6
 class MultiSelectDialog(ModalScreen[MultiSelectResult]):
     """List the voice samples (with line counts), an optional dialog-lines
     item, and a manual-entry item.
+
+    A blank row separates the voice items from the trailing items, and a dim
+    italic subheading can optionally introduce the voice items. The blank row
+    is a disabled option, which the list's keyboard navigation and selection
+    skip over.
 
     Dismisses with the chosen zero-based voice index, DIALOG_LINES,
     MANUAL_ENTRY, or None when cancelled.
@@ -59,7 +65,8 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         background: ansi_default;
     }
 
-    #multi-select-title {
+    #multi-select-title,
+    #multi-select-subheading {
         height: auto;
     }
 
@@ -97,18 +104,41 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         voice_line_counts: Sequence[int],
         voice_names: Sequence[str],
         dialog_line_count: int | None = None,
+        *,
+        visible_voice_line_counts: Sequence[int] | None = None,
+        visible_dialog_line_count: int | None = None,
+        voices_subheading: str = "",
     ) -> None:
         """dialog_line_count of None omits the dialog-lines item (eg when the
-        text was segmented without dialog detection)."""
+        text was segmented without dialog detection).
+
+        The visible counts are given when the host editor's list is filtered;
+        each item then shows "(visible/total lines)" instead of "(total lines)".
+
+        voices_subheading is shown above the voice items. It, like the blank
+        row before the trailing items, applies only when there are voice items.
+        """
         super().__init__()
         self.voice_line_counts = list(voice_line_counts)
         self.voice_names = list(voice_names)
         self.dialog_line_count = dialog_line_count
+        self.visible_voice_line_counts = (
+            list(visible_voice_line_counts)
+            if visible_voice_line_counts is not None
+            else None
+        )
+        self.visible_dialog_line_count = visible_dialog_line_count
+        has_voices = bool(self.voice_line_counts)
+        self.voices_subheading = voices_subheading if has_voices else ""
+        # The result of each list option, in display order; None marks the
+        # (disabled, never chosen) blank separator row
+        self.option_results: list[MultiSelectResult] = []
 
     @staticmethod
-    def line_count_text(count: int) -> str:
+    def line_count_text(count: int, visible_count: int | None = None) -> str:
         line_noun = "line" if count == 1 else "lines"
-        return f"{COL_DIM}({count} {line_noun})"
+        visible_text = f"{visible_count}/" if visible_count is not None else ""
+        return f"{COL_DIM}({visible_text}{count} {line_noun})"
 
     def voice_option_text(self, voice_index: int) -> Text:
         number = voice_index + 1
@@ -119,9 +149,14 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         )
         name_text = f" {name}" if name else ""
         count = self.voice_line_counts[voice_index]
+        visible_count = (
+            self.visible_voice_line_counts[voice_index]
+            if self.visible_voice_line_counts is not None
+            else None
+        )
         return Text.from_ansi(
             f"[{number}] {COL_ACCENT}Voice {number}{name_text} "
-            f"{self.line_count_text(count)}"
+            f"{self.line_count_text(count, visible_count)}"
         )
 
     def trailing_results(self) -> list[MultiSelectResult]:
@@ -133,27 +168,44 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         return results
 
     def compose(self) -> ComposeResult:
-        options = [
-            self.voice_option_text(voice_index)
-            for voice_index in range(len(self.voice_line_counts))
-        ]
-        if self.dialog_line_count is not None:
-            options.append(
-                Text.from_ansi(
-                    f"{LABEL_DIALOG_LINES} "
-                    f"{self.line_count_text(self.dialog_line_count)}"
-                )
-            )
-        options.append(Text(LABEL_MANUAL_ENTRY))
-        yield Vertical(
+        options: list[Option] = []
+        self.option_results = []
+        for voice_index in range(len(self.voice_line_counts)):
+            options.append(Option(self.voice_option_text(voice_index)))
+            self.option_results.append(voice_index)
+        if self.voice_line_counts:
+            options.append(Option("", disabled=True))
+            self.option_results.append(None)
+        for result in self.trailing_results():
+            options.append(Option(self.trailing_option_text(result)))
+            self.option_results.append(result)
+
+        widgets: list[Static | OptionList] = [
             Static(
                 Text.from_ansi(f"{COL_ACCENT}Multi-select\n"),
                 id="multi-select-title",
                 markup=False,
-            ),
-            OptionList(*options, id="multi-select-list", compact=True),
-            id="multi-select-dialog",
-        )
+            )
+        ]
+        if self.voices_subheading:
+            widgets.append(
+                Static(
+                    Text.from_ansi(f"{COL_DIM_ITALICS}{self.voices_subheading}"),
+                    id="multi-select-subheading",
+                    markup=False,
+                )
+            )
+        widgets.append(OptionList(*options, id="multi-select-list", compact=True))
+        yield Vertical(*widgets, id="multi-select-dialog")
+
+    def trailing_option_text(self, result: MultiSelectResult) -> Text:
+        if result == DIALOG_LINES:
+            assert self.dialog_line_count is not None
+            return Text.from_ansi(
+                f"{LABEL_DIALOG_LINES} "
+                f"{self.line_count_text(self.dialog_line_count, self.visible_dialog_line_count)}"
+            )
+        return Text(LABEL_MANUAL_ENTRY)
 
     def on_mount(self) -> None:
         self.fit_list_height()
@@ -171,20 +223,16 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         the cap is set in absolute rows.
         """
         option_list = self.query_one("#multi-select-list", OptionList)
-        option_list.styles.max_height = max(1, self.size.height - DIALOG_CHROME_HEIGHT)
+        chrome_height = DIALOG_CHROME_HEIGHT + (1 if self.voices_subheading else 0)
+        option_list.styles.max_height = max(1, self.size.height - chrome_height)
 
     def choose(self, option_index: int | None) -> None:
         """Dismiss with the result represented by one list item."""
-        if option_index is None:
+        if option_index is None or not 0 <= option_index < len(self.option_results):
             return
-        voice_count = len(self.voice_line_counts)
-        if option_index < voice_count:
-            self.dismiss(option_index)
-            return
-        trailing_results = self.trailing_results()
-        trailing_index = option_index - voice_count
-        if trailing_index < len(trailing_results):
-            self.dismiss(trailing_results[trailing_index])
+        result = self.option_results[option_index]
+        if result is not None:
+            self.dismiss(result)
 
     def on_option_list_option_highlighted(
         self, event: OptionList.OptionHighlighted

@@ -3,7 +3,7 @@ import datetime
 import math
 import os
 
-from tts_audiobook_tool import ask, text_util
+from tts_audiobook_tool import app_support, ask, text_util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types import Book
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_DIM_ITALICS, COL_ERROR
@@ -152,6 +152,11 @@ def create_roster(state: State) -> None:
         # The "Done" line below takes the progress line's place
         status.clear()
 
+    def fail(message: str) -> None:
+        # The request ran (not cancelled) but no roster came of it
+        app_support.play_fatal_gen_sound()
+        ask.ask_error(message)
+
     if result.cancelled:
         feedback = "Cancelled. Nothing was saved."
         if result.abandoned:
@@ -160,11 +165,13 @@ def create_roster(state: State) -> None:
         ask.ask_enter_to_continue(feedback)
         return
     if result.error is not None:
-        ask.ask_error(LlmRequestUtil.describe_error(result.error, prefs))
+        fail(LlmRequestUtil.describe_error(result.error, prefs))
         return
 
+    # A zero reasoning count isn't evidence of no reasoning (see LlmSession), so omit it
+    reasoning_part = f"{len(result.reasoning):,} reasoning chars, " if result.reasoning else ""
     printt(f"{COL_DEFAULT}Done: {COL_DIM}{len(result.reply):,} answer chars, "
-           f"{len(result.reasoning):,} reasoning chars, elapsed: {duration_string(result.elapsed)}")
+           f"{reasoning_part}elapsed: {duration_string(result.elapsed)}")
     if result.reasoning:
         path = save_temp_text(REASONING_FILE_NAME, result.reasoning)
         if path:
@@ -172,7 +179,7 @@ def create_roster(state: State) -> None:
     printt()
 
     if result.hit_output_limit:
-        ask.ask_error(LlmRequestUtil.describe_output_limit(result))
+        fail(LlmRequestUtil.describe_output_limit(result))
         return
     if not result.reply.strip():
         # The provider didn't report why (otherwise caught above); a likely cause
@@ -181,7 +188,7 @@ def create_roster(state: State) -> None:
             "while thinking (reasoning counts toward the limit)."
             if result.reasoning else ""
         )
-        ask.ask_error(f"Empty reply from the LLM.{hint}")
+        fail(f"Empty reply from the LLM.{hint}")
         return
 
     try:
@@ -193,7 +200,7 @@ def create_roster(state: State) -> None:
         path = save_temp_text(FAILED_REPLY_FILE_NAME, result.reply)
         if path:
             error += f"\nThe reply was saved to: {path}"
-        ask.ask_error(error)
+        fail(error)
         return
     for note in normalized.notes:
         printt(f"{COL_DIM}{note}")
@@ -210,18 +217,19 @@ def create_roster(state: State) -> None:
     )
     error = SpeakerAssignFileUtil.save_roster_file(project_dir, roster_file)
     if error:
-        ask.ask_error(error)
+        fail(error)
         return
 
     # A new roster invalidates attributions made against the previous one
     if has_attributions:
         error = SpeakerAssignFileUtil.delete_attributions_file(project_dir)
         if error:
-            ask.ask_error(error)
+            fail(error)
             return
         printt(f"{COL_DIM}Discarded dialog assignments made with the previous roster")
         printt()
 
+    app_support.play_done_sound()
     print_accent_separator("Roster summary")
     if print_roster_info(state):
         ask.ask_enter_to_continue()

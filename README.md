@@ -43,9 +43,9 @@ By themselves, these models are unreliable at book scale. The app wraps them in 
 - Silence trimming and reduction of excessive pauses, plus semantically-aware pause modulation at segment boundaries to improve prosody
 - EBU R128 loudness normalization plus optional 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) generative upsampler
 
-The app can also utilize multiple voice-clone samples, which can be assigned on a line-by-line basis. Optional dialog detection can automatically assign quoted dialog to a separate voice, simplifying setup.
+A single project can use multiple voice-clone samples, each assigned to a different character. Automated dialog detection and LLM-assisted speaker identification handle most of the gruntwork — so you can turn a book into your own little radio drama.
 
-It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
+It also includes a realtime audiobook playback mode and an LLM voice chat feature, useful for voice/model testing.
 
 The app uses a plain-text, hotkey-based console interface.
 
@@ -885,6 +885,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 
 # Update highlights
+
+**2026-10-25**
+
+- Added **Auto-assign character voices** (`Voices > Auto-assign character voices`). An LLM works out which character speaks each line of dialog, so main characters can each get their own voice.
 
 **2026-10-21**
 

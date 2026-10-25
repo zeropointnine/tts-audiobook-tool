@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 import time
 
-from tts_audiobook_tool import ask
+from tts_audiobook_tool import app_support, ask
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_support.system_sleep import prevent_system_sleep
 from tts_audiobook_tool.app_types import Book
@@ -271,11 +271,27 @@ def run_assign(state: State, start_over: bool = False) -> None:
     if kept_previous:
         printt(f"{COL_DIM}No chunks were saved, so the previous dialog assignments were kept.")
     printt()
+    play_outcome_sound(result.outcome, bool(result.failures))
 
     if result.attributions.ranges:
         print_accent_separator("Dialog summary")
         print_assign_results(state)
     ask.ask_enter_to_continue()
+
+
+def play_outcome_sound(outcome: RunOutcome, has_failures: bool) -> None:
+    """
+    The done sound for a run that completed every chunk, the error sound for
+    one that ended in errors (aborted, or finished with failed chunks).
+    No sound when the user stopped the run.
+    """
+    match outcome:
+        case RunOutcome.FINISHED if not has_failures:
+            app_support.play_done_sound()
+        case RunOutcome.FINISHED | RunOutcome.FAILED:
+            app_support.play_fatal_gen_sound()
+        case RunOutcome.STOPPED | RunOutcome.CANCELLED:
+            pass
 
 
 class StopWatcher:

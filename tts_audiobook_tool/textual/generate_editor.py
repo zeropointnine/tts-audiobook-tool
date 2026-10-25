@@ -33,6 +33,13 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
 )
 from tts_audiobook_tool.textual.filter_dialog import FilterDialog
+from tts_audiobook_tool.textual.multi_select_dialog import (
+    DIALOG_LINES,
+    MANUAL_ENTRY,
+    MultiSelectDialog,
+    MultiSelectResult,
+)
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.segment_staging_util import (
     accept_staged_segment,
     delete_staging_dir,
@@ -55,6 +62,7 @@ from tts_audiobook_tool.textual.textual_shared import (
     NonWrappingOptionList,
     OptionReconcileItem,
     STYLE_DIM,
+    has_dialog_detection,
 )
 from tts_audiobook_tool.system_support.ansi import Ansi
 
@@ -147,11 +155,19 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         Binding("i", "show_info", show=False),
         Binding("f", "show_filter", show=False),
         Binding("x", "delete_generated", show=False),
+        # Shares the "m" key with the base manual-selection binding, which
+        # check_action disables, so this one runs instead
+        Binding("m", "show_multi_select", show=False),
     ]
 
     def __init__(self, state: State) -> None:
 
         self.state = state
+        project = state.project
+        self.voice_sample_count = len(
+            ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
+        )
+        self.voice_names = [voice.name.strip() for voice in project.voice_references]
         self.all_phrase_indices: list[int] = []
         self.list_items: list[GenerateListItem] = []
         self.original_queued_indices: set[int] = set()
@@ -181,7 +197,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         return [
             f"{COL_ACCENT}Generate - Select lines / review sound segments",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
-            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
+            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Multi-select",
             f"{COL_DIM}- Press [{COL_ACCENT}SPACE{COL_DIM}] to queue or unqueue lines  - [F] Filter lines",
             f"{COL_DIM}- Sound segments: [P] Play  [X] Delete sound  [Q] Quick gen  [I] Info",
             f"{COL_DIM}- Press [ESC] to close",
@@ -666,6 +682,106 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             old_items_by_id,
         )
         self.phrase_segment_statuses.clear()
+
+    def check_action(
+        self, action: str, parameters: tuple[object, ...]
+    ) -> bool | None:
+        """Unbind the base "m" manual-selection key, leaving "m" to multi-select.
+
+        Manual entry is offered from the multi-select dialog instead, which
+        calls the action method directly (bypassing this check). Textual merges
+        BINDINGS across base classes, so the binding cannot be filtered out.
+        """
+        if action == "show_manual_selection":
+            return False
+        return super().check_action(action, parameters)
+
+    def has_dialog_detection(self) -> bool:
+        """Whether the text was segmented with dialog detection."""
+        book = getattr(self.project, "book", None)
+        return has_dialog_detection(
+            book is not None and book.segmentation_settings.dialog_segmentation,
+            (phrase_group.is_dialog for phrase_group in self.project.phrase_groups),
+        )
+
+    def dialog_phrase_indices(self) -> set[int]:
+        return {
+            phrase_index
+            for phrase_index, phrase_group in enumerate(self.project.phrase_groups)
+            if phrase_group.is_dialog
+        }
+
+    def voice_phrase_indices(self, voice_index: int) -> set[int]:
+        return {
+            phrase_index
+            for phrase_index, phrase_group in enumerate(self.project.phrase_groups)
+            if phrase_group.voice_index == voice_index
+        }
+
+    def action_show_multi_select(self) -> None:
+        """Show the multi-select dialog: select by voice, all dialog lines
+        (only with dialog detection), or manual entry.
+
+        Choices select only visible lines; while a filter is active, each item
+        shows its visible count alongside its total.
+        """
+        if (
+            not self.multi_select_enabled
+            or not self.content_initialized
+            or self.find_active
+            or self.manual_selection_line_count() <= 0
+        ):
+            return
+        voice_phrase_indices = [
+            self.voice_phrase_indices(voice_index)
+            for voice_index in range(self.voice_sample_count)
+        ]
+        dialog_phrase_indices = (
+            self.dialog_phrase_indices() if self.has_dialog_detection() else None
+        )
+        visible_voice_line_counts: list[int] | None = None
+        visible_dialog_line_count: int | None = None
+        if self.filter_type != FilterType.ALL:
+            visible_phrase_indices = set(self.visible_content_line_indices())
+            visible_voice_line_counts = [
+                len(indices & visible_phrase_indices)
+                for indices in voice_phrase_indices
+            ]
+            if dialog_phrase_indices is not None:
+                visible_dialog_line_count = len(
+                    dialog_phrase_indices & visible_phrase_indices
+                )
+        self.push_screen(
+            MultiSelectDialog(
+                [len(indices) for indices in voice_phrase_indices],
+                self.voice_names,
+                len(dialog_phrase_indices) if dialog_phrase_indices is not None else None,
+                visible_voice_line_counts=visible_voice_line_counts,
+                visible_dialog_line_count=visible_dialog_line_count,
+                voices_subheading="Select lines currently assigned to...",
+            ),
+            self.handle_multi_select,
+        )
+
+    def visible_content_line_indices(self) -> list[int]:
+        """Project phrase indices of the currently visible phrase rows."""
+        return [
+            phrase_index
+            for item_index in self.phrase_indices
+            if (phrase_index := self.content_line_index(item_index)) is not None
+        ]
+
+    def handle_multi_select(self, result: MultiSelectResult) -> None:
+        """Select the chosen voice's or dialog lines, or open manual selection."""
+        if result is None:
+            return
+        if result == MANUAL_ENTRY:
+            self.action_show_manual_selection()
+            return
+        if result == DIALOG_LINES:
+            self.handle_manual_selection(self.dialog_phrase_indices())
+            return
+        self.handle_manual_selection(self.voice_phrase_indices(result))
 
     def get_filtered_phrase_indices(
         self, filter_type: FilterType | None = None

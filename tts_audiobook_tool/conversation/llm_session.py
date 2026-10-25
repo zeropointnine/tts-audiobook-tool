@@ -343,7 +343,8 @@ class LlmSession:
                     if choices[0].get("finish_reason"):
                         self.last_finish_reason = choices[0]["finish_reason"]
                     delta = choices[0].get("delta") or {}
-                    reasoning = delta.get("reasoning_content") or ""
+                    # "reasoning_content": DeepSeek, vLLM, llama.cpp, etc.; "reasoning": OpenRouter
+                    reasoning = delta.get("reasoning_content") or delta.get("reasoning") or ""
                     if reasoning:
                         if not reasoning_text:
                             L.i(f"[llm] openai: reasoning tokens arriving (model is thinking before content)")
