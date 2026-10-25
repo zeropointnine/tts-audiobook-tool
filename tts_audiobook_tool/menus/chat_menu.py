@@ -93,11 +93,11 @@ class ChatMenu:
 
         MenuUtil.menu(
             state,
-            f"LLM voice chat",
+            f"Voice chat",
             make_items,
             subheading=subheading,
             hint=HINT_LLM_CHAT,
-            breadcrumb="LLM voice chat",
+            breadcrumb="Voice chat",
         )
 
     @staticmethod

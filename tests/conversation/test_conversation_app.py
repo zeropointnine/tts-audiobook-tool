@@ -105,7 +105,7 @@ def test_app_initializes_after_mount_and_has_fixed_shell() -> None:
             assert not app.input_area.level_meter.display
             title = app.query_one("#header-line-0", Static).content
             assert isinstance(title, Text)
-            assert title.plain == "LLM voice chat"
+            assert title.plain == "Voice chat"
             assert str(title.spans[0].style) == "#ffaa44"
             exit_line = app.query_one("#header-line-1", Static).content
             assert isinstance(exit_line, Text)
@@ -136,7 +136,7 @@ def test_echo_mode_header_initial_notice_and_response_label() -> None:
             await pilot.pause()
             title = app.query_one("#header-line-0", Static).content
             assert isinstance(title, Text)
-            assert title.plain == "LLM voice chat (echo only)"
+            assert title.plain == "Voice chat (echo only)"
             notice_entry = app.transcript.entries[0]
             notice = notice_entry.content
             assert isinstance(notice, Text)
@@ -197,7 +197,7 @@ def test_microphone_immediate_header_matches_content_app_conventions() -> None:
             assert app.input_area.level_meter.content == "████████  -5 dB"
             title = app.query_one("#header-line-0", Static).content
             assert isinstance(title, Text)
-            assert title.plain == "LLM voice chat"
+            assert title.plain == "Voice chat"
             assert str(title.spans[0].style) == "#ffaa44"
             exit_line = app.query_one("#header-line-1", Static).content
             assert isinstance(exit_line, Text)
@@ -230,7 +230,7 @@ def test_mic_phrase_header_matches_content_app_conventions() -> None:
             ]
             assert all(isinstance(line, Text) for line in lines)
             assert [line.plain for line in lines] == [
-                "LLM voice chat",
+                "Voice chat",
                 "Speak into the microphone to build your prompt",
                 "- Press [ENTER] to submit  - [LEFT/RIGHT/DEL] Edit transcribed chunks",
                 "- Press [ESC] to interrupt/close",

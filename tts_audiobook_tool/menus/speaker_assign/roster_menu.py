@@ -2,6 +2,7 @@
 import datetime
 import math
 import os
+from collections.abc import Sequence
 
 from tts_audiobook_tool import app_support, ask, text_util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
@@ -18,7 +19,7 @@ from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
 )
 from tts_audiobook_tool.speaker_assign.attribution_reply_util import AttributionReplyUtil
 from tts_audiobook_tool.speaker_assign.llm_request_util import CancelEvent, LlmRequestUtil
-from tts_audiobook_tool.speaker_assign.roster import RosterFile, RosterNarration
+from tts_audiobook_tool.speaker_assign.roster import RosterCharacter, RosterFile, RosterNarration
 from tts_audiobook_tool.speaker_assign.roster_util import ROSTER_SYSTEM_PROMPT, RosterUtil
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
@@ -44,7 +45,12 @@ def roster_menu(state: State) -> None:
     def items_maker(_: State) -> list[MenuItem]:
         items = [MenuItem("Start", on_select_roster_start)]
         if SpeakerAssignFileUtil.has_roster(state.project.dir_path):
-            items.append(MenuItem("View roster data" + make_roster_stale_marker(state), on_select_roster_view))
+            marker = make_roster_stale_marker(state)
+            items.append(MenuItem("View roster data" + marker, on_select_roster_view))
+            items.append(MenuItem(
+                f"View roster data, expanded {COL_DIM}(possible spoilers)" + marker,
+                on_select_roster_view_expanded,
+            ))
         return items
 
     MenuUtil.menu(
@@ -76,6 +82,12 @@ def on_select_roster_start(state: State, _item: MenuItem) -> None:
 def on_select_roster_view(state: State, _item: MenuItem) -> None:
     MenuUtil.print_screen_heading(state, "Roster data", breadcrumb="Roster data")
     if print_roster_info(state):
+        ask.ask_enter_to_continue()
+
+
+def on_select_roster_view_expanded(state: State, _item: MenuItem) -> None:
+    MenuUtil.print_screen_heading(state, "Roster data, expanded", breadcrumb="Roster data, expanded")
+    if print_roster_info(state, expanded=True):
         ask.ask_enter_to_continue()
 
 
@@ -235,10 +247,11 @@ def create_roster(state: State) -> None:
         ask.ask_enter_to_continue()
 
 
-def print_roster_info(state: State) -> bool:
+def print_roster_info(state: State, expanded: bool = False) -> bool:
     """
     Prints the saved roster's user-facing (spoiler-free) fields. Aliases and
-    descriptions are LLM-facing and may contain spoilers, so they're left out.
+    descriptions are LLM-facing and may contain spoilers, so they're left out
+    unless `expanded`, which prints each character as a block that includes them.
     Shows an error and returns False if the roster can't be loaded.
     """
     project_dir = state.project.dir_path
@@ -267,21 +280,47 @@ def print_roster_info(state: State) -> bool:
 
     id_width = max(len("id"), *(len(character.id) for character in roster.characters))
     printt()
-    printt(f"{COL_DIM}{'#':>3}  {'id':<{id_width}}  {'tier':<10} {'gender':<7} name")
-    for i, character in enumerate(roster.characters, 1):
-        narrator = f" {COL_DIM}[narrator]" if character.is_narrator else ""
-        tier = character.prominence.value or "?"
-        printt(
-            f"{COL_DIM}{i:>3}  {COL_ACCENT}{character.id:<{id_width}}{COL_DEFAULT}  "
-            f"{tier:<10} {character.gender:<7} {character.name}{narrator}"
-        )
-    printt()
+    if expanded:
+        print_characters_expanded(roster.characters, id_width)
+    else:
+        printt(f"{COL_DIM}{'#':>3}  {'id':<{id_width}}  {'tier':<10} {'gender':<7} name")
+        for i, character in enumerate(roster.characters, 1):
+            narrator = f" {COL_DIM}[narrator]" if character.is_narrator else ""
+            tier = character.prominence.value or "?"
+            printt(
+                f"{COL_DIM}{i:>3}  {COL_ACCENT}{character.id:<{id_width}}{COL_DEFAULT}  "
+                f"{tier:<10} {character.gender:<7} {character.name}{narrator}"
+            )
+        printt()
 
     path = SpeakerAssignFileUtil.roster_path(project_dir)
     printt(f"{COL_DEFAULT}Full roster data: "
            f"{COL_DIM}{text_util.make_terminal_hyperlink(path, is_file=True)} (may contain spoilers)")
     printt()
     return True
+
+
+def print_characters_expanded(characters: Sequence[RosterCharacter], id_width: int) -> None:
+    """Prints each character as a block, including the spoiler-prone aliases and description."""
+    # Index padded to the widest one so the id column and the indent line up
+    index_width = len(f"[{len(characters)}]")
+    for i, character in enumerate(characters, 1):
+        index = f"[{i}]".ljust(index_width)
+        indent = " " * (index_width + 1)
+        tier = character.prominence.value or "?"
+        narrator = f"  {COL_DIM}[narrator]" if character.is_narrator else ""
+        printt(
+            f"{COL_DEFAULT}{index} {COL_DIM}id: {COL_ACCENT}{character.id:<{id_width}}  "
+            f"{COL_DIM}tier: {COL_DEFAULT}{tier:<10} "
+            f"{COL_DIM}gender: {COL_DEFAULT}{character.gender}{narrator}"
+        )
+        aliases = ", ".join(character.aliases) if character.aliases else f"{COL_DIM}(none)"
+        printt(f"{indent}{COL_DIM}name: {COL_DEFAULT}{character.name}")
+        printt(f"{indent}{COL_DIM}aliases: {COL_DEFAULT}{aliases}")
+        if character.description.strip():
+            printt()
+            printt(f"{COL_DIM_ITALICS}{character.description.strip()}")
+        printt()
 
 
 CANCEL_EVENT_FEEDBACK = {

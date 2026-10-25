@@ -37,7 +37,7 @@ class SpeakerAssignMenu:
                 return f"Step 1: Create character roster {COL_DIM}(requires dialog segmentation)"
             if SpeakerAssignFileUtil.has_roster(state.project.dir_path):
                 return (
-                    f"Step 1: Create/view character roster {COL_DIM}(completed)"
+                    f"Step 1: Create character roster {COL_DIM}(completed)"
                     + make_roster_stale_marker(state)
                 )
             return "Step 1: Create character roster"
@@ -69,7 +69,7 @@ class SpeakerAssignMenu:
 
 
 SPEAKER_ASSIGN_DESC = \
-f"""Automatically determine which character speaks each line of dialog,
+f"""Uses LLM to automatically determine which character speaks each line of dialog,
 so that main characters can each get their own voice.
 
 {COL_DIM_ITALICS}* A capable LLM with plenty of context and reasoning enabled is recommended.

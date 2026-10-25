@@ -45,7 +45,7 @@ By themselves, these models are unreliable at book scale. The app wraps them in 
 
 A single project can use multiple voice-clone samples, each assigned to a different character. Automated dialog detection and LLM-assisted speaker identification handle most of the gruntwork — so you can turn a book into your own little radio drama.
 
-It also includes a realtime audiobook playback mode and an LLM voice chat feature, useful for voice/model testing.
+It also includes a realtime audiobook playback mode and a voice chat feature, useful for voice/model testing.
 
 The app uses a plain-text, hotkey-based console interface.
 

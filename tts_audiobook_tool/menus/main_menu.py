@@ -76,7 +76,7 @@ class MainMenu:
                 )
             )
             items.append(
-                MenuItem("LLM voice chat", on_chat, hotkey="l")
+                MenuItem("Voice chat", on_chat, hotkey="l")
             )
             items.append(
                 MenuItem(

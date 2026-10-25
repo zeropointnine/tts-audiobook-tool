@@ -5,14 +5,14 @@ import pytest
 
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types.phrase import Reason
-from tts_audiobook_tool.constants import COL_DIM, COL_ERROR
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_DIM_ITALICS, COL_ERROR
 from tts_audiobook_tool.menus.speaker_assign import speaker_assign_menu
 from tts_audiobook_tool.menus.speaker_assign import roster_menu as roster_menu_module
 from tts_audiobook_tool.menus.speaker_assign.roster_menu import create_roster, roster_menu
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu import SpeakerAssignMenu
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.speaker_assign.llm_request_util import LlmRequestResult, LlmRequestUtil
-from tts_audiobook_tool.speaker_assign.roster import Roster, RosterFile
+from tts_audiobook_tool.speaker_assign.roster import Prominence, Roster, RosterCharacter, RosterFile
 from tts_audiobook_tool.speaker_assign.roster_util import NormalizedRoster, RosterUtil
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
@@ -49,10 +49,44 @@ def test_roster_menu_labels_mark_only_known_stale_data(monkeypatch, status):
     marker = f"{COL_ERROR}*" if status == "stale" else ""
     expected_step = (
         "Step 1: Create character roster" if status == "missing" else
-        f"Step 1: Create/view character roster {COL_DIM}(completed)" + marker
+        f"Step 1: Create character roster {COL_DIM}(completed)" + marker
     )
     assert captured[0][0] == expected_step
-    assert captured[1] == (["Start"] if status == "missing" else ["Start", "View roster data" + marker])
+    assert captured[1] == (["Start"] if status == "missing" else [
+        "Start",
+        "View roster data" + marker,
+        f"View roster data, expanded {COL_DIM}(possible spoilers)" + marker,
+    ])
+
+
+def test_expanded_roster_view_prints_character_blocks(monkeypatch):
+    # The expanded view shows each character as a block with its aliases and description.
+    book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
+    roster = Roster((
+        RosterCharacter(
+            id="HARU_KOYAMA", name="Haru Koyama", aliases=("Haru", "Miss Haru", "Koyama"),
+            gender="female", description="A teenage girl from Tokyo.", prominence=Prominence.MAJOR,
+        ),
+    ))
+    roster_file = RosterFile(roster, section_text_hashes=UtteranceUtil.section_text_hashes(book))
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(book=book, dir_path="unused")))
+    monkeypatch.setattr(SpeakerAssignFileUtil, "load_roster_file", lambda _: roster_file)
+    lines: list[str] = []
+    monkeypatch.setattr(roster_menu_module, "printt", lambda s="": lines.append(s))
+
+    assert roster_menu_module.print_roster_info(state, expanded=True)
+
+    i = lines.index(
+        f"{COL_DEFAULT}[1] {COL_DIM}id: {COL_ACCENT}HARU_KOYAMA  {COL_DIM}tier: {COL_DEFAULT}major      "
+        f"{COL_DIM}gender: {COL_DEFAULT}female"
+    )
+    assert lines[i + 1:i + 6] == [
+        f"    {COL_DIM}name: {COL_DEFAULT}Haru Koyama",
+        f"    {COL_DIM}aliases: {COL_DEFAULT}Haru, Miss Haru, Koyama",
+        "",
+        f"{COL_DIM_ITALICS}A teenage girl from Tokyo.",
+        "",
+    ]
 
 
 @pytest.mark.parametrize("dialog_segmentation", [False, True])
