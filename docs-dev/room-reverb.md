@@ -129,7 +129,7 @@ per-channel normalization is applied.
 Per held segment in concat (`ConcatUtil.concatenate_sound_segments`, `flush_pending`):
 
     segment (resample, treble EQ, sentence-gap extension, gap limiting)
-      -> pause or break effect appended (pause timing rules)
+      -> pause or break effect appended (pause modulation rules)
       -> direct voice pan + parallel room reverb (narration only)
       -> room tone noise bed
       -> ffmpeg stream -> loudness normalization (whole file) -> metadata

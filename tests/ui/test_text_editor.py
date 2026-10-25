@@ -1527,7 +1527,7 @@ def test_confirmation_previews_assignment_cleanup_without_clearing_it(tmp_path, 
     assert Text.from_ansi(dialog.copy_lines[-1]).plain == (
         "• Saved dialog assignments for affected passages"
     )
-    assert 'Run "Assign dialog to characters" again' not in copy
+    assert '"Run dialog attribution" again' not in copy
     assert "roster and voice mappings" not in copy
     assert ("• 1 generated audio segment." in copy) == has_audio
     assert dialog.copy_lines[2] == "The text edits made will result in the removal of:"

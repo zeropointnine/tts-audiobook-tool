@@ -34,13 +34,11 @@ class SpeakerAssignMenu:
 
         def make_roster_label(_: State) -> str:
             if not book.segmentation_settings.dialog_segmentation:
-                return f"Step 1: Create character roster {COL_DIM}(requires dialog segmentation)"
+                return f"Step 1: Generate character roster {COL_DIM}(requires dialog segmentation)"
             if SpeakerAssignFileUtil.has_roster(state.project.dir_path):
-                return (
-                    f"Step 1: Create character roster {COL_DIM}(completed)"
-                    + make_roster_stale_marker(state)
-                )
-            return "Step 1: Create character roster"
+                marker = make_roster_stale_marker(state)
+                return f"Step 1: Generate character roster {COL_DIM}(completed{marker}{COL_DIM})"
+            return "Step 1: Generate character roster"
 
         def on_select_roster(_: State, _item: MenuItem) -> None:
             if not book.segmentation_settings.dialog_segmentation:

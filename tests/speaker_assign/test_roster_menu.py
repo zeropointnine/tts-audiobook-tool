@@ -48,14 +48,14 @@ def test_roster_menu_labels_mark_only_known_stale_data(monkeypatch, status):
 
     marker = f"{COL_ERROR}*" if status == "stale" else ""
     expected_step = (
-        "Step 1: Create character roster" if status == "missing" else
-        f"Step 1: Create character roster {COL_DIM}(completed)" + marker
+        "Step 1: Generate character roster" if status == "missing" else
+        f"Step 1: Generate character roster {COL_DIM}(completed{marker}{COL_DIM})"
     )
     assert captured[0][0] == expected_step
     assert captured[1] == (["Start"] if status == "missing" else [
         "Start",
         "View roster data" + marker,
-        f"View roster data, expanded {COL_DIM}(possible spoilers)" + marker,
+        f"View roster data, expanded{marker} {COL_DIM}(possible spoilers)",
     ])
 
 
@@ -89,6 +89,33 @@ def test_expanded_roster_view_prints_character_blocks(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize("expanded", [False, True])
+def test_roster_view_puts_stale_warning_first_and_provenance_last(monkeypatch, expanded):
+    # The stale warning opens the printout; the created/model line closes it after a blank line.
+    book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
+    roster = Roster((RosterCharacter(id="HARU", name="Haru"),))
+    roster_file = RosterFile(
+        roster, created="2026-10-24T18:43:10-04:00", llm={"model": "some/model"},
+        section_text_hashes=("old text",),
+    )
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(book=book, dir_path="unused")))
+    monkeypatch.setattr(SpeakerAssignFileUtil, "load_roster_file", lambda _: roster_file)
+    lines: list[str] = []
+    monkeypatch.setattr(roster_menu_module, "printt", lambda s="": lines.append(s))
+
+    assert roster_menu_module.print_roster_info(state, expanded=expanded)
+
+    assert lines[:2] == [
+        f"{COL_ERROR}* {COL_DIM_ITALICS}The project text has changed since this roster was created", "",
+    ]
+    assert lines[-3:] == [
+        "",
+        f"{COL_DEFAULT}Created: {COL_DIM}2026-10-24 18:43, {COL_DEFAULT}model: {COL_DIM}some/model",
+        "",
+    ]
+    assert lines[-4] != ""
+
+
 @pytest.mark.parametrize("dialog_segmentation", [False, True])
 @pytest.mark.parametrize("has_dialog", [False, True])
 def test_step_one_checks_dialog_segmentation_on_selection(monkeypatch, dialog_segmentation, has_dialog):
@@ -114,7 +141,7 @@ def test_step_one_checks_dialog_segmentation_on_selection(monkeypatch, dialog_se
     assert "Requires text imported with dialog segmentation enabled." not in menu["subheading"]
     assert not warnings
     step_one = menu["items"](state)[0]
-    expected_label = "Step 1: Create character roster"
+    expected_label = "Step 1: Generate character roster"
     if not dialog_segmentation:
         expected_label += f" {COL_DIM}(requires dialog segmentation)"
     assert step_one.label(state) == expected_label
@@ -158,13 +185,12 @@ def test_roster_menu_omits_discard_notice(monkeypatch, tmp_path, has_assignments
 
 @pytest.mark.parametrize("outcome, expected", [
     ("success", ["done"]),
-    ("error", ["error"]),
-    ("bad_reply", ["error"]),
+    ("error", []),
+    ("bad_reply", []),
     ("cancelled", []),
 ])
 def test_create_roster_outcome_sound(monkeypatch, tmp_path, outcome, expected):
-    # A saved roster plays the done sound, a request or reply error the error sound;
-    # a user cancel plays nothing.
+    # Only a saved roster plays a sound (done); request/reply errors and a user cancel play nothing.
     book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
     state = cast(State, SimpleNamespace(
         prefs=None, project=SimpleNamespace(book=book, dir_path=str(tmp_path)),

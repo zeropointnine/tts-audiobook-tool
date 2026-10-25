@@ -71,7 +71,7 @@ def load_assign_data(state: State) -> AssignData | str:
 
 def make_step_label(state: State) -> str:
     """The parent menu's label for step 2, with its progress."""
-    label = "Step 2: Assign dialog to characters"
+    label = "Step 2: Run dialog attribution"
     if not SpeakerAssignFileUtil.has_roster(state.project.dir_path):
         return label + f" {COL_DIM}(requires step 1)"
     data = load_assign_data(state)
@@ -87,7 +87,7 @@ def make_step_label(state: State) -> str:
 def assign_menu(state: State) -> None:
 
     if not SpeakerAssignFileUtil.has_roster(state.project.dir_path):
-        print_feedback("Requires step 1 (create character roster)", is_error=True)
+        print_feedback("Requires step 1 (generate character roster)", is_error=True)
         return
     data = load_assign_data(state)
     if isinstance(data, str):
@@ -108,7 +108,7 @@ def assign_menu(state: State) -> None:
     def print_run_heading() -> None:
         # Same heading and breadcrumbs as this menu: the run screen takes its
         # place rather than nesting under it
-        MenuUtil.print_heading(state, "Assign dialog to characters",
+        MenuUtil.print_heading(state, "Run dialog attribution",
                                breadcrumb_text=MenuUtil.make_breadcrumb_text(state))
 
     def on_start(_: State, __: MenuItem) -> None:
@@ -130,7 +130,7 @@ def assign_menu(state: State) -> None:
         refresh()
 
     def on_view(_: State, __: MenuItem) -> None:
-        MenuUtil.print_screen_heading(state, "Dialog assignments", breadcrumb="Dialog assignments")
+        MenuUtil.print_screen_heading(state, "Dialog attribution summary", breadcrumb="Dialog attribution summary")
         if print_assign_results(state):
             ask.ask_enter_to_continue()
 
@@ -150,10 +150,10 @@ def assign_menu(state: State) -> None:
 
     MenuUtil.menu(
         state,
-        heading="Assign dialog to characters",
+        heading="Run dialog attribution",
         items=items_maker,
         subheading=lambda _: subheading,
-        breadcrumb="Assign dialog to characters",
+        breadcrumb="Run dialog attribution",
     )
 
 
@@ -274,24 +274,18 @@ def run_assign(state: State, start_over: bool = False) -> None:
     play_outcome_sound(result.outcome, bool(result.failures))
 
     if result.attributions.ranges:
-        print_accent_separator("Dialog summary")
+        print_accent_separator("Dialog attribution summary")
         print_assign_results(state)
     ask.ask_enter_to_continue()
 
 
 def play_outcome_sound(outcome: RunOutcome, has_failures: bool) -> None:
     """
-    The done sound for a run that completed every chunk, the error sound for
-    one that ended in errors (aborted, or finished with failed chunks).
-    No sound when the user stopped the run.
+    The done sound for a run that completed every chunk. No sound for one that
+    ended in errors (aborted, or finished with failed chunks) or that the user stopped.
     """
-    match outcome:
-        case RunOutcome.FINISHED if not has_failures:
-            app_support.play_done_sound()
-        case RunOutcome.FINISHED | RunOutcome.FAILED:
-            app_support.play_fatal_gen_sound()
-        case RunOutcome.STOPPED | RunOutcome.CANCELLED:
-            pass
+    if outcome == RunOutcome.FINISHED and not has_failures:
+        app_support.play_done_sound()
 
 
 class StopWatcher:
@@ -318,9 +312,9 @@ class PrintingListener(AttributionRunListener):
 
     def chunk_started(self, chunk: PlannedChunk, plan: AssignPlan) -> None:
         self.status.end()
-        # Line numbers 0-based and inclusive, as in UtteranceUtil.range_label
+        # User-facing line numbers are 1-based and inclusive
         printt(f"{COL_DEFAULT}Chunk {chunk.number} of {len(plan.chunks)}: "
-               f"{COL_DIM}Lines {chunk.start}-{chunk.end - 1}, {chunk.utterance_count:,} dialog passages")
+               f"{COL_DIM}Lines {chunk.start + 1}-{chunk.end}, {chunk.utterance_count:,} dialog passages")
 
     def note(self, text: str) -> None:
         self.status.end()
@@ -332,7 +326,7 @@ class PrintingListener(AttributionRunListener):
         printt(f"  {COL_DIM}Retrying in {delay:.0f}s")
 
     def chunk_saved(self, chunk: PlannedChunk, attribution: RangeAttribution, elapsed: float) -> None:
-        printt(f"  {COL_DEFAULT}Done: {COL_DIM}{duration_string(elapsed)}")
+        printt(f"{COL_DEFAULT}Done: {COL_DIM}{duration_string(elapsed)}")
 
     def chunk_failed(self, chunk: PlannedChunk, error: str) -> None:
         self.status.end()
@@ -366,20 +360,27 @@ def print_assign_results(state: State) -> bool:
     characters = sorted(
         ((label, count) for label, count in summary.counts.items() if label in names),
         key=lambda item: (-item[1], item[0]))
-    reserved = [(label, summary.counts[label]) for label in (OTHER, UNKNOWN, NOT_SPEECH) if summary.counts[label]]
+    # NOT_SPEECH isn't actionable (no voice can be chosen for it), so it gets a
+    # note below the progress line rather than a row
+    reserved = [(label, summary.counts[label]) for label in (OTHER, UNKNOWN) if summary.counts[label]]
     # Labels neither in the roster nor reserved shouldn't occur (a new roster
     # discards saved ids), but are listed rather than hidden
     others = sorted((label, count) for label, count in summary.counts.items()
                     if label not in names and label not in RESERVED_LABEL_DESCRIPTIONS)
 
     rows = [*characters, *others, *reserved]
-    id_width = max(len("id"), *(len(label) for label, _ in rows))
-    printt(f"{COL_DIM}{'count':>6}  {'id':<{id_width}}  name")
-    for label, count in rows:
-        name = names.get(label) or f"{COL_DIM}{RESERVED_LABEL_DESCRIPTIONS.get(label, '')}"
-        printt(f"{count:>6,}  {COL_ACCENT}{label:<{id_width}}{COL_DEFAULT}  {name}")
-    printt()
+    if rows:
+        id_width = max(len("id"), *(len(label) for label, _ in rows))
+        printt(f"{COL_DIM}{'count':>6}  {'id':<{id_width}}  name")
+        for label, count in rows:
+            name = names.get(label) or f"{COL_DIM}{RESERVED_LABEL_DESCRIPTIONS.get(label, '')}"
+            printt(f"{count:>6,}  {COL_ACCENT}{label:<{id_width}}{COL_DEFAULT}  {name}")
+        printt()
     printt(progress_line)
+    not_speech = summary.counts[NOT_SPEECH]
+    if not_speech:
+        printt(f"{COL_DIM}({not_speech:,} of these {make_noun('is', 'are', not_speech)} "
+               f"quoted text that isn't speech; {make_noun('its', 'their', not_speech)} voice is left as is)")
     printt()
 
     if summary.recurring_others:

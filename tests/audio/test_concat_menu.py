@@ -23,6 +23,7 @@ from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
 from tts_audiobook_tool.state import State
 
@@ -129,8 +130,10 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     project.min_segment_sentence_silence = MinSegmentSentenceSilence.ENABLED
     project.high_shelf = HighShelfEq.DISABLED.id
     project.normalization_type = NormalizationType.DEFAULT
+    project.reason_pauses = ReasonPauseTypes.SHORTER.value
     # Same order as the menu: options, then post-processing
     assert plain_option_lines(state) == [
+        "  - Pauses between segments: shorter",
         "  - Maximum silence inside segments: True 1.00s",
         "  - Minimum sentence silence inside segments: True",
         "  - Section break sound effects: True",
@@ -143,6 +146,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     ]
     project.room_tone = RoomTone.OFF
     project.voice_references = []
+    project.reason_pauses = ReasonPauseTypes.NORMAL.value
     project.min_segment_sentence_silence = MinSegmentSentenceSilence.DISABLED
     project.limit_silence_gaps = False
     project.high_shelf = HighShelfEq.MODERATE.id
@@ -346,7 +350,7 @@ def test_concat_menu_heading_pluralizes_by_output_file_count(chapter_mode, marke
 
 
 def test_pause_timing_rules_menu_offers_limit_silence_gaps() -> None:
-    # The setting lives in the "Pause timing rules" submenu; its label reflects the current value
+    # The setting lives in the "Pause modulation rules" submenu; its label reflects the current value
     project = Project.model_validate({"limit_silence_gaps": True, "limit_silence_gaps_duration": 0.4})
     state = cast(State, SimpleNamespace(project=project))
 

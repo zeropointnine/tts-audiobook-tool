@@ -336,7 +336,7 @@ Replacing text from EPUB deletes old generated sound segments and clears section
 markers, matching text-file and manual import behavior. Word substitutions are
 kept. As a business rule, all saved dialog assignments are discarded after
 persistence, even for passages identical to the old text, so the user simply
-re-runs "Assign dialog to characters". The character roster and
+re-runs step 2 ("Run dialog attribution"). The character roster and
 character-to-voice mappings are retained.
 
 The text editor is different: edits are local, so it uses the

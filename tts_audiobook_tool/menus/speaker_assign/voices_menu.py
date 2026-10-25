@@ -17,6 +17,7 @@ from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
 from tts_audiobook_tool.speaker_assign.attribution_summary import AttributionSummary
 from tts_audiobook_tool.speaker_assign.roster import RosterCharacter
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
+from tts_audiobook_tool.speaker_assign.speaker_assign_types import NOT_SPEECH
 from tts_audiobook_tool.speaker_assign.voice_apply import VoiceApplyPlan
 from tts_audiobook_tool.speaker_assign.voice_map import VoiceMapFile
 from tts_audiobook_tool.state import State
@@ -25,7 +26,7 @@ from tts_audiobook_tool.util import make_hotkey_string, make_noun, print_feedbac
 
 def make_step_label(state: State) -> str:
     """The parent menu's label for step 3."""
-    label = "Step 3: Assign voices to characters"
+    label = "Step 3: Map to voices"
     if not SpeakerAssignFileUtil.has_roster(state.project.dir_path):
         label += f" {COL_DIM}(requires step 1)"
     return label
@@ -35,7 +36,7 @@ def voices_menu(state: State) -> None:
 
     project_dir = state.project.dir_path
     if not SpeakerAssignFileUtil.has_roster(project_dir):
-        print_feedback("Requires step 1 (create character roster)", is_error=True)
+        print_feedback("Requires step 1 (generate character roster)", is_error=True)
         return
     if len(state.project.voice_references) < 2:
         print_feedback("Requires 2+ voices")
@@ -146,12 +147,12 @@ def characters_page_menu(
         return items + make_action_items()
 
     if start == 0:
-        heading = breadcrumb = "Assign voices to characters"
+        heading = breadcrumb = "Map to voices"
     else:
         # The description is only shown on the first page
         subheading = ""
         breadcrumb = f"Characters {start + 1:,}-{end:,}"
-        heading = f"Assign voices to characters {COL_DIM}({start + 1:,}-{end:,} of {len(characters):,})"
+        heading = f"Map to voices {COL_DIM}({start + 1:,}-{end:,} of {len(characters):,})"
 
     MenuUtil.menu(state, heading=heading, items=items_maker, subheading=subheading, breadcrumb=breadcrumb)
 
@@ -219,8 +220,10 @@ def make_apply_preview(
                 f"{COL_ACCENT}{character.id}{COL_DEFAULT} ({plan.applied[character.id]:,})")
     rows = [(VoiceMenuShared.make_voice_title(voice_references[index], index), ", ".join(names))
             for index, names in sorted(by_voice.items())]
-    if plan.unchanged:
-        unchanged = ", ".join(f"{label} ({count:,})" for label, count in plan.unchanged.most_common())
+    # NOT_SPEECH passages are kept out: no voice can be chosen for them
+    unchanged_counts = [(label, count) for label, count in plan.unchanged.most_common() if label != NOT_SPEECH]
+    if unchanged_counts:
+        unchanged = ", ".join(f"{label} ({count:,})" for label, count in unchanged_counts)
         rows.append(("Unchanged", f"{unchanged} {COL_DIM}(no voice chosen)"))
     width = max(len(title) for title, _ in rows)
 

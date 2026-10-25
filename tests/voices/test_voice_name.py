@@ -56,8 +56,9 @@ def test_set_name_strips_edits_only_that_voice_and_restores_on_failed_save(monke
         ProjectVoiceUtil.set_voice_name_at_index_and_save(project, 2, "x")
 
 
-def test_submenu_name_item_shows_optional_then_value_and_offers_clear(monkeypatch):
-    # Unset: dim "(optional)" and no Clear item. Set: "(currently: ...)" plus Clear name.
+def test_submenu_name_item_shows_optional_then_value_and_clears_via_command(monkeypatch):
+    # Unset: dim "(optional)". Set: "(currently: ...)". There's no separate Clear item;
+    # entering "/clear" at the name prompt removes the name.
     state = cast(State, SimpleNamespace(project=Project(
         tts_model_type="omnivoice_local", voice_references=[{"file_name": "a.flac", "transcript": "t"}],
     )))
@@ -73,22 +74,23 @@ def test_submenu_name_item_shows_optional_then_value_and_offers_clear(monkeypatc
         return [get_string_from(state, item.label) for item in captured["items"](state)]
 
     assert labels()[0] == menu.make_menu_label_optional(menu.LABEL_VOICE_NAME)
-    assert menu.LABEL_CLEAR_VOICE_NAME not in labels()
+    item_count = len(labels())
 
     monkeypatch.setattr(menu.ask, "ask_input", lambda **_: "Narrator")
     item = captured["items"](state)[0]
     item.handler(state, item)
     assert state.project.voice_references[0].name == "Narrator"
     assert labels()[0] == f"{menu.LABEL_VOICE_NAME} {make_currently_string('Narrator')}"
+    assert len(labels()) == item_count
 
-    # Blank input (or cancel) leaves the name unchanged; Clear removes it.
+    # Blank input (or cancel) leaves the name unchanged; "/clear" removes it.
     monkeypatch.setattr(menu.ask, "ask_input", lambda **_: "")
     item.handler(state, item)
     assert state.project.voice_references[0].name == "Narrator"
-    clear = next(i for i in captured["items"](state)
-                 if get_string_from(state, i.label) == menu.LABEL_CLEAR_VOICE_NAME)
-    clear.handler(state, clear)
+    monkeypatch.setattr(menu.ask, "ask_input", lambda **_: "/clear")
+    item.handler(state, item)
     assert state.project.voice_references[0].name == ""
+    assert labels()[0] == menu.make_menu_label_optional(menu.LABEL_VOICE_NAME)
 
 
 def test_name_taken_ignores_own_voice_case_and_whitespace():

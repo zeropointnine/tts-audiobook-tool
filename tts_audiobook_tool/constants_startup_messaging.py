@@ -13,18 +13,23 @@ version that has this feature) are not shown any messages.
 
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT
 
-STARTUP_VERSION_CODE = 3
+STARTUP_VERSION_CODE = 4
 
 # (version code, message), ascending by version code
 STARTUP_VERSION_MESSAGES: list[tuple[int, str]] = [
     (
         2,
-        f"Room reverb has been moved to the {COL_ACCENT}Voice{COL_DEFAULT} menu, "
+        f"Room reverb has been moved to the {COL_ACCENT}Voice{COL_DEFAULT} menu,\n"
         "and can now be controlled on a per-voice basis."
     ),
     (
         3,
-        f"The \"Voice selection mode\" setting has been removed (including \"auto-advance\"). "
+        f"The \"Voice selection mode\" setting has been removed (including \"auto-advance\").\n"
         "Text lines now always use their assigned voice. "
+    ),
+    (
+        4,
+        f"Voices > Auto-assign character voices:\n"
+        "Automatically identify speaking lines by character using LLM."
     )
 ]

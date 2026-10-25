@@ -143,7 +143,7 @@ def test_character_pages_chain_through_more_and_repeat_actions(monkeypatch) -> N
         ["E", "Set all to...", "Apply"],
     ]
     assert [menu["subheading"] for menu in menus] == ["desc", "", ""]
-    assert strip_ansi_codes(menus[2]["heading"]) == "Assign voices to characters (5-5 of 5)"
+    assert strip_ansi_codes(menus[2]["heading"]) == "Map to voices (5-5 of 5)"
 
 
 def make_apply_state():
@@ -175,7 +175,8 @@ def quiet_apply(monkeypatch):
 
 def test_apply_preview_groups_by_voice_and_warns() -> None:
     # Characters sharing a voice share a row; unchosen speakers are listed as
-    # unchanged; stale results and existing audio each add a note.
+    # unchanged (except NOT_SPEECH, which can't have a voice); stale results
+    # and existing audio each add a note.
     state, attributions, _ = make_apply_state()
     voice_map = VoiceMapFile({"ALICE": 2, "CAROL": 2, "BOB": 0})
     plan = VoiceApplyPlan.make(state.project.book, ROSTER_IDS, attributions, voice_map)
@@ -185,8 +186,8 @@ def test_apply_preview_groups_by_voice_and_warns() -> None:
 
     assert "  Voice 1 general  BOB (1)" in lines
     assert "  Voice 3 bob      ALICE (1), CAROL (1)" in lines
-    assert any(line.startswith("  Unchanged") and "UNKNOWN (1)" in line and "NOT_SPEECH (1)" in line
-               for line in lines)
+    assert any(line.startswith("  Unchanged") and "UNKNOWN (1)" in line for line in lines)
+    assert not any("NOT_SPEECH" in line for line in lines)
     assert "3 lines change voice. Voices already set on these lines are replaced." in lines
     text = "\n".join(lines)
     assert "1 passage skipped" in text

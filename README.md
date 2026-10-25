@@ -43,7 +43,7 @@ By themselves, these models are unreliable at book scale. The app wraps them in 
 - Silence trimming and reduction of excessive pauses, plus semantically-aware pause modulation at segment boundaries to improve prosody
 - EBU R128 loudness normalization plus optional 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) generative upsampler
 
-A single project can use multiple voice-clone samples, each assigned to a different character. Automated dialog detection and LLM-assisted speaker identification handle most of the gruntwork — so you can turn a book into your own little radio drama.
+A single project can utilize multiple voice-clone samples. An optional step applies an LLM-assisted character identification pass on the text to map character lines to voice clones.
 
 It also includes a realtime audiobook playback mode and a voice chat feature, useful for voice/model testing.
 
@@ -69,20 +69,20 @@ The player is a static HTML page — no web server or install required. Open `br
 
 **Sample outputs**
 
-All examples use the same source text, same 15-second voice clone sample, and default model settings, unless otherwise noted.
+These examples use the same source text, 15-second voice clone sample, and default model settings.
 
 | | | |
 | --- | --- | --- |
-| [AuK](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-auk.abr.m4a) | [Breeze TTS 2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-breeze2.abr.m4a) | [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a) |
+| [AuK](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-auk.abr.m4a) | [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a) |
 | [CosyVoice3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-cosyvoice3.abr.m4a) | [dots.tts](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-dots-soar.abr.m4a) | [Echo-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-echo.abr.m4a) (audio.cpp q8) |
-| [FireRedTTS3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-fireredtts3.abr.m4a) | [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a) | [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a) |
-| [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a) | [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a) | [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (alt voice, high temp.) |
-| [Higgs Audio V3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-v3.abr.m4a) | [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a) | [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (plus emotional guidance sample) |
-| [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a) | [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a) | [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a) |
-| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (LavaSRv2 48k upsample) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined: stuart_bell) |
-| [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a) | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a) | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett)) |
-| [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a) | [ZONOS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-zonos2.abr.m4a) |  |
-| New feature: [**Dialog** (two voices, auto-assigned lines)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/two-voices-dialog-qwen3.abr.m4a) |  |  |
+| [FireRedTTS3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-fireredtts3.abr.m4a) (audio.cpp q8) | [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a) | [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a) |
+| [Higgs Audio V3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-v3.abr.m4a) (sgl-omni)| [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (plus emotional guidance sample) | [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a) |
+| [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (LavaSRv2 48k upsample) |
+| [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a) | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) ([LoRA](https://huggingface.co/vibevoice-community/klett) example) |  |
+
+| |
+| ------ |
+| [Multi-character dialog](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/through-the-looking-glass.abr.m4a) (four voices, LLM auto-attributed lines, Breeze TTS 2)|
 
 
 ### Enhance existing audiobooks
@@ -888,7 +888,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 **2026-10-25**
 
-- Added **Auto-assign character voices** (`Voices > Auto-assign character voices`). An LLM works out which character speaks each line of dialog, so main characters can each get their own voice.
+- Added **Auto-assign character voices** (`Voices > Auto-assign character voices`). Uses an LLM to work out which character speaks each line of dialog, so main characters can each get their own voice.
 
 **2026-10-21**
 
@@ -909,7 +909,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 - Added support for [**Fish Drama 3 for audio.cpp**](https://github.com/0xShug0/audio.cpp/blob/main/docs/models/fish_drama3.md)
 
-**2026-10-13**
+**2026-10-13**v
 
 - Added **Room reverb** under `Create > Post-processing`. Places the narration in a subtle small room (light or moderate level) or a larger, more audible space (Larger room). Off by default.
 - Added **Room reverb stereo effect**. Spreads the reverb across left and right while the voice stays centered; creates stereo files. Off by default.

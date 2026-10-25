@@ -48,17 +48,17 @@ def roster_menu(state: State) -> None:
             marker = make_roster_stale_marker(state)
             items.append(MenuItem("View roster data" + marker, on_select_roster_view))
             items.append(MenuItem(
-                f"View roster data, expanded {COL_DIM}(possible spoilers)" + marker,
+                f"View roster data, expanded{marker} {COL_DIM}(possible spoilers)",
                 on_select_roster_view_expanded,
             ))
         return items
 
     MenuUtil.menu(
         state,
-        heading="Create character roster",
+        heading="Generate character roster",
         items=items_maker,
         subheading=subheading,
-        breadcrumb="Create character roster",
+        breadcrumb="Generate character roster",
     )
 
 
@@ -75,7 +75,7 @@ def on_select_roster_start(state: State, _item: MenuItem) -> None:
         return
     # Same heading and breadcrumbs as the roster menu: the run screen takes its
     # place rather than nesting under it
-    MenuUtil.print_heading(state, "Create character roster", breadcrumb_text=MenuUtil.make_breadcrumb_text(state))
+    MenuUtil.print_heading(state, "Generate character roster", breadcrumb_text=MenuUtil.make_breadcrumb_text(state))
     create_roster(state)
 
 
@@ -166,7 +166,6 @@ def create_roster(state: State) -> None:
 
     def fail(message: str) -> None:
         # The request ran (not cancelled) but no roster came of it
-        app_support.play_fatal_gen_sound()
         ask.ask_error(message)
 
     if result.cancelled:
@@ -262,41 +261,53 @@ def print_roster_info(state: State, expanded: bool = False) -> bool:
     roster_file = result
     roster = roster_file.roster
 
-    provenance = [roster_file.created.replace("T", " ")[:16]] if roster_file.created else []
-    if roster_file.llm.get("model"):
-        provenance.append(f"model: {roster_file.llm['model']}")
-    if provenance:
-        printt(f"{COL_DIM}Created {', '.join(provenance)}")
+    # Sections are separated by a blank line, without a leading one under the heading
+    has_printed = False
+    def print_gap() -> None:
+        if has_printed:
+            printt()
+
     if RosterUtil.is_stale(roster_file.section_text_hashes, state.project.book):
         printt(f"{COL_ERROR}* {COL_DIM_ITALICS}The project text has changed since this roster was created")
+        has_printed = True
 
     narration = roster.narration
     if narration != RosterNarration():
         person = f"{narration.person.value} person" if narration.person.value else "Unknown person"
-        printt()
+        print_gap()
         printt(f"Narration: {person}")
         if narration.notes.strip():
             printt(f"{COL_DIM_ITALICS}{narration.notes.strip()}")
+        has_printed = True
 
     id_width = max(len("id"), *(len(character.id) for character in roster.characters))
-    printt()
+    print_gap()
     if expanded:
         print_characters_expanded(roster.characters, id_width)
     else:
-        printt(f"{COL_DIM}{'#':>3}  {'id':<{id_width}}  {'tier':<10} {'gender':<7} name")
+        printt(f"{COL_DIM}{'#':>3}  {'id':<{id_width}}  {'tier':<10}  {'gender':<7}  name")
         for i, character in enumerate(roster.characters, 1):
             narrator = f" {COL_DIM}[narrator]" if character.is_narrator else ""
             tier = character.prominence.value or "?"
             printt(
                 f"{COL_DIM}{i:>3}  {COL_ACCENT}{character.id:<{id_width}}{COL_DEFAULT}  "
-                f"{tier:<10} {character.gender:<7} {character.name}{narrator}"
+                f"{tier:<10}  {character.gender:<7}  {character.name}{narrator}"
             )
         printt()
+        path = SpeakerAssignFileUtil.roster_path(project_dir)
+        printt(f"{COL_DEFAULT}Full roster data: "
+               f"{COL_DIM}{text_util.make_terminal_hyperlink(path, is_file=True)} (may contain spoilers)")
+        printt()
 
-    path = SpeakerAssignFileUtil.roster_path(project_dir)
-    printt(f"{COL_DEFAULT}Full roster data: "
-           f"{COL_DIM}{text_util.make_terminal_hyperlink(path, is_file=True)} (may contain spoilers)")
-    printt()
+    # Both views above end with a blank line
+    provenance = []
+    if roster_file.created:
+        provenance.append(f"{COL_DEFAULT}Created: {COL_DIM}{roster_file.created.replace('T', ' ')[:16]}")
+    if roster_file.llm.get("model"):
+        provenance.append(f"{COL_DEFAULT}model: {COL_DIM}{roster_file.llm['model']}")
+    if provenance:
+        printt(", ".join(provenance))
+        printt()
     return True
 
 

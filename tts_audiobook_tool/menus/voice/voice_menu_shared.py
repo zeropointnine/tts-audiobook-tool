@@ -42,7 +42,6 @@ LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Auto-assign character voices"
 
 # Per-voice submenu labels
 LABEL_VOICE_NAME = "Name"
-LABEL_CLEAR_VOICE_NAME = "Clear name"
 LABEL_SET_VOICE_SAMPLE = "Voice sample"
 LABEL_CLEAR_VOICE_SAMPLE = "Clear voice sample"
 LABEL_REMOVE_VOICE_SAMPLE = "Remove"
@@ -921,13 +920,6 @@ class VoiceMenuShared:
         def on_set_name(s: State, _: MenuItem) -> None:
             VoiceMenuShared.ask_voice_name(s, current[0])
 
-        def on_clear_name(s: State, _: MenuItem) -> None:
-            error = ProjectVoiceUtil.set_voice_name_at_index_and_save(s.project, current[0], "")
-            if error:
-                ask.ask_error(error)
-            else:
-                print_feedback("Name cleared")
-
         def on_set_instructions(s: State, _: MenuItem) -> None:
             VoiceMenuShared.ask_voice_instructions(s, tts_type, current[0])
 
@@ -979,8 +971,6 @@ class VoiceMenuShared:
             preset = voice.preset_for(tts_type.id) if uses_presets else ""
             preset_label = get_preset_label(tts_type)
             items.append(MenuItem(VoiceMenuShared.make_voice_name_menu_label(voice), on_set_name))
-            if voice.name:
-                items.append(MenuItem(LABEL_CLEAR_VOICE_NAME, on_clear_name))
             if can_clone:
                 items.append(MenuItem(
                     VoiceMenuShared.make_set_voice_sample_label(s.project, tts_type, i),
@@ -1123,13 +1113,23 @@ class VoiceMenuShared:
 
     @staticmethod
     def ask_voice_name(state: State, index: int) -> None:
-        """Edit this voice's user-facing name; blank/cancel leaves it unchanged.
-        An invalid name (not one word, or not unique) is reported and not saved."""
+        """Edit this voice's user-facing name; blank/cancel leaves it unchanged
+        and "/clear" removes it. An invalid name (not one word, or not unique)
+        is reported and not saved."""
         current = state.project.voice_references[index].name
-        printt("Enter a name for this voice:")
+        printt('Enter a name for this voice (or "/clear" to clear):')
         printt(f"{COL_DIM}(One word, no spaces, up to {VOICE_NAME_MAX_LENGTH} characters)")
         value = ask.ask_input(lower=False, prefill=current).strip()
         if not value or value == current:
+            return
+        if value == "/clear":
+            if not current:
+                return
+            error = ProjectVoiceUtil.set_voice_name_at_index_and_save(state.project, index, "")
+            if error:
+                ask.ask_error(error)
+            else:
+                print_feedback("Name cleared")
             return
         error = ProjectVoiceUtil.get_voice_name_error(state.project, index, value)
         if error:

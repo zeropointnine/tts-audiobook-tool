@@ -93,7 +93,7 @@ class ConcatMenu:
 
             items.append(
                 MenuItem(
-                    "Pause timing rules",
+                    "Pause modulation rules",
                     lambda _, __: ConcatMenu.prosody_modulation_menu(state)
                 )
             )
@@ -218,7 +218,7 @@ class ConcatMenu:
 
         MenuUtil.menu(
             state=state,
-            heading="Pause timing rules",
+            heading="Pause modulation rules",
             items=make_items,
         )
 
@@ -526,6 +526,9 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
         lines.append(f"  {COL_DIM}- {prefix}: {COL_DEFAULT}{value}")
 
     # Same order as the menu
+    reason_pauses = state.project.reason_pauses
+    if reason_pauses.id != ReasonPauseTypes.default().value.id:
+        add("Pauses between segments", reason_pauses.menu_label)
     if state.project.limit_silence_gaps:
         add(
             "Maximum silence inside segments",
