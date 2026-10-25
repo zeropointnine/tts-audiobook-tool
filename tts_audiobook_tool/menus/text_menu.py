@@ -1,18 +1,16 @@
 from tts_audiobook_tool.app_support import app_text, hints
-from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
+from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.constants_config import PROJECT_DEFAULT_SEGMENTATION_STRATEGY
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
-from tts_audiobook_tool.text_ops.dialog_segmenter import (
-    DIALOG_VOICE_INDEX,
-)
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
+from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual.content_textual_app import (
@@ -258,6 +256,9 @@ def make_text_replacement_confirm_message(project: Project) -> str:
     Builds the confirmation prompt shown before replacing the project text,
     listing the text-dependent project data that would be invalidated.
     Returns an empty string when nothing would be invalidated (no prompt needed).
+
+    Everything listed is known before the incoming text is chosen: text import
+    discards all generated audio, markers and saved dialog assignments.
     """
     lines: list[str] = []
 
@@ -275,6 +276,19 @@ def make_text_replacement_confirm_message(project: Project) -> str:
         items_noun = make_noun("item", "items", num_markers)
         lines.append(f"{marker_label} ({COL_ERROR}{num_markers}{COL_DEFAULT} {items_noun})")
 
+    has_assignments = False
+    if project.dir_path:
+        saved = SpeakerAssignFileUtil.load_attributions_file(project.dir_path)
+        if isinstance(saved, str):
+            # Unreadable, but it gets cleared regardless; just omit the count
+            has_assignments = True
+            lines.append("Saved dialog assignments")
+        elif saved.ranges:
+            has_assignments = True
+            num_chunks = len(saved.ranges)
+            chunks_noun = make_noun("chunk", "chunks", num_chunks)
+            lines.append(f"Saved dialog assignments ({COL_ERROR}{num_chunks}{COL_DEFAULT} {chunks_noun})")
+
     if not lines:
         return ""
 
@@ -286,6 +300,8 @@ def make_text_replacement_confirm_message(project: Project) -> str:
     if num_substitutions > 0:
         items_noun = make_noun("item", "items", num_substitutions)
         s += f"{COL_DIM}Note: Word substitutions ({num_substitutions} {items_noun}) will be kept.{COL_DEFAULT}\n"
+    if has_assignments:
+        s += f"{COL_DIM}Note: Current character roster and voice mappings will be preserved{COL_DEFAULT}\n"
 
     s += "\nAre you sure? "
     return s
@@ -306,9 +322,8 @@ def on_select_import(state: State, item: MenuItem) -> bool:
 
     # Confirm before invalidating text-dependent project data
     confirm_message = make_text_replacement_confirm_message(state.project)
-    if confirm_message:
-        if not ask.ask_confirm(confirm_message):
-            return False
+    if confirm_message and not ask.ask_confirm(confirm_message):
+        return False
 
     epub_path = ""
     epub_import_result: EpubImportResult | None = None
@@ -364,16 +379,13 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         case _:
             raise ValueError(f"Bad value: {item.data!r}")
 
-    # Delete now-outdated gens
-    state.project.sound_segments.delete_all()
-
     # Commit
     if epub_import_result:
         err = EpubExtractor.copy_epub_to_project(epub_path, state.project.dir_path)
         if err:
             ask.ask_error(err)
             return False
-        ProjectTextIOUtil.set_phrase_groups_chapters_and_save(
+        err = ProjectTextIOUtil.set_phrase_groups_chapters_and_save(
             state.project,
             phrase_groups=phrase_groups,
             section_start_indices=epub_import_result.section_start_indices,
@@ -388,7 +400,7 @@ def on_select_import(state: State, item: MenuItem) -> bool:
 
     else:
         text_source_kind = "manual" if item.data == "manual" else "plain_text"
-        ProjectTextIOUtil.set_phrase_groups_and_save(
+        err = ProjectTextIOUtil.set_phrase_groups_and_save(
             state.project,
             phrase_groups=phrase_groups,
             strategy=state.project.segmentation_strategy,
@@ -399,6 +411,13 @@ def on_select_import(state: State, item: MenuItem) -> bool:
             title=title,
             text_source_kind=text_source_kind,
         )
+
+    if err:
+        ask.ask_error(err)
+        return False
+
+    # Delete outdated audio only after the import has succeeded.
+    state.project.sound_segments.delete_all()
 
     num_text_lines = len(phrase_groups)
     if epub_import_result:
@@ -415,30 +434,21 @@ def on_select_import(state: State, item: MenuItem) -> bool:
         printt(f"- Text segmenter max_words_per_segment: {COL_ACCENT}{segmentation_settings.max_words_per_segment}")
     printt(f"- Text segmenter strategy: {COL_ACCENT}{segmentation_settings.strategy.label}")
     printt(f"- Dialog segmentation: {COL_ACCENT}{segmentation_settings.dialog_segmentation}")
+    dialog_line_count = 0
     if segmentation_settings.dialog_segmentation:
-        dialog_segment_count = sum(
-            group.voice_index == DIALOG_VOICE_INDEX
-            for group in phrase_groups
-        )
-        printt(
-            f"  Text segments preassigned to voice sample 2: "
-            f"{COL_ACCENT}{dialog_segment_count}"
-        )
-        if (
-            dialog_segment_count
-            and state.project.voice_select_mode != VoiceSelectMode.USER_DEFINED
-        ):
-            printt(
-                f"{COL_DIM}  Voice selection mode must be set to: user-defined{COL_DEFAULT}"
-            )
+        dialog_line_count = sum(group.is_dialog for group in phrase_groups)
+        printt(f"  Dialog lines detected: {COL_ACCENT}{dialog_line_count}")
     printt()
+
+    if dialog_line_count:
+        ask_assign_dialog_voice(state, dialog_line_count)
 
     if state.project.language_code in ("en", "es"):
         hints.show_hint_if_necessary(
             state.prefs,
             HINT_TOLERANCE_FIRST_CLASS
         )
-    if state.project.dialog_segmentation:
+    if dialog_line_count:
         hints.show_hint_if_necessary(
             state.prefs,
             HINT_DIALOG_VOICE,
@@ -447,6 +457,36 @@ def on_select_import(state: State, item: MenuItem) -> bool:
     ask.ask_enter_to_continue()
 
     return False
+
+# Zero-based; voice sample 2 in the UI
+DIALOG_VOICE_INDEX = 1
+
+def ask_assign_dialog_voice(state: State, dialog_line_count: int) -> None:
+    """
+    Opt-in convenience at the end of text import: assigns every detected
+    dialog line to voice sample 2.
+    """
+    lines_noun = make_noun("line", "lines", dialog_line_count)
+    prompt = (
+        f"Assign the {dialog_line_count} dialog {lines_noun} to voice sample 2? "
+        f"Press {make_hotkey_string('Y')} to confirm: "
+    )
+    if not ask.ask_confirm(prompt):
+        return
+
+    dialog_groups = [group for group in state.project.phrase_groups if group.is_dialog]
+    previous = [group.voice_index for group in dialog_groups]
+    for group in dialog_groups:
+        group.voice_index = DIALOG_VOICE_INDEX
+    err = ProjectTextIOUtil.save_book(state.project)
+    if err:
+        for group, voice_index in zip(dialog_groups, previous, strict=True):
+            group.voice_index = voice_index
+        ask.ask_error(err)
+        return
+    printt(f"Assigned {len(dialog_groups)} dialog {lines_noun} to voice sample 2")
+    printt()
+
 
 def on_ask_max_size(state: State, _) -> None:
 
@@ -491,7 +531,7 @@ DIALOG_SEGMENTATION_DESC = \
 f"""Detects and splits dialog from surrounding narration,
 making it easier to assign different voices.
 For example, {COL_DIM}He said, "Hello."{COL_DEFAULT} becomes {COL_DIM}He said,{COL_DEFAULT} and {COL_DIM}"Hello."{COL_DEFAULT}
-Dialog segments are preassigned to voice sample 2.
+Is required by the "Auto-assign character voices" feature.
 
 For single-voice narration, leave this off to preserve natural flow."""
 

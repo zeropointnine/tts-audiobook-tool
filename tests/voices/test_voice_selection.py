@@ -1,7 +1,6 @@
 from unittest.mock import patch
 import pytest
 
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.generate_util import GenerateUtil, TtsModelError
 from tts_audiobook_tool.project import Project
@@ -12,7 +11,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from project_settings_test_support import set_setting
 
 
-def make_phrase_group(voice_index: int = -1) -> PhraseGroup:
+def make_phrase_group(voice_index: int = 0) -> PhraseGroup:
     return PhraseGroup([Phrase("Hello.", Reason.SENTENCE)], voice_index=voice_index)
 
 
@@ -30,59 +29,24 @@ def initialized_tts_type():
             Tts._type = previous_type
 
 
-def test_voice_select_mode_ids_and_project_default() -> None:
-    project = Project.model_validate({})
-
-    assert VoiceSelectMode.DISABLED.id == "disabled"
-    assert VoiceSelectMode.AUTO_ADVANCE.id == "auto_advance"
-    assert VoiceSelectMode.USER_DEFINED.id == "custom"
-    assert VoiceSelectMode.DISABLED.description == (
-        "Uses voice sample 1 for every TTS generation\n"
-        "      Uses the reverb settings of voice sample 1"
-    )
-    assert VoiceSelectMode.AUTO_ADVANCE.current_label == "auto-advance"
-    assert VoiceSelectMode.AUTO_ADVANCE.label == "Auto-advance"
-    assert VoiceSelectMode.AUTO_ADVANCE.description == (
-        "On each TTS batch generation, cycles through voices in order\n"
-        "      Uses the reverb settings of voice sample 1"
-    )
-    assert VoiceSelectMode.get_default() == VoiceSelectMode.DISABLED
-    assert VoiceSelectMode.get_by_id("disabled") == VoiceSelectMode.DISABLED
-    assert VoiceSelectMode.get_by_id("custom") == VoiceSelectMode.USER_DEFINED
-    assert VoiceSelectMode.get_by_id("invalid") is None
-    assert project.voice_select_mode == VoiceSelectMode.DISABLED
-
-
-@pytest.mark.parametrize("raw_value", [None, "invalid", 3])
-def test_project_invalid_or_missing_voice_select_mode_defaults_to_disabled(raw_value: object) -> None:
-    payload = {} if raw_value is None else {"voice_select_mode": raw_value}
-
-    project = Project.model_validate(payload)
-
-    assert project.voice_select_mode == VoiceSelectMode.DISABLED
-
-
-def test_project_voice_select_mode_json_round_trip() -> None:
-    project = Project.model_validate({"voice_select_mode": "custom"})
+@pytest.mark.parametrize("raw_value", ["auto_advance", "disabled", "custom"])
+def test_removed_voice_select_mode_is_ignored_on_load_and_not_saved(raw_value: str) -> None:
+    # Projects saved before the setting was removed still load; the key is dropped.
+    project = Project.model_validate({"voice_select_mode": raw_value})
 
     payload = ProjectSerializationUtil.to_project_json_dict(project)
-    assert payload["voice_select_mode"] == "custom"
 
-    reloaded = Project.model_validate(payload)
-
-    assert reloaded.voice_select_mode == VoiceSelectMode.USER_DEFINED
+    assert "voice_select_mode" not in payload
+    assert not hasattr(project, "voice_select_mode")
 
 
 def run_generation(
-        voice_select_mode: VoiceSelectMode,
         phrase_groups: list[PhraseGroup],
         indices: list[int],
         voices: list[str],
-        next_rotation_index: int = 7,
         voice_selection_index: int | None = None,
-) -> tuple[int, str, int]:
+) -> tuple[int, str]:
     project = Project(tts_model_type="mira_local")
-    project.voice_select_mode = voice_select_mode
     set_setting(project, "mira_voice_file_name", voices)
     captured_index = -1
 
@@ -93,7 +57,6 @@ def run_generation(
 
     with patch("tts_audiobook_tool.generate_util.Tts.get_active_type", return_value=TtsModelType.require_by_id("mira_local")), \
             patch("tts_audiobook_tool.generate_util.Tts.get_instance_if_exists", return_value=None), \
-            patch("tts_audiobook_tool.generate_util.Tts.get_next_voice_selection_index", return_value=next_rotation_index) as get_next, \
             patch("tts_audiobook_tool.generate_util.Tts.get_voice_tag_for_selection_index", side_effect=lambda _, index: f"voice-{index}") as get_tag, \
             patch("tts_audiobook_tool.generate_util.Tts.generate_using_project", side_effect=generate_using_project):
         results = GenerateUtil.generate(
@@ -108,108 +71,78 @@ def run_generation(
 
     assert all(isinstance(result, TtsModelError) for result in results)
     tagged_index = get_tag.call_args.args[1]
-    return captured_index, f"voice-{tagged_index}", get_next.call_count
-
-
-def test_auto_advance_mode_retains_rotation() -> None:
-    index, voice_tag, advance_count = run_generation(
-        VoiceSelectMode.AUTO_ADVANCE,
-        [make_phrase_group(1)],
-        [0],
-        ["voice-a.flac", "voice-b.flac"],
-    )
-
-    assert (index, voice_tag, advance_count) == (7, "voice-7", 1)
-
-
-@pytest.mark.parametrize("indices", [[0], [0, 1]])
-def test_disabled_mode_always_uses_first_voice_without_advancing(indices: list[int]) -> None:
-    index, voice_tag, advance_count = run_generation(
-        VoiceSelectMode.DISABLED,
-        [make_phrase_group(1), make_phrase_group(1)],
-        indices,
-        ["voice-a.flac", "voice-b.flac"],
-    )
-
-    assert (index, voice_tag, advance_count) == (0, "voice-0", 0)
+    return captured_index, f"voice-{tagged_index}"
 
 
 @pytest.mark.parametrize(
     ("requested_index", "expected_index"),
     [(-2, 0), (-1, 0), (2, 1), (100, 1)],
 )
-def test_custom_mode_invalid_index_clamps_to_nearest_valid_voice(
+def test_line_voice_invalid_index_clamps_to_nearest_valid_voice(
         requested_index: int,
         expected_index: int,
 ) -> None:
-    index, voice_tag, advance_count = run_generation(
-        VoiceSelectMode.USER_DEFINED,
+    index, voice_tag = run_generation(
         [make_phrase_group(requested_index)],
         [0],
         ["voice-a.flac", "voice-b.flac"],
     )
 
-    assert (index, voice_tag, advance_count) == (expected_index, f"voice-{expected_index}", 0)
+    assert (index, voice_tag) == (expected_index, f"voice-{expected_index}")
 
 
-def test_custom_mode_uses_explicit_phrase_voice_index() -> None:
-    index, voice_tag, advance_count = run_generation(
-        VoiceSelectMode.USER_DEFINED,
+def test_line_voice_uses_explicit_phrase_voice_index() -> None:
+    index, voice_tag = run_generation(
         [make_phrase_group(1)],
         [0],
         ["voice-a.flac", "voice-b.flac"],
     )
 
-    assert (index, voice_tag, advance_count) == (1, "voice-1", 0)
+    assert (index, voice_tag) == (1, "voice-1")
 
 
-def test_custom_mode_without_voice_samples_uses_the_default_voice_slot() -> None:
+def test_line_voice_without_voice_samples_uses_the_default_voice_slot() -> None:
     # A project always has at least one voice; with no samples configured that
     # is one sample-less voice, so the (stale) phrase index clamps to it.
-    index, voice_tag, advance_count = run_generation(
-        VoiceSelectMode.USER_DEFINED,
+    index, voice_tag = run_generation(
         [make_phrase_group(1)],
         [0],
         [],
     )
 
-    assert (index, voice_tag, advance_count) == (0, "voice-0", 0)
+    assert (index, voice_tag) == (0, "voice-0")
 
 
-def test_custom_mode_multi_item_batch_with_explicit_voice_uses_it() -> None:
-    index, voice_tag, advance_count = run_generation(
-        VoiceSelectMode.USER_DEFINED,
+def test_line_voice_multi_item_batch_with_explicit_voice_uses_it() -> None:
+    index, voice_tag = run_generation(
         [make_phrase_group(0), make_phrase_group(1)],
         [0, 1],
         ["voice-a.flac", "voice-b.flac"],
         voice_selection_index=1,
     )
 
-    assert (index, voice_tag, advance_count) == (1, "voice-1", 0)
+    assert (index, voice_tag) == (1, "voice-1")
 
 
-def test_custom_mode_multi_item_batch_without_explicit_voice_raises() -> None:
+def test_line_voice_multi_item_batch_without_explicit_voice_raises() -> None:
     with pytest.raises(ValueError, match="voice_selection_index"):
         run_generation(
-            VoiceSelectMode.USER_DEFINED,
-            [make_phrase_group(0), make_phrase_group(1)],
+                [make_phrase_group(0), make_phrase_group(1)],
             [0, 1],
             ["voice-a.flac", "voice-b.flac"],
         )
 
 
-def test_custom_voice_selection_is_stable_across_realtime_style_retries() -> None:
+def test_line_voice_selection_is_stable_across_realtime_style_retries() -> None:
     first = run_generation(
-        VoiceSelectMode.USER_DEFINED,
         [make_phrase_group(1)],
         [0],
         ["voice-a.flac", "voice-b.flac"],
     )
     retry = run_generation(
-        VoiceSelectMode.USER_DEFINED,
         [make_phrase_group(1)],
         [0],
         ["voice-a.flac", "voice-b.flac"],
     )
 
-    assert first == retry == (1, "voice-1", 0)
+    assert first == retry == (1, "voice-1")

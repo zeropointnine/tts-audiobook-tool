@@ -8,8 +8,12 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.util import make_error_string
 
 
-BOOK_FORMAT = "book.v2"
+# v3: phrase groups carry an explicit "is_dialog" flag. Earlier formats marked
+# dialog only implicitly, by its voice_index (see derive_legacy_dialog_flags).
+BOOK_FORMAT = "book.v3"
+BOOK_V2_FORMAT = "book.v2"
 LEGACY_BOOK_FORMAT = "book.v1"
+BOOK_FORMATS = (BOOK_FORMAT, BOOK_V2_FORMAT, LEGACY_BOOK_FORMAT)
 PHRASE_GROUPS_FORMAT = "phrase_groups.v1"
 LEGACY_LIST_FORMAT = "legacy_list"
 
@@ -18,7 +22,7 @@ def get_project_text_format(value: Any) -> str | None:
     if isinstance(value, list):
         return LEGACY_LIST_FORMAT
     if isinstance(value, dict):
-        if value.get("format") in (BOOK_FORMAT, LEGACY_BOOK_FORMAT):
+        if value.get("format") in BOOK_FORMATS:
             return value["format"]
         if value.get("format") == PHRASE_GROUPS_FORMAT or "phrase_groups" in value:
             return PHRASE_GROUPS_FORMAT
@@ -75,23 +79,44 @@ def book_from_project_text_json_dict(
         legacy_segmentation_settings: BookSegmentationSettings | None = None,
 ) -> Book | str:
     if isinstance(value, list):
-        return legacy_phrase_groups_to_book(value, legacy_segmentation_settings)
+        return derive_legacy_dialog_flags(
+            legacy_phrase_groups_to_book(value, legacy_segmentation_settings)
+        )
 
     if not isinstance(value, dict):
         return f"Project text file bad type: {type(value)}"
 
     format_value = value.get("format", PHRASE_GROUPS_FORMAT)
-    if format_value in (BOOK_FORMAT, LEGACY_BOOK_FORMAT):
+    if format_value in BOOK_FORMATS:
         if "book" not in value:
             return "Project text file missing 'book'"
-        return book_from_json_dict(value["book"])
+        book = book_from_json_dict(value["book"])
+        return book if format_value == BOOK_FORMAT else derive_legacy_dialog_flags(book)
 
     if format_value == PHRASE_GROUPS_FORMAT or "phrase_groups" in value:
         if "phrase_groups" not in value:
             return "Project text file missing 'phrase_groups'"
-        return legacy_phrase_groups_to_book(value["phrase_groups"], legacy_segmentation_settings)
+        return derive_legacy_dialog_flags(
+            legacy_phrase_groups_to_book(value["phrase_groups"], legacy_segmentation_settings)
+        )
 
     return f"Unsupported project text format: {format_value}"
+
+
+def derive_legacy_dialog_flags(book: Book | str) -> Book | str:
+    """
+    Pre-v3 formats had no dialog flag: dialog segmentation instead preassigned
+    voice index 1 to dialog, and app features treated any voice index >= 1 as
+    dialog. For a book segmented with dialog segmentation, flags are derived
+    the same way, which reproduces that earlier behavior exactly; other books
+    have no dialog.
+    """
+    if isinstance(book, str):
+        return book
+    has_dialog = book.segmentation_settings.dialog_segmentation
+    for group in book.flat_phrase_groups:
+        group.is_dialog = has_dialog and group.voice_index >= 1
+    return book
 
 
 def load_book_from_project_text_file(

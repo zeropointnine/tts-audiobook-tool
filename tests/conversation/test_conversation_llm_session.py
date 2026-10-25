@@ -68,6 +68,45 @@ def test_anthropic_requires_max_tokens() -> None:
         )
 
 
+def make_anthropic_llm_without_max_tokens(**kwargs) -> LlmSession:
+    return LlmSession(api_endpoint_url="https://api.anthropic.com/v1/messages", token="t", model="m", **kwargs)
+
+
+def test_anthropic_falls_back_to_default_max_tokens() -> None:
+    # The app's callers configure no max_tokens; Anthropic requires one, so
+    # the caller-supplied default fills in.
+    llm = make_anthropic_llm_without_max_tokens(anthropic_default_max_tokens=32_000)
+
+    payload = llm.build_anthropic_payload([{"role": "user", "content": "Hi"}])
+
+    assert payload["max_tokens"] == 32_000
+
+
+def test_anthropic_max_tokens_in_extra_params_wins_over_default() -> None:
+    # A user-set max_tokens in extra params satisfies the requirement on its
+    # own and overrides the default in the request.
+    llm = make_anthropic_llm_without_max_tokens(
+        extra_params={"max_tokens": 8_000}, anthropic_default_max_tokens=32_000)
+
+    payload = llm.build_anthropic_payload([{"role": "user", "content": "Hi"}])
+
+    assert payload["max_tokens"] == 8_000
+
+
+def test_anthropic_max_tokens_in_extra_params_alone_is_enough() -> None:
+    llm = make_anthropic_llm_without_max_tokens(extra_params={"max_tokens": 8_000})
+
+    assert llm.build_anthropic_payload([{"role": "user", "content": "Hi"}])["max_tokens"] == 8_000
+
+
+def test_anthropic_default_max_tokens_is_not_sent_to_openai() -> None:
+    # OpenAI's reasoning models reject max_tokens, so the Anthropic-only
+    # default must not leak into OpenAI-format requests.
+    llm = make_openai_llm(anthropic_default_max_tokens=32_000)
+
+    assert "max_tokens" not in llm.build_openai_payload([{"role": "user", "content": "Hi"}])
+
+
 def test_system_prompt_is_immutable_session_configuration() -> None:
     llm = make_openai_llm(system_prompt="captured")
 
@@ -182,6 +221,27 @@ def test_send_openai_streaming_streams_content_and_reasoning_chunks(monkeypatch)
         {"role": "user", "content": "Hi"},
         {"role": "assistant", "content": "Hello world"},
     ]
+
+
+def test_send_openai_streaming_reads_openrouter_reasoning_field(monkeypatch) -> None:
+    # OpenRouter streams thinking as delta.reasoning rather than delta.reasoning_content
+    llm = make_openai_llm(api_endpoint_url="https://openrouter.ai/api/v1/chat/completions")
+    lines = sse(
+        '{"choices": [{"delta": {"reasoning": "Let me "}}]}',
+        '{"choices": [{"delta": {"reasoning": "think."}}]}',
+        '{"choices": [{"delta": {"content": "Answer"}}]}',
+        done=True,
+    )
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *args, **kwargs: make_response(lines=lines),
+    )
+
+    reasoning: list[str] = []
+    reply = llm.send("Hi", on_chunk=lambda _t: None, on_reasoning=reasoning.append)
+
+    assert reply == "Answer"
+    assert reasoning == ["Let me ", "think."]
 
 
 def test_send_openai_error_rolls_back_user_message(monkeypatch) -> None:
@@ -431,3 +491,67 @@ def test_send_openai_streaming_tolerates_missing_delta_object(
     reply = llm.send("hello", on_chunk=lambda _t: None)
 
     assert reply == "Hey"
+
+
+def test_openai_streaming_records_an_output_limit_hit_during_reasoning(monkeypatch) -> None:
+    # A reasoning model that runs out of output tokens while thinking: the
+    # stream ends normally with finish_reason "length" and no answer.
+    llm = make_openai_llm()
+    lines = sse(
+        '{"choices": [{"delta": {"reasoning_content": "Let me count..."}}]}',
+        '{"choices": [{"delta": {}, "finish_reason": "length"}]}',
+        done=True,
+    )
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(lines=lines),
+    )
+
+    reply = llm.send("hello", on_chunk=lambda _t: None, on_reasoning=lambda _t: None)
+
+    assert reply == ""
+    assert llm.last_finish_reason == "length"
+    assert llm.hit_output_limit
+
+
+def test_finish_reason_is_reset_per_request(monkeypatch) -> None:
+    llm = make_openai_llm()
+    responses = iter([
+        make_response(lines=sse('{"choices": [{"delta": {"content": "x"}, "finish_reason": "length"}]}')),
+        make_response(lines=sse('{"choices": [{"delta": {"content": "y"}}]}')),
+    ])
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: next(responses),
+    )
+    llm.send("one", on_chunk=lambda _t: None)
+    assert llm.hit_output_limit
+    llm.send("two", on_chunk=lambda _t: None)
+    assert llm.last_finish_reason is None and not llm.hit_output_limit
+
+
+def test_anthropic_streaming_records_stop_reason(monkeypatch) -> None:
+    llm = make_anthropic_llm()
+    lines = sse(
+        '{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hi"}}',
+        '{"type": "message_delta", "delta": {"stop_reason": "max_tokens"}}',
+    )
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(lines=lines),
+    )
+
+    assert llm.send("hello", on_chunk=lambda _t: None) == "Hi"
+    assert llm.last_finish_reason == "max_tokens"
+    assert llm.hit_output_limit
+
+
+def test_non_streaming_records_finish_reason(monkeypatch) -> None:
+    llm = make_openai_llm()
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(json_data={
+            "choices": [{"message": {"content": "Hi"}, "finish_reason": "stop"}]}),
+    )
+    llm.send("hello")
+    assert llm.last_finish_reason == "stop" and not llm.hit_output_limit

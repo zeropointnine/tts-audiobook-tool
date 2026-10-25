@@ -729,6 +729,16 @@ class BookText {
         const regex = /[\r\n][^\p{L}\p{N}]*$/u; // unicode categories "L" and "N"
         const match = text.match(regex);
         if (match) {
+            // TEMPORARY FIX: a trailing non-vocalizable line which opens with a
+            // quote (eg `“…”`, a silent beat of dialog) is diegetic content, not
+            // an ornament, so it must not become a section divider (which would
+            // also hide the line). This mirrors the Python-side rule in
+            // app_text.is_ornamental_line. The proper fix is for the exported
+            // metadata to carry each segment's reason (SPACE_BREAK), so that
+            // the player stops re-deriving breaks from text heuristics.
+            if (BookText._isQuotedBeat(match[0])) {
+                return BookText._splitOuterWhitespace(text);
+            }
             const splitIndex = text.length - match[0].length;
             return {
                 "content": text.slice(0, splitIndex),
@@ -739,6 +749,30 @@ class BookText {
                 "content": text,
                 "after": ""
             }
+        }
+    }
+
+    /**
+     * Part of the temporary quoted-beat fix in _splitOrnamentalBreak.
+     * Whether the last non-blank line of a trailing non-vocalizable run opens
+     * with a quote mark (same character set as app_text._DIEGETIC_LINE_OPENERS).
+     */
+    static _isQuotedBeat(trailingText) {
+        const lines = trailingText.split(/[\r\n]/).map((line) => line.trim()).filter(Boolean);
+        return lines.length > 0 && /^["'“‘„‚«‹「『]/u.test(lines.at(-1));
+    }
+
+    /**
+     * Part of the temporary quoted-beat fix in _splitOrnamentalBreak.
+     * Like Util.splitWhitespace, but content may span line breaks.
+     */
+    static _splitOuterWhitespace(text) {
+        const before = text.match(/^\s*/)[0];
+        const after = text.slice(before.length).match(/\s*$/)[0];
+        return {
+            "before": before,
+            "content": text.slice(before.length, text.length - after.length),
+            "after": after
         }
     }
 

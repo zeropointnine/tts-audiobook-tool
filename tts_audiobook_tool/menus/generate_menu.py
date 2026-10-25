@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from tts_audiobook_tool.app_types import Strictness, VoiceSelectMode
+from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_support import app_hint_util, hints
 from tts_audiobook_tool import ask
@@ -229,8 +229,7 @@ def count_out_of_range_voice_indices(
         num_voice_values: int,
 ) -> int:
     """
-    Count user-defined voice selections that are stale (past the end of the voice sample list) and will be clamped.
-    `voice_index == -1` is the "no explicit assignment" default (the first voice sample), not an out-of-range selection.
+    Count per-line voice selections that are stale (past the end of the voice sample list) and will be clamped.
     """
     return sum(
         1 for index in indices
@@ -362,23 +361,19 @@ def do_generate(state: State) -> None:
             else:
                 s = "- Batching: disabled"
         printt(s)
-    # Print voice selection mode info
+    # Warn about stale per-line voice selections
     voice_values = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
     if len(voice_values) > 1:
-        s = "- Voice selection mode: "
-        s += f"{state.project.voice_select_mode.label}"
-        if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
-            num_invalid_voice_indices = count_out_of_range_voice_indices(
-                state.project.phrase_groups, indices, len(voice_values)
+        num_invalid_voice_indices = count_out_of_range_voice_indices(
+            state.project.phrase_groups, indices, len(voice_values)
+        )
+        if num_invalid_voice_indices:
+            selection_word = make_noun(
+                "selection",
+                "selections",
+                num_invalid_voice_indices,
             )
-            if num_invalid_voice_indices:
-                selection_word = make_noun(
-                    "selection",
-                    "selections",
-                    num_invalid_voice_indices,
-                )
-                s += f"\n  {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range and will be clamped"
-        printt(s)
+            printt(f"- {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range and will be clamped")
 
     # Print validation setting
     printt(make_validation_confirmation_line(state))

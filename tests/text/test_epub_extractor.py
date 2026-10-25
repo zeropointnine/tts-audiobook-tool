@@ -104,7 +104,7 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertTrue(result.phrase_groups[0].phrases[-1].text.endswith("one."))
         self.assertTrue(result.phrase_groups[1].phrases[-1].text.endswith("two."))
 
-    def test_import_epub_preassigns_detected_dialog_to_voice_sample_two(self):
+    def test_import_epub_flags_detected_dialog(self):
         source_chapters = [
             EpubSourceChapter(
                 "Chapter 1",
@@ -133,8 +133,8 @@ class TestEpubExtractor(unittest.TestCase):
             ["He said ", '"Hello." ', "Then left."],
         )
         self.assertEqual(
-            [group.voice_index for group in result.phrase_groups],
-            [-1, 1, -1],
+            [group.is_dialog for group in result.phrase_groups],
+            [False, True, False],
         )
 
     def test_import_epub_heading_replaces_only_matching_opening_space_break(self):
@@ -220,8 +220,8 @@ class TestEpubExtractor(unittest.TestCase):
             ["✦\n\n“Hello,” ", "she said.\n\n", "More prose follows here."],
         )
         self.assertEqual(
-            [group.voice_index for group in result.phrase_groups],
-            [1, -1, -1],
+            [group.is_dialog for group in result.phrase_groups],
+            [True, False, False],
         )
         self.assertTrue(app_text.is_vocalizable(result.phrase_groups[0].text))
 
@@ -1235,10 +1235,125 @@ class TestEpubExtractor(unittest.TestCase):
 
         self.assertEqual(result.text, "Before.\n\n\nAfter.")
 
-    def test_normalize_output_text_caps_section_break_spacing(self):
-        text = BeautifulSoupEpubChapterTextExtractor.normalize_output_text("Before.\n\n\n\n\nAfter.")
+    def test_extract_text_separately_wrapped_paragraphs_do_not_become_space_breaks(self):
+        # Publisher layout wrappers must not promote ordinary paragraphs to scene breaks.
+        for wrapper in ["div", "section", "blockquote"]:
+            for separator in ["", "\n    "]:
+                with self.subTest(wrapper=wrapper, separator=separator):
+                    chapter = EpubSourceChapter(
+                        "Chapter 1", "chapter.xhtml", "application/xhtml+xml",
+                        f"<body><{wrapper}><div><p>Before.</p></div></{wrapper}>"
+                        f"{separator}<{wrapper}><div><p>After.</p></div></{wrapper}></body>",
+                    )
 
-        self.assertEqual(text, "Before.\n\n\nAfter.")
+                    result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
+
+                    self.assertEqual(result.text, "Before.\n\nAfter.")
+
+    def test_extract_text_mixed_container_text_keeps_paragraph_boundaries(self):
+        # Ignoring containers outright would concatenate their leading/trailing prose.
+        chapter = EpubSourceChapter(
+            "Chapter 1", "chapter.xhtml", "application/xhtml+xml",
+            "<body><div>First.<p>Second.</p>Third.</div>"
+            "<div>Fourth.<p>Fifth.</p>Sixth.</div></body>",
+        )
+
+        result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
+
+        self.assertEqual(result.text, "First.\n\nSecond.\n\nThird.\n\nFourth.\n\nFifth.\n\nSixth.")
+
+    def test_extract_text_preserves_explicit_spacers_between_wrapped_paragraphs(self):
+        # Empty blocks, ornaments and explicit line breaks remain meaningful despite coalescing.
+        for spacer in [
+            "<div></div>", "<p></p>", "<p>&nbsp;</p>", "<p><br/></p>",
+            "<div><!-- spacer --></div>", "<div><script>ignored()</script></div>",
+            "<br/><br/>", '<div><div><img src="ornament.jpg"/></div></div>',
+        ]:
+            with self.subTest(spacer=spacer):
+                chapter = EpubSourceChapter(
+                    "Chapter 1", "chapter.xhtml", "application/xhtml+xml",
+                    f"<body><div><p>Before.</p></div>{spacer}"
+                    "<div><p>After.</p></div></body>",
+                )
+
+                result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
+
+                self.assertEqual(result.text, "Before.\n\n\nAfter.")
+
+    def test_extract_text_list_and_rule_boundaries_survive_coalescing(self):
+        # List prefixes are not spacers; a horizontal rule remains an explicit ornament.
+        chapter = EpubSourceChapter(
+            "Chapter 1", "chapter.xhtml", "application/xhtml+xml",
+            "<body><div><ul><li>First.</li><li>Second.</li></ul></div>"
+            "<hr/><div><p>After.</p></div></body>",
+        )
+
+        result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
+
+        self.assertEqual(result.text, "- First.\n\n- Second.\n\n* * *\n\nAfter.")
+
+    def test_import_epub_distinguishes_wrapped_paragraph_spacer_and_section_end(self):
+        # Verify extracted spacing reaches pause reasons without losing genuine scene/section breaks.
+        chapter = EpubSourceChapter(
+            "Chapter 1", "chapter.xhtml", "application/xhtml+xml",
+            "<body><div><p>First.</p></div><div><p>Second.</p></div>"
+            "<p><br/></p><div><p>Third.</p></div></body>",
+        )
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=([chapter], "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub", max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS, language_code="en",
+            )
+
+        self.assertEqual(
+            [phrase.reason for group in result.phrase_groups for phrase in group.phrases],
+            [Reason.PARAGRAPH, Reason.SPACE_BREAK, Reason.SECTION_BREAK],
+        )
+
+    def test_extract_text_keeps_navigation_slices_across_nested_blocks_and_spacers(self):
+        # Boundary coalescing must not rewrite pieces already referenced by navigation anchors.
+        chapter = EpubSourceChapter(
+            "Fallback", "Text/story.xhtml", "application/xhtml+xml",
+            '<body><div id="one"><div><p>First.</p></div></div>'
+            '<div><img src="ornament.jpg"/></div>'
+            '<div><div id="two"><p>Second.</p></div><p>Third.</p></div></body>',
+            [
+                make_navigation_target("One", "Text/story.xhtml#one", 0),
+                make_navigation_target("Two", "Text/story.xhtml#two", 1),
+            ],
+        )
+
+        result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
+
+        self.assertEqual([piece.text for piece in result.slices], ["First.", "Second.\n\nThird."])
+        self.assertEqual(
+            [piece.navigation_target.title if piece.navigation_target else None for piece in result.slices],
+            ["One", "Two"],
+        )
+        self.assertEqual(result.warnings, [])
+
+    def test_extract_text_preserves_explicit_internal_line_break_runs(self):
+        # Inside prose, br runs retain their own spacing rather than inheriting wrapper depth.
+        for count in range(1, 5):
+            with self.subTest(count=count):
+                chapter = EpubSourceChapter(
+                    "Chapter 1", "chapter.xhtml", "application/xhtml+xml",
+                    f"<body><div><p>Before.{'<br/>' * count}After.</p></div></body>",
+                )
+
+                result = BeautifulSoupEpubChapterTextExtractor().extract_text(chapter)
+
+                self.assertEqual(result.text, "Before." + "\n" * min(count, 3) + "After.")
+
+    def test_normalize_output_text_caps_section_break_spacing(self):
+        # Three explicit line breaks remain a scene break; deeper runs do not increase its strength.
+        for count in range(1, 7):
+            with self.subTest(count=count):
+                text = BeautifulSoupEpubChapterTextExtractor.normalize_output_text(
+                    "Before." + "\n" * count + "After.",
+                )
+
+                self.assertEqual(text, "Before." + "\n" * min(count, 3) + "After.")
 
     def test_format_skipped_section_warning_includes_removed_content_preview(self):
         chapter = EpubSourceChapter(

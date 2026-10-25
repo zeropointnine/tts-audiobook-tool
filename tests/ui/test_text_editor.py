@@ -1,12 +1,20 @@
 import pytest
 from pathlib import Path
 
+from rich.console import Console
 from rich.text import Text
 from textual.widgets import Button, Input, OptionList, Static, TextArea
 
-from tts_audiobook_tool.app_types import BookSection, SegmentationStrategy
+from tts_audiobook_tool.app_types import (
+    BookSection,
+    BookSegmentationSettings,
+    SegmentationStrategy,
+)
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile, RangeAttribution
+from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
+from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
     EditorSaved,
@@ -62,6 +70,67 @@ def test_single_section_lists_only_phrase_groups() -> None:
         "00002  Two.",
     ]
     assert app.find_match_indices("only section") == []
+
+
+@pytest.mark.parametrize(
+    ("dialog_segmentation", "expected_rows"),
+    [
+        (False, ["00001  Narration.", '00002  "Hi."']),
+        (True, ["00001      Narration.", '00002  💬  "Hi."']),
+    ],
+)
+def test_dialog_marker_column_is_shown_only_with_dialog_detection(
+    dialog_segmentation: bool, expected_rows: list[str]
+) -> None:
+    # With dialog detection, a column after the line number marks dialog lines
+    # with 💬 and reserves matching blanks on other lines; without it the
+    # column is omitted entirely rather than reserved.
+    dialog_group = make_phrase_group('"Hi."')
+    dialog_group.is_dialog = dialog_segmentation
+    project = make_project(
+        [BookSection(phrase_groups=[make_phrase_group("Narration."), dialog_group])]
+    )
+    project.book.segmentation_settings = BookSegmentationSettings(
+        dialog_segmentation=dialog_segmentation
+    )
+
+    app = make_loaded_editor(project)
+
+    assert [str(app.format_line(index)) for index in range(2)] == expected_rows
+    assert app.find_text_strings(1) == ["00002", '"Hi."']
+
+
+def test_dialog_marker_column_survives_deleting_every_dialog_line() -> None:
+    # The column is decided at load, so deleting the only dialog line keeps
+    # remaining rows aligned instead of collapsing the column mid-session.
+    dialog_group = make_phrase_group('"Hi."')
+    dialog_group.is_dialog = True
+    project = make_project(
+        [BookSection(phrase_groups=[make_phrase_group("Narration."), dialog_group])]
+    )
+    app = make_loaded_editor(project)
+
+    app.apply_mutation_result(
+        app.edit_session.delete_phrase_groups({app.list_items[1].item_id})
+    )
+
+    assert str(app.format_line(0)) == "00001      Narration."
+
+
+def test_dialog_marker_column_keeps_hanging_indent_aligned() -> None:
+    # Wrapped lines indent past the marker column (the emoji is two cells wide).
+    dialog_group = make_phrase_group('"One two three four five six seven."')
+    dialog_group.is_dialog = True
+    app = make_loaded_editor(make_project([BookSection(phrase_groups=[dialog_group])]))
+
+    console = Console(width=30, color_system=None)
+    with console.capture() as capture:
+        console.print(app.format_line(0))
+
+    assert capture.get().splitlines() == [
+        '00001  💬  "One two three four',
+        '           five six seven."',
+    ]
 
 
 def test_phrase_rows_show_line_feeds_as_dim_nonbreaking_tokens() -> None:
@@ -491,8 +560,7 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             1,
             ["segment-1.flac", "segment-2.flac"],
             [1],
-            "Saving these changes requires deleting 2 generated sound segments "
-            "from line 2 onward.",
+            ["• 2 generated audio segments from line 2 onward."],
             id="plural-segments-from-first-affected-line",
         ),
         pytest.param(
@@ -501,8 +569,7 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             0,
             ["segment.flac"],
             [0],
-            "Saving these changes requires deleting 1 generated sound segment "
-            "from line 1 onward.",
+            ["• 1 generated audio segment from line 1 onward."],
             id="singular-segment",
         ),
         pytest.param(
@@ -520,8 +587,7 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             1,
             [],
             [1],
-            "Saving these changes requires deleting 2 section markers "
-            "from line 2 onward.",
+            ["• 2 section markers from line 2 onward."],
             id="markers-only",
         ),
         pytest.param(
@@ -530,8 +596,8 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             1,
             ["segment-1.flac", "segment-2.flac"],
             [1],
-            "Saving these changes requires deleting 2 generated sound segments "
-            "and 1 section marker from line 2 onward.",
+            ["• 2 generated audio segments from line 2 onward.",
+             "• 1 section marker from line 2 onward."],
             id="segments-and-singular-marker",
         ),
         pytest.param(
@@ -540,8 +606,8 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
             2,
             ["segment.flac"],
             [2],
-            "Saving these changes requires deleting 1 generated sound segment "
-            "and 2 split points from line 3 onward.",
+            ["• 1 generated audio segment from line 3 onward.",
+             "• 2 split points from line 3 onward."],
             id="multi-section-split-points",
         ),
     ],
@@ -553,7 +619,7 @@ def test_confirmation_warns_about_generated_segments_from_first_affected_line(
     delete_original_index: int,
     snapshot_paths: list[str],
     expected_requested_indices: list[int],
-    expected_copy: str | None,
+    expected_copy: list[str] | None,
 ) -> None:
     project = make_project(
         [
@@ -588,7 +654,11 @@ def test_confirmation_warns_about_generated_segments_from_first_affected_line(
     if expected_copy is None:
         assert dialog.copy_lines == ["Save changes before exiting?"]
     else:
-        assert dialog.copy_lines[2].endswith(expected_copy)
+        assert dialog.copy_lines[2] == (
+            "The text edits made are structural changes which will result in the removal of:"
+        )
+        assert [Text.from_ansi(line).plain for line in dialog.copy_lines[3:]] == expected_copy
+        assert dialog.left_align_from_line == 3
 
 
 def test_finish_confirm_calls_commit_with_staged_book(monkeypatch) -> None:
@@ -1437,6 +1507,48 @@ def test_edit_preserves_original_trailing_break() -> None:
     run(exercise())
 
 
+@pytest.mark.parametrize("has_audio", [False, True])
+def test_confirmation_previews_assignment_cleanup_without_clearing_it(tmp_path, monkeypatch, has_audio):
+    # Assignment loss is warned about even with no audio, and combines with audio warnings.
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")])])
+    project.dir_path = str(tmp_path)
+    saved = AttributionsFile((RangeAttribution(
+        0, 2, UtteranceUtil.range_text_hash(project.book, 0, 2), (),
+    ),))
+    assert SpeakerAssignFileUtil.save_attributions_file(project.dir_path, saved) == ""
+    app = make_loaded_editor(project)
+    monkeypatch.setattr(project.sound_segments, "snapshot_paths_at_indices",
+                        lambda _: [Path("segment.flac")] if has_audio else [])
+    app.edit_session.update_phrase_group_text(
+        app.edit_session.phrase_groups[0].item_id, "Changed.", max_words=80, pysbd_lang="en",
+    )
+    dialog = app.make_confirmation_dialog()
+    copy = "\n".join(dialog.copy_lines)
+    assert Text.from_ansi(dialog.copy_lines[-1]).plain == (
+        "• Saved dialog assignments for affected passages"
+    )
+    assert 'Run "Assign dialog to characters" again' not in copy
+    assert "roster and voice mappings" not in copy
+    assert ("• 1 generated audio segment." in copy) == has_audio
+    assert dialog.copy_lines[2] == "The text edits made will result in the removal of:"
+    assert len(dialog.copy_lines[3:]) == 1 + has_audio
+    assert dialog.confirmation_enabled
+    assert SpeakerAssignFileUtil.load_attributions_file(project.dir_path) == saved
+
+
+def test_confirmation_blocks_save_when_assignment_cache_cannot_be_checked(tmp_path):
+    # Never silently clear or overwrite unreadable attribution data on text save.
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.dir_path = str(tmp_path)
+    path = Path(SpeakerAssignFileUtil.attributions_path(project.dir_path))
+    path.parent.mkdir()
+    path.write_text("{broken", encoding="utf-8")
+    app = make_loaded_editor(project)
+    dialog = app.make_confirmation_dialog()
+    assert not dialog.confirmation_enabled
+    assert "Cannot save changes" in dialog.copy_lines[0]
+
+
 def test_edit_confirmation_warns_only_about_edited_segment(monkeypatch) -> None:
     """Edit-only confirmation deletes only the edited segment, not markers."""
     project = make_project(
@@ -1467,9 +1579,8 @@ def test_edit_confirmation_warns_only_about_edited_segment(monkeypatch) -> None:
 
     assert requested == [{0}]
     assert isinstance(dialog, SaveChangesDialog)
-    assert dialog.copy_lines[2].endswith(
-        "Saving these changes requires deleting 1 generated sound segment."
-    )
+    assert dialog.copy_lines[2] == "The text edits made will result in the removal of:"
+    assert Text.from_ansi(dialog.copy_lines[3]).plain == "• 1 generated audio segment."
 
 
 def test_finish_confirm_commit_edit_uses_narrow_invalidation(monkeypatch) -> None:

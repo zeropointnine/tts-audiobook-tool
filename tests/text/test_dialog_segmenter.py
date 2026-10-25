@@ -8,7 +8,7 @@ from tts_audiobook_tool.text_ops.dialog_segmenter import (
 )
 
 
-def make_group(text: str, voice_index: int = -1) -> PhraseGroup:
+def make_group(text: str, voice_index: int = 0) -> PhraseGroup:
     return PhraseGroup(
         [Phrase(text, Reason.SENTENCE)],
         voice_index=voice_index,
@@ -67,10 +67,9 @@ class TestDialogSegmenter(unittest.TestCase):
             ["He asked, ", '"Ready")?! ', "Then he waited."],
         )
 
-    def test_assigns_voice_to_multiple_supported_quotes_and_attached_punctuation(self):
+    def test_flags_multiple_supported_quotes_and_attached_punctuation(self):
         groups = DialogSegmenter.segment_groups(
             [make_group('He asked, "Ready")?! Then he said “Go.” Finally.')],
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
@@ -78,9 +77,11 @@ class TestDialogSegmenter(unittest.TestCase):
             ["He asked, ", '"Ready")?! ', "Then he said ", "“Go.” ", "Finally."],
         )
         self.assertEqual(
-            [group.voice_index for group in groups],
-            [-1, 1, -1, 1, -1],
+            [group.is_dialog for group in groups],
+            [False, True, False, True, False],
         )
+        # Dialog flagging leaves voices alone
+        self.assertEqual([group.voice_index for group in groups], [0] * 5)
 
     def test_accepts_leading_dialog_punctuation_before_capital(self):
         groups = segment_one('He paused. "...Well, yes." Then he left.')
@@ -253,7 +254,7 @@ class TestDialogSegmenter(unittest.TestCase):
             [group.voice_index for group in groups],
             [4, 4, 5, 6, 6],
         )
-        self.assertIs(groups[2], original_groups[1])
+        self.assertEqual(groups[2].phrases, original_groups[1].phrases)
 
     def test_group_crossing_alone_does_not_make_lowercase_quote_dialog(self):
         original_groups = [
@@ -263,11 +264,10 @@ class TestDialogSegmenter(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             original_groups,
-            dialog_voice_index=1,
         )
 
         self.assertEqual(groups, original_groups)
-        self.assertEqual([group.voice_index for group in groups], [-1, -1])
+        self.assertEqual([group.is_dialog for group in groups], [False, False])
 
     def test_accepts_lowercase_dialog_spanning_existing_groups(self):
         original_groups = [
@@ -283,7 +283,6 @@ class TestDialogSegmenter(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             original_groups,
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
@@ -298,11 +297,11 @@ class TestDialogSegmenter(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            [group.voice_index for group in groups],
-            [-1, 1, 1, -1],
+            [group.is_dialog for group in groups],
+            [False, True, True, False],
         )
 
-    def test_assigns_voice_sample_two_to_dialog_fragments(self):
+    def test_flags_dialog_fragments_and_keeps_voices(self):
         original_group = make_group(
             'He said, "Hello." After.',
             voice_index=4,
@@ -310,30 +309,30 @@ class TestDialogSegmenter(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             [original_group],
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
             [group.text for group in groups],
             ["He said, ", '"Hello." ', "After."],
         )
-        self.assertEqual([group.voice_index for group in groups], [4, 1, 4])
-        self.assertEqual(original_group.voice_index, 4)
+        self.assertEqual([group.is_dialog for group in groups], [False, True, False])
+        self.assertEqual([group.voice_index for group in groups], [4, 4, 4])
+        self.assertFalse(original_group.is_dialog)
 
-    def test_assigns_dialog_voice_to_wholly_quoted_existing_group(self):
+    def test_flags_wholly_quoted_existing_group_without_mutating_it(self):
         original_group = make_group('"Hello."', voice_index=4)
 
         groups = DialogSegmenter.segment_groups(
             [original_group],
-            dialog_voice_index=1,
         )
 
         self.assertEqual([group.text for group in groups], ['"Hello."'])
-        self.assertEqual([group.voice_index for group in groups], [1])
-        self.assertEqual(original_group.voice_index, 4)
+        self.assertEqual([group.is_dialog for group in groups], [True])
+        self.assertEqual([group.voice_index for group in groups], [4])
+        self.assertFalse(original_group.is_dialog)
         self.assertIsNot(groups[0], original_group)
 
-    def test_assigns_dialog_voice_across_existing_groups(self):
+    def test_flags_dialog_across_existing_groups(self):
         original_groups = [
             make_group('He said, "This spans ', voice_index=4),
             make_group("several existing ", voice_index=5),
@@ -342,28 +341,26 @@ class TestDialogSegmenter(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             original_groups,
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
-            [group.voice_index for group in groups],
-            [4, 1, 1, 1, 6],
+            [group.is_dialog for group in groups],
+            [False, True, True, True, False],
         )
         self.assertEqual(
-            [group.voice_index for group in original_groups],
-            [4, 5, 6],
+            [group.is_dialog for group in original_groups],
+            [False, False, False],
         )
         self.assertIsNot(groups[2], original_groups[1])
 
-    def test_short_inline_quote_not_classified_as_dialog_keeps_existing_voice(self):
+    def test_short_inline_quote_not_classified_as_dialog_is_unchanged(self):
         original_group = make_group('That was "too much" for me.', voice_index=4)
 
         groups = DialogSegmenter.segment_groups(
             [original_group],
-            dialog_voice_index=1,
         )
 
-        self.assertEqual([group.voice_index for group in groups], [4])
+        self.assertEqual([group.is_dialog for group in groups], [False])
         self.assertIs(groups[0], original_group)
 
     def test_preserves_all_source_characters(self):
@@ -396,13 +393,14 @@ class TestDialogSegmenter(unittest.TestCase):
             ["I told them, ", '"What is up?" ', "Then I left."],
         )
         self.assertEqual(
-            [group.voice_index for group in without_option],
-            [-1],
+            [group.is_dialog for group in without_option],
+            [False],
         )
         self.assertEqual(
-            [group.voice_index for group in with_option],
-            [-1, 1, -1],
+            [group.is_dialog for group in with_option],
+            [False, True, False],
         )
+        self.assertEqual([group.voice_index for group in with_option], [0, 0, 0])
 
 
 class TestPhraseQuoteEnd(unittest.TestCase):
@@ -573,7 +571,6 @@ class TestPhraseQuoteEnd(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             original_groups,
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
@@ -584,12 +581,13 @@ class TestPhraseQuoteEnd(unittest.TestCase):
                 [("she left.", Reason.SENTENCE)],
             ],
         )
-        self.assertEqual([group.voice_index for group in groups], [4, 1, 4])
+        self.assertEqual([group.is_dialog for group in groups], [False, True, False])
+        self.assertEqual([group.voice_index for group in groups], [4, 4, 4])
         self.assertEqual(
             [phrase.reason for group in original_groups for phrase in group.phrases],
             [Reason.SENTENCE, Reason.SENTENCE],
         )
-        self.assertEqual([group.voice_index for group in original_groups], [4, 4])
+        self.assertEqual([group.is_dialog for group in original_groups], [False, False])
 
 
 class TestPhraseQuoteEndNameVerb(unittest.TestCase):
@@ -756,7 +754,7 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
             ],
         )
 
-    def test_multi_paragraph_dialog_gets_dialog_voice_across_paragraphs(self):
+    def test_multi_paragraph_dialog_is_flagged_across_paragraphs(self):
         original_groups = [
             make_group("“First paragraph of the speech,\n"),
             make_group("“second paragraph continues,\n"),
@@ -765,7 +763,6 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             original_groups,
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
@@ -778,8 +775,8 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            [group.voice_index for group in groups],
-            [1, 1, 1, -1],
+            [group.is_dialog for group in groups],
+            [True, True, True, False],
         )
         self.assertEqual(
             "".join(group.text for group in groups),
@@ -794,7 +791,6 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             original_groups,
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
@@ -802,8 +798,8 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
             ['"Opens without closing.\n', '"Closes here." ', "Then.\n"],
         )
         self.assertEqual(
-            [group.voice_index for group in groups],
-            [1, 1, -1],
+            [group.is_dialog for group in groups],
+            [True, True, False],
         )
 
     def test_multi_paragraph_dialog_closing_attribution_keeps_quote_end_reason(self):
@@ -849,7 +845,6 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             original_groups,
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
@@ -866,8 +861,8 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            [group.voice_index for group in groups],
-            [1, -1, 1, 1, -1, 1, 1, -1],
+            [group.is_dialog for group in groups],
+            [True, False, True, True, False, True, True, False],
         )
         self.assertEqual(
             "".join(group.text for group in groups),
@@ -883,7 +878,6 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             original_groups,
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
@@ -897,8 +891,8 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            [group.voice_index for group in groups],
-            [-1, -1, -1],
+            [group.is_dialog for group in groups],
+            [False, False, False],
         )
 
     def test_chained_dialog_spanning_multiple_existing_groups(self):
@@ -909,7 +903,6 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
 
         groups = DialogSegmenter.segment_groups(
             original_groups,
-            dialog_voice_index=1,
         )
 
         self.assertEqual(
@@ -921,8 +914,8 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            [group.voice_index for group in groups],
-            [1, 1, -1],
+            [group.is_dialog for group in groups],
+            [True, True, False],
         )
 
     def test_text_to_groups_forwards_language_code_to_dialog_segmenter(self):

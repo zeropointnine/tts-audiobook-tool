@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 import pytest
 
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.voice import Voice, VoiceCrop
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.voice import voice_menu_shared
@@ -16,6 +15,7 @@ from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
@@ -158,9 +158,12 @@ def test_voice_menu_direct_actions_refresh_samples_and_preserve_callbacks(monkey
     assert get_string_from(state, items[0].label).startswith("Voice 1: ")
     assert get_string_from(state, items[1].label) == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
     assert get_string_from(state, main["subheading"]) == "Sample guidance"
-    assert items[0].handler(state, items[0]) is None  # opens the voice's submenu
+    assert items[0].handler(state, items[0]) is False  # opens the voice's submenu; the menu stays
     sub_items = menus[-1]["items"](state)
-    set_item = sub_items[0]
+    set_item = next(
+        item for item in sub_items
+        if get_string_from(state, item.label).startswith(voice_menu_shared.LABEL_SET_VOICE_SAMPLE)
+    )
     assert get_string_from(state, set_item.label).startswith(voice_menu_shared.LABEL_SET_VOICE_SAMPLE)
     labels = [get_string_from(state, item.label) for item in sub_items]
     assert not any(label.startswith(voice_menu_shared.LABEL_CROP_VOICE_SAMPLE) for label in labels)
@@ -176,9 +179,10 @@ def test_voice_menu_direct_actions_refresh_samples_and_preserve_callbacks(monkey
     assert any(label.startswith(voice_menu_shared.LABEL_CROP_VOICE_SAMPLE) for label in labels)
     remove = find_item(state, menus[-1]["items"](state), voice_menu_shared.LABEL_RESET_VOICE_SAMPLE)
     assert remove.handler(state, remove) is True  # exits the voice submenu, not Voice clone
-    # The only voice was reset: one default voice, Add, and voice/line selections.
+    # The only voice was reset: one default voice, Add, voice/line selections
+    # and auto-assign.
     assert state.project.voice_references == [Voice()]
-    assert len(main["items"](state)) == 3
+    assert len(main["items"](state)) == 4
     assert events == ["before", "set 0", "after", "remove", "clear"]
     # Removing a voice that has no sample must not unload a model again.
     assert remove.handler(state, remove) is True
@@ -203,12 +207,45 @@ def test_add_appends_default_voice_and_opens_its_submenu(monkeypatch):
     assert opened == [1]
 
 
-def test_add_is_hidden_at_nine_voices(monkeypatch):
-    project = Project(tts_model_type="mira_local", voice_references=[{"file_name": ""}] * 9)
+def test_voice_list_pages_through_more_voices_with_add_on_last_page(monkeypatch):
+    # Past a page's worth of voices, "More voices..." replaces Add and opens
+    # the next page, which lists only voices (no model items or selection
+    # controls); Add follows the last page's voices.
+    project = Project(tts_model_type="mira_local", voice_references=[{"file_name": ""}] * 5)
     state = cast(State, SimpleNamespace(project=project))
+    monkeypatch.setattr(voice_menu_shared, "VOICES_PER_PAGE", 2)
+    menus = capture_menus(monkeypatch)
+
+    def labels(items) -> list[str]:
+        return [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+
     items = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())
-    labels = [get_string_from(state, item.label) for item in items]
-    assert voice_menu_shared.LABEL_ADD_VOICE_SAMPLE not in labels
+    assert [label.split(":")[0] for label in labels(items)] == ["Voice 1", "Voice 2", "More voices... (3)"]
+    items[-1].handler(state, items[-1])
+    page_2 = menus[-1]["items"](state)
+    assert [label.split(":")[0] for label in labels(page_2)] == ["Voice 3", "Voice 4", "More voices... (1)"]
+    assert strip_ansi_codes(get_string_from(state, menus[-1]["heading"])) == "Voices (3-4 of 5)"
+    assert get_string_from(state, menus[-1]["breadcrumb"]) == "Voices 3-4"
+    page_2[-1].handler(state, page_2[-1])
+    page_3 = menus[-1]["items"](state)
+    assert [label.split(":")[0] for label in labels(page_3)] == ["Voice 5", voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]
+
+
+def test_later_voice_page_closes_when_removals_empty_it(monkeypatch):
+    # Pages are recomputed on redraw; a page whose voices were all removed
+    # (from a voice's submenu) closes instead of showing an empty list.
+    project = Project(tts_model_type="mira_local", voice_references=[{"file_name": ""}] * 3)
+    state = cast(State, SimpleNamespace(project=project))
+    monkeypatch.setattr(voice_menu_shared, "VOICES_PER_PAGE", 2)
+    menus = capture_menus(monkeypatch)
+    monkeypatch.setattr(VoiceMenuShared, "voice_sample_submenu",
+                        lambda s, *_args, **_kwargs: setattr(s.project, "voice_references",
+                                                             s.project.voice_references[:-1]))
+    items = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())
+    items[-1].handler(state, items[-1])
+    voice_3 = menus[-1]["items"](state)[0]
+    assert voice_3.handler(state, voice_3) is True  # Voice 3 removed: page 2 is empty
+    assert items[0].handler(state, items[0]) is False  # The first page never closes this way
 
 
 @pytest.mark.parametrize("voice_count", [0, 1])
@@ -234,7 +271,11 @@ def test_voice_menu_canceled_actions_keep_samples_and_clear_callback(monkeypatch
     )
     items[0].handler(state, items[0])
     sub_items = menus[-1]["items"](state)
-    sub_items[0].handler(state, sub_items[0])  # Set voice sample, canceled at the file prompt
+    set_item = next(
+        item for item in sub_items
+        if get_string_from(state, item.label).startswith(voice_menu_shared.LABEL_SET_VOICE_SAMPLE)
+    )
+    set_item.handler(state, set_item)  # Set voice sample, canceled at the file prompt
     remove_label = voice_menu_shared.LABEL_RESET_VOICE_SAMPLE
     remove = find_item(state, sub_items, remove_label)
     assert remove.handler(state, remove) is False  # canceled: stay in the submenu
@@ -520,8 +561,8 @@ def test_voice_menu_duration_warning_tracks_current_model_on_redraw(monkeypatch)
         assert (f"{voice_menu_shared.COL_ERROR}*" in label) == warned
 
 
-@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 3), (1, 3), (2, 5), (9, 11)])
-def test_voice_sample_selection_mode_item_requires_multiple_samples(
+@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 4), (1, 4), (2, 5), (9, 12)])
+def test_voice_items_end_with_selection_items(
         monkeypatch,
         voice_count: int,
         expected_item_count: int,
@@ -542,53 +583,28 @@ def test_voice_sample_selection_mode_item_requires_multiple_samples(
     voice_count = max(voice_count, 1)
     for index, label in enumerate(labels[:voice_count]):
         assert f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {index + 1}: " in label
-    expected = []
-    if voice_count < 9:
-        expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
-    assert items[-2 if voice_count > 1 else -1].blank_line_before
-    if voice_count > 1:
-        expected.append(voice_menu_shared.LABEL_VOICE_SELECTION_MODE)
-        assert VoiceSelectMode.DISABLED.current_label in labels[-2]
+    expected = [voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]
+    assert items[-2].blank_line_before
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    expected.append(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
     assert len(labels[voice_count:]) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels[voice_count:], expected))
     assert not any(label.startswith("Add/remove") for label in labels)
 
 
-def test_voice_sample_selection_mode_item_label_tracks_project_value() -> None:
-    project = Project.model_validate({
-        "mira_voice_file_name": ["voice-a.flac", "voice-b.flac"],
-    })
-    state = cast(State, SimpleNamespace(project=project))
-    item = VoiceMenuShared.make_voice_selection_items(state, TtsModelType.require_by_id("mira_local"))[0]
+@pytest.mark.parametrize("file_name", ["roster.json", "attributions.json"])
+def test_auto_assign_item_is_optional_until_speaker_assign_data_exists(tmp_path, file_name) -> None:
+    # The "(uses LLM; optional)" hint shows only while the project has no saved
+    # roster or attributions; either file removes it
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
+    item = VoiceMenuShared.make_auto_assign_character_voices_item()
 
-    assert VoiceSelectMode.DISABLED.current_label in get_string_from(state, item.label)
+    label = strip_ansi_codes(get_string_from(state, item.label))
+    assert label == f"{voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES} (uses LLM; optional)"
 
-    project.voice_select_mode = VoiceSelectMode.USER_DEFINED
-
-    assert VoiceSelectMode.USER_DEFINED.current_label in get_string_from(state, item.label)
-
-
-def test_voice_sample_selection_mode_submenu_uses_options_menu_and_saves_selection() -> None:
-    project = Project.model_validate({
-        "mira_voice_file_name": ["voice-a.flac", "voice-b.flac"],
-    })
-    state = cast(State, SimpleNamespace(project=project))
-
-    with patch.object(Project, "save") as save, \
-            patch("tts_audiobook_tool.menus.voice.voice_menu_shared.MenuUtil.options_menu") as options_menu:
-        VoiceMenuShared.voice_sample_selection_mode_submenu(state)
-        kwargs = options_menu.call_args.kwargs
-        kwargs["on_select"](VoiceSelectMode.USER_DEFINED)
-
-    assert kwargs["heading_text"] == voice_menu_shared.LABEL_VOICE_SELECTION_MODE
-    assert kwargs["labels"] == [mode.label for mode in VoiceSelectMode]
-    assert kwargs["values"] == list(VoiceSelectMode)
-    assert kwargs["current_value"] == VoiceSelectMode.DISABLED
-    assert kwargs["default_value"] == VoiceSelectMode.get_default()
-    assert kwargs["sublabels"] == [mode.description for mode in VoiceSelectMode]
-    assert project.voice_select_mode == VoiceSelectMode.USER_DEFINED
-    save.assert_called_once_with()
+    (tmp_path / "speaker_assign").mkdir()
+    (tmp_path / "speaker_assign" / file_name).write_text("{}", encoding="utf-8")
+    assert get_string_from(state, item.label) == voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES
 
 
 @pytest.mark.parametrize("transcript", ["Transcribed sample text.", ""])
@@ -1109,7 +1125,7 @@ class TestCropVoiceSampleMenu:
         menus = capture_menus(monkeypatch)
         monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: duration)
         VoiceMenuShared.voice_sample_submenu(state, project.get_tts_model_type(), 0)
-        crop_label = get_string_from(state, menus[-1]["items"](state)[2].label)
+        crop_label = get_string_from(state, menus[-1]["items"](state)[3].label)
         m = voice_menu_shared
         note = (
             f" {m.COL_ERROR}*{m.COL_DIM_ITALICS}exceeds current model's "

@@ -152,7 +152,6 @@ def test_pocket_voice_preset_takes_precedence_for_its_voice_only(monkeypatch):
     assert captured["current_value"] == "alba"
     assert PocketBaseModel.get_primary_voice_value(project) == "alba"
     assert ProjectVoiceUtil.resolve_voice_source(project, project.voice_references[0]).label == "alba"
-    assert Tts.get_voice_value_count(project) == 3
     assert Tts.get_voice_tag_for_selection_index(project, 0) == "alba"
     assert Tts.get_voice_tag_for_selection_index(project, 2) == "c"
 
@@ -397,8 +396,8 @@ def test_static_menus_compose_voice_samples_and_model_seed(monkeypatch, module_n
         "vibevoice_local": ["Select LoRA"],
     }.get(model_id, []))
     expected.extend([
-        voice_menu_shared.LABEL_VOICE_SELECTION_MODE,
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
+        voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES,
     ])
     assert len(labels) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, expected))

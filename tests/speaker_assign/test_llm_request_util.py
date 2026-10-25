@@ -1,0 +1,242 @@
+import threading
+import time
+from types import SimpleNamespace
+
+import requests
+
+from tts_audiobook_tool.speaker_assign.llm_request_util import CancelEvent, LlmRequestUtil
+
+
+class FakeLlm:
+    """
+    Stands in for LlmSession. Stays silent until `streaming_starts` is set (like
+    a provider queueing or prefilling), then streams reasoning chunks, then the
+    answer. As with a real HTTP stream, a cancel during the silent phase can't
+    take effect (cancel_active_request blocks) until the first chunk arrives.
+    """
+
+    def __init__(self, reasoning=("r",) * 3, answer=("{", "}"), error=None, streaming_starts=None):
+        self.reasoning = reasoning
+        self.answer = answer
+        self.error = error
+        self.streaming_starts = streaming_starts or threading.Event()
+        if streaming_starts is None:
+            self.streaming_starts.set()
+        self.cancel_requested = threading.Event()
+        self.chunks_sent = 0
+        self.chunks_sent_at_cancel: int | None = None
+
+    def send(self, _message, on_chunk, on_reasoning):
+        if not self.streaming_starts.wait(3):
+            return ""
+        if self.error is not None:
+            raise self.error
+        reply = ""
+        for callback, chunk in [(on_reasoning, c) for c in self.reasoning] + [(on_chunk, c) for c in self.answer]:
+            self.chunks_sent += 1
+            callback(chunk)
+            if callback is on_chunk:
+                reply += chunk
+            time.sleep(0.03)
+            if self.cancel_requested.is_set():
+                return reply
+        return reply
+
+    def cancel_active_request(self):
+        self.chunks_sent_at_cancel = self.chunks_sent
+        self.cancel_requested.set()
+        self.streaming_starts.wait(3)
+
+
+def send(llm, presses, **kwargs):
+    """send_cancellable with control-c presses read from presses["n"], and the
+    cancel events it reported."""
+    events = []
+    result = LlmRequestUtil.send_cancellable(
+        llm, "msg", cancel_requests=lambda: presses["n"], on_cancel_event=events.append,
+        poll_interval=0.01, **kwargs)
+    return result, events
+
+
+def test_send_returns_reply_and_reasoning() -> None:
+    result, events = send(FakeLlm(reasoning=["hm", "m"]), {"n": 0})
+    assert (result.reply, result.reasoning, result.cancelled, result.error) == ("{}", "hmm", False, None)
+    assert events == []
+
+
+def test_request_errors_are_returned_not_raised() -> None:
+    error = requests.ConnectionError("refused")
+    result, _ = send(FakeLlm(error=error), {"n": 0})
+    assert result.error is error
+    assert not result.cancelled
+
+
+def test_cancel_while_streaming_closes_right_away() -> None:
+    llm = FakeLlm(reasoning=("r",) * 50)
+    presses = {"n": 0}
+
+    def on_poll(progress):
+        if progress.reasoning_chars:
+            presses["n"] = 1
+
+    result, events = send(llm, presses, on_poll=on_poll)
+    assert events == [CancelEvent.CANCELLING]
+    assert result.cancelled and not result.abandoned
+    assert llm.cancel_requested.is_set()
+    assert llm.chunks_sent < 10
+
+
+def test_cancel_before_streaming_is_deferred_until_the_first_chunk() -> None:
+    # A press during the silent phase only marks the cancel as pending (the
+    # connection can't be closed then anyway); once streaming starts, the
+    # request is closed right away, so the provider stops generating.
+    streaming_starts = threading.Event()
+    llm = FakeLlm(reasoning=("r",) * 50, streaming_starts=streaming_starts)
+    presses = {"n": 1}
+    polls = []
+
+    def on_poll(progress):
+        polls.append(progress)
+        if len(polls) == 5:
+            streaming_starts.set()
+
+    result, events = send(llm, presses, on_poll=on_poll)
+    assert events == [CancelEvent.PENDING, CancelEvent.CANCELLING]
+    assert all(p.cancel_pending for p in polls)
+    assert llm.chunks_sent_at_cancel is not None and llm.chunks_sent_at_cancel >= 1
+    assert llm.chunks_sent < 10
+    assert result.cancelled and not result.abandoned
+
+
+def test_second_press_before_streaming_abandons_without_blocking() -> None:
+    # The provider stays silent and closing the connection would block until
+    # its next byte; the caller still returns promptly.
+    llm = FakeLlm(streaming_starts=threading.Event())
+    presses = {"n": 1}
+    polls = []
+
+    def on_poll(progress):
+        polls.append(progress)
+        if len(polls) == 3:
+            presses["n"] = 2
+
+    started = time.monotonic()
+    result, events = send(llm, presses, on_poll=on_poll)
+    assert events == [CancelEvent.PENDING, CancelEvent.ABANDONING]
+    assert result.cancelled and result.abandoned
+    assert result.error is None
+    assert time.monotonic() - started < 2
+
+
+def make_http_error(status: int, body: str) -> requests.HTTPError:
+    response = requests.Response()
+    response.status_code = status
+    response._content = body.encode()
+    return requests.HTTPError(f"{status} error", response=response)
+
+
+def test_describe_http_error_includes_body_and_hint() -> None:
+    # A provider's context-length rejection: the body is shown along with a
+    # hint that the book may not fit the model's context window.
+    prefs = SimpleNamespace(llm_url="https://example.test/v1", llm_speaker_assign_extra_params={})
+    text = LlmRequestUtil.describe_error(
+        make_http_error(400, '{"error": "maximum context length is 131072 tokens"}'), prefs)  # type: ignore[arg-type]
+    assert "HTTP 400" in text
+    assert "maximum context length" in text
+    assert "context window" in text
+
+    text = LlmRequestUtil.describe_error(make_http_error(401, "bad key"), prefs)  # type: ignore[arg-type]
+    assert "API key" in text
+
+
+def test_describe_http_error_hints_at_max_tokens_rather_than_context() -> None:
+    # Anthropic rejects a max_tokens above the model's output cap (eg the 64K
+    # speaker-assign default on a 32K model). The body mentions "tokens", but
+    # the fix is a lower max_tokens, not shorter text.
+    prefs = SimpleNamespace(llm_url="https://api.anthropic.com/v1/messages", llm_speaker_assign_extra_params={})
+    body = ('{"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: 64000 > 32000, '
+            'which is the maximum allowed number of output tokens for claude-opus-4-1-20250805"}}')
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert "Set a lower one" in text
+    assert "context window" not in text
+
+    # An OpenAI reasoning model given max_tokens via extra params
+    body = "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert "doesn't accept max_tokens" in text
+
+
+def test_describe_http_error_points_at_an_extra_param_the_error_names() -> None:
+    # A 400 naming a user-set extra param points at the extra params setting,
+    # even though the body also mentions "tokens" (not a context-window problem)
+    prefs = SimpleNamespace(llm_url="https://example.test/v1",
+                            llm_speaker_assign_extra_params={"max_completion_tokens": "abc", "n": 1})
+    body = "Invalid type for 'max_completion_tokens': expected an integer, but got a string instead."
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert 'mentions the extra param "max_completion_tokens".' in text
+    assert "Extra params (Auto-assign character voices)" in text
+    assert "context window" not in text
+
+
+def test_describe_http_error_without_context_phrases_has_no_context_hint() -> None:
+    # Bare "token"/"length" in a 400 body no longer implies the text is too long
+    prefs = SimpleNamespace(llm_url="https://example.test/v1", llm_speaker_assign_extra_params={})
+    body = "Invalid value for 'logprobs': token length must be positive."
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert "context window" not in text
+
+    # Gemini-style wording still counts
+    body = "The input token count (2000000) exceeds the maximum number of tokens allowed (1048576)."
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
+    assert "context window" in text
+
+
+def test_describe_http_error_suggests_extra_params_only_when_set() -> None:
+    # An unexplained 400 suggests the extra params as a possible cause only
+    # if any are set
+    body = "Unrecognized request argument supplied: thinkng"
+    no_params = SimpleNamespace(llm_url="https://example.test/v1", llm_speaker_assign_extra_params={})
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), no_params)  # type: ignore[arg-type]
+    assert "Extra params" not in text
+
+    with_params = SimpleNamespace(llm_url="https://example.test/v1",
+                                  llm_speaker_assign_extra_params={"thinking": {"type": "enabled"}})
+    text = LlmRequestUtil.describe_error(make_http_error(400, body), with_params)  # type: ignore[arg-type]
+    assert "The extra params may be the cause" in text
+    assert "mentions the extra param" not in text  # "thinkng" isn't "thinking"
+
+
+def test_without_deferral_a_cancel_before_streaming_abandons_at_once() -> None:
+    # Step 2 uses its first control-c for "stop after this chunk", so the
+    # next press must stop the request immediately, even before streaming.
+    llm = FakeLlm(streaming_starts=threading.Event())
+    presses = {"n": 0}
+    polls = []
+
+    def on_poll(progress):
+        polls.append(progress)
+        if len(polls) == 3:
+            presses["n"] = 1
+
+    started = time.monotonic()
+    result, events = send(llm, presses, on_poll=on_poll, defer_until_streaming=False)
+    assert events == [CancelEvent.ABANDONING]
+    assert result.cancelled and result.abandoned
+    assert time.monotonic() - started < 2
+
+
+def test_is_retryable_separates_transient_from_permanent_errors() -> None:
+    assert LlmRequestUtil.is_retryable(requests.ConnectionError("reset"))
+    assert LlmRequestUtil.is_retryable(requests.Timeout("slow"))
+    for status in (429, 500, 503):
+        assert LlmRequestUtil.is_retryable(make_http_error(status, ""))
+    for status in (400, 401, 403, 404):
+        assert not LlmRequestUtil.is_retryable(make_http_error(status, ""))
+    assert not LlmRequestUtil.is_retryable(ValueError("bug"))
+
+
+def test_result_carries_the_sessions_finish_reason() -> None:
+    llm = FakeLlm()
+    llm.last_finish_reason = "length"
+    result, _ = send(llm, {"n": 0})
+    assert result.finish_reason == "length" and result.hit_output_limit

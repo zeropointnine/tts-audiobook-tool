@@ -11,8 +11,9 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
-from tts_audiobook_tool.app_types import Book, BookSection, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -21,7 +22,7 @@ def run(coroutine):
     return asyncio.run(coroutine)
 
 
-def make_phrase_group(text: str, voice_index: int = -1) -> PhraseGroup:
+def make_phrase_group(text: str, voice_index: int = 0) -> PhraseGroup:
     return PhraseGroup(
         phrases=[Phrase(text, Reason.SENTENCE)],
         voice_index=voice_index,
@@ -43,7 +44,8 @@ def make_project_with_markers(
 @dataclass
 class StubPhraseGroup:
     presentable_text: str
-    voice_index: int = -1
+    voice_index: int = 0
+    is_dialog: bool = False
 
     @property
     def presentable_text_lf_ansi(self) -> str:
@@ -95,10 +97,10 @@ class StubProject:
     sound_segments_path: str = "/project/segments"
     generate_range_string: str = "none"
     gen_auto_concat: bool = False
-    voice_select_mode: VoiceSelectMode = VoiceSelectMode.AUTO_ADVANCE
     save_calls: list[str] = field(default_factory=list)
     save_error: str = ""
     book: Book | None = None
+    voice_references: list[Voice] = field(default_factory=list)
 
     def get_tts_model_type(self) -> TtsModelType:
         return TtsModelType.require_by_id("none")

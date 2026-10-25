@@ -10,6 +10,11 @@ import requests
 from tts_audiobook_tool.l import L
 
 
+# Finish reasons meaning the output-token limit ended the reply: OpenAI-style
+# APIs report "length", Anthropic "max_tokens"
+OUTPUT_LIMIT_FINISH_REASONS = ("length", "max_tokens")
+
+
 class LlmSession:
     """
     Manages a multi-turn LLM conversation and makes the HTTP API calls.
@@ -37,6 +42,7 @@ class LlmSession:
         api_type: str | None = None,
         timeout: float | tuple[float, float] = (15.0, 120.0),
         verbose: bool = False,
+        anthropic_default_max_tokens: int | None = None,
     ) -> None:
         """
         Args:
@@ -45,13 +51,18 @@ class LlmSession:
             model: Model identifier string.
             system_prompt: System message injected on every request (not stored in history).
             temperature: Sampling temperature. Overridden to 1.0 by Anthropic when thinking is enabled.
-            max_tokens: Maximum tokens in the response; is optional for OpenAI but required for Anthropic.
+            max_tokens: Maximum tokens in the response; is optional for OpenAI but required for Anthropic
+                (see anthropic_default_max_tokens).
             extra_params: Provider-specific params merged into the request payload as-is (e.g.
                 {"reasoning_effort": "high"} for OpenAI, {"thinking": {"type": "enabled"}} for Anthropic).
+                They override same-named payload values, including max_tokens.
             api_type: Force "openai" or "anthropic" format. None = auto-detect from URL.
             timeout: HTTP request timeout. A single float sets both the connection and read
                 timeout in seconds. A (connect, read) tuple sets them independently
                 (default: (15.0, 120.0) — a fast connection failure with a lenient read window).
+            anthropic_default_max_tokens: For the Anthropic API only, the max_tokens to use when
+                neither max_tokens nor extra_params sets one (Anthropic requires it). Never applied
+                to OpenAI-format requests, which then send no output limit at all.
         """
         self.api_endpoint_url = api_endpoint_url
         self.token = token
@@ -68,11 +79,17 @@ class LlmSession:
         self._active_response_lock = threading.Lock()
         self._active_response: requests.Response | None = None
         self._cancel_requested = threading.Event()
+        # Why the provider ended the last reply, as reported ("stop", "length",
+        # "end_turn", "max_tokens", ...); None if not reported. See hit_output_limit.
+        self.last_finish_reason: str | None = None
         self.resolved_api_type = (
             api_type if api_type is not None else self.detect_api_type()
         )
-        if self.resolved_api_type == "anthropic" and max_tokens is None:
-            raise ValueError("max_tokens is required for Anthropic API")
+        if self.resolved_api_type == "anthropic" and "max_tokens" not in self.extra_params:
+            if self.max_tokens is None:
+                self.max_tokens = anthropic_default_max_tokens
+            if self.max_tokens is None:
+                raise ValueError("max_tokens is required for Anthropic API")
 
     @property
     def system_prompt(self) -> str:
@@ -91,6 +108,12 @@ class LlmSession:
         if extra_line:
             print(extra_line)
         print(sep)
+
+    @property
+    def hit_output_limit(self) -> bool:
+        """Whether the last reply was cut off by the output-token limit (with
+        reasoning models, possibly while still thinking, leaving no answer)."""
+        return self.last_finish_reason in OUTPUT_LIMIT_FINISH_REASONS
 
     def detect_api_type(self) -> str:
         if "anthropic.com" in self.api_endpoint_url:
@@ -133,6 +156,7 @@ class LlmSession:
             L.i("[llm] send skipped: interrupt already set")
             return ""
         self._cancel_requested.clear()
+        self.last_finish_reason = None
         with self.history_lock:
             self.history.append({"role": "user", "content": message})
             history_snapshot = list(self.history)
@@ -316,8 +340,11 @@ class LlmSession:
                         # and some providers' keep-alive/error events arrive
                         # with an empty choices list.
                         continue
+                    if choices[0].get("finish_reason"):
+                        self.last_finish_reason = choices[0]["finish_reason"]
                     delta = choices[0].get("delta") or {}
-                    reasoning = delta.get("reasoning_content") or ""
+                    # "reasoning_content": DeepSeek, vLLM, llama.cpp, etc.; "reasoning": OpenRouter
+                    reasoning = delta.get("reasoning_content") or delta.get("reasoning") or ""
                     if reasoning:
                         if not reasoning_text:
                             L.i(f"[llm] openai: reasoning tokens arriving (model is thinking before content)")
@@ -373,6 +400,7 @@ class LlmSession:
             response.raise_for_status()
             data = response.json()
             self.vlog("RESPONSE (openai)", data)
+            self.last_finish_reason = data["choices"][0].get("finish_reason")
             return data["choices"][0]["message"]["content"]
 
     def call_anthropic(
@@ -420,6 +448,10 @@ class LlmSession:
                     if not line_str.startswith("data: "):
                         continue
                     event_data = json.loads(line_str[6:])
+                    if event_data.get("type") == "message_delta":
+                        stop_reason = (event_data.get("delta") or {}).get("stop_reason")
+                        if stop_reason:
+                            self.last_finish_reason = stop_reason
                     if event_data.get("type") == "content_block_delta":
                         delta = event_data.get("delta", {})
                         if delta.get("type") == "thinking_delta":
@@ -471,6 +503,7 @@ class LlmSession:
             response.raise_for_status()
             data = response.json()
             self.vlog("RESPONSE (anthropic)", data)
+            self.last_finish_reason = data.get("stop_reason")
             return self.extract_anthropic_text(data["content"])
 
     def extract_anthropic_text(self, content: list[dict]) -> str:

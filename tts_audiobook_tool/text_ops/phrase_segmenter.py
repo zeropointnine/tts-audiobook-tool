@@ -50,6 +50,13 @@ class PhraseSegmenter:
                             reason = Reason.PARAGRAPH
                         case _: # >= 3
                             reason = Reason.SPACE_BREAK
+                    # Punctuation-only ornaments (eg `* * *`, `---`) are folded
+                    # into the preceding sentence string, so merge_ornamental_lines
+                    # never sees them as separate phrases. Their trailing line
+                    # still denotes a space break (the same rule applied when
+                    # loading saved phrases).
+                    if app_text.has_trailing_ornamental_line(phrase):
+                        reason = Reason.SPACE_BREAK
                 else:
                     reason = Reason.PHRASE
                 phrases.append( Phrase(phrase, reason) )
@@ -471,17 +478,22 @@ class PhraseSegmenter:
     def merge_ornamental_lines(phrases: list[Phrase]) -> list[Phrase]:
         """
         When a Phrase ends with PARAGRAPH or SPACE_BREAK and is 'not vocalizable', merges it with previous phrase
-        Idea here is that these items must be typographical ornamentation lines that signify a section break
+        Idea here is that these items must be typographical ornamentation lines that signify a section break.
+
+        A non-vocalizable line opening with a quote (a silent dialog beat such
+        as `"..."`) also merges, since it cannot be a TTS prompt by itself, but
+        is diegetic: the preceding phrase keeps the beat's own reason instead
+        of being promoted to a space break.
         """
 
-        def is_ornamental_break(phrase: Phrase) -> bool:
+        def is_non_vocalizable_break(phrase: Phrase) -> bool:
             return phrase.reason in [Reason.PARAGRAPH, Reason.SPACE_BREAK] and not app_text.is_vocalizable(phrase.text)
 
         results: list[Phrase] = []
         leading_ornamental_phrases: list[Phrase] = []
 
         for phrase in phrases:
-            if not is_ornamental_break(phrase):
+            if not is_non_vocalizable_break(phrase):
                 results.append(phrase)
             elif not results:
                 # A leading ornamental line has no preceding phrase to merge
@@ -495,9 +507,13 @@ class PhraseSegmenter:
                 # and retain its structural meaning. Ornamental lines commonly
                 # have only two trailing line feeds, so their initially inferred
                 # reason is PARAGRAPH even though the ornament denotes a space
-                # break between scenes.
+                # break between scenes. A silent dialog beat (`"..."`) is not
+                # an ornament; its own trailing boundary carries over instead.
                 results[-1].text += phrase.text
-                results[-1].reason = Reason.SPACE_BREAK
+                if app_text.is_ornamental_line(phrase.text):
+                    results[-1].reason = Reason.SPACE_BREAK
+                else:
+                    results[-1].reason = phrase.reason
 
         if leading_ornamental_phrases:
             if results:

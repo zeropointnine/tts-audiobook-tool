@@ -907,6 +907,35 @@ def test_confirmation_dialog_renders_copy_lines_and_grows_to_fit_warnings() -> N
     run(exercise())
 
 
+def test_confirmation_dialog_can_left_align_removal_list() -> None:
+    # Consequences align left without changing the shared dialog's prompt layout.
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            app.push_screen(SaveChangesDialog(
+                [
+                    "Save changes before exiting?",
+                    "",
+                    "The text edits made are structural changes which will result in the removal of:",
+                    f"{COL_ERROR}• 2 generated audio segments from line 2 onward.",
+                    f"{COL_ERROR}• 1 section marker from line 2 onward.",
+                ],
+                left_align_from_line=3,
+            ))
+            await pilot.pause()
+            prompt = app.screen.query_one("#save-changes-copy-line-1", Static)
+            heading = app.screen.query_one("#save-changes-copy-line-3", Static)
+            bullet = app.screen.query_one("#save-changes-copy-line-4", Static)
+            assert prompt.styles.content_align_horizontal == "center"
+            assert heading.styles.content_align_horizontal == "left"
+            assert bullet.styles.content_align_horizontal == "left"
+            assert heading.region.height > 1
+            assert bullet.content.plain == "• 2 generated audio segments from line 2 onward."
+
+    run(exercise())
+
+
 def test_confirmation_dialog_can_show_but_disable_yes_button() -> None:
     app, _ = make_app()
 

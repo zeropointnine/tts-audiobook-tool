@@ -10,7 +10,7 @@ from tts_audiobook_tool.generate_util import (
 )
 
 
-def make_phrase_group(num_words: int, voice_index: int = -1) -> PhraseGroup:
+def make_phrase_group(num_words: int, voice_index: int = 0) -> PhraseGroup:
     text = " ".join(["word"] * num_words)
     return PhraseGroup([Phrase(text, Reason.SENTENCE)], voice_index=voice_index)
 

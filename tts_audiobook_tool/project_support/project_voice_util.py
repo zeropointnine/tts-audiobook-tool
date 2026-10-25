@@ -32,6 +32,12 @@ def _settings_registry():
 # Max length of instruction previews (voice list, submenu items, status block)
 INSTRUCTIONS_PREVIEW_LENGTH = 40
 
+# User-facing voice name (`Voice.name`) validation
+VOICE_NAME_MAX_LENGTH = 12
+VOICE_NAME_ONE_WORD_ERROR = "Name must be one word (no spaces)"
+VOICE_NAME_TOO_LONG_ERROR = f"Name must be at most {VOICE_NAME_MAX_LENGTH} characters"
+VOICE_NAME_UNIQUE_ERROR = "Name must be unique"
+
 VoiceSourceKind = Literal["preset", "sample", "instructions", "builtin", "missing"]
 
 
@@ -137,33 +143,28 @@ class ProjectVoiceUtil:
 
     @staticmethod
     def get_effective_voice_index(requested_index: int, num_voices: int) -> int:
-        """Clamp a per-line assignment, including unassigned (-1), as inference does."""
+        """Clamp a per-line assignment (eg one left stale by a removed voice), as inference does."""
         return min(max(requested_index, 0), num_voices - 1)
 
     @staticmethod
     def get_job_voice_indices(project: Project, phrase_indices: Iterable[int] | None = None) -> list[int]:
         """Voice slots to pre-flight, without changing the list or advancing rotation.
 
-        Disabled uses slot 0; user-defined uses the job's clamped line
-        assignments; auto-advance checks every slot, including sample-less
-        ones. None denotes a literal prompt/chat with no line assignment
-        (slot 0 unless auto-advancing); an explicitly empty job uses no voices.
+        Uses the job's clamped line assignments. None denotes a literal
+        prompt/chat with no line assignment (slot 0); an explicitly empty job
+        uses no voices.
         """
-        from tts_audiobook_tool.app_types import VoiceSelectMode
-
         num_voices = len(ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type()))
         indices = None if phrase_indices is None else list(phrase_indices)
         if not num_voices or indices == []:
             return []
-        if project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE:
-            return list(range(num_voices))
-        if project.voice_select_mode == VoiceSelectMode.USER_DEFINED and indices is not None:
-            phrase_groups = project.phrase_groups
-            return sorted({
-                ProjectVoiceUtil.get_effective_voice_index(phrase_groups[index].voice_index, num_voices)
-                for index in indices
-            })
-        return [0]
+        if indices is None:
+            return [0]
+        phrase_groups = project.phrase_groups
+        return sorted({
+            ProjectVoiceUtil.get_effective_voice_index(phrase_groups[index].voice_index, num_voices)
+            for index in indices
+        })
 
     @staticmethod
     def get_voice_transcript_values(project: Project, tts_model_type: TtsModelType) -> list[str]:
@@ -780,6 +781,53 @@ class ProjectVoiceUtil:
         entries[index] = replace(entries[index], room_reverb=room_reverb)
         project.voice_references = entries
         return project.save()
+
+    @staticmethod
+    def is_voice_name_taken(project: Project, index: int, name: str) -> bool:
+        """Whether another voice already has this name (case-insensitive, ignoring
+        surrounding whitespace). An empty name is never taken."""
+        key = name.strip().casefold()
+        return bool(key) and any(
+            i != index and voice.name.strip().casefold() == key
+            for i, voice in enumerate(project.voice_references)
+        )
+
+    @staticmethod
+    def get_voice_name_error(project: Project, index: int, name: str) -> str:
+        """Why `name` can't be voice `index`'s name, or "". A name is one word
+        (no whitespace), at most `VOICE_NAME_MAX_LENGTH` characters, and unique
+        among the project's voices. Empty is valid (unset)."""
+        name = name.strip()
+        if any(char.isspace() for char in name):
+            return VOICE_NAME_ONE_WORD_ERROR
+        if len(name) > VOICE_NAME_MAX_LENGTH:
+            return VOICE_NAME_TOO_LONG_ERROR
+        if ProjectVoiceUtil.is_voice_name_taken(project, index, name):
+            return VOICE_NAME_UNIQUE_ERROR
+        return ""
+
+    @staticmethod
+    def set_voice_name_at_index_and_save(project: Project, index: int, name: str) -> str:
+        """Set one entry's user-facing name; empty clears it. Returns the validation
+        error (see `get_voice_name_error`) without saving, or the save error, in which
+        case the previous list is restored."""
+        if not 0 <= index < len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        voice = project.voice_references[index]
+        name = name.strip()
+        if name == voice.name:
+            return ""
+        error = ProjectVoiceUtil.get_voice_name_error(project, index, name)
+        if error:
+            return error
+        previous = project.voice_references
+        entries = list(previous)
+        entries[index] = replace(voice, name=name)
+        project.voice_references = entries
+        error = project.save()
+        if error:
+            project.voice_references = previous
+        return error
 
     @staticmethod
     def set_voice_pan_at_index_and_save(project: Project, index: int, pan: float) -> str:

@@ -15,6 +15,7 @@ Tests are grouped by their **primary behavioral owner**, not strictly by source 
 | [ui](<../tests/ui/>) | Shared widgets/editors/dialogs, general console menus, headers, generation/playback screens and browser-player tests. |
 | [conversation](<../tests/conversation/>) | Chat/LLM/response sessions, microphone transcription, startup and conversation-specific UI. |
 | [enhance](<../tests/enhance/>) | Enhancement text/alignment/artifacts, orchestration and feature-specific UI. |
+| [speaker_assign](<../tests/speaker_assign/>) | Speaker assignment: character roster, dialog utterances, chunking, LLM reply parsing and speaker-to-voice mapping. |
 
 Domain-specific menus and screens stay with their feature; shared UI stays in **ui**. Mixed-responsibility files have not been split. [Shared fixtures](<../tests/conftest.py>) and helper modules remain at the test root.
 

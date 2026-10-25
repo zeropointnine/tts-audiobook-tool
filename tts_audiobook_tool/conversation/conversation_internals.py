@@ -308,14 +308,12 @@ class _ResponseEngine:
         self.sound_stream.clear_buffer()
 
     def _reset_chat_session(self, phase: str) -> None:
-        """Reset continuation state without changing the selected voice.
+        """Reset continuation state.
 
         Start/end resets isolate turns; recovery resets allow subsequent chunks
         to proceed after a TTS failure. Failed resets remain visible in logs.
         """
-        error = ModelWorker.reset_chat_session_blocking(
-            reset_voice_selection=False, console_handler=discard_console_output
-        )
+        error = ModelWorker.reset_chat_session_blocking(console_handler=discard_console_output)
         if error:
             L.w(f"[chat] engine: {phase} reset failed: {error}")
 

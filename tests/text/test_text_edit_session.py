@@ -6,7 +6,7 @@ from tts_audiobook_tool.text_ops.text_edit_session import (
 )
 
 
-def make_phrase_group(*texts: str, voice_index: int = -1) -> PhraseGroup:
+def make_phrase_group(*texts: str, voice_index: int = 0) -> PhraseGroup:
     return PhraseGroup(
         [Phrase(text, Reason.SENTENCE) for text in texts],
         voice_index=voice_index,
@@ -212,7 +212,7 @@ def test_split_rejects_endpoints_and_tracks_earliest_mutation() -> None:
     assert session.earliest_affected_original_index == 1
 
 
-def make_single_group_session(text: str = "Original.", voice_index: int = -1) -> TextEditSession:
+def make_single_group_session(text: str = "Original.", voice_index: int = 0) -> TextEditSession:
     return TextEditSession(
         Book(
             sections=[
@@ -415,6 +415,21 @@ def test_update_preserves_voice_index() -> None:
     )
 
     assert session.phrase_groups[0].phrase_group.voice_index == 42
+
+
+def test_split_and_update_preserve_dialog_flag() -> None:
+    # A dialog line stays dialog when split or when its text is edited.
+    source = PhraseGroup(
+        [Phrase("“First. ", Reason.SENTENCE), Phrase("Second.”", Reason.SENTENCE)],
+        is_dialog=True,
+    )
+    session = TextEditSession(Book(sections=[BookSection(phrase_groups=[source])]))
+    session.split_phrase_group(session.phrase_groups[0].item_id, PhraseGroupSplitPoint(1))
+    session.update_phrase_group_text(
+        session.phrase_groups[1].item_id, "Changed.”", max_words=10, pysbd_lang="en"
+    )
+
+    assert [item.phrase_group.is_dialog for item in session.phrase_groups] == [True, True]
 
 
 def test_update_trailing_whitespace_only_change_is_noop() -> None:

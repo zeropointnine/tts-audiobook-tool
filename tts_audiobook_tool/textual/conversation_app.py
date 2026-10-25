@@ -151,7 +151,7 @@ RuntimeFactory = Callable[..., ConversationRuntime]
 
 
 class ConversationTextualApp(App[ConversationAppResult]):
-    """Dedicated multi-turn Textual LLM voice-chat interface."""
+    """Dedicated multi-turn Textual voice-chat interface."""
 
     CSS = (
         TEXTUAL_SHARED_CSS
@@ -227,9 +227,9 @@ class ConversationTextualApp(App[ConversationAppResult]):
 
     def make_header_lines(self) -> list[str]:
         """Build the app's fixed instruction header for the active input mode."""
-        title = "LLM voice chat (echo only)" if getattr(
+        title = "Voice chat (echo only)" if getattr(
             self.runtime, "echo_override", False
-        ) else "LLM voice chat"
+        ) else "Voice chat"
         match self.runtime.input_mode:
             case ChatInputMode.TEXT:
                 return [

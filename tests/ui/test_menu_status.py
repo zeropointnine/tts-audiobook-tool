@@ -492,7 +492,7 @@ def test_server_status_hides_loaded_when_binding_or_snapshot_is_unsuitable(monke
 
 
 # Reconciliation itself is tested in test_project_tts_selection. Here only the backend
-# (local mode vs remote; "sole active audio.cpp" qualifier), saved none / known / unknown
+# (local mode vs remote wording), saved none / known / unknown
 # (hint or not, old-name copy) and dir_path (save or not) matter.
 @pytest.mark.parametrize("model_id, saved, dir_path", [
     ("chatterbox_local", "none", ""),
@@ -547,12 +547,12 @@ def test_status_auto_selects_sole_model_and_defers_hint_until_menu(
         return
     old_name = (_display_name(TtsModelType.require_by_id("mira_local")) if saved == "mira_local" else
                 f"Unknown model: {saved}")
-    qualifier = ("sole active audio.cpp" if model.value.backend_kind is TtsBackendKind.AUDIO_CPP
-                 else "active")
-    assert output == (
-        f"🔔 FYI\nThis project was last used with TTS model {old_name};\n"
-        f"It will now use the {qualifier} model, {_display_name(model)}\n\n"
-    )
+    # The notice explains where the sole model came from: the server or this environment.
+    current = _display_name(model)
+    reason = (f"This environment has {current} installed, so it will use that."
+              if model.value.backend_kind is TtsBackendKind.LOCAL
+              else f"The server is serving {current}, so it will use that.")
+    assert output == f"🔔 FYI\nThis project was last used with TTS model {old_name}.\n{reason}\n\n"
     assert state.pending_tts_model_change is None
 
 
@@ -574,10 +574,11 @@ def test_model_change_hint_reports_binding_failure(monkeypatch, capsys, sole_rem
     MenuStatus.show_pending_tts_model_hint(state)
 
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    assert "last used with TTS model Chatterbox TTS" in output
-    assert f"It is now configured to use {sole_remote_model.value.ui['proper_name']}" in output
-    assert "runtime is unavailable (see Model settings)" in output
-    assert "currently active model" not in output
+    assert output == (
+        "🔔 FYI\nThis project was last used with TTS model Chatterbox TTS (local).\n"
+        f"It has been switched to {_display_name(sole_remote_model)}, "
+        "but that model can't be used yet (see Model settings).\n\n"
+    )
     assert state.pending_tts_model_change is None
 
 
@@ -608,7 +609,7 @@ def test_model_change_hint_coalesces_to_first_old_and_latest_new(monkeypatch, ca
     MenuStatus.show_pending_tts_model_hint(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
     assert "last used with TTS model Chatterbox TTS" in output
-    assert f"active model, {_display_name(latest)}" in output
+    assert f"The server is serving {_display_name(latest)}, so it will use that." in output
     assert sole_remote_model.value.ui["proper_name"] not in output
 
 
@@ -662,7 +663,7 @@ def test_local_startup_notice_waits_for_first_main_menu(monkeypatch, capsys):
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
     assert output.count("FYI") == 1
     assert "last used with TTS model Echo-TTS" in output
-    assert "active model, Chatterbox TTS" in output
+    assert "This environment has Chatterbox TTS (local) installed, so it will use that." in output
     assert state.pending_tts_model_change is None
 
 
@@ -1038,29 +1039,31 @@ def test_status_clears_unavailable_selection_with_multiple_models(monkeypatch, c
 
 
 @pytest.mark.parametrize("case", [
-    "restored", "restored_from_none", "restored_unbound", "unavailable_multiple", "unavailable_sole",
+    "restored", "restored_from_none", "restored_unbound", "restored_unbound_from_none",
+    "unavailable_multiple", "unavailable_sole", "unavailable_sole_from_none", "unavailable_sole_unbound",
 ])
 def test_remembered_audio_cpp_selection_notices(monkeypatch, capsys, case):
     # Reconnecting to audio.cpp after using a local model restores (or reports
     # failing to restore) the project's last-used audio.cpp entry, deferred to
     # the end of the next complete menu like other model-change notices.
+    # From an unselected project the "last used" line is omitted, so the next
+    # sentence must name the project rather than start with "It"/"Its".
     fish = TtsModelType.require_by_id("fish_s2_audiocpp")
     chatterbox = TtsModelType.require_by_id("chatterbox_audiocpp")
     higgs = TtsModelType.require_by_id("higgs_v3_audiocpp")
     state = make_state()
     state.project.set_tts_selection(fish.id, "fish-q8")
-    state.project.set_tts_selection("none" if case == "restored_from_none" else "chatterbox_local")
+    state.project.set_tts_selection("none" if case.endswith("_from_none") else "chatterbox_local")
     state.project.dir_path = "/example/book"
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
-    candidates = {
-        "unavailable_multiple": ((chatterbox, "cb"), (higgs, "higgs")),
-        "unavailable_sole": ((chatterbox, "cb"),),
-    }.get(case, ((chatterbox, "cb"), (fish, "fish-q8")))
+    candidates = (((chatterbox, "cb"), (higgs, "higgs")) if case == "unavailable_multiple" else
+                  ((chatterbox, "cb"),) if case.startswith("unavailable_sole") else
+                  ((chatterbox, "cb"), (fish, "fish-q8")))
     monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
         TtsBackendKind.AUDIO_CPP, candidates=candidates))
     monkeypatch.setattr(Project, "save", lambda _: "")
     monkeypatch.setattr(Tts, "get_active_type", lambda: (
-        TtsModelType.require_by_id("none") if case == "restored_unbound"
+        TtsModelType.require_by_id("none") if "_unbound" in case
         else TtsModelType.get_by_id(state.project.tts_model_type)))
     monkeypatch.setattr("tts_audiobook_tool.ask.ask_enter_to_continue",
                         lambda *_: pytest.fail("Model-change notices must not pause"))
@@ -1074,22 +1077,29 @@ def test_remembered_audio_cpp_selection_notices(monkeypatch, capsys, case):
 
     old_line = "This project was last used with TTS model Chatterbox TTS (local)"
     remembered = f"{fish.value.ui['proper_name']} (audio.cpp; fish-q8)"
-    expected_selection = {
-        "unavailable_multiple": ("none", ""),
-        "unavailable_sole": (chatterbox.id, "cb"),
-    }.get(case, (fish.id, "fish-q8"))
+    is_sole = case.startswith("unavailable_sole")
+    expected_selection = (("none", "") if case == "unavailable_multiple" else
+                          (chatterbox.id, "cb") if is_sole else (fish.id, "fish-q8"))
     assert (state.project.tts_model_type, state.project.audio_cpp_model_id) == expected_selection
     assert (state.project.last_audio_cpp_model_type, state.project.last_audio_cpp_model_id) == (
-        (chatterbox.id, "cb") if case == "unavailable_sole" else (fish.id, "fish-q8"))
+        (chatterbox.id, "cb") if is_sole else (fish.id, "fish-q8"))
+    sole = _display_name(chatterbox)
+    unusable = "but that model can't be used yet (see Model settings)."
     expected = {
-        "restored": f"{old_line};\nIt will now use its last-used audio.cpp model, {remembered}",
-        "restored_from_none": f"It will now use its last-used audio.cpp model, {remembered}",
-        "restored_unbound": (f"{old_line};\nIt is now configured to use its last-used audio.cpp model, "
-                             f"{remembered},\nbut the runtime is unavailable (see Model settings)."),
+        "restored": f"{old_line}.\nIt will switch back to its last-used audio.cpp model, {remembered}.",
+        "restored_from_none": f"This project will switch back to its last-used audio.cpp model, {remembered}.",
+        "restored_unbound": (f"{old_line}.\nIt has been switched back to its last-used audio.cpp model, "
+                             f"{remembered},\n{unusable}"),
+        "restored_unbound_from_none": (f"This project has been switched back to its last-used audio.cpp model, "
+                                       f"{remembered},\n{unusable}"),
         "unavailable_multiple": (f"{old_line}.\nIts last-used audio.cpp model, {remembered},\n"
                                  "is currently unavailable.\nSelect a TTS model in Model settings > TTS model."),
-        "unavailable_sole": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, is unavailable,\n"
-                             f"so it will now use the sole active audio.cpp model, {_display_name(chatterbox)}"),
+        "unavailable_sole": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, is not on this server.\n"
+                             f"The server is serving {sole}, so it will use that."),
+        "unavailable_sole_from_none": (f"This project's last-used audio.cpp model, {remembered}, "
+                                       f"is not on this server.\nThe server is serving {sole}, so it will use that."),
+        "unavailable_sole_unbound": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, "
+                                     f"is not on this server.\nThis project has been switched to {sole}, {unusable}"),
     }[case]
     assert output == f"🔔 FYI\n{expected}\n\n"
 
@@ -1116,9 +1126,9 @@ def test_saved_entry_missing_from_new_server_announces_replacement(monkeypatch, 
 
     old_name = f"{fish.value.ui['proper_name']} (audio.cpp; fish-drama3)"
     if sole:
-        assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name};\n"
-                          f"It will now use the sole active audio.cpp model, "
-                          f"{chatterbox.value.ui['proper_name']} (audio.cpp; cb)\n\n")
+        assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name}.\n"
+                          f"The server is serving {chatterbox.value.ui['proper_name']} (audio.cpp; cb), "
+                          "so it will use that.\n\n")
     else:
         assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name},\nwhich is currently "
                           "unavailable.\nSelect a TTS model in Model settings > TTS model.\n\n")

@@ -134,7 +134,7 @@ def test_custom_speaker_save_cancel_and_failure_preserve_existing_data(monkeypat
     assert prompts == [{"lower": False, "prefill": "vivian"}]
     if value.strip() and not error:
         assert state.project.voice_references[0].presets[MODEL_ID] == "My Custom Speaker"
-        assert "My Custom Speaker" in labels(state, submenu)[0]
+        assert any("My Custom Speaker" in label for label in labels(state, submenu))
         # Clearing a custom speaker still uses the existing shared clear action.
         select(state, submenu, "Clear speaker")
         assert MODEL_ID not in state.project.voice_references[0].presets

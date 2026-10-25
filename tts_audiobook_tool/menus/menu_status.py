@@ -201,15 +201,15 @@ class MenuStatus:
             )))
             return
         current_name = _make_model_name(pending.new_model_id, pending.new_audio_cpp_model_id)
-        text = f"This project was last used with TTS model {old_name};\n"
-        active = Tts.get_active_type()
-        if active.id == pending.new_model_id:
-            qualifier = ("sole active audio.cpp" if active.value.backend_kind is TtsBackendKind.AUDIO_CPP
-                         else "active")
-            text += f"It will now use the {qualifier} model, {current_name}"
+        text = f"This project was last used with TTS model {old_name}.\n"
+        if Tts.get_active_type().id != pending.new_model_id:
+            text += f"It has been switched to {current_name}, {_UNUSABLE_MODEL_TEXT}"
+        elif Tts.is_remote_mode():
+            # The server offers exactly one model (an SGL-Omni server, or audio.cpp with one entry).
+            text += _make_server_model_text(current_name)
         else:
-            text += (f"It is now configured to use {current_name}, "
-                     "but the runtime is unavailable (see Model settings).")
+            # Local mode has exactly one installed model library.
+            text += f"This environment has {current_name} installed, so it will use that."
         hints.print_hint(Hint("", "FYI", text))
 
     @staticmethod
@@ -285,23 +285,32 @@ def _make_remembered_audio_cpp_notice(pending: PendingTtsModelChange, old_name: 
     remembered = _make_model_name(pending.last_audio_cpp_model_type, pending.last_audio_cpp_model_id)
     has_old = pending.old_model_id != "none"
     is_bound = Tts.get_active_type().id == pending.new_model_id
-    if pending.reason == "restored_audio_cpp":
-        text = f"This project was last used with TTS model {old_name};\n" if has_old else ""
-        if is_bound:
-            return text + f"It will now use its last-used audio.cpp model, {remembered}"
-        return text + (f"It is now configured to use its last-used audio.cpp model, {remembered},\n"
-                       "but the runtime is unavailable (see Model settings).")
+    # Without the "last used" line there is no antecedent for "It"/"Its".
     text = f"This project was last used with TTS model {old_name}.\n" if has_old else ""
+    if pending.reason == "restored_audio_cpp":
+        subject = "It" if has_old else "This project"
+        if is_bound:
+            return text + f"{subject} will switch back to its last-used audio.cpp model, {remembered}."
+        return text + (f"{subject} has been switched back to its last-used audio.cpp model, {remembered},\n"
+                       + _UNUSABLE_MODEL_TEXT)
     subject = "Its" if has_old else "This project's"
     if pending.new_model_id == "none":
         return text + (f"{subject} last-used audio.cpp model, {remembered},\nis currently unavailable.\n"
                        "Select a TTS model in Model settings > TTS model.")
     current_name = _make_model_name(pending.new_model_id)
-    text += f"{subject} last-used audio.cpp model, {remembered}, is unavailable,\n"
+    text += f"{subject} last-used audio.cpp model, {remembered}, is not on this server.\n"
     if is_bound:
-        return text + f"so it will now use the sole active audio.cpp model, {current_name}"
-    return text + (f"so it is now configured to use {current_name}, "
-                   "but the runtime is unavailable (see Model settings).")
+        return text + _make_server_model_text(current_name)
+    return text + f"This project has been switched to {current_name}, {_UNUSABLE_MODEL_TEXT}"
+
+
+def _make_server_model_text(current_name: str) -> str:
+    """Explains choosing the server's sole model."""
+    return f"The server is serving {current_name}, so it will use that."
+
+
+# Completes a "switched to" sentence for a selection that failed to bind.
+_UNUSABLE_MODEL_TEXT = "but that model can't be used yet (see Model settings)."
 
 
 def _make_project_text(state: State) -> str:

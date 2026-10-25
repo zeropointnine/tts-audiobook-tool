@@ -102,12 +102,21 @@ class PhraseGroup:
     Ie, add 'phrase-level granularity' to the timing metadata.
     """
 
-    def __init__(self, phrases: list[Phrase] | None = None, voice_index: int = -1):
+    def __init__(
+            self,
+            phrases: list[Phrase] | None = None,
+            voice_index: int = 0,
+            is_dialog: bool = False,
+    ):
         self._presentable_text_memo: str | None = None
         self._presentable_text_lf_ansi_memo: str | None = None
         # Route through the property so memos are cleared on assignment
         self.phrases = phrases or []
         self.voice_index = voice_index
+        # Whether the group is detected dialog (set by import-time dialog
+        # segmentation, which isolates dialog into groups of its own).
+        # Independent of voice_index. See docs-dev/dialog-segmentation.md
+        self.is_dialog = is_dialog
 
     @property
     def phrases(self) -> list[Phrase]:
@@ -211,10 +220,12 @@ class PhraseGroup:
         return [phrase.to_json_dict() for phrase in self.phrases]
 
     def to_json_dict(self) -> dict:
-        return {
-            "voice_index": self.voice_index,
-            "phrases": self.to_json_dict_list(),
-        }
+        result: dict[str, Any] = {"voice_index": self.voice_index}
+        if self.is_dialog:
+            # Written only when set
+            result["is_dialog"] = True
+        result["phrases"] = self.to_json_dict_list()
+        return result
 
     @staticmethod
     def phrase_groups_from_json_list(values: list[Any]) -> list[PhraseGroup] | str:
@@ -228,17 +239,21 @@ class PhraseGroup:
                 if "phrases" not in value:
                     return f"Phrase group missing 'phrases': {value}"
                 phrase_dicts = value["phrases"]
-                raw_voice_index = value.get("voice_index", -1)
+                raw_voice_index = value.get("voice_index", 0)
+                # Earlier versions defaulted to -1 ("unassigned"), which always
+                # meant the first voice; it and any other invalid value load as 0
                 voice_index = (
                     raw_voice_index
                     if isinstance(raw_voice_index, int)
                     and not isinstance(raw_voice_index, bool)
-                    and raw_voice_index >= -1
-                    else -1
+                    and raw_voice_index >= 0
+                    else 0
                 )
+                is_dialog = value.get("is_dialog", False) is True
             else:
                 phrase_dicts = value
-                voice_index = -1
+                voice_index = 0
+                is_dialog = False
 
             if not isinstance(phrase_dicts, list):
                 return f"Expected phrase list: {phrase_dicts}"
@@ -260,7 +275,7 @@ class PhraseGroup:
                 return err
 
             phrases = result
-            group = PhraseGroup(phrases, voice_index=voice_index)
+            group = PhraseGroup(phrases, voice_index=voice_index, is_dialog=is_dialog)
             text_groups.append(group)
 
         return text_groups

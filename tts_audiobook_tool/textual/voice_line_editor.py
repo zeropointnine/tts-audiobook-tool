@@ -13,14 +13,30 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
     EditorSaved,
 )
+from tts_audiobook_tool.textual.multi_select_dialog import (
+    DIALOG_LINES,
+    MANUAL_ENTRY,
+    MultiSelectDialog,
+    MultiSelectResult,
+)
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
     STYLE_DIM,
+    dialog_marker,
+    has_dialog_detection,
+)
+from tts_audiobook_tool.textual.voice_select_dialog import (
+    VoiceSelectDialog,
+    make_voice_select_title,
 )
 from tts_audiobook_tool.util import make_error_string
 
 # The editor title intentionally matches the voice menu item label that opens it
 TITLE_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
+
+# Voice column: number, truncated/padded voice name, then a dialog marker
+# (the marker column only when the text was segmented with dialog detection)
+VOICE_NAME_WIDTH = 5
 
 
 @dataclass(frozen=True)
@@ -59,6 +75,10 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             Binding(str(number), f"assign_voice({number - 1})", show=False)
             for number in range(1, 10)
         ),
+        # Shares the "m" key with the base manual-selection binding, which
+        # check_action disables, so this one runs instead
+        Binding("m", "show_multi_select", show=False),
+        Binding("v", "show_voice_select", show=False),
     ]
 
     def __init__(
@@ -69,16 +89,18 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         self.original_voice_indices: list[int] = []
         self.staged_voice_indices: list[int] = []
         self.list_items: list[VoiceLineListItem] = []
+        self.show_dialog_markers = False
         self.voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
         if voice_sample_count is None:
             voice_sample_count = len(self.voice_values)
         self.voice_sample_count = voice_sample_count
+        self.voice_names = [voice.name.strip() for voice in project.voice_references]
         highest_voice_key = min(max(self.voice_sample_count, 1), 9)
         header_lines = [
             f"{COL_ACCENT}{TITLE_EDIT_VOICE_SELECTIONS}",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
-            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
-            f"{COL_DIM}- Use number keys [{COL_ACCENT}1{COL_DIM}] to [{COL_ACCENT}{highest_voice_key}{COL_DIM}] to set voice sample for selected text line/s",
+            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Multi-select",
+            f"{COL_DIM}- Use keys [{COL_ACCENT}1{COL_DIM}] to [{COL_ACCENT}{highest_voice_key}{COL_DIM}] to set voice sample for selected lines  - [{COL_ACCENT}V{COL_DIM}] Voice list dialog",
             f"{COL_DIM}- Press [ESC] to finish",
         ]
         super().__init__(
@@ -88,14 +110,36 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             loading_state_text="...",
         )
 
+    def check_action(
+        self, action: str, parameters: tuple[object, ...]
+    ) -> bool | None:
+        """Unbind the base "m" manual-selection key, leaving "m" to multi-select.
+
+        Manual entry is offered from the multi-select dialog instead, which
+        calls the action method directly (bypassing this check). Textual merges
+        BINDINGS across base classes, so the binding cannot be filtered out.
+        """
+        if action == "show_manual_selection":
+            return False
+        return super().check_action(action, parameters)
+
     def initialize_content(self) -> range:
         """Snapshot voice assignments before installing their formatted rows."""
         self.original_voice_indices = [
             phrase_group.voice_index for phrase_group in self.project.phrase_groups
         ]
         self.staged_voice_indices = list(self.original_voice_indices)
+        self.show_dialog_markers = self.has_dialog_detection()
         self.list_items = self.make_list_items()
         return range(len(self.list_items))
+
+    def has_dialog_detection(self) -> bool:
+        """Whether the dialog-marker column is shown (see has_dialog_detection)."""
+        book = getattr(self.project, "book", None)
+        return has_dialog_detection(
+            book is not None and book.segmentation_settings.dialog_segmentation,
+            (phrase_group.is_dialog for phrase_group in self.project.phrase_groups),
+        )
 
     def make_list_items(self) -> list[VoiceLineListItem]:
         """Project non-empty book sections and phrase groups into visible rows."""
@@ -142,12 +186,24 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         )
 
     def voice_label(self, voice_index: int) -> str:
-        """Build the row's voice label, kept shared between display and search."""
-        voice_number = max(voice_index + 1, 1)
+        """Build the row's voice label, kept shared between display and search.
+
+        In-range labels are fixed width so rows stay aligned: the number is
+        padded to the digit count of the highest voice number, followed (only
+        when any voice is named) by the voice name's first VOICE_NAME_WIDTH
+        characters, blank when unnamed.
+        """
+        voice_number = voice_index + 1
         # Keep showing the stored number, but flag stale selections after voices change.
         if voice_index >= self.voice_sample_count:
-            return f"Voice {voice_number} *OUT OF RANGE*"
-        return f"Voice {voice_number}"
+            return f"#{voice_number} *OUT OF RANGE*"
+        number_width = len(str(max(self.voice_sample_count, 1)))
+        number_text = f"#{voice_number:<{number_width}}"
+        if not any(self.voice_names):
+            return number_text
+        name_index = voice_number - 1
+        name = self.voice_names[name_index] if name_index < len(self.voice_names) else ""
+        return f"{number_text} {name[:VOICE_NAME_WIDTH]:<{VOICE_NAME_WIDTH}}"
 
     def format_line(self, index: int) -> HangingIndentText:
         """Format one row, styling selected rows except for the active row."""
@@ -159,10 +215,14 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         style = f"{STYLE_DIM} reverse" if is_find_match else ""
         phrase_index = list_item.phrase_index
         phrase_group = self.project.phrase_groups[phrase_index]
+        if self.show_dialog_markers:
+            dialog_column = f"{dialog_marker(phrase_group.is_dialog)}  "
+        else:
+            dialog_column = ""
         prefix_ansi = (
             f"{COL_DIM}[{self.format_line_number(phrase_index + 1)}] "
-            f"{COL_ACCENT}[{self.voice_label(self.staged_voice_indices[phrase_index])}]"
-            f"{COL_DIM} "
+            f"{COL_ACCENT}[{self.voice_label(self.staged_voice_indices[phrase_index])}] "
+            f"{COL_DEFAULT}{dialog_column}"
         )
         return HangingIndentText.from_ansi(
             ansi_text=f"{prefix_ansi}{COL_DEFAULT}{phrase_group.presentable_text_lf_ansi}",
@@ -179,7 +239,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         phrase_index = list_item.phrase_index
         return [
             self.format_line_number(phrase_index + 1),
-            self.voice_label(self.staged_voice_indices[phrase_index]),
+            self.voice_label(self.staged_voice_indices[phrase_index]).rstrip(),
             self.project.phrase_groups[phrase_index].presentable_text,
         ]
 
@@ -189,6 +249,87 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         if isinstance(item, VoiceLineSectionItem):
             return None
         return item.phrase_index
+
+    def dialog_phrase_indices(self) -> set[int]:
+        return {
+            phrase_index
+            for phrase_index, phrase_group in enumerate(self.project.phrase_groups)
+            if phrase_group.is_dialog
+        }
+
+    def action_show_multi_select(self) -> None:
+        """Show the multi-select dialog: select by voice, all dialog lines
+        (only with dialog detection), or manual entry."""
+        if (
+            not self.multi_select_enabled
+            or not self.content_initialized
+            or self.find_active
+            or self.manual_selection_line_count() <= 0
+        ):
+            return
+        voice_line_counts = [
+            self.staged_voice_indices.count(voice_index)
+            for voice_index in range(self.voice_sample_count)
+        ]
+        dialog_line_count = (
+            len(self.dialog_phrase_indices()) if self.show_dialog_markers else None
+        )
+        self.push_screen(
+            MultiSelectDialog(voice_line_counts, self.voice_names, dialog_line_count),
+            self.handle_multi_select,
+        )
+
+    def handle_multi_select(self, result: MultiSelectResult) -> None:
+        """Select the chosen voice's or dialog lines, or open manual selection."""
+        if result is None:
+            return
+        if result == MANUAL_ENTRY:
+            self.action_show_manual_selection()
+            return
+        if result == DIALOG_LINES:
+            self.handle_manual_selection(self.dialog_phrase_indices())
+            return
+        self.handle_manual_selection(
+            {
+                phrase_index
+                for phrase_index, voice_index in enumerate(self.staged_voice_indices)
+                if voice_index == result
+            }
+        )
+
+    def action_show_voice_select(self) -> None:
+        """Show the voice list dialog, which assigns the entered voice to the
+        selected lines (and reaches voices beyond the 1-9 number keys)."""
+        if (
+            not self.content_initialized
+            or self.find_active
+            or self.voice_sample_count <= 0
+        ):
+            return
+        phrase_indices = sorted(self.selected_content_line_indices())
+        if not phrase_indices:
+            return
+        current_voice_index = (
+            self.staged_voice_indices[phrase_indices[0]]
+            if len(phrase_indices) == 1
+            else None
+        )
+        voice_names = [
+            self.voice_names[index] if index < len(self.voice_names) else ""
+            for index in range(self.voice_sample_count)
+        ]
+        self.push_screen(
+            VoiceSelectDialog(
+                make_voice_select_title([index + 1 for index in phrase_indices]),
+                voice_names,
+                current_voice_index,
+            ),
+            self.handle_voice_select,
+        )
+
+    def handle_voice_select(self, voice_index: int | None) -> None:
+        if voice_index is not None:
+            self.action_assign_voice(voice_index)
 
     def action_assign_voice(self, voice_index: int) -> None:
         """Assign an available voice sample to all selected phrase groups."""

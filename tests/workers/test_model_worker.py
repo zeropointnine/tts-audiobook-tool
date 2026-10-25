@@ -793,9 +793,6 @@ def test_run_tts_preview_returns_processed_sound_without_word_substitutions(
         model_worker_module, "_make_worker_state", lambda _command: state
     )
     monkeypatch.setattr(Tts, "clear_continuation", staticmethod(lambda: None))
-    monkeypatch.setattr(
-        Tts, "reset_voice_selection_index", staticmethod(lambda: None)
-    )
     monkeypatch.setattr(Tts, "get_instance", staticmethod(lambda: object()))
     # This test covers the unwatched path (a call that may still load the
     # model); the watchdog itself is covered separately.
@@ -873,9 +870,6 @@ def test_run_tts_preview_rejects_nan_output(monkeypatch) -> None:
         model_worker_module, "_make_worker_state", lambda _command: state
     )
     monkeypatch.setattr(Tts, "clear_continuation", staticmethod(lambda: None))
-    monkeypatch.setattr(
-        Tts, "reset_voice_selection_index", staticmethod(lambda: None)
-    )
     monkeypatch.setattr(Tts, "get_instance", staticmethod(lambda: object()))
     monkeypatch.setattr(
         model_worker_module, "_should_watch_preview_inference", lambda: False
@@ -932,9 +926,6 @@ def _install_preview_state(monkeypatch) -> None:
         lambda _command: SimpleNamespace(project=project),
     )
     monkeypatch.setattr(Tts, "clear_continuation", staticmethod(lambda: None))
-    monkeypatch.setattr(
-        Tts, "reset_voice_selection_index", staticmethod(lambda: None)
-    )
     # The preview resolves the model instance before announcing the run.
     monkeypatch.setattr(Tts, "get_instance", staticmethod(lambda: object()))
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import pytest
 
-from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
@@ -22,48 +21,45 @@ class _NoModelWarnings:
         return []
 
 
-def make_project(model_id="chatterbox_local", mode=VoiceSelectMode.USER_DEFINED) -> Project:
+def make_project(model_id="chatterbox_local") -> Project:
     # Voice 1 has a sample, voice 2 does not; line N is assigned to voice N % 2
-    project = Project(tts_model_type=model_id, voice_select_mode=mode.id,
+    project = Project(tts_model_type=model_id,
                       voice_references=[Voice("a.flac", "text"), Voice()])
     project.phrase_groups = [PhraseGroup([Phrase("Hello.", Reason.SENTENCE)], voice_index=index % 2)
                              for index in range(4)]
     return project
 
 
-@pytest.mark.parametrize("mode, lines, warned", [
+@pytest.mark.parametrize("lines, warned", [
     # Only voice 1 (which has a sample) is in play
-    (VoiceSelectMode.DISABLED, [0, 1, 2], False),
-    (VoiceSelectMode.USER_DEFINED, [0, 2], False),
-    (VoiceSelectMode.USER_DEFINED, None, False),
+    ([0, 2], False),
+    (None, False),
     # The sample-less voice 2 is in play: previously missed, since only voice 1 was checked
-    (VoiceSelectMode.USER_DEFINED, [0, 1], True),
-    (VoiceSelectMode.USER_DEFINED, [3], True),
-    (VoiceSelectMode.AUTO_ADVANCE, [0], True),
-    (VoiceSelectMode.AUTO_ADVANCE, None, True),
+    ([0, 1], True),
+    ([3], True),
     # An empty job uses no voices
-    (VoiceSelectMode.AUTO_ADVANCE, [], False),
+    ([], False),
 ])
-def test_note_follows_the_runs_voices(mode, lines, warned):
-    project = make_project(mode=mode)
+def test_note_follows_the_runs_voices(lines, warned):
+    project = make_project()
     assert get_run_warnings(project, _NoModelWarnings(), lines) == ([NOTE] if warned else [])
 
 
 def test_note_comes_before_model_warnings():
-    project = make_project(mode=VoiceSelectMode.AUTO_ADVANCE)
+    project = make_project()
 
     class Model:
         def get_warning_issues(self, project: Project) -> list[str]:
             return ["model warning"]
 
-    assert get_run_warnings(project, Model(), None) == [NOTE, "model warning"]
+    assert get_run_warnings(project, Model(), [1]) == [NOTE, "model warning"]
 
 
 # The check is model-agnostic; these differ in what it reads: sample-optional,
 # instructions-capable sample-optional, and voice-required.
 @pytest.mark.parametrize("model_id", ["chatterbox_local", "omnivoice_local", "glm_local"])
 def test_rule_is_the_same_for_every_model(model_id):
-    project = make_project(model_id, VoiceSelectMode.AUTO_ADVANCE)
+    project = make_project(model_id)
     model = TtsModelType.require_by_id(model_id).value
     # Required samples are the voice pre-flight's job; there is no "may vary" note then.
     assert get_voice_variation_warnings(project, [0, 1]) == ([] if model.requires_voice else [NOTE])
@@ -71,7 +67,7 @@ def test_rule_is_the_same_for_every_model(model_id):
 
 
 def test_model_without_voice_storage_never_warns():
-    project = make_project("none", VoiceSelectMode.AUTO_ADVANCE)
+    project = make_project("none")
     assert get_voice_variation_warnings(project, [0, 1]) == []
 
 
@@ -133,7 +129,6 @@ def test_qwen_voice_design_groups_only_used_voices_once(model_id):
     # Described and empty slots share the generic constant and one grouped note.
     project = Project(
         tts_model_type=model_id,
-        voice_select_mode=VoiceSelectMode.USER_DEFINED.id,
         voice_references=[
             Voice("old.flac", "Old transcript.", presets={model_id: "Ryan"},
                   instructions={model_id: "A warm, low voice."}),

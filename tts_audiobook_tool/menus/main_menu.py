@@ -1,6 +1,7 @@
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.menus.chat_menu import ChatMenu
+from tts_audiobook_tool.menus.menu_shared import make_concat_menu_heading
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.real_time_playback_menu import RealTimePlaybackMenu
 from tts_audiobook_tool.menus.options_menu import OptionsMenu
@@ -66,7 +67,7 @@ class MainMenu:
                 )
             )
             items.append(
-                MenuItem("Create audiobook file", on_concat, hotkey="c")
+                MenuItem(make_concat_menu_heading, on_concat, hotkey="c")
             )
 
             items.append(
@@ -76,7 +77,7 @@ class MainMenu:
                 )
             )
             items.append(
-                MenuItem("LLM voice chat", on_chat, hotkey="l")
+                MenuItem("Voice chat", on_chat, hotkey="l")
             )
             items.append(
                 MenuItem(

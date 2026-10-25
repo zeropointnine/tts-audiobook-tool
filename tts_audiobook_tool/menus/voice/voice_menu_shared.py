@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Callable
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.app_types import RoomReverb, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types import RoomReverb, SttVariant
 from tts_audiobook_tool.app_types.voice import Voice, stereo_position_label, stereo_position_to_percent
 from tts_audiobook_tool import ask
 
@@ -20,7 +20,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
 from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
-from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.project_support.project_voice_util import VOICE_NAME_MAX_LENGTH, ProjectVoiceUtil
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -34,12 +34,15 @@ from tts_audiobook_tool.transcriber import Transcriber
 
 # Menu item labels shared by per-model voice menus; tests reference these.
 LABEL_VOICE_SAMPLE_ITEM = "Voice"  # "Voice N: <name> (<duration>); "<instructions>""
-LABEL_VOICE_SAMPLES_SUPERLABEL = "Select to move, remove, edit properties"
+LABEL_VOICE_SAMPLES_SUPERLABEL = "Voice list"
 LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sample-less) voice
-LABEL_VOICE_SELECTION_MODE = "Voice selection mode"
+LABEL_MORE_VOICES = "More voices..."  # Opens the next page of voices
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
+LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Auto-assign character voices"
 
 # Per-voice submenu labels
+LABEL_VOICE_NAME = "Name"
+LABEL_CLEAR_VOICE_NAME = "Clear name"
 LABEL_SET_VOICE_SAMPLE = "Voice sample"
 LABEL_CLEAR_VOICE_SAMPLE = "Clear voice sample"
 LABEL_REMOVE_VOICE_SAMPLE = "Remove"
@@ -70,6 +73,29 @@ def format_instructions_message(message: str) -> str:
         f"{COL_DIM}{line}{COL_DEFAULT}" if line.lstrip().startswith("(") else line
         for line in message.split("\n")
     )
+
+# Voices listed per page, both in the Voices menu and in the character voice
+# picker (speaker_assign/voices_menu.py), so page boundaries match. Fixed
+# rather than fitted to each model's extra items so they don't shift between
+# models; leaves the Voices menu's first page room for "More voices...", the
+# model's items and the selection controls within the 35 auto hotkeys.
+VOICES_PER_PAGE = 20
+
+
+def make_more_voices_label(remaining: int) -> str:
+    """Eg "More voices... (5)"."""
+    return f"{LABEL_MORE_VOICES} {COL_DIM}({remaining:,})"
+
+
+def make_page_range_text(start: int, end: int, count: int) -> str:
+    """Eg "(21-40 of 45)", for a later page's heading."""
+    return f"({start + 1:,}-{end:,} of {count:,})"
+
+
+def make_page_breadcrumb(start: int, end: int) -> str:
+    """Eg "Voices 21-40"."""
+    return f"Voices {start + 1:,}-{end:,}"
+
 
 # Minimum duration of an imported voice sample, checked before and after silence trim
 VOICE_SAMPLE_MIN_DURATION_S = 2.0
@@ -564,7 +590,10 @@ class VoiceMenuShared:
         The selection controls close the menu; `menu_wrapper` adds them.
 
         Built on every redraw, so labels and indices are those of the current
-        list. A project always has at least one voice. The set callbacks run
+        list. A project always has at least one voice. The list is paged to
+        stay within the hotkeys: past `VOICES_PER_PAGE` voices, "More
+        voices..." replaces Add and opens the next page as a submenu (see
+        `voices_page_menu`); Add follows the last page's voices. The set callbacks run
         around a voice's "Set voice sample"; `on_clear_callback` runs when a
         removal leaves no voice with a sample. `preset_choices` enables each
         voice's preset item (while the model uses presets, `can_voice_presets`).
@@ -586,45 +615,87 @@ class VoiceMenuShared:
                 return
             open_submenu(s, index)
 
-        voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
-        items: list[MenuItem] = []
-        for index in range(len(voices)):
-            label, _ = VoiceMenuShared.make_voice_sample_item_label(state.project, tts_type, index)
-            items.append(MenuItem(
-                label,
-                lambda s, item: open_submenu(s, item.data),
-                data=index,
-                superlabel=LABEL_VOICE_SAMPLES_SUPERLABEL if index == 0 else "",
-                superlabel_no_blank_line=True,
-            ))
-        if len(voices) < 9:
-            items.append(MenuItem(LABEL_ADD_VOICE_SAMPLE, add_voice))
-        return items
+        def make_page_items(s: State, start: int) -> list[MenuItem]:
+            """The page of voices from `start`, then "More voices..." when any
+            follow, else Add."""
+            count = len(ProjectVoiceUtil.get_voice_values(s.project, tts_type))
+            end = min(start + VOICES_PER_PAGE, count)
+
+            def on_voice(s2: State, item: MenuItem) -> bool:
+                open_submenu(s2, item.data)
+                # A later page closes once removals have emptied it
+                return start >= len(s2.project.voice_references)
+
+            items: list[MenuItem] = []
+            for index in range(start, end):
+                label, _ = VoiceMenuShared.make_voice_sample_item_label(s.project, tts_type, index)
+                items.append(MenuItem(
+                    label,
+                    on_voice,
+                    data=index,
+                    superlabel=LABEL_VOICE_SAMPLES_SUPERLABEL if index == 0 else "",
+                    superlabel_no_blank_line=True,
+                ))
+            if end < count:
+                items.append(MenuItem(
+                    make_more_voices_label(count - end),
+                    lambda s2, _: VoiceMenuShared.voices_page_menu(s2, end, make_page_items),
+                ))
+            else:
+                items.append(MenuItem(LABEL_ADD_VOICE_SAMPLE, add_voice))
+            return items
+
+        return make_page_items(state, 0)
+
+    @staticmethod
+    def voices_page_menu(
+            state: State, start: int, make_page_items: Callable[[State, int], list[MenuItem]],
+    ) -> None:
+        """A later page of the Voices menu's voice list: just its voices, then
+        "More voices..." or Add (the model's items and the selection controls
+        stay on the first page). Recomputed on every redraw, since voices can
+        be added, moved and removed from here."""
+        def make_range(s: State) -> tuple[int, int]:
+            count = len(s.project.voice_references)
+            return min(start + VOICES_PER_PAGE, count), count
+
+        def make_heading(s: State) -> str:
+            end, count = make_range(s)
+            return f"Voices {COL_DIM}{make_page_range_text(start, end, count)}"
+
+        MenuUtil.menu(
+            state=state,
+            heading=make_heading,
+            items=lambda s: make_page_items(s, start),
+            on_exit=lambda: PlaySoundUtil.stop_sound_async(),
+            breadcrumb=lambda s: make_page_breadcrumb(start, make_range(s)[0]),
+        )
 
     @staticmethod
     def make_voice_selection_items(state: State, tts_type: TtsModelType) -> list[MenuItem]:
-        """The closing group of every Voices menu: Voice selection mode (with
-        2+ voices) and Edit voice/line selections. Added by `menu_wrapper`."""
-        voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+        """The closing group of every Voices menu: Edit voice/line selections
+        and Auto-assign character voices. Added by `menu_wrapper`."""
         items: list[MenuItem] = []
-        if len(voices) > 1:
-            items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
         items.append(VoiceMenuShared.make_assign_voice_samples_to_text_lines_item(tts_type))
+        items.append(VoiceMenuShared.make_auto_assign_character_voices_item())
         items[0].blank_line_before = True
         return items
 
     @staticmethod
-    def make_voice_sample_selection_mode_item() -> MenuItem:
-        def make_label(state: State) -> str:
-            return make_menu_label(
-                LABEL_VOICE_SELECTION_MODE,
-                state.project.voice_select_mode.current_label,
-            )
+    def make_auto_assign_character_voices_item() -> MenuItem:
+        def on_item(state: State, _: MenuItem) -> None:
+            # Deferred: the feature's modules aren't needed until it's opened
+            from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu import SpeakerAssignMenu
+            SpeakerAssignMenu.menu(state)
 
-        return MenuItem(
-            make_label,
-            lambda state, _: VoiceMenuShared.voice_sample_selection_mode_submenu(state),
-        )
+        def make_label(state: State) -> str:
+            from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
+            label = LABEL_AUTO_ASSIGN_CHARACTER_VOICES
+            if not SpeakerAssignFileUtil.has_any_data(state.project.dir_path):
+                label += f" {COL_DIM}(uses LLM; optional)"
+            return label
+
+        return MenuItem(make_label, on_item)
 
     @staticmethod
     def make_assign_voice_samples_to_text_lines_item(tts_type: TtsModelType) -> MenuItem:
@@ -633,8 +704,6 @@ class VoiceMenuShared:
             voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
             if len(voices) < 2:
                 label += f" {COL_DIM}(optional; requires 2+ voice samples)"
-            elif state.project.voice_select_mode is not VoiceSelectMode.USER_DEFINED:
-                label += f" {COL_DIM}(optional; requires \"voice selection mode: user-defined\")"
             return label
 
         def on_item(state: State, _: MenuItem) -> None:
@@ -661,26 +730,6 @@ class VoiceMenuShared:
             ask.ask_error(run_result.result.error)
         elif isinstance(run_result.result, EditorSaved):
             print_feedback("Saved changes", long_pause=True)
-
-    @staticmethod
-    def voice_sample_selection_mode_submenu(state: State) -> None:
-        modes = list(VoiceSelectMode)
-
-        def on_select(value: VoiceSelectMode) -> None:
-            state.project.voice_select_mode = value
-            state.project.save()
-            print_feedback("Voice selection mode set to:", value.id)
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text="Voice selection mode",
-            labels=[mode.label for mode in modes],
-            values=modes,
-            current_value=state.project.voice_select_mode,
-            default_value=VoiceSelectMode.get_default(),
-            on_select=on_select,
-            sublabels=[mode.description for mode in modes],
-        )
 
     @staticmethod
     def get_voice_sample_duration(project: Project, voice: Voice) -> float | None:
@@ -797,8 +846,15 @@ class VoiceMenuShared:
         if not parts:
             # Eg Qwen3-TTS CustomVoice without instructions: the speaker's default delivery
             parts.append(ProjectVoiceUtil.make_no_voice_value_text(project))
-        label = f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1}: " + f"{COL_DIM};{COL_DEFAULT} ".join(parts)
+        title = VoiceMenuShared.make_voice_title(voice, index)
+        label = f"{title}: " + f"{COL_DIM};{COL_DEFAULT} ".join(parts)
         return label, is_long
+
+    @staticmethod
+    def make_voice_title(voice: Voice | None, index: int) -> str:
+        """Eg "Voice 1", or "Voice 1 MyName" when the voice has a name."""
+        title = f"{LABEL_VOICE_SAMPLE_ITEM} {index + 1}"
+        return f"{title} {voice.name}" if voice is not None and voice.name else title
 
     @staticmethod
     def make_transcript_preview(project: Project, tts_type: TtsModelType, index: int) -> str:
@@ -840,7 +896,7 @@ class VoiceMenuShared:
             return entries[current[0]] if 0 <= current[0] < len(entries) else None
 
         def make_heading(s: State) -> str:
-            return f"{LABEL_VOICE_SAMPLE_ITEM} {current[0] + 1}"
+            return VoiceMenuShared.make_voice_title(get_voice(s), current[0])
 
         def on_set_sample(s: State, _: MenuItem) -> None:
             if on_before_set_callback:
@@ -861,6 +917,16 @@ class VoiceMenuShared:
             if on_clear_callback and not ProjectVoiceUtil.has_any_voice_sample(s.project):
                 on_clear_callback()
             print_feedback("Voice sample cleared")
+
+        def on_set_name(s: State, _: MenuItem) -> None:
+            VoiceMenuShared.ask_voice_name(s, current[0])
+
+        def on_clear_name(s: State, _: MenuItem) -> None:
+            error = ProjectVoiceUtil.set_voice_name_at_index_and_save(s.project, current[0], "")
+            if error:
+                ask.ask_error(error)
+            else:
+                print_feedback("Name cleared")
 
         def on_set_instructions(s: State, _: MenuItem) -> None:
             VoiceMenuShared.ask_voice_instructions(s, tts_type, current[0])
@@ -912,6 +978,9 @@ class VoiceMenuShared:
             uses_presets = preset_choices is not None and support.can_voice_presets(s.project)
             preset = voice.preset_for(tts_type.id) if uses_presets else ""
             preset_label = get_preset_label(tts_type)
+            items.append(MenuItem(VoiceMenuShared.make_voice_name_menu_label(voice), on_set_name))
+            if voice.name:
+                items.append(MenuItem(LABEL_CLEAR_VOICE_NAME, on_clear_name))
             if can_clone:
                 items.append(MenuItem(
                     VoiceMenuShared.make_set_voice_sample_label(s.project, tts_type, i),
@@ -984,11 +1053,6 @@ class VoiceMenuShared:
                 ),
                 lambda s2, _: VoiceMenuShared.ask_stereo_position(s2, i),
                 superlabel=LABEL_EFFECTS_SUPERLABEL,
-                # Auto-advance doesn't record which voice spoke a line, so output stays centered
-                sublabel=(
-                    "No effect in auto-advance voice selection mode"
-                    if s.project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE else None
-                ),
             ))
             items.append(MenuItem(
                 make_menu_label(LABEL_ROOM_REVERB, voice.room_reverb.label, RoomReverb.get_default().label),
@@ -1049,6 +1113,33 @@ class VoiceMenuShared:
             on_select=on_select,
             breadcrumb=preset_label,
         )
+
+    @staticmethod
+    def make_voice_name_menu_label(voice: Voice) -> str:
+        """Eg 'Name (currently: Narrator)', or 'Name (optional)' (dimmed) when unset."""
+        if not voice.name:
+            return make_menu_label_optional(LABEL_VOICE_NAME)
+        return f"{LABEL_VOICE_NAME} {make_currently_string(voice.name)}"
+
+    @staticmethod
+    def ask_voice_name(state: State, index: int) -> None:
+        """Edit this voice's user-facing name; blank/cancel leaves it unchanged.
+        An invalid name (not one word, or not unique) is reported and not saved."""
+        current = state.project.voice_references[index].name
+        printt("Enter a name for this voice:")
+        printt(f"{COL_DIM}(One word, no spaces, up to {VOICE_NAME_MAX_LENGTH} characters)")
+        value = ask.ask_input(lower=False, prefill=current).strip()
+        if not value or value == current:
+            return
+        error = ProjectVoiceUtil.get_voice_name_error(state.project, index, value)
+        if error:
+            print_feedback(error, is_error=True)
+            return
+        error = ProjectVoiceUtil.set_voice_name_at_index_and_save(state.project, index, value)
+        if error:
+            ask.ask_error(error)
+        else:
+            print_feedback(f"{LABEL_VOICE_NAME} set to: {value}")
 
     @staticmethod
     def ask_voice_instructions(state: State, tts_type: TtsModelType, index: int) -> None:

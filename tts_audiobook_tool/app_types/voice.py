@@ -5,6 +5,7 @@ spec v5; see docs-dev/project-spec-v5.md).
 On disk an entry is a flat JSON object:
 
     {
+        "name": "Narrator",                 # optional user-facing name (one word); written only when non-empty
         "file_name": "belle.flac",          # project-local voice sample
         "transcript": "...",                # "" when unused/absent
         "crop_file_name": "<hex>.flac",     # optional crop group (all four or none)
@@ -44,6 +45,7 @@ ROOM_REVERB_FIELD = "room_reverb"
 PAN_FIELD = "pan"
 PRESETS_FIELD = "presets"
 INSTRUCTIONS_FIELD = "instructions"
+NAME_FIELD = "name"
 
 
 def stereo_position_to_percent(pan: float) -> int:
@@ -97,7 +99,8 @@ class VoiceCrop:
 
 @dataclass(frozen=True)
 class Voice:
-    """A project voice: reference sample, its transcript, optional crop, room reverb,
+    """A project voice: optional user-facing `name` (a convenience name only;
+    never affects generation), reference sample, its transcript, optional crop, room reverb,
     stereo position (`pan`, -1 full left to 1 full right, 0 centered), model
     preset voice ids (`presets`, keyed by TTS model id, for models with
     built-in voices), and voice `instructions` keyed by TTS model id (for
@@ -113,8 +116,11 @@ class Voice:
     presets: dict[str, str] = field(default_factory=dict, hash=False)
     # TTS model id -> instructions. Treat as read-only; excluded from hashing.
     instructions: dict[str, str] = field(default_factory=dict, hash=False)
+    name: str = ""
 
     def __post_init__(self) -> None:
+        if not isinstance(self.name, str):
+            raise ValueError("name must be a string")
         pan = float(self.pan)
         if not (math.isfinite(pan) and -1.0 <= pan <= 1.0):
             raise ValueError("pan must be finite and between -1 and 1")
@@ -146,8 +152,12 @@ class Voice:
 
     def to_dict(self) -> dict[str, Any]:
         """The on-disk form. `room_reverb` is always written; `pan` only when nonzero;
-        `presets` and `instructions` only when non-empty."""
-        result: dict[str, Any] = {"file_name": self.file_name, "transcript": self.transcript}
+        `name`, `presets` and `instructions` only when non-empty."""
+        result: dict[str, Any] = {}
+        if self.name:
+            result[NAME_FIELD] = self.name
+        result["file_name"] = self.file_name
+        result["transcript"] = self.transcript
         if self.crop is not None:
             result[CROP_FILE_NAME_FIELD] = self.crop.file_name
             result[CROP_START_FIELD] = self.crop.start
@@ -180,7 +190,7 @@ class Voice:
         pre-v5 data) takes `default_room_reverb`. A missing or non-numeric
         `pan` loads as centered; an out-of-range one is clamped. A missing or
         non-object `presets` / `instructions` (including a legacy plain string)
-        loads as an empty map.
+        loads as an empty map. A missing or non-string `name` loads as "".
         """
         from tts_audiobook_tool.app_support import path_norm
         from tts_audiobook_tool.l import L
@@ -210,6 +220,7 @@ class Voice:
             pan=_parse_pan(raw, where, index),
             presets=_parse_str_map(raw, PRESETS_FIELD, where, index),
             instructions=_parse_str_map(raw, INSTRUCTIONS_FIELD, where, index),
+            name=_parse_name(raw, where, index),
         )
 
 
@@ -229,6 +240,17 @@ def _parse_str_map(raw: dict, field: str, where: str, index: int) -> dict[str, s
         L.w(f"{where}[{index}]: invalid {field} ({value!r}); using empty")
         return {}
     return {key: item for key, item in value.items() if isinstance(key, str) and isinstance(item, str)}
+
+
+def _parse_name(raw: dict, where: str, index: int) -> str:
+    """"" when absent or not a string (the latter with a warning)."""
+    from tts_audiobook_tool.l import L
+
+    value = raw.get(NAME_FIELD, "")
+    if not isinstance(value, str):
+        L.w(f"{where}[{index}]: invalid {NAME_FIELD} ({value!r}); using empty")
+        return ""
+    return value
 
 
 def _parse_pan(raw: dict, where: str, index: int) -> float:

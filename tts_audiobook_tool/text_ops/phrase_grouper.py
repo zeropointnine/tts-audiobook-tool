@@ -4,10 +4,7 @@ from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.text_ops.phrase_segmenter import Reason, Phrase, PhraseSegmenter
-from tts_audiobook_tool.text_ops.dialog_segmenter import (
-    DIALOG_VOICE_INDEX,
-    DialogSegmenter,
-)
+from tts_audiobook_tool.text_ops.dialog_segmenter import DialogSegmenter
 from tts_audiobook_tool.util import printt
 
 class PhraseGrouper:
@@ -30,8 +27,8 @@ class PhraseGrouper:
         One PhraseGroup gets transformed into one TTS prompt.
 
         When dialog_segmentation is enabled, a final pass subdivides groups so
-        accepted dialog and narration do not share a group, preassigns dialog
-        to voice sample 2, and marks close-quote pieces followed by an
+        accepted dialog and narration do not share a group, flags dialog
+        groups with is_dialog, and marks close-quote pieces followed by an
         attribution with reason PHRASE_QUOTE_END (a lowercase continuation, or
         for language code "en" a speaker name followed by a whitelisted verb).
         It does not recombine groups created by the normal segmentation passes.
@@ -71,11 +68,7 @@ class PhraseGrouper:
         groups = results
 
         if dialog_segmentation:
-            groups = DialogSegmenter.segment_groups(
-                groups,
-                dialog_voice_index=DIALOG_VOICE_INDEX,
-                language_code=pysbd_lang,
-            )
+            groups = DialogSegmenter.segment_groups(groups, language_code=pysbd_lang)
 
         groups = PhraseGrouper.merge_ornamental_groups(groups)
 
@@ -85,6 +78,8 @@ class PhraseGrouper:
     def merge_ornamental_groups(groups: list[PhraseGroup]) -> list[PhraseGroup]:
         """
         Folds ornamental-only groups into a vocalizable neighboring group.
+        Quoted silent dialog beats (eg `"..."`) fold the same way, but without
+        being promoted to a space break (see ``app_text.is_ornamental_line``).
 
         A PhraseGroup is the app's atomic TTS prompt unit, and a group whose
         text has no vocalizable content (a lone dinkus or divider line)
@@ -113,11 +108,15 @@ class PhraseGrouper:
                 continue
             # Merge backward, mirroring PhraseSegmenter.merge_ornamental_lines:
             # the ornament joins the previous group's last phrase and promotes
-            # its boundary to a space break.
+            # its boundary to a space break. A silent dialog beat (`"..."`)
+            # is not an ornament and carries its own boundary over instead.
             if result[-1].phrases:
                 last_phrase = result[-1].phrases[-1]
                 last_phrase.text += group.text
-                last_phrase.reason = Reason.SPACE_BREAK
+                if app_text.is_ornamental_line(group.text):
+                    last_phrase.reason = Reason.SPACE_BREAK
+                elif group.phrases:
+                    last_phrase.reason = group.phrases[-1].reason
                 result[-1].invalidate_presentable_memos()
             else:
                 result[-1].phrases.extend(group.phrases)

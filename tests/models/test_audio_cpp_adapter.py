@@ -292,7 +292,6 @@ def test_omnivoice_menu_renders_settings_in_local_order_without_headings(monkeyp
 
 def test_echo_menus_partition_voice_selections_and_settings_without_headings(monkeypatch, tmp_path: Path):
     from tts_audiobook_tool import text_util
-    from tts_audiobook_tool.app_types import VoiceSelectMode
     from tts_audiobook_tool.menus.menu_util import get_string_from
     from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
     from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
@@ -301,7 +300,6 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
     monkeypatch.setattr(Project, "save", lambda self: "")
     project = Project.model_validate({"dir_path": str(tmp_path), "tts_model_type": ECHO_ID})
     project.set_model_setting(ECHO_ID, "file_name", ["suzie yeung hanya 1_4.flac", "second.flac"])
-    project.voice_select_mode = VoiceSelectMode.USER_DEFINED
     state = SimpleNamespace(project=project)
 
     # As composed by the Voices menu wrapper (selection controls appended last)
@@ -313,8 +311,8 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
         f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: suzie yeung hanya 1_4",
         f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: second",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
-        f"{voice_menu_shared.LABEL_VOICE_SELECTION_MODE} (currently: user-defined)",
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
+        f"{voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES} (uses LLM; optional)",
     ]
     # Only the sample list carries its shared superlabel; no model headings.
     assert [item.superlabel for item in items] == [voice_menu_shared.LABEL_VOICE_SAMPLES_SUPERLABEL, "", "", "", ""]

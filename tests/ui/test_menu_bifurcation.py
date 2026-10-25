@@ -39,15 +39,13 @@ def make_state(model_id="mira_local", voice_count=0, dir_path="/example/book"):
 def sample_group_prefixes(voice_count):
     """Expected (ANSI-stripped) label prefixes of the shared voice list (voices and Add)."""
     prefixes = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(voice_count)]
-    if voice_count < 9:
-        prefixes.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
-    return prefixes
+    return [*prefixes, voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]  # One page (see VOICES_PER_PAGE)
 
 
 def selection_group_prefixes(voice_count):
     """Expected label prefixes of the selection controls that close every Voices menu."""
-    prefixes = [voice_menu_shared.LABEL_VOICE_SELECTION_MODE] if voice_count >= 2 else []
-    return [*prefixes, voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS]
+    return [voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
+            voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES]
 
 
 def capture_voices_items(captured):
@@ -138,7 +136,6 @@ def test_all_local_voice_menus_keep_sample_selection_group(
         # The requirement replaces "no sample set" when the model requires a voice
         required = VoiceMenuShared.get_voice_sample_required_label(state.project, 0)
         assert labels[0].startswith(f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: {required or 'no sample set'}")
-    assert (voice_menu_shared.LABEL_ADD_VOICE_SAMPLE in labels) == (voice_count < 9)
     expected = sample_group_prefixes(max(voice_count, 1))
     assert len(labels) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, expected))
@@ -164,8 +161,7 @@ def test_all_local_models_route_settings_without_sample_controls(monkeypatch, mo
                                      voice_menu_shared.LABEL_CROP_VOICE_SAMPLE,
                                      voice_menu_shared.LABEL_EDIT_VOICE_TRANSCRIPTION,
                                      "Add/remove voice samples", "Select voice clone sample",
-                                     voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
-                                     voice_menu_shared.LABEL_VOICE_SELECTION_MODE)) for label in labels)
+                                     voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)) for label in labels)
     if model_id == "indextts2_local":
         assert not any("emotion" in label.lower() for label in labels)
         assert labels[0].startswith("FP16")
@@ -260,7 +256,8 @@ def test_local_omnivoice_voice_menu_has_no_instructions_items(monkeypatch, instr
     VoiceMenuShared.menu(state)
     items = captured["items"](state)
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
-    assert labels[-1].startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    assert labels[-2].startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
+    assert labels[-1].startswith(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
     assert not any(label.startswith(("Voice design", "Clear instructions")) for label in labels)
 
 

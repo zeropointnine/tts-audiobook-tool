@@ -103,7 +103,6 @@ class ClearModelsCommand:
 @dataclass(frozen=True)
 class ResetChatSessionCommand:
     operation_id: str
-    reset_voice_selection: bool = True
 
 
 @dataclass(frozen=True)

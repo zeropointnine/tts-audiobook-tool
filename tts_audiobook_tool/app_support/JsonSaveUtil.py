@@ -16,6 +16,9 @@ class JsonArtifactType(Enum):
     PROJECT_TEXT = "project text"
     ENHANCE_BOOK = "enhance source book"
     PREFS = "preferences"
+    SPEAKER_ROSTER = "speaker roster"
+    SPEAKER_ATTRIBUTIONS = "speaker attributions"
+    SPEAKER_VOICES = "character voices"
 
 
 class JsonSaveUtil:

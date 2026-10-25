@@ -11,6 +11,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
+from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
@@ -53,7 +54,8 @@ class ProjectNewMenu:
         if migrate_current_settings:
             console_message = (
                 "This will create a new project directory, copying over the\n"
-                " current project's settings including voice-clone data and text.\n\n"
+                " current project's settings including voice-clone data, text,\n"
+                " and speaker assignment data.\n\n"
                 + console_message
             )
         ui_title = "Select empty directory"
@@ -84,9 +86,14 @@ class ProjectNewMenu:
                 text_file_names,
                 voice_file_names,
             )
+            speaker_assign_errors = SpeakerAssignFileUtil.copy_files(old_project.dir_path, state.project.dir_path)
             state.project.save()
             state.set_existing_project(state.project.dir_path)
             ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
+            for error in speaker_assign_errors:
+                printt(f"{COL_ERROR}{error}{COL_DEFAULT}")
+            if speaker_assign_errors:
+                printt()
 
         hints.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
 

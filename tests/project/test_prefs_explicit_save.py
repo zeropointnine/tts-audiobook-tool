@@ -521,3 +521,57 @@ def test_saved_project_dir_from_another_os_is_left_alone_so_it_can_be_reported(
     prefs = Prefs.load()
 
     assert prefs.project_dir == saved_dir
+
+
+def test_legacy_llm_extra_params_migrate_to_both_feature_values(
+    prefs_path: Path,
+) -> None:
+    # The old shared "llm_extra_params" seeds both per-feature values,
+    # and the legacy key is dropped from the re-saved file
+    legacy = {"thinking": {"type": "disabled"}}
+    prefs_path.write_text(json.dumps({"llm_extra_params": legacy}), encoding="utf-8")
+
+    prefs = Prefs.load()
+
+    assert prefs.llm_chat_extra_params == legacy
+    assert prefs.llm_speaker_assign_extra_params == legacy
+    # Independent copies: changing one doesn't affect the other
+    prefs.llm_chat_extra_params["top_k"] = 3
+    assert "top_k" not in prefs.llm_speaker_assign_extra_params
+    normalized = json.loads(prefs_path.read_text(encoding="utf-8"))
+    assert "llm_extra_params" not in normalized
+    assert normalized["llm_chat_extra_params"] == legacy
+    assert normalized["llm_speaker_assign_extra_params"] == legacy
+
+
+def test_llm_extra_params_are_independent_and_round_trip(
+    prefs_path: Path,
+) -> None:
+    # Once the per-feature keys exist, a stray legacy value no longer applies
+    prefs_path.write_text(json.dumps({
+        "llm_extra_params": {"legacy": True},
+        "llm_chat_extra_params": {"thinking": {"type": "disabled"}},
+        "llm_speaker_assign_extra_params": {"thinking": {"type": "enabled"}},
+    }), encoding="utf-8")
+
+    prefs = Prefs.load()
+
+    assert prefs.llm_chat_extra_params == {"thinking": {"type": "disabled"}}
+    assert prefs.llm_speaker_assign_extra_params == {"thinking": {"type": "enabled"}}
+
+
+def test_invalid_llm_extra_params_are_normalized_to_empty(
+    prefs_path: Path,
+) -> None:
+    prefs_path.write_text(json.dumps({
+        "llm_chat_extra_params": "bad",
+        "llm_speaker_assign_extra_params": [1],
+    }), encoding="utf-8")
+
+    prefs = Prefs.load()
+
+    assert prefs.llm_chat_extra_params == {}
+    assert prefs.llm_speaker_assign_extra_params == {}
+    normalized = json.loads(prefs_path.read_text(encoding="utf-8"))
+    assert normalized["llm_chat_extra_params"] == {}
+    assert normalized["llm_speaker_assign_extra_params"] == {}

@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tts_audiobook_tool.app_types import Book, BookSection, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types import (
     ExportType,
     HighShelfEq,
@@ -14,7 +14,6 @@ from tts_audiobook_tool.app_types import (
     RoomReverbStereo,
     RoomTone,
     SectionMarkerMode,
-    VoiceSelectMode,
 )
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.voice import Voice
@@ -186,21 +185,16 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Channel output: Stereo",
     ]
     project.voice_references = [Voice("a.flac", pan=-0.3), Voice("b.flac")]
-    project.voice_select_mode = VoiceSelectMode.USER_DEFINED
     assert plain_option_lines(state) == [
         "  - Stereo position: Varies by voice", "  - Channel output: Stereo",
     ]
 
     # Each voice's own room is applied; differing voices are summarized
-    project.voice_select_mode = VoiceSelectMode.USER_DEFINED
     project.voice_references = [Voice("a.flac", room_reverb=RoomReverb.SMALL_DRR22), Voice("b.flac")]
     assert plain_option_lines(state) == [
         "  - Room reverb: Varies by voice", "  - Room reverb stereo effect: Wide", "  - Channel output: Stereo",
     ]
-    # ... but only voice 0 is heard outside user-defined voice selection
-    project.voice_select_mode = VoiceSelectMode.AUTO_ADVANCE
-    assert plain_option_lines(state)[0] == "  - Room reverb: Small room, light"
-    project.voice_references = [Voice("a.flac"), Voice("b.flac", room_reverb=RoomReverb.SMALL_DRR22)]
+    project.voice_references = [Voice("a.flac"), Voice("b.flac")]
     assert plain_option_lines(state) == ["  - Channel output: Mono"]
 
 
@@ -322,13 +316,33 @@ def test_concat_menu_always_shows_generative_upsampling() -> None:
         return_value=[],
     ), patch.object(LavaSrUtil, "has_lava_sr", return_value=False):
         ConcatMenu.menu(state)
-        assert menu.call_args.args[1] == "Create audiobook file/s"
+        assert get_string_from(state, menu.call_args.args[1]) == "Create audiobook file"
         assert menu.call_args.kwargs.get("breadcrumb") is None
         make_items = menu.call_args.args[2]
         items = make_items(state)
 
     labels = [get_string_from(state, item.label) for item in items]
     assert any(label.startswith("Generative upsampling") for label in labels)
+
+
+@pytest.mark.parametrize(
+    ("chapter_mode", "markers", "expected"),
+    [
+        (SectionMarkerMode.FILES, [], "Create audiobook file"),
+        (SectionMarkerMode.FILES, [1], "Create audiobook files"),
+        # Bookmark-mode markers still produce a single file
+        (SectionMarkerMode.BOOKMARKS, [1], "Create audiobook file"),
+    ],
+)
+def test_concat_menu_heading_pluralizes_by_output_file_count(chapter_mode, markers, expected) -> None:
+    project = SimpleNamespace(
+        chapter_mode=chapter_mode,
+        markers=markers,
+        phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
+    )
+    state = cast(State, SimpleNamespace(project=project))
+
+    assert concat_menu.make_concat_menu_heading(state) == expected
 
 
 def test_pause_timing_rules_menu_offers_limit_silence_gaps() -> None:

@@ -26,7 +26,10 @@ The browser player currently receives timed text segments without explicit `Reas
 metadata. When break audio is present, `browser_player/book-text.js` infers
 horizontal rule placement from displayed text ending with three or more line feeds. This
 means section-like display is currently coupled to whitespace rather than an explicit
-semantic marker in app metadata.
+semantic marker in app metadata. As a temporary workaround for that coupling, a trailing
+non-vocalizable line which opens with a quote mark (a silent dialog beat such as `“…”`)
+is kept as segment text rather than becoming a divider, mirroring
+`app_text.is_ornamental_line`.
 
 ## Break sound effect rules (render time)
 

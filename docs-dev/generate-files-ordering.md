@@ -6,12 +6,12 @@ Related documents:
 
 - [`tts-validation-architecture.md`](tts-validation-architecture.md) — what happens *after* each call returns (transcription, word-error validation, retry criteria)
 - [`tts-rolling-continuation-clear-architecture.md`](tts-rolling-continuation-clear-architecture.md) — rolling-continuation reset points, including the voice-sample-switch reset used by the loop described here
-- [`dialog-segmentation.md`](dialog-segmentation.md) — how dialog lines get pre-assigned voice indices (`DIALOG_VOICE_INDEX`)
-- [Project Spec v5](<project-spec-v5.md>) — project-wide voice selection mode and shared ordered voice-reference pairs
+- [`dialog-segmentation.md`](dialog-segmentation.md) — how dialog lines are detected and flagged (`is_dialog`); voices are assigned separately
+- [Project Spec v5](<project-spec-v5.md>) — shared ordered voice-reference pairs
 
 ## The hard constraint
 
-A single model call can use exactly **one voice** — one `Voice` slot of the project's `voice_references` list (project spec v5). Everything generation-relevant about a voice is per slot and is resolved by the model from the call's `voice_selection_index`: sample/crop, transcript, and per-model `instructions` (eg Qwen3-TTS VoiceDesign/CustomVoice, OmniVoice). So "same slot index" is exactly "same generation settings", and the slot index is the sub-batch key. (`pan` and `room_reverb` are per voice too but are applied at playback/export, not at generation, so they don't constrain batching.) In user-defined voice selection mode, a line's voice is fixed per line, so one call can never mix lines from different voices. Everything below is built around that constraint.
+A single model call can use exactly **one voice** — one `Voice` slot of the project's `voice_references` list (project spec v5). Everything generation-relevant about a voice is per slot and is resolved by the model from the call's `voice_selection_index`: sample/crop, transcript, and per-model `instructions` (eg Qwen3-TTS VoiceDesign/CustomVoice, OmniVoice). So "same slot index" is exactly "same generation settings", and the slot index is the sub-batch key. (`pan` and `room_reverb` are per voice too but are applied at playback/export, not at generation, so they don't constrain batching.) A line's voice is fixed per line (its phrase group's `voice_index`, clamped), so one call can never mix lines from different voices. Everything below is built around that constraint.
 
 ## Scheduling vocabulary
 
@@ -20,7 +20,7 @@ The queue consumed by `generate_files()` has three levels:
 | term | definition |
 |---|---|
 | item | `(phrase_group_index, retry_count)` tuple |
-| sub-batch | [`SubBatch`](../tts_audiobook_tool/generate_util.py:47): up to `batch_size` items that all use the *same* voice sample (`voice_selection_index`), or no explicit voice (`None`) so the mode logic inside [`GenerateUtil.generate()`](../tts_audiobook_tool/generate_util.py:609) resolves it. **One sub-batch = one model call.** |
+| sub-batch | [`SubBatch`](../tts_audiobook_tool/generate_util.py:47): up to `batch_size` items that all use the *same* voice sample (`voice_selection_index`), or no explicit voice (`None`) so [`GenerateUtil.generate()`](../tts_audiobook_tool/generate_util.py:609) resolves it from the single line's assignment. **One sub-batch = one model call.** |
 | round | a list of sub-batches — a "batch of batches". A round is executed to completion before the next round starts. |
 | queue | a FIFO list of rounds. |
 
@@ -29,21 +29,21 @@ For single-voice projects a round holds exactly one sub-batch, so the shape dege
 ## Job voice pre-flight
 
 Before submission, `ProjectVoiceUtil.get_job_voice_indices(project, phrase_indices)`
-resolves the voice slots needed by the actual queued lines: Disabled checks voice 1;
-User-defined checks distinct effective assignments (including the usual clamp of
-unassigned/stale indices); Auto-advance checks every voice. The same pure clamp is
-used by `GenerateUtil.generate()` and `effective_voice_indices()`, so pre-flight
-and inference agree. Empty sample slots retain their indices and are never filtered
-out of the shared list. Unused voices neither block the job nor trigger transcript
-repair. Auto-advance intentionally checks all slots rather than predicting which
-ones batching/retries might reach. See [Project Spec v5](<project-spec-v5.md>).
+resolves the voice slots needed by the actual queued lines: the distinct effective
+assignments (including the usual clamp of stale indices via
+`ProjectVoiceUtil.get_effective_voice_index`). Chat and literal previews
+(`phrase_indices=None`) need voice 1 only; an empty job needs none. The same pure
+clamp is used by `GenerateUtil.generate()` and `effective_voice_indices()`, so
+pre-flight and inference agree. Empty sample slots retain their indices and are
+never filtered out of the shared list. Unused voices neither block the job nor
+trigger transcript repair. See [Project Spec v5](<project-spec-v5.md>).
 
 ## Queue construction
 
 `generate_files()` starts from `items`: the queued indices sorted in book order, each with retry count 0 ([generate_files()](../tts_audiobook_tool/generate_util.py:111)). It then picks one of two builders:
 
 ```
-batch_size > 1  AND  voice_select_mode == USER_DEFINED  AND  model has a voice binding?
+batch_size > 1  AND  model has a voice binding?
 ├── yes → make_multi_voice_rounds(items, ..., voice_of_index, sort_by_words = not is_cjk)
 └── no  → bucket_items(items, ...)            # only if batch_size > 1 and not CJK
           make_single_voice_rounds(items, batch_size)
@@ -51,12 +51,12 @@ batch_size > 1  AND  voice_select_mode == USER_DEFINED  AND  model has a voice b
 
 The gate is `ProjectVoiceUtil.get_voice_values()` being non-empty, ie the model has a voice binding (every batchable model does); the voice list is never empty (`ensure_voice_slot`), and it has one entry per slot whether or not that slot has a sample. Sample-less voices therefore still get per-voice sub-batches — required, since they can differ by instructions alone (eg several Qwen3-TTS VoiceDesign voices).
 
-`voice_of_index` comes from [`effective_voice_indices()`](../tts_audiobook_tool/generate_util.py:1028), which maps each queued line to the voice sample index the call will actually use: a per-line selection of `-1` (no explicit assignment) or a stale out-of-range value is clamped to the nearest valid sample index.
+`voice_of_index` comes from [`effective_voice_indices()`](../tts_audiobook_tool/generate_util.py:1028), which maps each queued line to the voice sample index the call will actually use: a stale out-of-range per-line selection is clamped to the nearest valid sample index.
 
 ### The single-voice shape (`make_single_voice_rounds` + `bucket_items`)
 
 - [`bucket_items()`](../tts_audiobook_tool/generate_util.py:987) reorders the flat list in **windows of `batch_size × 5`** items (`BATCH_ITERATIONS_PER_GROUP` = 5). Within each window, items are sorted by phrase-group word count — longest-first in one window, shortest-first in the next, alternating per window. The windowed alternation is what preserves a "semblance" of index monotonicity: always-sorting-longest-first would make long lines systematically drift to the front of every window; alternating cancels that drift over every pair of windows, so a line's *expected* position in the execution order stays centered on its book position.
-- [`make_single_voice_rounds()`](../tts_audiobook_tool/generate_util.py:1045) then chunks the (reordered) list into sub-batches of `batch_size` with `voice_selection_index=None`. The voice for each call is resolved later by the mode logic in `generate()` (disabled mode → sample 1; auto-advance → rotation).
+- [`make_single_voice_rounds()`](../tts_audiobook_tool/generate_util.py:1045) then chunks the (reordered) list into sub-batches of `batch_size` with `voice_selection_index=None`. The voice for each call is resolved later in `generate()`: the single line's clamped assignment (`GenerateUtil.get_line_voice_index`), or index 0 when the model has no voice values. Sub-batches on this path hold one item whenever the model has a voice binding (`batch_size == 1`).
 - CJK projects skip `bucket_items` entirely: no word-count sorting is meaningful for word-count-based packing, and the lines keep pure book order. `batch_size == 1` also skips it (there is nothing to pack).
 
 ### The multi-voice shape (`make_multi_voice_rounds`)
@@ -118,8 +118,8 @@ The design contract in one sentence: *worst case is bounded by the window width,
 
 ## Invariants worth preserving
 
-- Disabled or auto-advance mode, `batch_size == 1`, or a model without a voice binding take the `bucket_items` + `make_single_voice_rounds` path, which reproduces the pre-multi-voice flat queue byte-for-byte. Changes to the multi-voice path must not leak into that one. A user-defined project with no voice samples is *not* on that path (its slots may carry distinct instructions); with a single slot the multi-voice path produces the same order anyway (next invariant).
+- `batch_size == 1` or a model without a voice binding take the `bucket_items` + `make_single_voice_rounds` path, which reproduces the pre-multi-voice flat queue byte-for-byte. Changes to the multi-voice path must not leak into that one. A project with no voice samples is *not* on that path when the model has a voice binding (its slots may carry distinct instructions); with a single distinct voice the multi-voice path produces the same order as the flat path anyway (next invariant).
 - The sub-batch key is the voice slot index alone. If a future per-voice property affects generation, it must be resolved from `voice_selection_index` inside the model call (as `instructions` is), never per line, or batches would stop being homogeneous.
 - `make_multi_voice_rounds()` returns `[]` for empty input; with one distinct voice it is equivalent to the single-voice path (window collapses to `batch_size × 5`).
 - `voice_of_index` is computed once up front from the *queued* indices, so a line's voice for the whole run — including retry rounds — is fixed at queue-build time.
-- `generate()` raises a `ValueError` if handed a multi-item user-defined batch without an explicit `voice_selection_index` (a logic error, guarding against a future caller bypassing the sub-batch split).
+- `generate()` raises a `ValueError` if handed a multi-item batch with voice values but without an explicit `voice_selection_index` (a logic error, guarding against a future caller bypassing the sub-batch split).

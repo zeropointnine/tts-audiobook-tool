@@ -58,7 +58,8 @@ class Prefs(Saveable):
             llm_model: str = "",
             llm_system_prompt: str = "",
             system_prompt_preset: str = CHAT_SYSTEM_PROMPTS[0][0],
-            llm_extra_params: dict = {},
+            llm_chat_extra_params: dict = {},
+            llm_speaker_assign_extra_params: dict = {},
             last_voice_dir: str = "",
             last_project_dir: str = "",
             last_text_dir: str = "",
@@ -97,7 +98,10 @@ class Prefs(Saveable):
         self._llm_model = llm_model
         self._llm_system_prompt = llm_system_prompt
         self._system_prompt_preset = system_prompt_preset
-        self._llm_extra_params = llm_extra_params
+        # Separate per feature: eg chat wants fast replies (thinking off),
+        # while speaker assignment benefits from reasoning
+        self._llm_chat_extra_params = llm_chat_extra_params
+        self._llm_speaker_assign_extra_params = llm_speaker_assign_extra_params
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
@@ -328,10 +332,26 @@ class Prefs(Saveable):
             system_prompt_preset = system_prompt_preset_default
             dirty = True
 
-        llm_extra_params = prefs_dict.get("llm_extra_params", {})
-        if not isinstance(llm_extra_params, dict):
-            llm_extra_params = {}
+        # LLM extra params, per feature. Migration: the legacy shared
+        # "llm_extra_params" value seeds both (the legacy key is dropped on re-save)
+        legacy_llm_extra_params = prefs_dict.get("llm_extra_params", None)
+        if legacy_llm_extra_params is not None:
             dirty = True
+        if not isinstance(legacy_llm_extra_params, dict):
+            legacy_llm_extra_params = {}
+
+        def load_extra_params(key: str) -> dict:
+            nonlocal dirty
+            if key not in prefs_dict:
+                return dict(legacy_llm_extra_params)
+            value = prefs_dict[key]
+            if not isinstance(value, dict):
+                dirty = True
+                return {}
+            return value
+
+        llm_chat_extra_params = load_extra_params("llm_chat_extra_params")
+        llm_speaker_assign_extra_params = load_extra_params("llm_speaker_assign_extra_params")
 
         # Max retries
         max_retries = prefs_dict.get("max_retries", PROJECT_MAX_RETRIES_DEFAULT)
@@ -449,7 +469,8 @@ class Prefs(Saveable):
             llm_model=llm_model,
             llm_system_prompt=llm_system_prompt,
             system_prompt_preset=system_prompt_preset,
-            llm_extra_params=llm_extra_params,
+            llm_chat_extra_params=llm_chat_extra_params,
+            llm_speaker_assign_extra_params=llm_speaker_assign_extra_params,
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
@@ -652,14 +673,26 @@ class Prefs(Saveable):
         self._system_prompt_preset = value
 
     @property
-    def llm_extra_params(self) -> dict:
-        return self._llm_extra_params
+    def llm_chat_extra_params(self) -> dict:
+        """Extra LLM request params for the LLM Chat feature."""
+        return self._llm_chat_extra_params
 
-    @llm_extra_params.setter
-    def llm_extra_params(self, value: dict) -> None:
+    @llm_chat_extra_params.setter
+    def llm_chat_extra_params(self, value: dict) -> None:
         if not isinstance(value, dict):
             value = {}
-        self._llm_extra_params = value
+        self._llm_chat_extra_params = value
+
+    @property
+    def llm_speaker_assign_extra_params(self) -> dict:
+        """Extra LLM request params for the Auto-assign character voices feature."""
+        return self._llm_speaker_assign_extra_params
+
+    @llm_speaker_assign_extra_params.setter
+    def llm_speaker_assign_extra_params(self, value: dict) -> None:
+        if not isinstance(value, dict):
+            value = {}
+        self._llm_speaker_assign_extra_params = value
 
     @property
     def last_voice_dir(self) -> str:
@@ -756,7 +789,8 @@ class Prefs(Saveable):
                 "llm_model": self._llm_model,
                 "llm_system_prompt": self._llm_system_prompt,
                 "system_prompt_preset": self._system_prompt_preset,
-                "llm_extra_params": self._llm_extra_params,
+                "llm_chat_extra_params": self._llm_chat_extra_params,
+                "llm_speaker_assign_extra_params": self._llm_speaker_assign_extra_params,
                 "last_voice_dir": self._last_voice_dir,
                 "last_project_dir": self._last_project_dir,
                 "last_text_dir": self._last_text_dir,

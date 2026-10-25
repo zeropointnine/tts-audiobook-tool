@@ -88,7 +88,7 @@ def test_book_load_rejects_corrupt_and_unsupported_payloads(tmp_path: Path) -> N
     artifacts.book_path.write_text('{"format": "book.v1", "book": {}}', encoding="utf-8")
     loaded, error = load_book(artifacts)
     assert loaded is None
-    assert "book.v2" in error
+    assert "book.v3" in error
 
     assert save_book(artifacts, make_book("legacy_flat")) == ""
     loaded, error = load_book(artifacts)
