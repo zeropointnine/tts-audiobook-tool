@@ -4,7 +4,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
 from tts_audiobook_tool.menus.section_markers_menu import SectionMarkersMenu
-from tts_audiobook_tool.menus.menu_shared import make_output_files_subheading, make_output_range_info_strings
+from tts_audiobook_tool.menus.menu_shared import make_concat_menu_heading, make_output_files_subheading, make_output_range_info_strings
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -171,7 +171,7 @@ class ConcatMenu:
 
             return items
 
-        MenuUtil.menu(state, "Create audiobook file/s", make_items, subheading=make_output_files_subheading)
+        MenuUtil.menu(state, make_concat_menu_heading, make_items, subheading=make_output_files_subheading)
 
     @staticmethod
     def file_type_menu(state: State) -> None:

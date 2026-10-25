@@ -316,13 +316,33 @@ def test_concat_menu_always_shows_generative_upsampling() -> None:
         return_value=[],
     ), patch.object(LavaSrUtil, "has_lava_sr", return_value=False):
         ConcatMenu.menu(state)
-        assert menu.call_args.args[1] == "Create audiobook file/s"
+        assert get_string_from(state, menu.call_args.args[1]) == "Create audiobook file"
         assert menu.call_args.kwargs.get("breadcrumb") is None
         make_items = menu.call_args.args[2]
         items = make_items(state)
 
     labels = [get_string_from(state, item.label) for item in items]
     assert any(label.startswith("Generative upsampling") for label in labels)
+
+
+@pytest.mark.parametrize(
+    ("chapter_mode", "markers", "expected"),
+    [
+        (SectionMarkerMode.FILES, [], "Create audiobook file"),
+        (SectionMarkerMode.FILES, [1], "Create audiobook files"),
+        # Bookmark-mode markers still produce a single file
+        (SectionMarkerMode.BOOKMARKS, [1], "Create audiobook file"),
+    ],
+)
+def test_concat_menu_heading_pluralizes_by_output_file_count(chapter_mode, markers, expected) -> None:
+    project = SimpleNamespace(
+        chapter_mode=chapter_mode,
+        markers=markers,
+        phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
+    )
+    state = cast(State, SimpleNamespace(project=project))
+
+    assert concat_menu.make_concat_menu_heading(state) == expected
 
 
 def test_pause_timing_rules_menu_offers_limit_silence_gaps() -> None:

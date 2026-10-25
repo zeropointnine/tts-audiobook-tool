@@ -5,7 +5,7 @@ from typing import cast
 import pytest
 
 from tts_audiobook_tool.app_types.voice import Voice
-from tts_audiobook_tool.menus.menu_util import MenuUtil, get_string_from
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, get_string_from
 from tts_audiobook_tool.menus.speaker_assign import voices_menu
 from tts_audiobook_tool.menus.speaker_assign.voices_menu import (
     make_apply_preview,
@@ -79,6 +79,38 @@ def test_voice_submenu_lists_voices_then_clear_and_reports_choice(monkeypatch) -
     for item in items:
         item.handler(state, item)
     assert chosen == [0, 1, None]
+
+
+def test_character_pages_chain_through_more_and_repeat_actions(monkeypatch) -> None:
+    # Each page lists a page's worth of characters, then "More characters..."
+    # while any are left (it opens the next page), then the same action items.
+    menus = []
+    monkeypatch.setattr(MenuUtil, "menu", lambda state, **kwargs: menus.append(kwargs))
+    monkeypatch.setattr(voices_menu, "CHARACTERS_PER_PAGE", 2)
+    state = make_state()
+    roster = characters("A", "B", "C", "D", "E")
+
+    def labels(menu: dict) -> list[str]:
+        return [strip_ansi_codes(get_string_from(state, item.label)) for item in menu["items"](state)]
+
+    def make_item(character: RosterCharacter) -> MenuItem:
+        return MenuItem(character.id, lambda _, __: None)
+
+    def make_action_items() -> list[MenuItem]:
+        return [MenuItem("Set all to...", lambda _, __: None), MenuItem("Apply", lambda _, __: None)]
+
+    voices_menu.characters_page_menu(state, roster, 0, make_item, make_action_items, "desc")
+    while labels(menus[-1])[-3].startswith("More characters"):
+        more = menus[-1]["items"](state)[-3]
+        more.handler(state, more)
+
+    assert [labels(menu) for menu in menus] == [
+        ["A", "B", "More characters... (3)", "Set all to...", "Apply"],
+        ["C", "D", "More characters... (1)", "Set all to...", "Apply"],
+        ["E", "Set all to...", "Apply"],
+    ]
+    assert [menu["subheading"] for menu in menus] == ["desc", "", ""]
+    assert strip_ansi_codes(menus[2]["heading"]) == "Assign voices to characters (5-5 of 5)"
 
 
 def make_apply_state():

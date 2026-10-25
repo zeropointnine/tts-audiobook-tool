@@ -209,12 +209,10 @@ class SectionMarkersEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         asterisk = "*" if is_marked else " "
         prefix_ansi = f"{number_color}{self.format_line_number(item.phrase_index + 1)}{asterisk} {COL_DEFAULT}"
         phrase_group = self.project.phrase_groups[item.phrase_index]
-        return HangingIndentText.from_ansi_prefix(
-            f"{prefix_ansi}{Ansi.RESET}",
-            phrase_group.presentable_text,
-            max_lines=3,
-            style=style,
-        )
+        text = Text.from_ansi(f"{prefix_ansi}{Ansi.RESET}")
+        content_start = len(text.plain)
+        text.append(Text.from_ansi(phrase_group.presentable_text_lf_ansi))
+        return HangingIndentText(text, content_start, max_lines=3, style=style)
 
     def action_toggle_marker(self) -> None:
         """Toggle the section marker on the highlighted phrase row."""

@@ -20,7 +20,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
 from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
-from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.project_support.project_voice_util import VOICE_NAME_MAX_LENGTH, ProjectVoiceUtil
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -1059,7 +1059,7 @@ class VoiceMenuShared:
         An invalid name (not one word, or not unique) is reported and not saved."""
         current = state.project.voice_references[index].name
         printt("Enter a name for this voice:")
-        printt(f"{COL_DIM}(One word, no spaces)")
+        printt(f"{COL_DIM}(One word, no spaces, up to {VOICE_NAME_MAX_LENGTH} characters)")
         value = ask.ask_input(lower=False, prefill=current).strip()
         if not value or value == current:
             return

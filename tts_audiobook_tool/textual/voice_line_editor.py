@@ -25,6 +25,10 @@ from tts_audiobook_tool.textual.textual_shared import (
     dialog_marker,
     has_dialog_detection,
 )
+from tts_audiobook_tool.textual.voice_select_dialog import (
+    VoiceSelectDialog,
+    make_voice_select_title,
+)
 from tts_audiobook_tool.util import make_error_string
 
 # The editor title intentionally matches the voice menu item label that opens it
@@ -74,6 +78,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         # Shares the "m" key with the base manual-selection binding, which
         # check_action disables, so this one runs instead
         Binding("m", "show_multi_select", show=False),
+        Binding("v", "show_voice_select", show=False),
     ]
 
     def __init__(
@@ -95,7 +100,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             f"{COL_ACCENT}{TITLE_EDIT_VOICE_SELECTIONS}",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
             f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Multi-select",
-            f"{COL_DIM}- Use number keys [{COL_ACCENT}1{COL_DIM}] to [{COL_ACCENT}{highest_voice_key}{COL_DIM}] to set voice sample for selected text line/s",
+            f"{COL_DIM}- Use keys [{COL_ACCENT}1{COL_DIM}] to [{COL_ACCENT}{highest_voice_key}{COL_DIM}] to set voice sample for selected lines  - [{COL_ACCENT}V{COL_DIM}] Voice list dialog",
             f"{COL_DIM}- Press [ESC] to finish",
         ]
         super().__init__(
@@ -291,6 +296,40 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
                 if voice_index == result
             }
         )
+
+    def action_show_voice_select(self) -> None:
+        """Show the voice list dialog, which assigns the entered voice to the
+        selected lines (and reaches voices beyond the 1-9 number keys)."""
+        if (
+            not self.content_initialized
+            or self.find_active
+            or self.voice_sample_count <= 0
+        ):
+            return
+        phrase_indices = sorted(self.selected_content_line_indices())
+        if not phrase_indices:
+            return
+        current_voice_index = (
+            self.staged_voice_indices[phrase_indices[0]]
+            if len(phrase_indices) == 1
+            else None
+        )
+        voice_names = [
+            self.voice_names[index] if index < len(self.voice_names) else ""
+            for index in range(self.voice_sample_count)
+        ]
+        self.push_screen(
+            VoiceSelectDialog(
+                make_voice_select_title([index + 1 for index in phrase_indices]),
+                voice_names,
+                current_voice_index,
+            ),
+            self.handle_voice_select,
+        )
+
+    def handle_voice_select(self, voice_index: int | None) -> None:
+        if voice_index is not None:
+            self.action_assign_voice(voice_index)
 
     def action_assign_voice(self, voice_index: int) -> None:
         """Assign an available voice sample to all selected phrase groups."""

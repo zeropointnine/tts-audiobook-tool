@@ -32,8 +32,10 @@ def _settings_registry():
 # Max length of instruction previews (voice list, submenu items, status block)
 INSTRUCTIONS_PREVIEW_LENGTH = 40
 
-# User-facing voice name (`Voice.name`) validation messages
+# User-facing voice name (`Voice.name`) validation
+VOICE_NAME_MAX_LENGTH = 12
 VOICE_NAME_ONE_WORD_ERROR = "Name must be one word (no spaces)"
+VOICE_NAME_TOO_LONG_ERROR = f"Name must be at most {VOICE_NAME_MAX_LENGTH} characters"
 VOICE_NAME_UNIQUE_ERROR = "Name must be unique"
 
 VoiceSourceKind = Literal["preset", "sample", "instructions", "builtin", "missing"]
@@ -793,10 +795,13 @@ class ProjectVoiceUtil:
     @staticmethod
     def get_voice_name_error(project: Project, index: int, name: str) -> str:
         """Why `name` can't be voice `index`'s name, or "". A name is one word
-        (no whitespace) and unique among the project's voices. Empty is valid (unset)."""
+        (no whitespace), at most `VOICE_NAME_MAX_LENGTH` characters, and unique
+        among the project's voices. Empty is valid (unset)."""
         name = name.strip()
         if any(char.isspace() for char in name):
             return VOICE_NAME_ONE_WORD_ERROR
+        if len(name) > VOICE_NAME_MAX_LENGTH:
+            return VOICE_NAME_TOO_LONG_ERROR
         if ProjectVoiceUtil.is_voice_name_taken(project, index, name):
             return VOICE_NAME_UNIQUE_ERROR
         return ""

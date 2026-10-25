@@ -9,7 +9,9 @@ from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.voice import voice_menu_shared as menu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import (
+    VOICE_NAME_MAX_LENGTH,
     VOICE_NAME_ONE_WORD_ERROR,
+    VOICE_NAME_TOO_LONG_ERROR,
     VOICE_NAME_UNIQUE_ERROR,
     ProjectVoiceUtil,
 )
@@ -106,6 +108,9 @@ def test_name_taken_ignores_own_voice_case_and_whitespace():
     ("Big Bob", VOICE_NAME_ONE_WORD_ERROR),
     ("Big\tBob", VOICE_NAME_ONE_WORD_ERROR),
     ("narrator", VOICE_NAME_UNIQUE_ERROR),
+    ("x" * VOICE_NAME_MAX_LENGTH, ""),
+    (" " + "x" * VOICE_NAME_MAX_LENGTH + " ", ""),  # length is measured after stripping
+    ("x" * (VOICE_NAME_MAX_LENGTH + 1), VOICE_NAME_TOO_LONG_ERROR),
 ])
 def test_voice_name_error(name, error):
     project = Project(tts_model_type="omnivoice_local", voice_references=[

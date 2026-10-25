@@ -72,9 +72,6 @@ def voices_menu(state: State) -> None:
         subheading += f"\n\n{COL_ERROR}The roster has no characters"
     elif not attributions.ranges:
         subheading += f"\n\n{COL_DIM}No dialog has been assigned to characters yet (step 2)."
-    elif hidden_count := len(roster_characters) - len(characters):
-        subheading += (f"\n\n{COL_DIM}{hidden_count} {make_noun('character', 'characters', hidden_count)} "
-                       f"with no assigned dialog not shown.")
 
     def on_character(_: State, item: MenuItem) -> None:
         character_id: str = item.data
@@ -96,30 +93,61 @@ def voices_menu(state: State) -> None:
             on_select=lambda index: save(VoiceMapFile.all_set_to(ids, index)),
         )
 
-    def items_maker(_: State) -> list[MenuItem]:
-        items = [
-            MenuItem(
-                make_character_label(state, character.id, counts[character.id], voice_map.get(character.id)),
-                on_character,
-                data=character.id,
-            )
-            for character in characters
-        ]
-        items.append(MenuItem("Set all to...", on_set_all))
-        items.append(MenuItem(
-            "Apply",
-            lambda _, __: run_apply(state, characters, attributions, voice_map),
-            blank_line_before=True,
-        ))
-        return items
+    def make_item(character: RosterCharacter) -> MenuItem:
+        return MenuItem(
+            make_character_label(state, character.id, counts[character.id], voice_map.get(character.id)),
+            on_character,
+            data=character.id,
+        )
 
-    MenuUtil.menu(
-        state,
-        heading="Assign voices to characters",
-        items=items_maker,
-        subheading=subheading,
-        breadcrumb="Assign voices to characters",
-    )
+    def make_action_items() -> list[MenuItem]:
+        return [
+            MenuItem("Set all to...", on_set_all),
+            MenuItem(
+                "Apply",
+                lambda _, __: run_apply(state, characters, attributions, voice_map),
+                blank_line_before=True,
+            ),
+        ]
+
+    characters_page_menu(state, characters, 0, make_item, make_action_items, subheading)
+
+
+def characters_page_menu(
+        state: State,
+        characters: list[RosterCharacter],
+        start: int,
+        make_item: Callable[[RosterCharacter], MenuItem],
+        make_action_items: Callable[[], list[MenuItem]],
+        subheading: str,
+) -> None:
+    """One page of the character list: up to CHARACTERS_PER_PAGE characters,
+    then "More characters..." (opens the next page as a submenu) when any are
+    left, then the action items, which every page repeats. Paging keeps the
+    menu within the hotkeys available; the list is sorted by dialog count, so
+    the later pages hold the minor speakers."""
+    page = characters[start:start + CHARACTERS_PER_PAGE]
+    end = start + len(page)
+    remaining = len(characters) - end
+
+    def items_maker(_: State) -> list[MenuItem]:
+        items = [make_item(character) for character in page]
+        if remaining:
+            items.append(MenuItem(
+                f"More characters... {COL_DIM}({remaining:,})",
+                lambda _, __: characters_page_menu(state, characters, end, make_item, make_action_items, subheading),
+            ))
+        return items + make_action_items()
+
+    if start == 0:
+        heading = breadcrumb = "Assign voices to characters"
+    else:
+        # The description is only shown on the first page
+        subheading = ""
+        breadcrumb = f"Characters {start + 1:,}-{end:,}"
+        heading = f"Assign voices to characters {COL_DIM}({start + 1:,}-{end:,} of {len(characters):,})"
+
+    MenuUtil.menu(state, heading=heading, items=items_maker, subheading=subheading, breadcrumb=breadcrumb)
 
 
 def run_apply(
@@ -233,16 +261,21 @@ def sort_characters(
 
 def make_character_label(state: State, character_id: str, count: int, voice_index: int | None) -> str:
     """Eg "BOB (50) -> Voice 1 bob"; just "BOB (50)" when no voice is chosen."""
-    label = f"{COL_ACCENT}{character_id} {COL_DEFAULT}({count:,})"
+    label = f"{COL_DEFAULT}{character_id} {COL_DIM}({count:,})"
     if voice_index is None:
         return label
+    label += f" {COL_DEFAULT}->"
     voice_references = state.project.voice_references
     if voice_index >= len(voice_references):
         # Eg the voice was removed after it was chosen
-        return label + f" -> {COL_ERROR}Voice {voice_index + 1} (missing)"
+        return label + f" {COL_ERROR}Voice {voice_index + 1} (missing)"
     title = VoiceMenuShared.make_voice_title(voice_references[voice_index], voice_index)
-    return label + f" -> {COL_ACCENT}{title}"
+    return label + f" {COL_ACCENT}{title}"
 
+
+# Characters listed per page: the 35 auto-assigned hotkeys (1-9, a-z) minus
+# "More characters...", "Set all to..." and "Apply", so a full page ends on "Z"
+CHARACTERS_PER_PAGE = 32
 
 VOICES_DESC = \
 """Choose voices for whichever characters you like (the rest are left as-is).

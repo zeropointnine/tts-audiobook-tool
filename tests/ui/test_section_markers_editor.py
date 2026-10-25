@@ -98,6 +98,22 @@ def test_editor_omits_heading_for_a_single_section() -> None:
     assert app.list_items == [SectionMarkersPhraseGroupItem(0)]
     assert str(app.format_line(0)) == "00001  One."
 
+def test_phrase_rows_show_line_feeds_as_dim_nonbreaking_tokens() -> None:
+    # Line feeds render as visible "↵" tokens, like the other editor apps,
+    # while find text still matches the flattened presentable text.
+    phrase_group = PhraseGroup(
+        [
+            Phrase("  One\t\n", Reason.SENTENCE),
+            Phrase("\nTwo\r Three.  ", Reason.SENTENCE),
+        ]
+    )
+    app = make_loaded_editor(make_project([BookSection(phrase_groups=[phrase_group])]))
+
+    plain_text = str(app.format_line(0))
+
+    assert plain_text == "00001  One↵\N{NO-BREAK SPACE}↵\N{NO-BREAK SPACE}Two Three."
+    assert app.find_text_strings(0) == ["00001", "One Two Three."]
+
 def test_markers_panel_text_enumerates_current_markers() -> None:
     app, _ = make_markers_editor(
         [

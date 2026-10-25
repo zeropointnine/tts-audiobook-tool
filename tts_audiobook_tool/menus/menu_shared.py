@@ -4,6 +4,18 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
 
+def get_num_output_files(state: State) -> int:
+    """Number of audiobook files the concat step produces with the current markers."""
+    if state.project.chapter_mode != SectionMarkerMode.FILES:
+        return 1
+    return len(make_file_line_ranges(state.project.markers, len(state.project.phrase_groups)))
+
+
+def make_concat_menu_heading(state: State) -> str:
+    noun = "files" if get_num_output_files(state) > 1 else "file"
+    return f"Create audiobook {noun}"
+
+
 def make_output_files_subheading(state: State) -> str:
 
     if state.project.chapter_mode != SectionMarkerMode.FILES:

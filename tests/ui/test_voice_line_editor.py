@@ -16,6 +16,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
 from tts_audiobook_tool.textual.manual_selection_dialog import ManualSelectionDialog
 from tts_audiobook_tool.textual.multi_select_dialog import MultiSelectDialog
 from tts_audiobook_tool.textual.textual_shared import NonWrappingOptionList
+from tts_audiobook_tool.textual.voice_select_dialog import VoiceSelectDialog
 from tts_audiobook_tool.textual.voice_line_editor import (
     VoiceLineEditorTextualApp,
     VoiceLinePhraseGroupItem,
@@ -104,7 +105,8 @@ def test_header_limits_voice_key_range_to_available_samples() -> None:
     assert all(isinstance(line, str) for line in app.header_lines)
     assert all(not line.endswith(Ansi.RESET) for line in app.header_lines)
     assert Text.from_ansi(app.header_lines[3]).plain == (
-        "- Use number keys [1] to [2] to set voice sample for selected text line/s"
+        "- Use keys [1] to [2] to set voice sample for selected lines"
+        "  - [V] Voice list dialog"
     )
 
 
@@ -631,6 +633,34 @@ def test_choosing_voice_selects_all_its_lines(keys: tuple[str, ...]) -> None:
             assert app.selected_indices == {0, 2, 3}
             await pilot.press("2")
             assert app.staged_voice_indices == [1, 1, 1, 1]
+
+    run(exercise())
+
+
+def test_v_opens_voice_list_which_assigns_to_selected_lines() -> None:
+    # "v" titles the dialog by the selection and passes the current voice only
+    # for a single line; entering a number assigns it like the number keys do.
+    app, _ = make_voiced_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down", "v")
+            dialog = app.screen
+            assert isinstance(dialog, VoiceSelectDialog)
+            assert dialog.heading == "Line 2"
+            assert dialog.voice_names == ["Alice", ""]
+            assert dialog.current_voice_index == 1
+            await pilot.press("1", "enter")
+            assert len(app.screen_stack) == 1
+            assert app.staged_voice_indices == [0, 0, 0, 0]
+
+            await pilot.press("shift+down", "shift+down", "v")
+            dialog = app.screen
+            assert isinstance(dialog, VoiceSelectDialog)
+            assert dialog.heading == "3 lines selected"
+            assert dialog.current_voice_index is None
+            await pilot.press("2", "enter")
+            assert app.staged_voice_indices == [0, 1, 1, 1]
 
     run(exercise())
 
