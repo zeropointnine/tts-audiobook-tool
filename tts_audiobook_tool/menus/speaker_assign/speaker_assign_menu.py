@@ -2,7 +2,12 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import COL_DIM, COL_DIM_ITALICS, COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.speaker_assign import assign_menu, voices_menu
-from tts_audiobook_tool.menus.speaker_assign.roster_menu import make_roster_stale_marker, roster_menu
+from tts_audiobook_tool.menus.speaker_assign.characters_view import (
+    VIEW_RESULTS_LABEL,
+    characters_menu,
+    make_roster_stale_marker,
+)
+from tts_audiobook_tool.menus.speaker_assign.roster_menu import roster_menu
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 from tts_audiobook_tool.state import State
@@ -51,11 +56,18 @@ class SpeakerAssignMenu:
             roster_menu(state)
 
         def items_maker(_: State) -> list[MenuItem]:
-            return [
+            items = [
                 MenuItem(make_roster_label, on_select_roster),
                 MenuItem(assign_menu.make_step_label, lambda _, __: assign_menu.assign_menu(state)),
                 MenuItem(voices_menu.make_step_label, lambda _, __: voices_menu.voices_menu(state)),
             ]
+            if SpeakerAssignFileUtil.has_roster(state.project.dir_path):
+                items.append(MenuItem(
+                    lambda _: VIEW_RESULTS_LABEL + make_roster_stale_marker(state),
+                    lambda _, __: characters_menu(state),
+                    blank_line_before=True,
+                ))
+            return items
 
         MenuUtil.menu(
             state,

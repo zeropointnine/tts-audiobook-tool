@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 from typing import cast
 
@@ -5,14 +6,14 @@ import pytest
 
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types.phrase import Reason
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_DIM_ITALICS, COL_ERROR
+from tts_audiobook_tool.constants import COL_DIM, COL_ERROR
 from tts_audiobook_tool.menus.speaker_assign import speaker_assign_menu
 from tts_audiobook_tool.menus.speaker_assign import roster_menu as roster_menu_module
 from tts_audiobook_tool.menus.speaker_assign.roster_menu import create_roster, roster_menu
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu import SpeakerAssignMenu
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.speaker_assign.llm_request_util import LlmRequestResult, LlmRequestUtil
-from tts_audiobook_tool.speaker_assign.roster import Prominence, Roster, RosterCharacter, RosterFile
+from tts_audiobook_tool.speaker_assign.roster import Roster, RosterFile
 from tts_audiobook_tool.speaker_assign.roster_util import NormalizedRoster, RosterUtil
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
@@ -22,7 +23,9 @@ from tests.speaker_assign.speaker_assign_test_support import DIALOG, make_book
 
 @pytest.mark.parametrize("status", ["current", "stale", "unreadable", "missing"])
 def test_roster_menu_labels_mark_only_known_stale_data(monkeypatch, status):
-    # Both navigation levels expose stale provenance without marking missing/unreadable data.
+    # Step 1 and the "View character/dialog results" item expose stale provenance without
+    # marking missing/unreadable data; the view item needs a saved roster, and
+    # step 1 offers "Start over" and "Clear" once one exists.
     book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
     book.segmentation_settings = book.segmentation_settings._replace(dialog_segmentation=True)
     hashes = ("old text",) if status == "stale" else UtteranceUtil.section_text_hashes(book)
@@ -39,7 +42,7 @@ def test_roster_menu_labels_mark_only_known_stale_data(monkeypatch, status):
     def capture_menu(state, *, items, **kwargs):
         captured.append([
             item.label(state) if callable(item.label) else item.label
-            for item in (items(state)[:1] if kwargs["heading"] == "Auto-assign character voices" else items(state))
+            for item in (items(state) if callable(items) else items)
         ])
 
     monkeypatch.setattr(MenuUtil, "menu", capture_menu)
@@ -52,68 +55,11 @@ def test_roster_menu_labels_mark_only_known_stale_data(monkeypatch, status):
         f"Step 1: Generate character roster {COL_DIM}(completed{marker}{COL_DIM})"
     )
     assert captured[0][0] == expected_step
-    assert captured[1] == (["Start"] if status == "missing" else [
-        "Start",
-        "View roster data" + marker,
-        f"View roster data, expanded{marker} {COL_DIM}(possible spoilers)",
-    ])
-
-
-def test_expanded_roster_view_prints_character_blocks(monkeypatch):
-    # The expanded view shows each character as a block with its aliases and description.
-    book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
-    roster = Roster((
-        RosterCharacter(
-            id="HARU_KOYAMA", name="Haru Koyama", aliases=("Haru", "Miss Haru", "Koyama"),
-            gender="female", description="A teenage girl from Tokyo.", prominence=Prominence.MAJOR,
-        ),
-    ))
-    roster_file = RosterFile(roster, section_text_hashes=UtteranceUtil.section_text_hashes(book))
-    state = cast(State, SimpleNamespace(project=SimpleNamespace(book=book, dir_path="unused")))
-    monkeypatch.setattr(SpeakerAssignFileUtil, "load_roster_file", lambda _: roster_file)
-    lines: list[str] = []
-    monkeypatch.setattr(roster_menu_module, "printt", lambda s="": lines.append(s))
-
-    assert roster_menu_module.print_roster_info(state, expanded=True)
-
-    i = lines.index(
-        f"{COL_DEFAULT}[1] {COL_DIM}id: {COL_ACCENT}HARU_KOYAMA  {COL_DIM}tier: {COL_DEFAULT}major      "
-        f"{COL_DIM}gender: {COL_DEFAULT}female"
-    )
-    assert lines[i + 1:i + 6] == [
-        f"    {COL_DIM}name: {COL_DEFAULT}Haru Koyama",
-        f"    {COL_DIM}aliases: {COL_DEFAULT}Haru, Miss Haru, Koyama",
-        "",
-        f"{COL_DIM_ITALICS}A teenage girl from Tokyo.",
-        "",
-    ]
-
-
-@pytest.mark.parametrize("expanded", [False, True])
-def test_roster_view_puts_stale_warning_first_and_provenance_last(monkeypatch, expanded):
-    # The stale warning opens the printout; the created/model line closes it after a blank line.
-    book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
-    roster = Roster((RosterCharacter(id="HARU", name="Haru"),))
-    roster_file = RosterFile(
-        roster, created="2026-10-24T18:43:10-04:00", llm={"model": "some/model"},
-        section_text_hashes=("old text",),
-    )
-    state = cast(State, SimpleNamespace(project=SimpleNamespace(book=book, dir_path="unused")))
-    monkeypatch.setattr(SpeakerAssignFileUtil, "load_roster_file", lambda _: roster_file)
-    lines: list[str] = []
-    monkeypatch.setattr(roster_menu_module, "printt", lambda s="": lines.append(s))
-
-    assert roster_menu_module.print_roster_info(state, expanded=expanded)
-
-    assert lines[:2] == [
-        f"{COL_ERROR}* {COL_DIM_ITALICS}The project text has changed since this roster was created", "",
-    ]
-    assert lines[-3:] == [
-        "",
-        f"{COL_DEFAULT}Created: {COL_DIM}2026-10-24 18:43, {COL_DEFAULT}model: {COL_DIM}some/model",
-        "",
-    ]
-    assert lines[-4] != ""
+    assert len(captured[0]) == (3 if status == "missing" else 4)
+    if status != "missing":
+        assert captured[0][-1] == "View character/dialog results" + marker
+    # An existing roster (even an unreadable one) can be replaced or cleared
+    assert captured[1] == (["Start"] if status == "missing" else ["Start over", "Clear"])
 
 
 @pytest.mark.parametrize("dialog_segmentation", [False, True])
@@ -199,7 +145,7 @@ def test_create_roster_outcome_sound(monkeypatch, tmp_path, outcome, expected):
     monkeypatch.setattr(app_support, "play_done_sound", lambda: played.append("done"))
     monkeypatch.setattr(app_support, "play_fatal_gen_sound", lambda: played.append("error"))
     monkeypatch.setattr(roster_menu_module, "print_llm_info", lambda _: None)
-    monkeypatch.setattr(roster_menu_module, "print_roster_info", lambda _: False)
+    monkeypatch.setattr(roster_menu_module, "print_characters_info", lambda _: False)
     monkeypatch.setattr(roster_menu_module.ask, "ask_error", lambda *_: None)
     monkeypatch.setattr(roster_menu_module.ask, "ask_enter_to_continue", lambda *_: None)
     monkeypatch.setattr(LlmRequestUtil, "make_session", lambda *_: None)
@@ -219,3 +165,80 @@ def test_create_roster_outcome_sound(monkeypatch, tmp_path, outcome, expected):
     create_roster(state)
 
     assert played == expected
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_clear_roster_deletes_roster_and_dependents_after_confirmation(monkeypatch, tmp_path, confirmed):
+    # Clearing step 1 also discards step 2's results and step 3's voice
+    # mappings (both keyed by the roster's character ids), only once confirmed.
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
+    paths = [SpeakerAssignFileUtil.roster_path(str(tmp_path)), *write_dependents(tmp_path)]
+    with open(paths[0], "w", encoding="utf-8") as file:
+        file.write("{}")
+    printed: list[str] = []
+    feedback: list[str] = []
+    monkeypatch.setattr(roster_menu_module, "printt", lambda s="": printed.append(s))
+    monkeypatch.setattr(roster_menu_module.ask, "ask_confirm", lambda *_: confirmed)
+    monkeypatch.setattr(roster_menu_module, "print_feedback", lambda s, **_: feedback.append(s))
+
+    roster_menu_module.clear_roster(state)
+
+    assert any("Dialog assignments from step 2" in line for line in printed)
+    assert any("Voice mappings from step 3" in line for line in printed)
+    assert [os.path.exists(path) for path in paths] == [not confirmed] * 3
+    assert feedback == (["Roster cleared"] if confirmed else [])
+
+
+def write_dependents(tmp_path) -> list[str]:
+    """Writes placeholder step 2 and 3 files; returns their paths."""
+    paths = [SpeakerAssignFileUtil.attributions_path(str(tmp_path)), SpeakerAssignFileUtil.voices_path(str(tmp_path))]
+    os.makedirs(SpeakerAssignFileUtil.dir_path(str(tmp_path)), exist_ok=True)
+    for path in paths:
+        with open(path, "w", encoding="utf-8") as file:
+            file.write("{}")
+    return paths
+
+
+def test_regenerated_roster_discards_dialog_assignments_and_voice_mappings(monkeypatch, tmp_path):
+    # A new roster may use different character ids, so step 2 and step 3 data
+    # are both discarded once it's saved, and the run says so.
+    book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
+    state = cast(State, SimpleNamespace(prefs=None, project=SimpleNamespace(book=book, dir_path=str(tmp_path))))
+    paths = write_dependents(tmp_path)
+    printed: list[str] = []
+    monkeypatch.setattr(roster_menu_module, "printt", lambda s="": printed.append(s))
+    monkeypatch.setattr(roster_menu_module, "print_llm_info", lambda _: None)
+    monkeypatch.setattr(roster_menu_module, "print_characters_info", lambda _: False)
+    monkeypatch.setattr(app_support, "play_done_sound", lambda: None)
+    monkeypatch.setattr(LlmRequestUtil, "make_session", lambda *_: None)
+    monkeypatch.setattr(LlmRequestUtil, "describe_llm", lambda _: {})
+    monkeypatch.setattr(SpeakerAssignFileUtil, "save_roster_file", lambda *_: "")
+    monkeypatch.setattr(RosterUtil, "normalize_roster", lambda _: NormalizedRoster(Roster(())))
+    result = LlmRequestResult(reply='{"characters": []}', reasoning="", elapsed=1.0, finish_reason="stop")
+    monkeypatch.setattr(LlmRequestUtil, "send_cancellable", lambda *_, **__: result)
+
+    create_roster(state)
+
+    assert not any(os.path.exists(path) for path in paths)
+    assert f"{COL_DIM}Discarded dialog assignments and voice mappings made with the previous roster" in printed
+
+
+@pytest.mark.parametrize("existing", ["nothing", "roster", "dependents"])
+def test_roster_replacement_is_confirmed_only_when_data_would_be_lost(monkeypatch, tmp_path, existing):
+    # Starting step 1 asks first (in place, under the menu) only when it would
+    # replace a roster or discard step 2/3 data, listing what would be lost.
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
+    if existing == "dependents":
+        write_dependents(tmp_path)
+    monkeypatch.setattr(SpeakerAssignFileUtil, "has_roster", lambda _: existing == "roster")
+    printed: list[str] = []
+    asked: list[str] = []
+    monkeypatch.setattr(roster_menu_module, "printt", lambda s="": printed.append(s))
+    monkeypatch.setattr(roster_menu_module.ask, "ask_confirm", lambda *_: asked.append("asked") or False)
+
+    confirmed = roster_menu_module.confirm_roster_replacement(state)
+
+    assert confirmed == (existing == "nothing")
+    assert asked == ([] if existing == "nothing" else ["asked"])
+    assert any("already exists" in line for line in printed) == (existing == "roster")
+    assert any("Voice mappings from step 3" in line for line in printed) == (existing == "dependents")

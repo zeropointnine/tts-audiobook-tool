@@ -106,12 +106,27 @@ class SpeakerAssignFileUtil:
     def delete_attributions_file(project_dir: str) -> str:
         """Remove the saved attributions, if any (eg when the roster they were
         made against is replaced). Returns an error string on failure, otherwise ""."""
+        return SpeakerAssignFileUtil._delete(SpeakerAssignFileUtil.attributions_path(project_dir), "speaker attributions")
+
+    @staticmethod
+    def delete_roster_file(project_dir: str) -> str:
+        """Remove the saved roster, if any. Returns an error string on failure, otherwise ""."""
+        return SpeakerAssignFileUtil._delete(SpeakerAssignFileUtil.roster_path(project_dir), "speaker roster")
+
+    @staticmethod
+    def delete_voices_file(project_dir: str) -> str:
+        """Remove the saved character voices, if any (eg when the roster whose
+        ids they map is replaced). Returns an error string on failure, otherwise ""."""
+        return SpeakerAssignFileUtil._delete(SpeakerAssignFileUtil.voices_path(project_dir), "character voices")
+
+    @staticmethod
+    def _delete(path: str, description: str) -> str:
         try:
-            os.remove(SpeakerAssignFileUtil.attributions_path(project_dir))
+            os.remove(path)
         except FileNotFoundError:
             pass
         except OSError as e:
-            return f"Error deleting speaker attributions: {make_error_string(e)}"
+            return f"Error deleting {description}: {make_error_string(e)}"
         return ""
 
     @staticmethod

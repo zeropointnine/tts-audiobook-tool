@@ -339,5 +339,7 @@ def make_character_label(state: State, character_id: str, count: int, voice_inde
 CHARACTERS_PER_PAGE = 32
 
 VOICES_DESC = \
-"""Choose voices for whichever characters you like (the rest are left as-is).
-Then choose \"Apply\" to set those voices on their dialog lines in the project text."""
+"""Sets each character's dialog lines (as identified in step 2) to the voice
+chosen for that character.
+
+Choose voices below, then select \"Apply\"."""

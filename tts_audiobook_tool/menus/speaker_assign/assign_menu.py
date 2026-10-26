@@ -6,9 +6,10 @@ from tts_audiobook_tool import app_support, ask
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_support.system_sleep import prevent_system_sleep
 from tts_audiobook_tool.app_types import Book
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR
+from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM, COL_ERROR
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.speaker_assign.characters_view import print_characters_info
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
     StatusLine,
     check_llm_configured,
@@ -21,7 +22,6 @@ from tts_audiobook_tool.speaker_assign.attribution_runner import (
     AttributionRunner,
     RunOutcome,
 )
-from tts_audiobook_tool.speaker_assign.attribution_summary import AttributionSummary
 from tts_audiobook_tool.speaker_assign.llm_request_util import (
     CancelEvent,
     LlmRequestProgress,
@@ -31,13 +31,6 @@ from tts_audiobook_tool.speaker_assign.llm_request_util import (
 from tts_audiobook_tool.speaker_assign.roster import RosterFile
 from tts_audiobook_tool.speaker_assign.roster_util import RosterUtil
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
-from tts_audiobook_tool.speaker_assign.speaker_assign_types import (
-    NOT_SPEECH,
-    OTHER,
-    RESERVED_SPEAKER_IDS,
-    RESERVED_SPEAKER_ORDER,
-    UNKNOWN,
-)
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import (
     duration_string,
@@ -111,23 +104,18 @@ def assign_menu(state: State) -> None:
         if not isinstance(fresh, str):
             current, subheading = fresh, make_subheading(state, fresh)
 
-    def print_run_heading() -> None:
-        # Same heading and breadcrumbs as this menu: the run screen takes its
-        # place rather than nesting under it
-        MenuUtil.print_heading(state, "Run dialog attribution",
-                               breadcrumb_text=MenuUtil.make_breadcrumb_text(state))
+    # No new heading for the handlers below: confirmations and runs print
+    # directly below the menu
 
     def on_start(_: State, __: MenuItem) -> None:
         if not check_llm_configured(state):
             return
-        print_run_heading()
         run_assign(state)
         refresh()
 
     def on_start_over(_: State, __: MenuItem) -> None:
         if not check_llm_configured(state):
             return
-        print_run_heading()
         printt("Existing dialog assignments will be replaced.")
         printt()
         if not ask.ask_confirm(""):
@@ -135,24 +123,32 @@ def assign_menu(state: State) -> None:
         run_assign(state, start_over=True)
         refresh()
 
-    def on_view(_: State, __: MenuItem) -> None:
-        MenuUtil.print_screen_heading(state, "Dialog attribution summary", breadcrumb="Dialog attribution summary")
-        if print_assign_results(state):
-            ask.ask_enter_to_continue()
+    def on_clear(_: State, __: MenuItem) -> None:
+        printt("Existing dialog assignments will be deleted.")
+        printt()
+        if not ask.ask_confirm(""):
+            return
+        error = SpeakerAssignFileUtil.delete_attributions_file(state.project.dir_path)
+        refresh()
+        if error:
+            ask.ask_error(error)
+            return
+        print_feedback("Dialog assignments cleared")
 
     def items_maker(_: State) -> list[MenuItem]:
         plan = current.plan
         if not plan.chunks:
-            return []
-        if plan.is_complete:
-            return [MenuItem("Start", on_start_over), MenuItem("View results", on_view)]
-        if plan.done_count:
-            return [
-                MenuItem("Continue", on_start),
-                MenuItem("View results", on_view),
-                MenuItem("Start over", on_start_over),
-            ]
-        return [MenuItem("Start", on_start)]
+            items = []
+        elif plan.is_complete:
+            items = [MenuItem("Start over", on_start_over)]
+        elif plan.done_count:
+            items = [MenuItem("Continue", on_start), MenuItem("Start over", on_start_over)]
+        else:
+            items = [MenuItem("Start", on_start)]
+        # Any saved results, including ones the text has since invalidated
+        if current.attributions.ranges:
+            items.append(MenuItem("Clear", on_clear))
+        return items
 
     MenuUtil.menu(
         state,
@@ -280,8 +276,8 @@ def run_assign(state: State, start_over: bool = False) -> None:
     play_outcome_sound(result.outcome, bool(result.failures))
 
     if result.attributions.ranges:
-        print_accent_separator("Dialog attribution summary")
-        print_assign_results(state)
+        print_accent_separator("Character/dialog results")
+        print_characters_info(state)
     ask.ask_enter_to_continue()
 
 
@@ -339,68 +335,6 @@ class PrintingListener(AttributionRunListener):
         printt(f"  {COL_ERROR}Failed:{COL_DEFAULT} {error}")
 
 
-def print_assign_results(state: State) -> bool:
-    """
-    Prints the saved speaker ids: per-speaker counts (roster characters by
-    count, then the reserved answers, with recurring speakers not in the
-    roster named in the OTHER row). Shows an error and returns False if the
-    saved data can't be loaded.
-    """
-    data = load_assign_data(state)
-    if isinstance(data, str):
-        ask.ask_error(data)
-        return False
-    book = state.project.book
-    roster = data.roster_file.roster
-    plan = data.plan
-    summary = AttributionSummary.make(data.attributions, book)
-
-    total = summary.attributed + summary.unattributed
-    progress_line = (f"{COL_DIM}{summary.attributed:,} of {total:,} dialog passages assigned "
-                     f"({plan.done_count} of {len(plan.chunks)} chunks)")
-    if not summary.attributed:
-        printt(progress_line)
-        return True
-
-    names = {character.id: character.name for character in roster.characters}
-    characters = sorted(
-        ((label, count) for label, count in summary.counts.items() if label in names),
-        key=lambda item: (-item[1], item[0]))
-    reserved = [(label, summary.counts[label]) for label in RESERVED_SPEAKER_ORDER if summary.counts[label]]
-    # Labels neither in the roster nor reserved shouldn't occur (a new roster
-    # discards saved ids), but are listed rather than hidden
-    others = sorted((label, count) for label, count in summary.counts.items()
-                    if label not in names and label not in RESERVED_SPEAKER_IDS)
-
-    descriptions = dict(RESERVED_LABEL_DESCRIPTIONS)
-    if summary.recurring_others:
-        speakers = ", ".join(f"{name} ({count:,})" for name, count in summary.recurring_others.most_common())
-        # Less frequent (and unnamed) OTHER answers are counted but not named
-        if summary.counts[OTHER] > sum(summary.recurring_others.values()):
-            speakers += ", ..."
-        descriptions[OTHER] += f": {speakers}"
-
-    rows = [*characters, *others, *reserved]
-    if rows:
-        id_width = max(len("id"), *(len(label) for label, _ in rows))
-        printt(f"{COL_DIM}{'count':>6}  {'id':<{id_width}}  name")
-        for label, count in rows:
-            name = names.get(label) or f"{COL_DIM}{descriptions.get(label, '')}"
-            printt(f"{count:>6,}  {COL_ACCENT}{label:<{id_width}}{COL_DEFAULT}  {name}")
-        printt()
-    printt(progress_line)
-    printt()
-    return True
-
-
-RESERVED_LABEL_DESCRIPTIONS = {
-    OTHER: "Not found in roster",
-    UNKNOWN: "Speaker couldn't be determined",
-    NOT_SPEECH: "Quoted text that isn't speech, like a sign or title",
-}
-
-
 ASSIGN_DESC = \
 f"""The LLM assigns each line of dialog to a character from the roster. Results
-are saved after each chunk, so a run can be stopped and resumed later.
-May take several minutes."""
+are saved after each chunk, so a run can be stopped and resumed later."""

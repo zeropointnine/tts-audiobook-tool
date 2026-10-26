@@ -1,14 +1,15 @@
 """Step 1: the full-book roster request (see plans/llm-speaker-attribution.md)."""
 import datetime
+from dataclasses import dataclass
 import math
 import os
-from collections.abc import Sequence
 
 from tts_audiobook_tool import app_support, ask, text_util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types import Book
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_DIM_ITALICS, COL_ERROR
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.speaker_assign.characters_view import print_characters_info
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
     CHARS_PER_TOKEN,
     StatusLine,
@@ -19,7 +20,7 @@ from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
 )
 from tts_audiobook_tool.speaker_assign.attribution_reply_util import AttributionReplyUtil
 from tts_audiobook_tool.speaker_assign.llm_request_util import CancelEvent, LlmRequestUtil
-from tts_audiobook_tool.speaker_assign.roster import RosterCharacter, RosterFile, RosterNarration
+from tts_audiobook_tool.speaker_assign.roster import RosterFile
 from tts_audiobook_tool.speaker_assign.roster_util import ROSTER_SYSTEM_PROMPT, RosterUtil
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
@@ -29,6 +30,7 @@ from tts_audiobook_tool.util import (
     make_error_string,
     make_hotkey_string,
     print_accent_separator,
+    print_feedback,
     printt,
 )
 
@@ -37,21 +39,15 @@ def roster_menu(state: State) -> None:
 
     # Computed once on entry (walks the whole book), not on every redraw
     tokens = estimate_roster_input_tokens(state.project.book)
-    # Always in thousands, rounded up, as it's a requirement
+    # Always in thousands, rounded up, as the context it needs
     subheading = ROSTER_DESC.replace(
-        "%1", f"{COL_ACCENT}{math.ceil(tokens / 1000):,}k{COL_DEFAULT}"
+        "%1", f"{COL_ACCENT}~{math.ceil(tokens / 1000):,}k{COL_DEFAULT}"
     )
 
     def items_maker(_: State) -> list[MenuItem]:
-        items = [MenuItem("Start", on_select_roster_start)]
-        if SpeakerAssignFileUtil.has_roster(state.project.dir_path):
-            marker = make_roster_stale_marker(state)
-            items.append(MenuItem("View roster data" + marker, on_select_roster_view))
-            items.append(MenuItem(
-                f"View roster data, expanded{marker} {COL_DIM}(possible spoilers)",
-                on_select_roster_view_expanded,
-            ))
-        return items
+        if not SpeakerAssignFileUtil.has_roster(state.project.dir_path):
+            return [MenuItem("Start", on_select_roster_start)]
+        return [MenuItem("Start over", on_select_roster_start), MenuItem("Clear", on_select_roster_clear)]
 
     MenuUtil.menu(
         state,
@@ -62,33 +58,90 @@ def roster_menu(state: State) -> None:
     )
 
 
-def make_roster_stale_marker(state: State) -> str:
-    """Mark known stale roster data; unreadable data has no known provenance."""
-    roster_file = SpeakerAssignFileUtil.load_roster_file(state.project.dir_path)
-    if not isinstance(roster_file, str) and RosterUtil.is_stale(roster_file.section_text_hashes, state.project.book):
-        return f"{COL_ERROR}*"
-    return ""
-
-
 def on_select_roster_start(state: State, _item: MenuItem) -> None:
     if not check_llm_configured(state):
         return
-    # Same heading and breadcrumbs as the roster menu: the run screen takes its
-    # place rather than nesting under it
-    MenuUtil.print_heading(state, "Generate character roster", breadcrumb_text=MenuUtil.make_breadcrumb_text(state))
+    # No new heading: the confirmation and the run print directly below the menu
+    if not confirm_roster_replacement(state):
+        return
     create_roster(state)
 
 
-def on_select_roster_view(state: State, _item: MenuItem) -> None:
-    MenuUtil.print_screen_heading(state, "Roster data", breadcrumb="Roster data")
-    if print_roster_info(state):
-        ask.ask_enter_to_continue()
+def confirm_roster_replacement(state: State) -> bool:
+    """
+    Asks to confirm when starting would replace a roster or discard the step 2
+    and 3 data that depend on it, listing what would be lost. True to go ahead.
+    """
+    project_dir = state.project.dir_path
+    has_roster = SpeakerAssignFileUtil.has_roster(project_dir)
+    dependents = RosterDependents.find(project_dir)
+    if not has_roster and not dependents:
+        return True
+    if has_roster:
+        printt("A roster already exists and will be replaced.")
+    dependents.print_warnings()
+    printt()
+    return ask.ask_confirm("")
 
 
-def on_select_roster_view_expanded(state: State, _item: MenuItem) -> None:
-    MenuUtil.print_screen_heading(state, "Roster data, expanded", breadcrumb="Roster data, expanded")
-    if print_roster_info(state, expanded=True):
-        ask.ask_enter_to_continue()
+def on_select_roster_clear(state: State, _item: MenuItem) -> None:
+    # No new heading: the confirmation prints directly below the menu
+    clear_roster(state)
+
+
+def clear_roster(state: State) -> None:
+    """Deletes the saved roster, and the step 2 and 3 data that depend on it, after confirmation."""
+    project_dir = state.project.dir_path
+    dependents = RosterDependents.find(project_dir)
+    printt("The character roster will be deleted.")
+    dependents.print_warnings()
+    printt()
+    if not ask.ask_confirm(""):
+        return
+    # Dependents first: they're meaningless without the roster they were made against
+    error = dependents.delete(project_dir) or SpeakerAssignFileUtil.delete_roster_file(project_dir)
+    if error:
+        ask.ask_error(error)
+        return
+    print_feedback("Roster cleared")
+
+
+@dataclass(frozen=True)
+class RosterDependents:
+    """
+    Which saved data depends on the roster's character ids, and so is
+    invalidated when the roster is cleared or replaced: step 2's dialog
+    assignments and step 3's voice mappings.
+    """
+    has_attributions: bool
+    has_voices: bool
+
+    @staticmethod
+    def find(project_dir: str) -> "RosterDependents":
+        return RosterDependents(
+            has_attributions=os.path.isfile(SpeakerAssignFileUtil.attributions_path(project_dir)),
+            has_voices=os.path.isfile(SpeakerAssignFileUtil.voices_path(project_dir)),
+        )
+
+    def __bool__(self) -> bool:
+        return self.has_attributions or self.has_voices
+
+    def print_warnings(self) -> None:
+        if self.has_attributions:
+            printt(f"Dialog assignments from step 2 will be {COL_ERROR}discarded{COL_DEFAULT}.")
+        if self.has_voices:
+            printt(f"Voice mappings from step 3 will be {COL_ERROR}discarded{COL_DEFAULT}.")
+
+    def describe(self) -> str:
+        """What was discarded, eg "dialog assignments and voice mappings"."""
+        parts = (["dialog assignments"] if self.has_attributions else []) + \
+                (["voice mappings"] if self.has_voices else [])
+        return " and ".join(parts)
+
+    def delete(self, project_dir: str) -> str:
+        """Returns an error string on failure, otherwise ""."""
+        return (SpeakerAssignFileUtil.delete_attributions_file(project_dir)
+                or SpeakerAssignFileUtil.delete_voices_file(project_dir))
 
 
 # ---
@@ -97,7 +150,8 @@ def create_roster(state: State) -> None:
     """
     The full-book roster request: sends the book to the LLM (control-c
     cancels), then saves the roster and prints it. Nothing is saved or
-    deleted unless a valid roster comes back.
+    deleted unless a valid roster comes back. Doesn't ask before replacing
+    saved data (see confirm_roster_replacement).
     """
     project_dir = state.project.dir_path
     book = state.project.book
@@ -112,18 +166,6 @@ def create_roster(state: State) -> None:
             )
         ask.ask_error(message)
         return
-
-    # Replacing an existing roster invalidates speaker ids assigned with it
-    has_roster = SpeakerAssignFileUtil.has_roster(project_dir)
-    has_attributions = os.path.isfile(SpeakerAssignFileUtil.attributions_path(project_dir))
-    if has_roster or has_attributions:
-        if has_roster:
-            printt("A roster already exists and will be replaced.")
-        if has_attributions:
-            printt(f"Dialog assignments from step 2 will be {COL_ERROR}discarded{COL_DEFAULT}.")
-        printt()
-        if not ask.ask_confirm(""):
-            return
 
     try:
         llm = LlmRequestUtil.make_session(prefs, ROSTER_SYSTEM_PROMPT)
@@ -231,118 +273,21 @@ def create_roster(state: State) -> None:
         fail(error)
         return
 
-    # A new roster invalidates attributions made against the previous one
-    if has_attributions:
-        error = SpeakerAssignFileUtil.delete_attributions_file(project_dir)
+    # A new roster may have different character ids, invalidating the
+    # attributions and voice mappings made with the previous one
+    dependents = RosterDependents.find(project_dir)
+    if dependents:
+        error = dependents.delete(project_dir)
         if error:
             fail(error)
             return
-        printt(f"{COL_DIM}Discarded dialog assignments made with the previous roster")
+        printt(f"{COL_DIM}Discarded {dependents.describe()} made with the previous roster")
         printt()
 
     app_support.play_done_sound()
     print_accent_separator("Roster summary")
-    if print_roster_info(state):
+    if print_characters_info(state):
         ask.ask_enter_to_continue()
-
-
-def print_roster_info(state: State, expanded: bool = False) -> bool:
-    """
-    Prints the saved roster's user-facing (spoiler-free) fields, voice hints
-    included. Aliases and descriptions are LLM-facing and may contain spoilers,
-    so they're left out unless `expanded`, which prints each character as a
-    block that includes them.
-    Shows an error and returns False if the roster can't be loaded.
-    """
-    project_dir = state.project.dir_path
-    result = SpeakerAssignFileUtil.load_roster_file(project_dir)
-    if isinstance(result, str):
-        ask.ask_error(result)
-        return False
-    roster_file = result
-    roster = roster_file.roster
-
-    # Sections are separated by a blank line, without a leading one under the heading
-    has_printed = False
-    def print_gap() -> None:
-        if has_printed:
-            printt()
-
-    if RosterUtil.is_stale(roster_file.section_text_hashes, state.project.book):
-        printt(f"{COL_ERROR}* {COL_DIM_ITALICS}The project text has changed since this roster was created")
-        has_printed = True
-
-    narration = roster.narration
-    if narration != RosterNarration():
-        person = f"{narration.person.value} person" if narration.person.value else "Unknown person"
-        print_gap()
-        printt(f"Narration: {person}")
-        if narration.notes.strip():
-            printt(f"{COL_DIM_ITALICS}{narration.notes.strip()}")
-        if narration.voice_hint.strip():
-            printt(f"{COL_DIM}voice: {COL_DEFAULT}{narration.voice_hint.strip()}")
-        has_printed = True
-
-    id_width = max(len("id"), *(len(character.id) for character in roster.characters))
-    print_gap()
-    if expanded:
-        print_characters_expanded(roster.characters, id_width)
-    else:
-        printt(f"{COL_DIM}{'#':>3}  {'id':<{id_width}}  {'tier':<10}  {'gender':<7}  name")
-        # Voice hints go on a second line, under the id column
-        hint_indent = " " * 5
-        for i, character in enumerate(roster.characters, 1):
-            narrator = f" {COL_DIM}[narrator]" if character.is_narrator else ""
-            tier = character.prominence.value or "?"
-            printt(
-                f"{COL_DIM}{i:>3}  {COL_ACCENT}{character.id:<{id_width}}{COL_DEFAULT}  "
-                f"{tier:<10}  {character.gender:<7}  {character.name}{narrator}"
-            )
-            if character.voice_hint.strip():
-                printt(f"{hint_indent}{COL_DIM}voice: {character.voice_hint.strip()}")
-        printt()
-        path = SpeakerAssignFileUtil.roster_path(project_dir)
-        printt(f"{COL_DEFAULT}Full roster data: "
-               f"{COL_DIM}{text_util.make_terminal_hyperlink(path, is_file=True)} (may contain spoilers)")
-        printt()
-
-    # Both views above end with a blank line
-    provenance = []
-    if roster_file.created:
-        provenance.append(f"{COL_DEFAULT}Created: {COL_DIM}{roster_file.created.replace('T', ' ')[:16]}")
-    if roster_file.llm.get("model"):
-        provenance.append(f"{COL_DEFAULT}model: {COL_DIM}{roster_file.llm['model']}")
-    if provenance:
-        printt(", ".join(provenance))
-        printt()
-    return True
-
-
-def print_characters_expanded(characters: Sequence[RosterCharacter], id_width: int) -> None:
-    """Prints each character as a block, including the spoiler-prone aliases and description."""
-    # Index padded to the widest one so the id column and the indent line up
-    index_width = len(f"[{len(characters)}]")
-    for i, character in enumerate(characters, 1):
-        index = f"[{i}]".ljust(index_width)
-        indent = " " * (index_width + 1)
-        tier = character.prominence.value or "?"
-        narrator = f"  {COL_DIM}[narrator]" if character.is_narrator else ""
-        printt(
-            f"{COL_DEFAULT}{index} {COL_DIM}id: {COL_ACCENT}{character.id:<{id_width}}  "
-            f"{COL_DIM}tier: {COL_DEFAULT}{tier:<10} "
-            f"{COL_DIM}gender: {COL_DEFAULT}{character.gender}{narrator}"
-        )
-        # An alias that just repeats the name adds nothing here
-        alias_list = [alias for alias in character.aliases if alias.strip() != character.name.strip()]
-        aliases = ", ".join(alias_list) if alias_list else f"{COL_DIM}(none)"
-        printt(f"{indent}{COL_DIM}name: {COL_DEFAULT}{character.name}")
-        printt(f"{indent}{COL_DIM}aliases: {COL_DEFAULT}{aliases}")
-        if character.voice_hint.strip():
-            printt(f"{indent}{COL_DIM}voice: {COL_DEFAULT}{character.voice_hint.strip()}")
-        if character.description.strip():
-            printt()
-            printt(f"{COL_DIM_ITALICS}{character.description.strip()}")
-        printt()
 
 
 CANCEL_EVENT_FEEDBACK = {
@@ -363,7 +308,5 @@ def estimate_roster_input_tokens(book: Book) -> int:
 
 
 ROSTER_DESC = \
-"""Sends the full book text to the LLM in a single request, which identifies
-and saves the roster of speaking characters.
-
-Requires an LLM with ~%1 context or more."""
+"""Sends the full book text to the LLM in a single request (%1 tokens),
+which identifies and saves the roster of speaking characters."""
