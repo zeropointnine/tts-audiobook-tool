@@ -122,8 +122,8 @@ def test_single_section_lists_only_phrase_group_rows() -> None:
 
     assert all(isinstance(item, VoiceLinePhraseGroupItem) for item in app.list_items)
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
-        "[00001] [#1] One.",
-        "[00002] [#1] Two.",
+        "00001 [#1] One.",
+        "00002 [#1] Two.",
     ]
     assert app.find_match_indices("only section") == []
 
@@ -143,9 +143,9 @@ def test_voice_column_shows_truncated_name_and_dialog_marker() -> None:
     app = make_editor(project, voice_sample_count=3)
 
     assert [str(app.format_line(index)) for index in range(3)] == [
-        "[00001] [#1 Alexa]     Narration.",
-        '[00002] [#2 Bo   ] 💬  "Hi."',
-        '[00003] [#3      ] 💬  "Yo."',
+        "00001 [#1 Alexa]     Narration.",
+        '00002 [#2 Bo   ] 💬  "Hi."',
+        '00003 [#3      ] 💬  "Yo."',
     ]
     # Search uses the displayed label without its padding
     assert app.find_text_strings(1) == ["00002", "#2 Bo", '"Hi."']
@@ -154,7 +154,7 @@ def test_voice_column_shows_truncated_name_and_dialog_marker() -> None:
 
 @pytest.mark.parametrize(
     ("dialog_segmentation", "expected_row"),
-    [(False, "[00001] [#1] One."), (True, "[00001] [#1]     One.")],
+    [(False, "00001 [#1] One."), (True, "00001 [#1]     One.")],
 )
 def test_dialog_marker_column_is_reserved_only_with_dialog_detection(
     dialog_segmentation: bool, expected_row: str
@@ -174,6 +174,55 @@ def test_dialog_marker_column_is_reserved_only_with_dialog_detection(
     assert str(app.format_line(0)) == expected_row
 
 
+def make_character_editor(
+    monkeypatch, speakers: dict[int, str]
+) -> VoiceLineEditorTextualApp:
+    project = make_project(
+        [
+            BookSection(
+                title="",
+                phrase_groups=[
+                    make_phrase_group("One."),
+                    make_phrase_group("Two."),
+                    make_phrase_group("Three."),
+                ],
+            )
+        ]
+    )
+    project.dir_path = "/project"
+    monkeypatch.setattr(
+        voice_line_editor.line_speakers, "load_line_speakers", lambda *_: speakers
+    )
+    app = VoiceLineEditorTextualApp(project, voice_sample_count=2)
+    app.load_content()
+    return app
+
+
+def test_character_column_fits_longest_id_up_to_six_characters(monkeypatch) -> None:
+    # The column follows the line number, padded to the longest attributed id
+    # but at most 6 characters, bracketed; unattributed lines get blanks. Reserved labels
+    # (OTHER:..., UNKNOWN) are shown like any other id. Search uses full ids.
+    app = make_character_editor(monkeypatch, {0: "BARON", 2: "UNKNOWN"})
+
+    assert [str(app.format_line(index)) for index in range(3)] == [
+        "00001 [BARON ] [#1] One.",
+        "00002          [#1] Two.",
+        "00003 [UNKNOW] [#1] Three.",
+    ]
+    assert app.find_text_strings(2) == ["00003", "UNKNOWN", "#1", "Three."]
+    assert app.find_text_strings(1) == ["00002", "#1", "Two."]
+    assert app.find_match_indices("unknown") == [2]
+
+    narrow_app = make_character_editor(monkeypatch, {1: "AL"})
+    assert str(narrow_app.format_line(1)) == "00002 [AL] [#1] Two."
+
+
+def test_character_column_is_hidden_without_attributions(monkeypatch) -> None:
+    app = make_character_editor(monkeypatch, {})
+
+    assert str(app.format_line(0)) == "00001 [#1] One."
+
+
 def test_voice_number_pads_to_two_digits_only_beyond_nine_voices() -> None:
     # With 10+ voices, single-digit numbers are padded so labels stay aligned.
     project = StubProject(
@@ -182,8 +231,8 @@ def test_voice_number_pads_to_two_digits_only_beyond_nine_voices() -> None:
     app = make_editor(project, voice_sample_count=10)
 
     assert [str(app.format_line(index)) for index in range(2)] == [
-        "[00001] [#1 ] One.",
-        "[00002] [#10] Ten.",
+        "00001 [#1 ] One.",
+        "00002 [#10] Ten.",
     ]
 
 
@@ -210,10 +259,10 @@ def test_multiple_sections_insert_generated_section_rows() -> None:
     ]
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
         "\nSection 1/2: Opening (2 lines)\n\n",
-        "[00001] [#1] One.",
-        "[00002] [#1] Two.",
+        "00001 [#1] One.",
+        "00002 [#1] Two.",
         "\nSection 2/2: Middle (1 line)\n\n",
-        "[00003] [#1] Three.",
+        "00003 [#1] Three.",
     ]
 
 
@@ -233,7 +282,7 @@ def test_empty_sections_are_hidden_and_all_empty_sections_show_empty_state() -> 
 
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
         "\nSection 2/2: Text (1 line)\n\n",
-        "[00001] [#1] One.",
+        "00001 [#1] One.",
     ]
     assert empty_app.list_items == []
 

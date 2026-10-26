@@ -8,6 +8,7 @@ from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.speaker_assign import line_speakers
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentTextualApp,
     EditorSaveFailed,
@@ -37,6 +38,10 @@ TITLE_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 # Voice column: number, truncated/padded voice name, then a dialog marker
 # (the marker column only when the text was segmented with dialog detection)
 VOICE_NAME_WIDTH = 5
+
+# Character column: the line's attributed speaker id (from Auto-assign
+# character voices), truncated; only shown when any line has one
+CHARACTER_ID_MAX_WIDTH = 6
 
 
 @dataclass(frozen=True)
@@ -90,6 +95,10 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         self.staged_voice_indices: list[int] = []
         self.list_items: list[VoiceLineListItem] = []
         self.show_dialog_markers = False
+        # Attributed speaker label by phrase index, and the character column's
+        # width (0 hides the column)
+        self.line_speakers: dict[int, str] = {}
+        self.character_width = 0
         self.voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
         if voice_sample_count is None:
             voice_sample_count = len(self.voice_values)
@@ -130,6 +139,11 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         ]
         self.staged_voice_indices = list(self.original_voice_indices)
         self.show_dialog_markers = self.has_dialog_detection()
+        self.line_speakers = self.load_line_speakers()
+        self.character_width = min(
+            max((len(label) for label in self.line_speakers.values()), default=0),
+            CHARACTER_ID_MAX_WIDTH,
+        )
         self.list_items = self.make_list_items()
         return range(len(self.list_items))
 
@@ -140,6 +154,14 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             book is not None and book.segmentation_settings.dialog_segmentation,
             (phrase_group.is_dialog for phrase_group in self.project.phrase_groups),
         )
+
+    def load_line_speakers(self) -> dict[int, str]:
+        """Saved speaker attributions by phrase index (read-only, for display)."""
+        book = getattr(self.project, "book", None)
+        project_dir = getattr(self.project, "dir_path", "")
+        if book is None or not project_dir:
+            return {}
+        return line_speakers.load_line_speakers(project_dir, book)
 
     def make_list_items(self) -> list[VoiceLineListItem]:
         """Project non-empty book sections and phrase groups into visible rows."""
@@ -219,9 +241,21 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             dialog_column = f"{dialog_marker(phrase_group.is_dialog)}  "
         else:
             dialog_column = ""
+        if self.character_width:
+            character_id = self.line_speakers.get(phrase_index, "")[: self.character_width]
+            # Padded inside the brackets, like the voice label; blank (no
+            # brackets) for unattributed lines
+            character_column = (
+                f"[{character_id:<{self.character_width}}] "
+                if character_id
+                else " " * (self.character_width + 3)
+            )
+        else:
+            character_column = ""
         prefix_ansi = (
-            f"{COL_DIM}[{self.format_line_number(phrase_index + 1)}] "
-            f"{COL_ACCENT}[{self.voice_label(self.staged_voice_indices[phrase_index])}] "
+            f"{COL_DIM}{self.format_line_number(phrase_index + 1)} "
+            f"{character_column}"
+            f"{COL_DIM}[{COL_ACCENT}{self.voice_label(self.staged_voice_indices[phrase_index])}{COL_DIM}] "
             f"{COL_DEFAULT}{dialog_column}"
         )
         return HangingIndentText.from_ansi(
@@ -232,13 +266,15 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         )
 
     def find_text_strings(self, item_index: int) -> Sequence[str]:
-        """Search the row's number, voice label, and phrase text as separate fields."""
+        """Search the row's number, full character id, voice label, and phrase
+        text as separate fields."""
         list_item = self.list_items[item_index]
         if isinstance(list_item, VoiceLineSectionItem):
             return [list_item.display_text]
         phrase_index = list_item.phrase_index
         return [
             self.format_line_number(phrase_index + 1),
+            *([self.line_speakers[phrase_index]] if phrase_index in self.line_speakers else []),
             self.voice_label(self.staged_voice_indices[phrase_index]).rstrip(),
             self.project.phrase_groups[phrase_index].presentable_text,
         ]

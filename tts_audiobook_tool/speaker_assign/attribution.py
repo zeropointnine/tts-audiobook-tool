@@ -162,6 +162,11 @@ class AttributionsFile:
         """Speaker label by utterance first line (see by_first_line)."""
         return {line: u.speaker for line, u in self.by_first_line(book).items()}
 
+    def speaker_of_each_line(self, book: Book) -> dict[int, str]:
+        """Speaker label of every line of each still-valid utterance (not just
+        its first line, unlike speakers_by_line)."""
+        return {line: u.speaker for u in self.by_first_line(book).values() for line in u.lines}
+
     def to_dict(self) -> dict[str, Any]:
         return {"format": ATTRIBUTIONS_FILE_FORMAT, "ranges": [r.to_dict() for r in self.ranges]}
 

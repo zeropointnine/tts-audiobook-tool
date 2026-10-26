@@ -8,6 +8,7 @@ from tts_audiobook_tool.speaker_assign.attribution import (
     RangeAttribution,
     UtteranceAttribution,
 )
+from tts_audiobook_tool.speaker_assign.line_speakers import load_line_speakers
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 
@@ -98,3 +99,28 @@ def test_file_util_reports_an_invalid_file(tmp_path) -> None:
     with open(SpeakerAssignFileUtil.attributions_path(project_dir), "w", encoding="utf-8") as file:
         file.write("{not json")
     assert isinstance(SpeakerAssignFileUtil.load_attributions_file(project_dir), str)
+
+
+def test_speaker_of_each_line_covers_continuation_lines() -> None:
+    # A quotation split across lines is one utterance; every one of its lines
+    # gets the speaker, whereas speakers_by_line only keys the first line.
+    utterance = UtteranceAttribution((0, 1), "BARON")
+    file = AttributionsFile((RangeAttribution(0, 4, UtteranceUtil.range_text_hash(BOOK, 0, 4), (utterance,)),))
+    assert file.speakers_by_line(BOOK) == {0: "BARON"}
+    assert file.speaker_of_each_line(BOOK) == {0: "BARON", 1: "BARON"}
+
+
+def test_load_line_speakers(tmp_path) -> None:
+    # Missing and unreadable files both load as no data (the data is optional
+    # to the views that display it).
+    project_dir = str(tmp_path)
+    assert load_line_speakers(project_dir, BOOK) == {}
+    assert load_line_speakers("", BOOK) == {}
+
+    file = AttributionsFile((attribution(0, 4, {0: "BARON", 2: "OTHER:maid"}),))
+    SpeakerAssignFileUtil.save_attributions_file(project_dir, file)
+    assert load_line_speakers(project_dir, BOOK) == {0: "BARON", 2: "OTHER:maid"}
+
+    with open(SpeakerAssignFileUtil.attributions_path(project_dir), "w", encoding="utf-8") as f:
+        f.write("{not json")
+    assert load_line_speakers(project_dir, BOOK) == {}
