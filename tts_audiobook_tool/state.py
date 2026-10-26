@@ -11,6 +11,7 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
+from tts_audiobook_tool.textual.editor_view_anchor import EditorViewAnchors
 
 @dataclass(frozen=True)
 class PendingTtsModelChange:
@@ -51,6 +52,8 @@ class State:
     pending_binding_notice: PendingBindingNotice | None
     # Identifies the binding issue last announced, so it is shown only once.
     binding_notice_key: tuple | None
+    # Per-editor view positions for the current project, for this app run only
+    editor_view_anchors: EditorViewAnchors
 
 
     def __init__(self):
@@ -66,6 +69,7 @@ class State:
         self.pending_project_load_checks = False
         self.pending_binding_notice = None
         self.binding_notice_key = None
+        self.editor_view_anchors = {}
 
         self.prefs = Prefs.load()
 
@@ -102,6 +106,7 @@ class State:
         state.pending_project_load_checks = False
         state.pending_binding_notice = None
         state.binding_notice_key = None
+        state.editor_view_anchors = {}
         state.prefs = prefs
         return state
 
@@ -119,6 +124,7 @@ class State:
         self.pending_tts_model_change = None
         self.pending_binding_notice = None
         self.binding_notice_key = None
+        self.editor_view_anchors = {}
         self.pending_project_load_checks = bool(value.dir_path)
         self._project = value
         self._project.sound_segments.dont_show_scan_message = self.dont_show_scan_message

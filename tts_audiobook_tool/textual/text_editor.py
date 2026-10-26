@@ -342,6 +342,13 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             return None
         return item.ordinal - 1
 
+    def content_line_text(self, item_index: int) -> str:
+        """Use staged text, which may differ from the Project after a discard."""
+        item = self.list_items[item_index]
+        if isinstance(item, TextEditorSectionItem):
+            return ""
+        return item.phrase_group.presentable_text
+
     def manual_selection_line_count(self) -> int:
         """Return the number of currently staged phrase-group lines."""
         return sum(

@@ -66,7 +66,9 @@ class SectionMarkersMenu:
     @staticmethod
     def edit_section_markers(state: State) -> None:
         """Run the section-markers editor and report launch failures or saves."""
-        run_result = run_content_textual_app(SectionMarkersEditor(state.project))
+        run_result = run_content_textual_app(
+            SectionMarkersEditor(state.project), state.editor_view_anchors
+        )
         if not isinstance(run_result, ContentAppCompleted):
             ask.ask_error(run_result.message)
             return

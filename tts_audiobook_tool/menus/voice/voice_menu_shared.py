@@ -720,7 +720,7 @@ class VoiceMenuShared:
     @staticmethod
     def assign_voice_samples_to_text_lines(state: State) -> None:
         run_result = run_content_textual_app(
-            VoiceLineEditorTextualApp(state.project)
+            VoiceLineEditorTextualApp(state.project), state.editor_view_anchors
         )
         if not isinstance(run_result, ContentAppCompleted):
             ask.ask_error(run_result.message)

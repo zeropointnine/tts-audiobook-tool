@@ -145,7 +145,9 @@ class GenerateMenu:
             ask.ask_error(range_save_error)
 
         try:
-            run_result = run_content_textual_app(GenerateEditor(state))
+            run_result = run_content_textual_app(
+                GenerateEditor(state), state.editor_view_anchors
+            )
         finally:
             # Housekeeping: quick-gen output that was never kept. Any owned
             # worker job was cancelled or reset by the modal's teardown.

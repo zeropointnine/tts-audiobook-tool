@@ -2,6 +2,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import ClassVar, Generic, TypeVar
 
+from rich.console import RenderableType
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
@@ -16,6 +17,11 @@ from textual.timer import Timer
 
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.system_support.ansi import Ansi
+from tts_audiobook_tool.textual.editor_view_anchor import (
+    EditorViewAnchor,
+    EditorViewAnchors,
+    resolve_anchor_line,
+)
 from tts_audiobook_tool.textual.manual_selection_dialog import ManualSelectionDialog
 from tts_audiobook_tool.textual.save_changes_dialog import (
     ExitDecision,
@@ -133,6 +139,11 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
     expensive editor-specific snapshots do not delay construction of the UI.
     Mutations remain staged by the subclass while this base coordinates row
     refreshes, selection state, confirmation dialogs, and typed exit results.
+
+    The view position (top visible line and highlighted line) is captured on
+    exit as ``exit_view_anchor`` and restored from ``view_anchor`` when content
+    is installed; ``run_content_textual_app`` shuttles both through a
+    session-scoped per-editor store.
     """
 
     CSS = "\n".join((TEXTUAL_SHARED_CSS, CONTENT_TEXTUAL_APP_CSS))
@@ -189,6 +200,10 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         self.selected_status = _StatusContent(right=self.selection_status_text)
         self.toast_status = _StatusContent()
         self.toast_timer: Timer | None = None
+        # View position to restore when content is installed, and the one
+        # captured when the editor exits.
+        self.view_anchor: EditorViewAnchor | None = None
+        self.exit_view_anchor: EditorViewAnchor | None = None
         self.configure()
 
     def configure(self) -> None:
@@ -251,11 +266,178 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         phrase_indices = list(self.initialize_content())
         self.content_initialized = True
         self.update_empty_state_text(self.empty_state_text)
+        # Install the mapping first so the anchor can be resolved against rows.
+        self.phrase_indices = phrase_indices
+        anchor_rows = self.resolve_view_anchor_rows()
         self.replace_phrase_indices(
             phrase_indices,
-            self.initial_selected_phrase_index(),
+            (
+                phrase_indices[anchor_rows[1]]
+                if anchor_rows is not None
+                else self.initial_selected_phrase_index()
+            ),
         )
+        if anchor_rows is not None:
+            self.call_after_refresh(self.scroll_view_to_row, anchor_rows[0])
         self.on_content_loaded()
+
+    def content_line_text(self, item_index: int) -> str:
+        """Return a content row's text, used to recognize its line across sessions.
+
+        Editors which display staged text override this so a captured anchor
+        reflects what was on screen.
+        """
+        line_index = self.content_line_index(item_index)
+        if line_index is None:
+            return ""
+        return self.project_line_text(line_index)
+
+    def project_line_text(self, line_index: int) -> str:
+        """Return the Project's current text for one line."""
+        return self.project.phrase_groups[line_index].presentable_text
+
+    def content_row_at_or_after(self, row: int) -> tuple[int, int] | None:
+        """Return the first visible (row, content line) at or below a row."""
+        for index in range(max(row, 0), len(self.phrase_indices)):
+            line_index = self.content_line_index(self.phrase_indices[index])
+            if line_index is not None:
+                return index, line_index
+        return None
+
+    def visible_row_for_line(self, line_index: int) -> int | None:
+        """Return the visible row showing a content line, else the nearest after it.
+
+        Falls back to the last content row when every visible line precedes
+        it (eg, the line is filtered out or the line count shrank).
+        """
+        last_content_row: int | None = None
+        for row, item_index in enumerate(self.phrase_indices):
+            row_line_index = self.content_line_index(item_index)
+            if row_line_index is None:
+                continue
+            if row_line_index >= line_index:
+                return row
+            last_content_row = row
+        return last_content_row
+
+    def capture_view_anchor(self) -> EditorViewAnchor | None:
+        """Describe the current view position in Project line terms."""
+        if not self.content_initialized or not self.phrase_indices:
+            return None
+        option_lists = self.query("#line-list")
+        if not option_lists:
+            return None
+        option_list = option_lists.first(NonWrappingOptionList)
+        lines = option_list._lines
+        scroll_y = round(option_list.scroll_offset.y)
+        top_row = lines[scroll_y][0] if 0 <= scroll_y < len(lines) else 0
+        top = self.content_row_at_or_after(top_row)
+        if top is None:
+            return None
+        top_content_row, top_line = top
+        # A highlight scrolled entirely out of view (eg, with the mouse) isn't
+        # recorded, so the view rather than the highlight is restored.
+        highlighted = (
+            self.content_row_at_or_after(self.selected_index)
+            if self.selected_index is not None
+            and self.is_row_in_view(option_list, self.selected_index)
+            else None
+        )
+        return EditorViewAnchor(
+            top_line=top_line,
+            top_line_text=self.content_line_text(self.phrase_indices[top_content_row]),
+            top_leading_rows=top_content_row - top_row,
+            highlighted_line=highlighted[1] if highlighted else None,
+            highlighted_line_text=(
+                self.content_line_text(self.phrase_indices[highlighted[0]])
+                if highlighted
+                else ""
+            ),
+        )
+
+    @staticmethod
+    def is_row_in_view(option_list: NonWrappingOptionList, row: int) -> bool:
+        """Whether any part of a row is within the list's viewport."""
+        row_y = option_list._index_to_line.get(row)
+        if row_y is None:
+            return False
+        row_height = option_list._heights.get(row, 1)
+        view_top = round(option_list.scroll_offset.y)
+        view_bottom = view_top + option_list.scrollable_content_region.height
+        return row_y < view_bottom and row_y + row_height > view_top
+
+    def resolve_anchor_row(self, line_index: int, text: str) -> int | None:
+        """Map a stored line onto the closest visible row."""
+        resolved_line = resolve_anchor_line(
+            line_index,
+            text,
+            len(self.project.phrase_groups),
+            self.project_line_text,
+        )
+        if resolved_line is None:
+            return None
+        return self.visible_row_for_line(resolved_line)
+
+    def resolve_view_anchor_rows(self) -> tuple[int, int] | None:
+        """Return the (top row, highlighted row) restoring ``view_anchor``, if any.
+
+        Only deferred content (see ``load_content``) restores an anchor.
+        """
+        anchor = self.view_anchor
+        if anchor is None or not self.phrase_indices:
+            return None
+        top_content_row = self.resolve_anchor_row(anchor.top_line, anchor.top_line_text)
+        if top_content_row is None:
+            return None
+        top_row = top_content_row
+        # Re-include structural rows (eg, a section heading) which were above
+        # the top content line, when they're still there.
+        leading_rows = 0
+        while (
+            leading_rows < anchor.top_leading_rows
+            and top_row > 0
+            and self.content_line_index(self.phrase_indices[top_row - 1]) is None
+        ):
+            top_row -= 1
+            leading_rows += 1
+        highlighted_row = (
+            self.resolve_anchor_row(anchor.highlighted_line, anchor.highlighted_line_text)
+            if anchor.highlighted_line is not None
+            else None
+        )
+        return (
+            top_row,
+            top_content_row if highlighted_row is None else highlighted_row,
+        )
+
+    def scroll_view_to_row(self, top_row: int) -> None:
+        """Put a row at the top of the list, then ensure the highlight is shown.
+
+        The highlight takes precedence: when it isn't fully visible from the
+        stored top row (eg, the original top row was partly scrolled off),
+        the list scrolls only as far as needed to reveal it.
+        """
+        option_list = self.query_one("#line-list", NonWrappingOptionList)
+        top_y = option_list._index_to_line.get(top_row)
+        if top_y is None:
+            return
+        option_list.scroll_to(y=top_y, animate=False, immediate=True)
+        option_list.scroll_to_highlight()
+
+    def exit(
+        self,
+        result: "EditorClosed | EditorResultT | None" = None,
+        return_code: int = 0,
+        message: RenderableType | None = None,
+    ) -> None:
+        """Record the view position while the list is still mounted, then exit."""
+        try:
+            self.exit_view_anchor = self.capture_view_anchor()
+        except Exception:
+            # Position memory is a convenience; it must never block an exit
+            # (which may follow a completed save).
+            self.exit_view_anchor = None
+        super().exit(result, return_code, message)
 
     def format_line_number(self, line_number: int) -> str:
         """Format a user-facing one-based line number as displayed (e.g. "00001")."""
@@ -916,17 +1098,29 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
 
 def run_content_textual_app(
     app: ContentTextualApp[EditorResultT],
+    view_anchors: EditorViewAnchors | None = None,
 ) -> ContentAppRunResult[EditorClosed | EditorResultT]:
-    """Run one editor and translate Textual infrastructure into a typed result."""
+    """Run one editor and translate Textual infrastructure into a typed result.
+
+    When ``view_anchors`` is given, the editor reopens at its previous view
+    position and its exit position is stored back, keyed per editor class.
+    """
     if not can_textual():
         return ContentAppUnavailable(
             "The current terminal environment does not support full-screen editor"
         )
 
+    view_anchor_key = type(app).__name__
+    if view_anchors is not None:
+        app.view_anchor = view_anchors.get(view_anchor_key)
+
     try:
         result = app.run(inline=False)
     except Exception as exception:
         return ContentAppFailed(f"{type(exception).__name__}: {exception}")
+
+    if view_anchors is not None and app.exit_view_anchor is not None:
+        view_anchors[view_anchor_key] = app.exit_view_anchor
 
     exception = app._exception
     if isinstance(exception, StylesheetError):

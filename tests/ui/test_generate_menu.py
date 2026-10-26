@@ -173,7 +173,7 @@ def test_generate_menu_shows_blocker_but_delegates_launch_validation(monkeypatch
 
 
 def test_generation_workflow_closed_result_performs_no_generation(monkeypatch, tmp_path) -> None:
-    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path)), editor_view_anchors={}))
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
         "persist_range_without_generated_items",
@@ -183,7 +183,7 @@ def test_generation_workflow_closed_result_performs_no_generation(monkeypatch, t
     monkeypatch.setattr(
         generate_menu_module,
         "run_content_textual_app",
-        lambda _: ContentAppCompleted(EditorClosed()),
+        lambda _app, _anchors: ContentAppCompleted(EditorClosed()),
     )
     errors: list[str] = []
     monkeypatch.setattr(generate_menu_module.ask, "ask_error", errors.append)
@@ -195,7 +195,7 @@ def test_generation_workflow_closed_result_performs_no_generation(monkeypatch, t
 
 
 def test_generation_workflow_reports_save_failure_without_generation(monkeypatch, tmp_path) -> None:
-    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path)), editor_view_anchors={}))
     feedback_calls: list[str] = []
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
@@ -206,7 +206,7 @@ def test_generation_workflow_reports_save_failure_without_generation(monkeypatch
     monkeypatch.setattr(
         generate_menu_module,
         "run_content_textual_app",
-        lambda _: ContentAppCompleted(EditorSaveFailed("Save failed: disk full")),
+        lambda _app, _anchors: ContentAppCompleted(EditorSaveFailed("Save failed: disk full")),
     )
     monkeypatch.setattr(generate_menu_module.ask, "ask_error", feedback_calls.append)
 
@@ -216,7 +216,7 @@ def test_generation_workflow_reports_save_failure_without_generation(monkeypatch
 
 
 def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch, tmp_path) -> None:
-    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path))))
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(dir_path=str(tmp_path)), editor_view_anchors={}))
     feedback_calls: list[str] = []
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
@@ -227,7 +227,7 @@ def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch, tm
     monkeypatch.setattr(
         generate_menu_module,
         "run_content_textual_app",
-        lambda _: ContentAppStylesheetFailed("Couldn't load textual css"),
+        lambda _app, _anchors: ContentAppStylesheetFailed("Couldn't load textual css"),
     )
     monkeypatch.setattr(generate_menu_module.ask, "ask_error", feedback_calls.append)
 

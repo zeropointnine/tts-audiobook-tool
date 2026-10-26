@@ -89,7 +89,9 @@ class TextMenu:
     @staticmethod
     def edit_text(state: State) -> None:
         """Run one text editor and present its result in the surrounding menu."""
-        run_result = run_content_textual_app(TextEditor(state.project))
+        run_result = run_content_textual_app(
+            TextEditor(state.project), state.editor_view_anchors
+        )
         if not isinstance(run_result, ContentAppCompleted):
             ask.ask_error(run_result.message)
             return
@@ -299,7 +301,7 @@ def make_text_replacement_confirm_message(project: Project) -> str:
     num_substitutions = len(project.word_substitutions)
     if num_substitutions > 0:
         items_noun = make_noun("item", "items", num_substitutions)
-        s += f"{COL_DIM}Note: Word substitutions ({num_substitutions} {items_noun}) will be kept.{COL_DEFAULT}\n"
+        s += f"{COL_DIM}Note: Word substitutions ({num_substitutions} {items_noun}) will be preserved{COL_DEFAULT}\n"
     if has_assignments:
         s += f"{COL_DIM}Note: Current character roster and voice mappings will be preserved{COL_DEFAULT}\n"
 

@@ -20,6 +20,10 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaved,
     run_content_textual_app,
 )
+from tts_audiobook_tool.textual.editor_view_anchor import (
+    EditorViewAnchor,
+    resolve_anchor_line,
+)
 from tts_audiobook_tool.textual.manual_selection_dialog import ManualSelectionDialog
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
 from tts_audiobook_tool.textual.textual_shared import (
@@ -1050,3 +1054,205 @@ def test_base_discarded_or_cancelled_exit_closes_or_stays_open_without_committin
         assert app.return_value == EditorClosed()
 
     run(exercise())
+
+
+def test_resolve_anchor_line_follows_text_then_clamps() -> None:
+    texts = ["a", "b", "c", "d"]
+
+    def line_text(index: int) -> str:
+        return texts[index]
+
+    # Unchanged line resolves to itself
+    assert resolve_anchor_line(2, "c", len(texts), line_text) == 2
+    # A line which moved (eg, lines inserted above it) is followed by its text
+    assert resolve_anchor_line(0, "c", len(texts), line_text) == 2
+    # Without a text match the stored index is clamped into range
+    assert resolve_anchor_line(9, "gone", len(texts), line_text) == 3
+    assert resolve_anchor_line(1, "gone", len(texts), line_text) == 1
+    assert resolve_anchor_line(0, "a", 0, line_text) is None
+
+
+def test_runner_restores_and_stores_view_anchor_per_editor(monkeypatch) -> None:
+    app, _ = make_app()
+    stored = EditorViewAnchor(top_line=1, top_line_text="hidden")
+    captured = EditorViewAnchor(top_line=2, top_line_text="third needle")
+    other = EditorViewAnchor(top_line=0, top_line_text="first")
+    view_anchors = {"StubContentApp": stored, "OtherEditor": other}
+    seen_on_run: list[EditorViewAnchor | None] = []
+
+    def fake_run(**_):
+        seen_on_run.append(app.view_anchor)
+        app.exit_view_anchor = captured
+        return EditorSaved()
+
+    monkeypatch.setattr(content_textual_app, "can_textual", lambda: True)
+    monkeypatch.setattr(app, "run", fake_run)
+
+    run_content_textual_app(app, view_anchors)
+
+    assert seen_on_run == [stored]
+    # Only this editor's entry is replaced
+    assert view_anchors == {"StubContentApp": captured, "OtherEditor": other}
+
+
+def make_long_project(count: int, prefix: list[str] | None = None) -> StubProject:
+    return StubProject(
+        [StubPhraseGroup(text) for text in (prefix or [])]
+        + [StubPhraseGroup(f"line {index}") for index in range(count)]
+    )
+
+
+def top_row(app: ContentTextualApp) -> int:
+    option_list = app.query_one("#line-list", NonWrappingOptionList)
+    return option_list._lines[round(option_list.scroll_offset.y)][0]
+
+
+def test_view_anchor_round_trips_through_exit_and_follows_shifted_lines() -> None:
+    # The first session scrolls down and exits; the second session reopens on
+    # a project with lines inserted at the start, and lands on the same text.
+    first_project = make_long_project(200)
+    first_app = DeferredStubContentApp(first_project, list(range(200)))
+
+    async def first_session() -> None:
+        async with first_app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            option_list = first_app.query_one("#line-list", OptionList)
+            option_list.highlighted = 120
+            await pilot.pause()
+            first_app.exit(EditorClosed())
+            await pilot.pause()
+
+    run(first_session())
+    anchor = first_app.exit_view_anchor
+    assert anchor is not None
+    assert anchor.highlighted_line == 120
+    assert anchor.highlighted_line_text == "line 120"
+    assert 90 < anchor.top_line < 120
+    assert anchor.top_line_text == f"line {anchor.top_line}"
+
+    second_project = make_long_project(200, prefix=["new a", "new b", "new c"])
+    second_app = DeferredStubContentApp(second_project, list(range(203)))
+    second_app.view_anchor = anchor
+
+    async def second_session() -> None:
+        async with second_app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            assert second_app.selected_index == 123
+            assert top_row(second_app) == anchor.top_line + 3
+
+    run(second_session())
+
+
+def test_view_anchor_highlight_wins_over_partially_scrolled_top_row() -> None:
+    # Rows are three lines tall. The top row is scrolled one line out of view
+    # and the highlight sits on the bottom row. The anchor only records the
+    # top row, so restoring it in full would push the highlight off the bottom;
+    # the highlight takes precedence and the view scrolls just enough to show it.
+    project = StubProject([StubPhraseGroup(f"line {index}\nb\nc") for index in range(60)])
+    first_app = DeferredStubContentApp(project, list(range(60)))
+
+    async def first_session() -> None:
+        async with first_app.run_test(size=(80, 25)) as pilot:
+            await pilot.pause()
+            option_list = first_app.query_one("#line-list", NonWrappingOptionList)
+            assert option_list.scrollable_content_region.height == 22
+            option_list.highlighted = 17
+            await pilot.pause()
+            # Row 10 spans y 30-32; rows 11-17 fill y 33-53
+            option_list.scroll_to(y=32, animate=False, immediate=True)
+            await pilot.pause()
+            first_app.exit(EditorClosed())
+            await pilot.pause()
+
+    run(first_session())
+    anchor = first_app.exit_view_anchor
+    assert anchor is not None
+    assert (anchor.top_line, anchor.highlighted_line) == (10, 17)
+
+    second_app = DeferredStubContentApp(project, list(range(60)))
+    second_app.view_anchor = anchor
+
+    async def second_session() -> None:
+        async with second_app.run_test(size=(80, 25)) as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            option_list = second_app.query_one("#line-list", NonWrappingOptionList)
+            assert second_app.selected_index == 17
+            assert option_list.scroll_offset.y == 32
+
+    run(second_session())
+
+
+def test_view_anchor_omits_highlight_scrolled_out_of_view() -> None:
+    # A highlight scrolled entirely out of view (eg, with the mouse) isn't
+    # recorded, so reopening restores the view and highlights its top line.
+    project = make_long_project(200)
+    first_app = DeferredStubContentApp(project, list(range(200)))
+
+    async def first_session() -> None:
+        async with first_app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            option_list = first_app.query_one("#line-list", OptionList)
+            option_list.scroll_to(y=150, animate=False, immediate=True)
+            await pilot.pause()
+            first_app.exit(EditorClosed())
+            await pilot.pause()
+
+    run(first_session())
+    assert first_app.exit_view_anchor == EditorViewAnchor(
+        top_line=150, top_line_text="line 150"
+    )
+
+    second_app = DeferredStubContentApp(project, list(range(200)))
+    second_app.view_anchor = first_app.exit_view_anchor
+
+    async def second_session() -> None:
+        async with second_app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            assert top_row(second_app) == 150
+            assert second_app.selected_index == 150
+
+    run(second_session())
+
+
+def test_view_anchor_restores_leading_structural_row() -> None:
+    # A structural row (eg, a section heading) at the top of the view is
+    # restored above the anchor's top content line.
+    project = make_long_project(60)
+    app = StructuralRowStubContentApp(project, phrase_indices=list(range(60)))
+
+    async def exercise() -> None:
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            option_list = app.query_one("#line-list", OptionList)
+            option_list.scroll_to(y=1, animate=False, immediate=True)
+            await pilot.pause()
+            anchor = app.capture_view_anchor()
+            assert anchor == EditorViewAnchor(
+                top_line=2,
+                top_line_text="line 2",
+                top_leading_rows=1,
+                # Row 0 (the highlight) was scrolled out of view
+            )
+
+    run(exercise())
+
+    class DeferredStructuralRowStubContentApp(DeferredStubContentApp):
+        def content_line_index(self, item_index: int) -> int | None:
+            return None if item_index == 1 else item_index
+
+    restored_app = DeferredStructuralRowStubContentApp(project, list(range(60)))
+    restored_app.view_anchor = EditorViewAnchor(
+        top_line=2, top_line_text="line 2", top_leading_rows=1
+    )
+
+    async def restore() -> None:
+        async with restored_app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            assert top_row(restored_app) == 1
+            assert restored_app.selected_index == 2
+
+    run(restore())

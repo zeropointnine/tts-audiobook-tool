@@ -301,7 +301,10 @@ def test_voice_sample_assignment_reports_editor_failures(
 ) -> None:
     state = cast(
         State,
-        SimpleNamespace(project=StubProject([StubPhraseGroup("Line 1")])),
+        SimpleNamespace(
+            project=StubProject([StubPhraseGroup("Line 1")]),
+            editor_view_anchors={},
+        ),
     )
     feedback_calls: list[str] = []
     monkeypatch.setattr(
@@ -312,7 +315,7 @@ def test_voice_sample_assignment_reports_editor_failures(
     monkeypatch.setattr(
         voice_menu_shared,
         "run_content_textual_app",
-        lambda _: run_result,
+        lambda _app, _anchors: run_result,
     )
     monkeypatch.setattr(voice_menu_shared.ask, "ask_error", feedback_calls.append)
 

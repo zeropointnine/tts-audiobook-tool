@@ -23,7 +23,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
 
 
 def make_state() -> State:
-    return cast(State, SimpleNamespace(project=object()))
+    return cast(State, SimpleNamespace(project=object(), editor_view_anchors={}))
 
 
 def stub_editor_construction(monkeypatch) -> None:
@@ -36,7 +36,7 @@ def test_text_menu_saved_editor_result_does_not_report_error(monkeypatch) -> Non
     monkeypatch.setattr(
         text_menu_module,
         "run_content_textual_app",
-        lambda _: ContentAppCompleted(EditorSaved()),
+        lambda _app, _anchors: ContentAppCompleted(EditorSaved()),
     )
     monkeypatch.setattr(text_menu_module.ask, "ask_error", errors.append)
 
@@ -51,7 +51,7 @@ def test_text_menu_reports_save_failure(monkeypatch) -> None:
     monkeypatch.setattr(
         text_menu_module,
         "run_content_textual_app",
-        lambda _: ContentAppCompleted(EditorSaveFailed("Save failed: disk full")),
+        lambda _app, _anchors: ContentAppCompleted(EditorSaveFailed("Save failed: disk full")),
     )
     monkeypatch.setattr(text_menu_module.ask, "ask_error", feedback_calls.append)
 
@@ -66,7 +66,7 @@ def test_text_menu_reports_technical_launch_failure(monkeypatch) -> None:
     monkeypatch.setattr(
         text_menu_module,
         "run_content_textual_app",
-        lambda _: ContentAppUnavailable("Unsupported terminal"),
+        lambda _app, _anchors: ContentAppUnavailable("Unsupported terminal"),
     )
     monkeypatch.setattr(text_menu_module.ask, "ask_error", feedback_calls.append)
 
@@ -432,11 +432,11 @@ def test_text_import_confirmation_notes_kept_substitutions(monkeypatch) -> None:
 
     assert len(captured["confirm_calls"]) == 1
     raw_message = captured["confirm_calls"][0]
-    assert f"{COL_DIM}Note: Word substitutions (1 item) will be kept." in raw_message
+    assert f"{COL_DIM}Note: Word substitutions (1 item) will be preserved" in raw_message
     assert strip_ansi_codes(raw_message) == (
         "Replacing project text will invalidate the following:\n"
         "- Section markers (2 items)\n"
-        "Note: Word substitutions (1 item) will be kept.\n"
+        "Note: Word substitutions (1 item) will be preserved\n"
         "\n"
         "Are you sure? "
     )

@@ -325,7 +325,9 @@ def print_characters_expanded(characters: Sequence[RosterCharacter], id_width: i
             f"{COL_DIM}tier: {COL_DEFAULT}{tier:<10} "
             f"{COL_DIM}gender: {COL_DEFAULT}{character.gender}{narrator}"
         )
-        aliases = ", ".join(character.aliases) if character.aliases else f"{COL_DIM}(none)"
+        # An alias that just repeats the name adds nothing here
+        alias_list = [alias for alias in character.aliases if alias.strip() != character.name.strip()]
+        aliases = ", ".join(alias_list) if alias_list else f"{COL_DIM}(none)"
         printt(f"{indent}{COL_DIM}name: {COL_DEFAULT}{character.name}")
         printt(f"{indent}{COL_DIM}aliases: {COL_DEFAULT}{aliases}")
         if character.description.strip():
