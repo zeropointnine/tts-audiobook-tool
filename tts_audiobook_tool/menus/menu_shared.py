@@ -16,7 +16,11 @@ def make_concat_menu_heading(state: State) -> str:
     return f"Create audiobook {noun}"
 
 
-def make_output_files_subheading(state: State) -> str:
+def make_output_files_subheading(state: State, truncate: bool = True) -> str:
+    """
+    Lists the output files' line ranges and generation progress.
+    When `truncate` is set, long lists show only the first few files.
+    """
 
     if state.project.chapter_mode != SectionMarkerMode.FILES:
         return ""
@@ -25,7 +29,7 @@ def make_output_files_subheading(state: State) -> str:
     if len(infos) == 1:
         return ""
 
-    if len(infos) > 4:
+    if truncate and len(infos) > 4:
         subinfos = infos[:3]
         extra = f" {COL_DIM_ITALICS}... {COL_ACCENT}+{len(infos) - len(subinfos)} {COL_DIM}more files"
     else:
@@ -36,6 +40,11 @@ def make_output_files_subheading(state: State) -> str:
     if extra:
         strings[-1] += extra
     return "\n".join(strings)
+
+
+def make_full_output_files_subheading(state: State) -> str:
+    """Lists every output file, without truncation."""
+    return make_output_files_subheading(state, truncate=False)
 
 
 def make_output_range_info_strings(infos: list[OutputRangeInfo], indices: list[int]) -> list[str]:

@@ -207,6 +207,14 @@ class Project(BaseModel):
     # - string literal "none" means no selection
     generate_range_string: str = Field(default="", alias="generate_range")
 
+    # Output file numbers last entered at the "create audiobook files" prompt,
+    # as a normalized range string (eg, "1-3, 5" or "all").
+    # Only valid while the file cut points and number of text lines it was
+    # entered against are unchanged, as recorded by `concat_files_range_basis`.
+    # (see `ProjectUtil.get_concat_files_range_string()`)
+    concat_files_range_string: str = ""
+    concat_files_range_basis: str = ""
+
     marker_indices: set[int] = Field(default_factory=set, alias="markers")
     subdivide_phrases: bool = False
     export_type: ExportType = list(ExportType)[0]

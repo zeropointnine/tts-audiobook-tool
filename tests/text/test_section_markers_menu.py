@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.menus.menu_shared import make_output_files_subheading
+from tts_audiobook_tool.menus.menu_shared import make_full_output_files_subheading, make_output_files_subheading
 from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.section_markers_menu import (
     LIMITED_SUBLABEL,
@@ -51,6 +51,24 @@ def test_output_files_subheading_has_only_internal_newlines() -> None:
         "▸ File 1: lines 1 to 2 (0/2 generated)\n"
         "▸ File 2: lines 3 to 6 (0/4 generated)"
     )
+
+
+def test_output_files_subheading_truncation_is_optional() -> None:
+    # Menus abbreviate long file lists; the concat "Start" screen lists every file.
+    state = make_multisection_state()
+    state.project.markers = {1, 2, 3, 4}
+
+    truncated = strip_ansi_codes(make_output_files_subheading(state))
+    assert truncated.splitlines()[-1] == "▸ File 3: lines 3 to 3 (0/1 generated) ... +2 more files"
+
+    full = strip_ansi_codes(make_full_output_files_subheading(state))
+    assert full.splitlines() == [
+        "▸ File 1: lines 1 to 1 (0/1 generated)",
+        "▸ File 2: lines 2 to 2 (0/1 generated)",
+        "▸ File 3: lines 3 to 3 (0/1 generated)",
+        "▸ File 4: lines 4 to 4 (0/1 generated)",
+        "▸ File 5: lines 5 to 6 (0/2 generated)",
+    ]
 
 
 def test_split_points_subheading_lists_output_file_ranges() -> None:

@@ -52,6 +52,105 @@ def test_ask_output_indices_empty_input_cancels() -> None:
     print_feedback.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("inp", "expected"),
+    [
+        # Input is returned post-processed as a canonical range string
+        ("4,1, 3", ([0, 2, 3], "1, 3-4")),
+        ("2-4", ([1, 2, 3], "2-4")),
+        # Files without audio (file 2) are skipped, but kept in the saved range string
+        ("1-3", ([0, 2], "1-3")),
+        ("all", ([0, 2, 3], "all")),
+        # Out-of-range values are dropped (and range ends clamped) rather than rejected
+        ("1, 9", ([0], "1")),
+        ("3-99", ([2, 3], "3-4")),
+    ],
+)
+def test_ask_output_indices_returns_normalized_range_string(inp, expected) -> None:
+    infos = [
+        SimpleNamespace(output_index=0, num_files_exist=1),
+        SimpleNamespace(output_index=1, num_files_exist=1 if inp == "2-4" else 0),
+        SimpleNamespace(output_index=2, num_files_exist=1),
+        SimpleNamespace(output_index=3, num_files_exist=1),
+    ]
+
+    with patch.object(concat_menu.ask, "ask_input", return_value=inp) as ask_input, \
+            patch.object(concat_menu, "printt"):
+        result = concat_menu.ask_output_indices(infos, prefill="2")  # type: ignore[arg-type]
+
+    assert result == expected
+    ask_input.assert_called_once_with(prefill="2")
+
+
+@pytest.mark.parametrize("inp", ["2", "9", "bad", "1, x"])
+def test_ask_output_indices_errors_when_nothing_usable_selected(inp) -> None:
+    # Syntax errors block, as does a selection with no audio at all
+    # (including one made up only of out-of-range values)
+    infos = [
+        SimpleNamespace(output_index=0, num_files_exist=1),
+        SimpleNamespace(output_index=1, num_files_exist=0),
+    ]
+
+    with patch.object(concat_menu.ask, "ask_input", return_value=inp), \
+            patch.object(concat_menu.ask, "ask_error") as ask_error, \
+            patch.object(concat_menu, "printt"):
+        result = concat_menu.ask_output_indices(infos)  # type: ignore[arg-type]
+
+    assert result is None
+    ask_error.assert_called_once()
+
+
+def make_files_mode_project(num_lines: int, markers: set[int]) -> Project:
+    return Project.model_validate({
+        "phrase_groups": [make_phrase_group(f"Line {i}.") for i in range(num_lines)],
+        "markers": sorted(markers),
+        "chapter_mode": SectionMarkerMode.FILES.id,
+    })
+
+
+def test_concat_files_range_string_invalidates_when_file_layout_changes() -> None:
+    # The saved file numbers only apply to the cut points and line count they
+    # were entered against; changing either one drops the prefill.
+    project = make_files_mode_project(6, {2, 4})
+    with patch.object(Project, "save", return_value="") as save:
+        concat_menu.ProjectUtil.persist_concat_files_range_string(project, "1, 3")
+        concat_menu.ProjectUtil.persist_concat_files_range_string(project, "1, 3")
+    save.assert_called_once()
+    assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == "1, 3"
+
+    project.markers = {2, 5}
+    assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == ""
+    # Restoring the original cut points makes it valid again
+    project.markers = {2, 4}
+    assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == "1, 3"
+
+    project.phrase_groups = project.phrase_groups[:5]
+    assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == ""
+
+
+def test_ask_output_indices_and_make_prefills_and_persists_file_numbers() -> None:
+    project = make_files_mode_project(6, {2, 4})
+    project.concat_files_range_string = "2"
+    project.concat_files_range_basis = concat_menu.ProjectUtil.make_concat_files_range_basis(project)
+    project._sound_segments = SimpleNamespace(num_generated=lambda: 6)
+    state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(project_dir="/tmp")))
+    infos = [concat_menu.OutputRangeInfo(i, i * 2, i * 2 + 1, {i * 2: "a.wav"}) for i in range(3)]
+
+    with patch.object(concat_menu.OutputRangeInfo, "make_output_range_infos", return_value=infos), \
+            patch.object(concat_menu.MenuUtil, "print_screen_heading"), \
+            patch.object(concat_menu, "printt"), \
+            patch.object(concat_menu, "print_accent_separator"), \
+            patch.object(concat_menu.ask, "ask_input", return_value="3, 1") as ask_input, \
+            patch.object(concat_menu.ask, "ask_confirm", return_value=False), \
+            patch.object(Project, "save", return_value="") as save:
+        concat_menu.ask_output_indices_and_make(state)
+
+    ask_input.assert_called_once_with(prefill="2")
+    save.assert_called_once()
+    assert project.concat_files_range_string == "1, 3"
+    assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == "1, 3"
+
+
 def test_start_shows_split_file_list_before_file_number_prompt() -> None:
     # Start renders the same range/progress description as Create, before input.
     state = cast(State, SimpleNamespace(
@@ -59,6 +158,9 @@ def test_start_shows_split_file_list_before_file_number_prompt() -> None:
             export_type=ExportType.AAC,
             chapter_mode=SectionMarkerMode.FILES,
             markers=[9],
+            phrase_groups=[None] * 6947,
+            concat_files_range_string="",
+            concat_files_range_basis="",
             sound_segments=SimpleNamespace(num_generated=lambda: 1021),
         ),
         prefs=SimpleNamespace(project_dir="/tmp"),
@@ -84,7 +186,7 @@ def test_start_shows_split_file_list_before_file_number_prompt() -> None:
     ), patch.object(
         concat_menu.ask, "ask_input", return_value=""
     ), patch.object(concat_menu.ConcatUtil, "make_files") as make_files:
-        expected_description = strip_ansi_codes(concat_menu.make_output_files_subheading(state))
+        expected_description = strip_ansi_codes(concat_menu.make_full_output_files_subheading(state))
         concat_menu.ask_output_indices_and_make(state)
 
     assert expected_description == (
@@ -253,7 +355,7 @@ def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_s
         concat_menu.ask_output_indices_and_make(cast(State, state))
 
     print_screen_heading.assert_called_once_with(
-        state, "Start", subheading=concat_menu.make_output_files_subheading
+        state, "Start", subheading=concat_menu.make_full_output_files_subheading
     )
     assert events.index("heading") < events.index("Will create a single AAC/M4B file:")
     assert events.index("Will create a single AAC/M4B file:") < events.index("confirm")
@@ -294,7 +396,7 @@ def test_ask_output_indices_and_make_single_file_ignores_markers_as_bookmarks_fo
         concat_menu.ask_output_indices_and_make(cast(State, state))
 
     print_screen_heading.assert_called_once_with(
-        state, "Start", subheading=concat_menu.make_output_files_subheading
+        state, "Start", subheading=concat_menu.make_full_output_files_subheading
     )
     make_files_mock.assert_called_once_with(
         state=state,

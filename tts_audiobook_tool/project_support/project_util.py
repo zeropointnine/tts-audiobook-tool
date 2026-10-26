@@ -149,6 +149,35 @@ class ProjectUtil:
         return f"Save failed: {error}" if error else ""
     
     @staticmethod
+    def make_concat_files_range_basis(project: Project) -> str:
+        """
+        Returns a string identifying the project's current output file layout
+        (number of text lines plus file cut points).
+        """
+        markers = ",".join(str(marker) for marker in sorted(project.markers))
+        return f"{len(project.phrase_groups)}:{markers}"
+
+    @staticmethod
+    def get_concat_files_range_string(project: Project) -> str:
+        """
+        Returns the last-entered output file numbers range string,
+        or empty string if none was saved or if the file layout has changed since.
+        """
+        if project.concat_files_range_basis != ProjectUtil.make_concat_files_range_basis(project):
+            return ""
+        return project.concat_files_range_string
+
+    @staticmethod
+    def persist_concat_files_range_string(project: Project, range_string: str) -> str:
+        """Stores the output file numbers range string, saving when changed."""
+        basis = ProjectUtil.make_concat_files_range_basis(project)
+        if (project.concat_files_range_string, project.concat_files_range_basis) == (range_string, basis):
+            return ""
+        project.concat_files_range_string = range_string
+        project.concat_files_range_basis = basis
+        return project.save()
+
+    @staticmethod
     def get_latest_concat_files(project: Project, limit=10) -> list[tuple[str, str]]:
         """
         Finds latest concatenated audio files within the project's concat directory,

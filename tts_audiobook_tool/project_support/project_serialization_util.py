@@ -359,6 +359,11 @@ class ProjectSerializationUtil:
             elif normalized_range == 'none':
                 d['generate_range'] = 'none'
 
+        # Optional keys: absent in projects saved before they existed, so no warning
+        for key in ('concat_files_range_string', 'concat_files_range_basis'):
+            if not isinstance(d.get(key, ''), str):
+                d[key] = ''
+
         if 'markers' in d:
             phrase_groups = d.get('phrase_groups', [])
             if not phrase_groups and isinstance(d.get('book'), Book):
@@ -960,6 +965,8 @@ class ProjectSerializationUtil:
             "word_substitutions_json_string": json.dumps(project.word_substitutions),
 
             "generate_range": project.generate_range_string,
+            "concat_files_range_string": project.concat_files_range_string,
+            "concat_files_range_basis": project.concat_files_range_basis,
             "markers": sorted(project.markers),
             "subdivide_phrases": project.subdivide_phrases,
             "export_type": project.export_type.id,

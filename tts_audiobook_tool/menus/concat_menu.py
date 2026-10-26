@@ -4,7 +4,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
 from tts_audiobook_tool.menus.section_markers_menu import SectionMarkersMenu
-from tts_audiobook_tool.menus.menu_shared import make_concat_menu_heading, make_output_files_subheading, make_output_range_info_strings
+from tts_audiobook_tool.menus.menu_shared import make_concat_menu_heading, make_full_output_files_subheading, make_output_files_subheading, make_output_range_info_strings
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -585,19 +585,20 @@ def ask_output_indices_and_make(state: State) -> None:
 
     type_string = "AAC/M4B" if state.project.export_type == ExportType.AAC else "FLAC"
 
-    MenuUtil.print_screen_heading(state, "Start", subheading=make_output_files_subheading)
+    MenuUtil.print_screen_heading(state, "Start", subheading=make_full_output_files_subheading)
 
     should_ask_file_numbers = (state.project.chapter_mode == SectionMarkerMode.FILES) and len(state.project.markers) > 0
     if should_ask_file_numbers:
 
         infos = OutputRangeInfo.make_output_range_infos(state.project)
 
-        result = ask_output_indices(infos)
+        prefill = ProjectUtil.get_concat_files_range_string(state.project)
+        result = ask_output_indices(infos, prefill=prefill)
         if result is None:
             return
-        else:
-            output_indices = result
-            bookmark_indices = []
+        output_indices, range_string = result
+        bookmark_indices = []
+        ProjectUtil.persist_concat_files_range_string(state.project, range_string)
 
         noun = make_noun('file', 'files', len(output_indices))
         s = f"Will create the following {type_string} {noun}:"
@@ -640,39 +641,36 @@ def ask_output_indices_and_make(state: State) -> None:
         bookmark_indices=bookmark_indices
     )
 
-def ask_output_indices(infos: list[OutputRangeInfo]) -> list[int] | None:
+def ask_output_indices(infos: list[OutputRangeInfo], prefill: str = "") -> tuple[list[int], str] | None:
+    """
+    Returns the selected zero-indexed output file indices, excluding files
+    with no generated audio, and the input normalized as a range string
+    (including those files), or None on cancel/error.
+    Out-of-range file numbers are ignored.
+    """
 
     printt("Enter file numbers to create:")
     printt(f"{COL_DIM}(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
-    inp = ask.ask_input()
+    inp = ask.ask_input(prefill=prefill)
 
     if not inp:
         return None
 
-    if inp == "all" or inp == "a":
-        indices = [info.output_index for info in infos if info.num_files_exist > 0]
-        if not indices:
-            ask.ask_error("No chapter files have generated audio")
-            return None
-        return indices
-
-    indices, warnings = RangeStringUtil.parse_ranges_string(inp, len(infos))
+    # Lenient: out-of-range values are dropped; only syntax errors are reported
+    selected_indices, warnings = RangeStringUtil.parse_ranges_string(inp, len(infos), strict=False)
     if warnings:
         message = "\n".join(warnings)
         ask.ask_error(message)
         return None
 
-    indices = list(indices)
+    # Files without generated audio are skipped rather than rejected
+    indices = sorted(index for index in selected_indices if infos[index].num_files_exist > 0)
     if not indices:
+        ask.ask_error("No generated audio for the selected files")
         return None
 
-    missing_audio_indices = [index for index in indices if infos[index].num_files_exist == 0]
-    if missing_audio_indices:
-        item_numbers = ", ".join(str(index + 1) for index in missing_audio_indices)
-        ask.ask_error(f"No generated audio for chapter file: {item_numbers}")
-        return None
-
-    return indices
+    range_string = RangeStringUtil.make_ranges_string(selected_indices, len(infos))
+    return indices, range_string
 
 chromium_info = get_chromium_info()
 
