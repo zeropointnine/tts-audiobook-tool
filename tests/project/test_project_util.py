@@ -61,3 +61,30 @@ def test_persist_range_without_generated_items_updates_and_saves_project(
     assert error == ""
     assert project.generate_range_string == expected_range
     assert project.save_calls == expected_save_calls
+
+def test_get_latest_concat_files_lists_every_abr_file_per_subdir(tmp_path) -> None:
+    # Every .abr file in each concat subdirectory is listed (newest subdirectory first,
+    # files in natural order), debug artifacts are skipped, and the result is clamped to `limit`.
+    import os
+    from types import SimpleNamespace
+
+    older = tmp_path / "older"
+    newer = tmp_path / "newer"
+    older.mkdir()
+    newer.mkdir()
+    for name in ("book [1 of 1].abr.m4b", "notes.txt"):
+        (older / name).write_text("")
+    for name in ("book [10 of 12].abr.flac", "book [2 of 12].abr.flac", "book [2 of 12] [concat].abr.flac"):
+        (newer / name).write_text("")
+    os.utime(older, (1_000, 1_000))
+    os.utime(newer, (2_000, 2_000))
+    project = cast(Project, SimpleNamespace(concat_path=str(tmp_path)))
+
+    paths = [path for path, _ in ProjectUtil.get_latest_concat_files(project, limit=10)]
+    assert paths == [
+        str(newer / "book [2 of 12].abr.flac"),
+        str(newer / "book [10 of 12].abr.flac"),
+        str(older / "book [1 of 1].abr.m4b"),
+    ]
+
+    assert len(ProjectUtil.get_latest_concat_files(project, limit=2)) == 2

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -181,10 +182,13 @@ class ProjectUtil:
     def get_latest_concat_files(project: Project, limit=10) -> list[tuple[str, str]]:
         """
         Finds latest concatenated audio files within the project's concat directory,
-        returning tuples of (path, modified_date) where modified_date is
+        returning up to `limit` tuples of (path, modified_date) where modified_date is
         YYYY-MM-DD HH:MM.
+        Subdirectories are ordered newest first; files within a subdirectory
+        are in natural sort order (eg, "[2 of 12]" before "[10 of 12]").
         """
-        ONE_FILE_PER_SUBDIR = True
+        if limit <= 0:
+            return []
 
         concat_dir = project.concat_path
         if not concat_dir or not os.path.exists(concat_dir):
@@ -203,7 +207,7 @@ class ProjectUtil:
         results = []
         for subdir in subdirs:
             try:
-                file_names = sorted(os.listdir(subdir)) # alpha-sorted
+                file_names = sorted(os.listdir(subdir), key=_natural_sort_key)
             except (OSError, PermissionError):
                 continue
             for file_name in file_names:
@@ -216,10 +220,8 @@ class ProjectUtil:
                     except (OSError, PermissionError, ValueError):
                         modified_date = "unknown"
                     results.append((path, modified_date))
-                    if ONE_FILE_PER_SUBDIR:
-                        break
-            if len(results) >= limit:
-                break
+                    if len(results) >= limit:
+                        return results
         
         return results
 
@@ -262,3 +264,7 @@ class ProjectUtil:
             tokens = tokens[:4]
             tokens[3] = "..."
         return ", ".join(tokens)
+
+def _natural_sort_key(s: str) -> list[int | str]:
+    """Sort key which orders embedded numbers numerically (eg, "2" before "10")."""
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", s)]

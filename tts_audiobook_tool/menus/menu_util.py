@@ -246,8 +246,7 @@ class MenuUtil:
 
         if is_no_hotkeys:
             # Assign hotkeys to items
-            HOTKEYS_AUTO = list('123456789abcdefghijklmnopqrstuvwxyz')
-            items_list = items_list[:len(HOTKEYS_AUTO)] # Silently clamp
+            items_list = items_list[:MAX_AUTO_HOTKEY_MENU_ITEMS] # Silently clamp
             for i, item in enumerate(items_list):
                 item.hotkey = HOTKEYS_AUTO[i]
         else:
@@ -530,3 +529,6 @@ def get_string_from(state: State, string_or_maker: StringOrMaker) -> str:
         return string_or_maker(state)
 
 HOTKEYS_AUTO = list('123456789abcdefghijklmnopqrstuvwxyz')
+
+# Maximum number of items a menu with auto-assigned hotkeys can display
+MAX_AUTO_HOTKEY_MENU_ITEMS = len(HOTKEYS_AUTO)

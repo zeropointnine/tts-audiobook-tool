@@ -8,7 +8,7 @@ from tts_audiobook_tool.menus.menu_shared import make_concat_menu_heading, make_
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MAX_AUTO_HOTKEY_MENU_ITEMS, MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
@@ -159,7 +159,7 @@ class ConcatMenu:
                 )
             )
 
-            can_and_haz = chromium_info and ProjectUtil.get_latest_concat_files(state.project)
+            can_and_haz = chromium_info and ProjectUtil.get_latest_concat_files(state.project, limit=1)
             if can_and_haz:
                 items.append(
                     MenuItem(
@@ -480,8 +480,7 @@ class ConcatMenu:
         if chromium_info is None:
             return
 
-        MAX = 35 # TODO parameterize menu-max-items
-        file_infos = ProjectUtil.get_latest_concat_files(state.project, MAX)
+        file_infos = ProjectUtil.get_latest_concat_files(state.project, MAX_AUTO_HOTKEY_MENU_ITEMS)
         if not file_infos:
             print_feedback("No files found")
             return
