@@ -6,7 +6,7 @@ ids (or one of the reserved answers in `speaker_assign_types`).
 On disk (the keys the prototype's cache already uses):
 
     {
-        "narration": {"person": "first", "notes": "..."},
+        "narration": {"person": "first", "notes": "...", "voice_hint": "..."},
         "characters": [
             {
                 "id": "BARON",                  # canonical speaker label
@@ -14,15 +14,18 @@ On disk (the keys the prototype's cache already uses):
                 "aliases": ["the baron", "pèren"],
                 "gender": "male",
                 "description": "...",
+                "voice_hint": "elderly; deep, gravelly; slow, imperious",
                 "is_narrator": false,
                 "prominence": "major"
             }
         ]
     }
 
-User-facing fields (`id`, `name`, narration `notes`) are spoiler-free;
-LLM-facing fields (`aliases`, `description`) are complete and may contain
-spoilers. Instances are immutable; edits make a new instance with
+User-facing fields (`id`, `name`, `voice_hint`, narration `notes` and
+`voice_hint`) are spoiler-free; LLM-facing fields (`aliases`, `description`)
+are complete and may contain spoilers. `voice_hint` (what kind of reference
+voice suits the character or narration) is shown only to the user, not sent
+with the dialog attribution requests. Instances are immutable; edits make a new instance with
 `dataclasses.replace`.
 
 `RosterFile` is the full-book pass's saved result: the roster plus provenance,
@@ -108,6 +111,7 @@ class RosterCharacter:
     description: str = ""
     is_narrator: bool = False
     prominence: Prominence = Prominence.UNKNOWN
+    voice_hint: str = ""
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not ROSTER_ID_PATTERN.fullmatch(self.id):
@@ -134,6 +138,7 @@ class RosterCharacter:
             "description": self.description,
             "is_narrator": self.is_narrator,
             "prominence": self.prominence.value,
+            "voice_hint": self.voice_hint,
         }
 
     @staticmethod
@@ -156,6 +161,7 @@ class RosterCharacter:
             description=_string(value.get("description"), ""),
             is_narrator=value.get("is_narrator") is True,
             prominence=Prominence.from_value(value.get("prominence")),
+            voice_hint=_string(value.get("voice_hint"), ""),
         )
 
 
@@ -163,9 +169,10 @@ class RosterCharacter:
 class RosterNarration:
     person: NarrativePerson = NarrativePerson.UNKNOWN
     notes: str = ""
+    voice_hint: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {"person": self.person.value, "notes": self.notes}
+        return {"person": self.person.value, "notes": self.notes, "voice_hint": self.voice_hint}
 
     @staticmethod
     def from_dict(value: Any) -> RosterNarration:
@@ -175,6 +182,7 @@ class RosterNarration:
         return RosterNarration(
             person=NarrativePerson.from_value(value.get("person")),
             notes=_string(value.get("notes"), ""),
+            voice_hint=_string(value.get("voice_hint"), ""),
         )
 
 

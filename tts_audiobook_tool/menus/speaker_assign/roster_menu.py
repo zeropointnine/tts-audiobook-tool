@@ -248,9 +248,10 @@ def create_roster(state: State) -> None:
 
 def print_roster_info(state: State, expanded: bool = False) -> bool:
     """
-    Prints the saved roster's user-facing (spoiler-free) fields. Aliases and
-    descriptions are LLM-facing and may contain spoilers, so they're left out
-    unless `expanded`, which prints each character as a block that includes them.
+    Prints the saved roster's user-facing (spoiler-free) fields, voice hints
+    included. Aliases and descriptions are LLM-facing and may contain spoilers,
+    so they're left out unless `expanded`, which prints each character as a
+    block that includes them.
     Shows an error and returns False if the roster can't be loaded.
     """
     project_dir = state.project.dir_path
@@ -278,6 +279,8 @@ def print_roster_info(state: State, expanded: bool = False) -> bool:
         printt(f"Narration: {person}")
         if narration.notes.strip():
             printt(f"{COL_DIM_ITALICS}{narration.notes.strip()}")
+        if narration.voice_hint.strip():
+            printt(f"{COL_DIM}voice: {COL_DEFAULT}{narration.voice_hint.strip()}")
         has_printed = True
 
     id_width = max(len("id"), *(len(character.id) for character in roster.characters))
@@ -286,6 +289,8 @@ def print_roster_info(state: State, expanded: bool = False) -> bool:
         print_characters_expanded(roster.characters, id_width)
     else:
         printt(f"{COL_DIM}{'#':>3}  {'id':<{id_width}}  {'tier':<10}  {'gender':<7}  name")
+        # Voice hints go on a second line, under the id column
+        hint_indent = " " * 5
         for i, character in enumerate(roster.characters, 1):
             narrator = f" {COL_DIM}[narrator]" if character.is_narrator else ""
             tier = character.prominence.value or "?"
@@ -293,6 +298,8 @@ def print_roster_info(state: State, expanded: bool = False) -> bool:
                 f"{COL_DIM}{i:>3}  {COL_ACCENT}{character.id:<{id_width}}{COL_DEFAULT}  "
                 f"{tier:<10}  {character.gender:<7}  {character.name}{narrator}"
             )
+            if character.voice_hint.strip():
+                printt(f"{hint_indent}{COL_DIM}voice: {character.voice_hint.strip()}")
         printt()
         path = SpeakerAssignFileUtil.roster_path(project_dir)
         printt(f"{COL_DEFAULT}Full roster data: "
@@ -330,6 +337,8 @@ def print_characters_expanded(characters: Sequence[RosterCharacter], id_width: i
         aliases = ", ".join(alias_list) if alias_list else f"{COL_DIM}(none)"
         printt(f"{indent}{COL_DIM}name: {COL_DEFAULT}{character.name}")
         printt(f"{indent}{COL_DIM}aliases: {COL_DEFAULT}{aliases}")
+        if character.voice_hint.strip():
+            printt(f"{indent}{COL_DIM}voice: {COL_DEFAULT}{character.voice_hint.strip()}")
         if character.description.strip():
             printt()
             printt(f"{COL_DIM_ITALICS}{character.description.strip()}")

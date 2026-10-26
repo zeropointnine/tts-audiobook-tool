@@ -31,7 +31,13 @@ from tts_audiobook_tool.speaker_assign.llm_request_util import (
 from tts_audiobook_tool.speaker_assign.roster import RosterFile
 from tts_audiobook_tool.speaker_assign.roster_util import RosterUtil
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
-from tts_audiobook_tool.speaker_assign.speaker_assign_types import NOT_SPEECH, OTHER, UNKNOWN
+from tts_audiobook_tool.speaker_assign.speaker_assign_types import (
+    NOT_SPEECH,
+    OTHER,
+    RESERVED_SPEAKER_IDS,
+    RESERVED_SPEAKER_ORDER,
+    UNKNOWN,
+)
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import (
     duration_string,
@@ -336,9 +342,9 @@ class PrintingListener(AttributionRunListener):
 def print_assign_results(state: State) -> bool:
     """
     Prints the saved speaker ids: per-speaker counts (roster characters by
-    count, then the reserved answers) and recurring speakers not in the
-    roster. Shows an error and returns False if the saved
-    data can't be loaded.
+    count, then the reserved answers, with recurring speakers not in the
+    roster named in the OTHER row). Shows an error and returns False if the
+    saved data can't be loaded.
     """
     data = load_assign_data(state)
     if isinstance(data, str):
@@ -360,39 +366,37 @@ def print_assign_results(state: State) -> bool:
     characters = sorted(
         ((label, count) for label, count in summary.counts.items() if label in names),
         key=lambda item: (-item[1], item[0]))
-    # NOT_SPEECH isn't actionable (no voice can be chosen for it), so it gets a
-    # note below the progress line rather than a row
-    reserved = [(label, summary.counts[label]) for label in (OTHER, UNKNOWN) if summary.counts[label]]
+    reserved = [(label, summary.counts[label]) for label in RESERVED_SPEAKER_ORDER if summary.counts[label]]
     # Labels neither in the roster nor reserved shouldn't occur (a new roster
     # discards saved ids), but are listed rather than hidden
     others = sorted((label, count) for label, count in summary.counts.items()
-                    if label not in names and label not in RESERVED_LABEL_DESCRIPTIONS)
+                    if label not in names and label not in RESERVED_SPEAKER_IDS)
+
+    descriptions = dict(RESERVED_LABEL_DESCRIPTIONS)
+    if summary.recurring_others:
+        speakers = ", ".join(f"{name} ({count:,})" for name, count in summary.recurring_others.most_common())
+        # Less frequent (and unnamed) OTHER answers are counted but not named
+        if summary.counts[OTHER] > sum(summary.recurring_others.values()):
+            speakers += ", ..."
+        descriptions[OTHER] += f": {speakers}"
 
     rows = [*characters, *others, *reserved]
     if rows:
         id_width = max(len("id"), *(len(label) for label, _ in rows))
         printt(f"{COL_DIM}{'count':>6}  {'id':<{id_width}}  name")
         for label, count in rows:
-            name = names.get(label) or f"{COL_DIM}{RESERVED_LABEL_DESCRIPTIONS.get(label, '')}"
+            name = names.get(label) or f"{COL_DIM}{descriptions.get(label, '')}"
             printt(f"{count:>6,}  {COL_ACCENT}{label:<{id_width}}{COL_DEFAULT}  {name}")
         printt()
     printt(progress_line)
-    not_speech = summary.counts[NOT_SPEECH]
-    if not_speech:
-        printt(f"{COL_DIM}({not_speech:,} of these {make_noun('is', 'are', not_speech)} "
-               f"quoted text that isn't speech; {make_noun('its', 'their', not_speech)} voice is left as is)")
     printt()
-
-    if summary.recurring_others:
-        printt(f"Frequent speakers not in the roster: {AttributionSummary.counts_text(summary.recurring_others)}")
-        printt(f"{COL_DIM}(counted under {OTHER}; re-creating the roster may pick them up)")
     return True
 
 
 RESERVED_LABEL_DESCRIPTIONS = {
-    OTHER: "characters not in the roster",
-    UNKNOWN: "speaker couldn't be determined",
-    NOT_SPEECH: "quoted text that isn't speech",
+    OTHER: "Not found in roster",
+    UNKNOWN: "Speaker couldn't be determined",
+    NOT_SPEECH: "Quoted text that isn't speech, like a sign or title",
 }
 
 

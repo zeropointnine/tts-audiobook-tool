@@ -10,6 +10,7 @@ from tts_audiobook_tool.menus.speaker_assign import voices_menu
 from tts_audiobook_tool.menus.speaker_assign.voices_menu import (
     make_apply_preview,
     make_character_label,
+    make_character_subheading,
     run_apply,
     sort_characters,
     voice_submenu,
@@ -52,6 +53,15 @@ def test_character_label_shows_count_and_chosen_voice() -> None:
     assert strip_ansi_codes(make_character_label(state, "DAVE", 0, 5)) == "DAVE (0) -> Voice 6 (missing)"
 
 
+def test_character_subheading_shows_name_details_and_voice_hint() -> None:
+    # The voice picker's subheading: the name, known gender and narrator flag,
+    # then the voice hint on its own line (omitted when there is none).
+    baron = RosterCharacter(id="BARON", name="Baron de Verdira", gender="male", voice_hint="elderly; deep")
+    assert strip_ansi_codes(make_character_subheading(baron)) == "Baron de Verdira (male)\nvoice: elderly; deep"
+    narrator = RosterCharacter(id="NARRATOR", name="The physician", is_narrator=True)
+    assert strip_ansi_codes(make_character_subheading(narrator)) == "The physician (narrator)"
+
+
 def test_voice_map_set_clear_and_set_all() -> None:
     # Copies are returned; "set all" covers exactly the given characters and
     # clearing all leaves no entries (stale ids included).
@@ -90,7 +100,8 @@ def test_voice_picker_pages_chain_through_more_and_repeat_clear(monkeypatch) -> 
     monkeypatch.setattr(voices_menu, "VOICES_PER_PAGE", 2)
     state = make_state("a", "b", "c", "d", "e")
     chosen = []
-    voice_submenu(state, heading="Assign ALICE to...", current=4, clear_label="Clear", on_select=chosen.append)
+    voice_submenu(state, heading="Assign ALICE to...", current=4, clear_label="Clear", on_select=chosen.append,
+                  subheading="Alice")
 
     def labels(menu: dict) -> list[str]:
         return [strip_ansi_codes(get_string_from(state, item.label)) for item in menu["items"](state)]
@@ -101,6 +112,7 @@ def test_voice_picker_pages_chain_through_more_and_repeat_clear(monkeypatch) -> 
     assert labels(menus[1]) == ["Voice 3 c", "Voice 4 d", "More voices... (1)", "Clear"]
     assert strip_ansi_codes(menus[1]["heading"]) == "Assign ALICE to... (3-4 of 5)"
     assert menus[1]["breadcrumb"] == "Voices 3-4"
+    assert [menu["subheading"] for menu in menus] == ["Alice", "Alice"]
 
     # Choosing on page 3 reports True up through page 2's "More voices..."
     def choose_on_page_3(state, **kwargs):
@@ -175,8 +187,8 @@ def quiet_apply(monkeypatch):
 
 def test_apply_preview_groups_by_voice_and_warns() -> None:
     # Characters sharing a voice share a row; unchosen speakers are listed as
-    # unchanged (except NOT_SPEECH, which can't have a voice); stale results
-    # and existing audio each add a note.
+    # unchanged, NOT_SPEECH included like any other id; stale results and
+    # existing audio each add a note.
     state, attributions, _ = make_apply_state()
     voice_map = VoiceMapFile({"ALICE": 2, "CAROL": 2, "BOB": 0})
     plan = VoiceApplyPlan.make(state.project.book, ROSTER_IDS, attributions, voice_map)
@@ -186,8 +198,8 @@ def test_apply_preview_groups_by_voice_and_warns() -> None:
 
     assert "  Voice 1 general  BOB (1)" in lines
     assert "  Voice 3 bob      ALICE (1), CAROL (1)" in lines
-    assert any(line.startswith("  Unchanged") and "UNKNOWN (1)" in line for line in lines)
-    assert not any("NOT_SPEECH" in line for line in lines)
+    assert any(line.startswith("  Unchanged") and "UNKNOWN (1)" in line and "NOT_SPEECH (1)" in line
+               for line in lines)
     assert "3 lines change voice. Voices already set on these lines are replaced." in lines
     text = "\n".join(lines)
     assert "1 passage skipped" in text

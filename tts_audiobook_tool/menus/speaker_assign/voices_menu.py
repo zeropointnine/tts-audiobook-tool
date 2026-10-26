@@ -17,7 +17,7 @@ from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
 from tts_audiobook_tool.speaker_assign.attribution_summary import AttributionSummary
 from tts_audiobook_tool.speaker_assign.roster import RosterCharacter
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
-from tts_audiobook_tool.speaker_assign.speaker_assign_types import NOT_SPEECH
+from tts_audiobook_tool.speaker_assign.speaker_label_util import SpeakerLabelUtil
 from tts_audiobook_tool.speaker_assign.voice_apply import VoiceApplyPlan
 from tts_audiobook_tool.speaker_assign.voice_map import VoiceMapFile
 from tts_audiobook_tool.state import State
@@ -81,13 +81,15 @@ def voices_menu(state: State) -> None:
         subheading += f"\n\n{COL_DIM}No dialog has been assigned to characters yet (step 2)."
 
     def on_character(_: State, item: MenuItem) -> None:
-        character_id: str = item.data
+        character: RosterCharacter = item.data
+        character_id = character.id
         voice_submenu(
             state,
             heading=f"Assign {character_id} to...",
             current=voice_map.get(character_id),
             clear_label="Clear",
             on_select=lambda index: save(voice_map.with_voice(character_id, index)),
+            subheading=make_character_subheading(character),
         )
 
     def on_set_all(_: State, __: MenuItem) -> None:
@@ -104,7 +106,7 @@ def voices_menu(state: State) -> None:
         return MenuItem(
             make_character_label(state, character.id, counts[character.id], voice_map.get(character.id)),
             on_character,
-            data=character.id,
+            data=character,
         )
 
     def make_action_items() -> list[MenuItem]:
@@ -220,8 +222,7 @@ def make_apply_preview(
                 f"{COL_ACCENT}{character.id}{COL_DEFAULT} ({plan.applied[character.id]:,})")
     rows = [(VoiceMenuShared.make_voice_title(voice_references[index], index), ", ".join(names))
             for index, names in sorted(by_voice.items())]
-    # NOT_SPEECH passages are kept out: no voice can be chosen for them
-    unchanged_counts = [(label, count) for label, count in plan.unchanged.most_common() if label != NOT_SPEECH]
+    unchanged_counts = SpeakerLabelUtil.sorted_counts(plan.unchanged)
     if unchanged_counts:
         unchanged = ", ".join(f"{label} ({count:,})" for label, count in unchanged_counts)
         rows.append(("Unchanged", f"{unchanged} {COL_DIM}(no voice chosen)"))
@@ -244,18 +245,19 @@ def make_apply_preview(
 
 def voice_submenu(
         state: State, heading: str, current: int | None, clear_label: str,
-        on_select: Callable[[int | None], None],
+        on_select: Callable[[int | None], None], subheading: str = "",
 ) -> None:
     """One item per project voice, then `clear_label`; selecting one calls
     `on_select` with the voice index (None for clear) and returns.
     Paged like the Voices menu: past VOICES_PER_PAGE voices, "More voices..."
-    opens the next page as a submenu; every page repeats `clear_label`."""
-    voice_picker_page(state, heading, current, clear_label, on_select, 0)
+    opens the next page as a submenu; every page repeats `clear_label` and
+    `subheading`."""
+    voice_picker_page(state, heading, current, clear_label, on_select, 0, subheading)
 
 
 def voice_picker_page(
         state: State, heading: str, current: int | None, clear_label: str,
-        on_select: Callable[[int | None], None], start: int,
+        on_select: Callable[[int | None], None], start: int, subheading: str = "",
 ) -> bool:
     """One page of `voice_submenu`. Returns whether a choice was made, so that
     a choice closes every page, while going back returns to the previous one."""
@@ -282,7 +284,7 @@ def voice_picker_page(
         if end < count:
             items.append(MenuItem(
                 make_more_voices_label(count - end),
-                lambda _, __: voice_picker_page(state, heading, current, clear_label, on_select, end),
+                lambda _, __: voice_picker_page(state, heading, current, clear_label, on_select, end, subheading),
             ))
         items.append(MenuItem(clear_label, lambda _, __: choose(None)))
         return items
@@ -293,7 +295,7 @@ def voice_picker_page(
         end, count = make_range()
         page_heading = f"{heading} {COL_DIM}{make_page_range_text(start, end, count)}"
         breadcrumb = make_page_breadcrumb(start, end)
-    MenuUtil.menu(state, heading=page_heading, items=items_maker, breadcrumb=breadcrumb)
+    MenuUtil.menu(state, heading=page_heading, items=items_maker, subheading=subheading, breadcrumb=breadcrumb)
     return chosen
 
 
@@ -305,6 +307,17 @@ def sort_characters(
     if omit_unused:
         characters = tuple(character for character in characters if counts[character.id])
     return sorted(characters, key=lambda character: -counts[character.id])
+
+
+def make_character_subheading(character: RosterCharacter) -> str:
+    """The character's user-facing (spoiler-free) roster fields, to help choose
+    a voice: eg "Baron de Verdira (male)" then "voice: elderly; deep, gravelly"."""
+    details = [part for part in (character.gender, "narrator" if character.is_narrator else "")
+               if part and part != "unknown"]
+    lines = [f"{COL_DEFAULT}{character.name}" + (f" {COL_DIM}({', '.join(details)})" if details else "")]
+    if character.voice_hint.strip():
+        lines.append(f"{COL_DIM}voice: {COL_DEFAULT}{character.voice_hint.strip()}")
+    return "\n".join(lines)
 
 
 def make_character_label(state: State, character_id: str, count: int, voice_index: int | None) -> str:

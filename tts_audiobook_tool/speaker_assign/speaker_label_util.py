@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Set
+from collections.abc import Mapping, Set
 from enum import Enum
 
-from tts_audiobook_tool.speaker_assign.speaker_assign_types import NOT_SPEECH, OTHER, UNKNOWN
+from tts_audiobook_tool.speaker_assign.speaker_assign_types import (
+    NOT_SPEECH,
+    OTHER,
+    RESERVED_SPEAKER_IDS,
+    RESERVED_SPEAKER_ORDER,
+    UNKNOWN,
+)
 
 
 class SpeakerKind(Enum):
@@ -45,6 +51,17 @@ class SpeakerLabelUtil:
         if label.upper().startswith(OTHER):
             return SpeakerKind.OTHER
         return SpeakerKind.UNKNOWN
+
+    @staticmethod
+    def sorted_counts(counts: Mapping[str, int]) -> list[tuple[str, int]]:
+        """(id, count) pairs for display: non-reserved ids by count (most
+        first, then by id), followed by the reserved ids in
+        RESERVED_SPEAKER_ORDER. Zero counts are omitted."""
+        regular = sorted(
+            ((label, count) for label, count in counts.items() if count and label not in RESERVED_SPEAKER_IDS),
+            key=lambda item: (-item[1], item[0]))
+        reserved = [(label, counts[label]) for label in RESERVED_SPEAKER_ORDER if counts.get(label)]
+        return regular + reserved
 
     @staticmethod
     def counting_id(label: str) -> str:

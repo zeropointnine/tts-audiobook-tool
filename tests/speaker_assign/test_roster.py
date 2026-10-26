@@ -13,7 +13,7 @@ from tts_audiobook_tool.speaker_assign.roster import (
 
 # A roster in the on-disk shape the prototype's speaker_attribution.json uses.
 STORED_ROSTER = {
-    "narration": {"person": "first", "notes": "A physician arrives at a remote château."},
+    "narration": {"person": "first", "notes": "A physician arrives at a remote château.", "voice_hint": "measured"},
     "characters": [
         {
             "id": "NARRATOR",
@@ -23,6 +23,7 @@ STORED_ROSTER = {
             "description": "The first-person narrator.",
             "is_narrator": True,
             "prominence": "major",
+            "voice_hint": "adult; calm, measured",
         },
         {
             "id": "OLD_DOC",
@@ -32,6 +33,7 @@ STORED_ROSTER = {
             "description": "The previous physician.",
             "is_narrator": False,
             "prominence": "minor",
+            "voice_hint": "elderly; gruff",
         },
     ],
 }
@@ -42,7 +44,7 @@ def test_round_trip_preserves_stored_form() -> None:
     # so existing prototype cache files keep working.
     roster = Roster.from_dict(STORED_ROSTER)
     assert roster.to_dict() == STORED_ROSTER
-    assert roster.narration == RosterNarration(NarrativePerson.FIRST, STORED_ROSTER["narration"]["notes"])
+    assert roster.narration == RosterNarration(NarrativePerson.FIRST, STORED_ROSTER["narration"]["notes"], "measured")
     assert roster.characters[0].prominence is Prominence.MAJOR
 
 

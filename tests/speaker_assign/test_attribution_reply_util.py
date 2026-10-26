@@ -67,6 +67,14 @@ def test_speaker_label_kinds(label: str, kind: SpeakerKind, counting_id: str) ->
     assert SpeakerLabelUtil.counting_id(label) == counting_id
 
 
+def test_sorted_counts_puts_reserved_ids_last_in_fixed_order() -> None:
+    # Character ids go by count regardless of how frequent the reserved ids are;
+    # then OTHER, UNKNOWN, NOT_SPEECH, with zero counts dropped.
+    counts = {"NOT_SPEECH": 50, "UNKNOWN": 40, "DIDIER": 3, "OTHER": 30, "BARON": 9, "ALICE": 3, "BOB": 0}
+    assert SpeakerLabelUtil.sorted_counts(counts) == [
+        ("BARON", 9), ("ALICE", 3), ("DIDIER", 3), ("OTHER", 30), ("UNKNOWN", 40), ("NOT_SPEECH", 50)]
+
+
 def test_other_name() -> None:
     assert SpeakerLabelUtil.other_name("OTHER: Anis del Mono man") == "anis del mono man"
     assert SpeakerLabelUtil.other_name("OTHER") == "" and SpeakerLabelUtil.other_name("BARON") == ""

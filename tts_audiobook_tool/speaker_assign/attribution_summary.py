@@ -9,7 +9,8 @@ from tts_audiobook_tool.speaker_assign.speaker_label_util import SpeakerLabelUti
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 
 
-# An OTHER:<name> speaker this frequent is worth adding to the roster
+# An OTHER:<name> speaker this frequent is named in the step 2 summary's OTHER
+# row (a roster candidate)
 RECURRING_OTHER_MIN_COUNT = 3
 
 
@@ -44,8 +45,3 @@ class AttributionSummary:
             recurring_others=Counter(
                 {name: count for name, count in others.items() if count >= RECURRING_OTHER_MIN_COUNT}),
         )
-
-    @staticmethod
-    def counts_text(counts: Counter[str]) -> str:
-        """eg "BARON 20, NARRATOR 15, OTHER 3" (most common first)."""
-        return ", ".join(f"{label} {count}" for label, count in counts.most_common())

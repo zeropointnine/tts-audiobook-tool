@@ -14,7 +14,7 @@ from tts_audiobook_tool.menus.speaker_assign.assign_menu import (
     play_outcome_sound,
 )
 from tts_audiobook_tool.speaker_assign.assign_plan import AssignPlan
-from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
+from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile, RangeAttribution, UtteranceAttribution
 from tts_audiobook_tool.speaker_assign.attribution_runner import RunOutcome
 from tts_audiobook_tool.speaker_assign.roster import Roster, RosterCharacter, RosterFile
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
@@ -56,19 +56,44 @@ def test_outcome_sound(monkeypatch, outcome, has_failures, expected):
     assert played == ([expected] if expected else [])
 
 
-def test_assign_results_note_not_speech_instead_of_listing_it(monkeypatch):
-    # NOT_SPEECH isn't actionable, so it's a dim note under the progress line, not a table row.
-    book, attributions = make_fixture()
+def print_assign_results(monkeypatch, book, attributions) -> list[str]:
     roster = Roster(tuple(RosterCharacter(id=id, name=id.title()) for id in sorted(ROSTER_IDS)))
     data = AssignData(RosterFile(roster), attributions, AssignPlan.make(book, attributions))
     state = cast(State, SimpleNamespace(project=SimpleNamespace(book=book)))
     monkeypatch.setattr(assign_menu, "load_assign_data", lambda _: data)
     lines: list[str] = []
     monkeypatch.setattr(assign_menu, "printt", lambda s="": lines.append(strip_ansi_codes(s)))
-
     assert assign_menu.print_assign_results(state)
+    return lines
+
+
+def test_assign_results_list_not_speech_as_a_row(monkeypatch):
+    # NOT_SPEECH is a table row like any other id, so the rows add up to the
+    # progress total and no extra note is printed for it.
+    lines = print_assign_results(monkeypatch, *make_fixture())
 
     assert any(line.split()[1:2] == ["UNKNOWN"] for line in lines)
-    assert not any("NOT_SPEECH" in line for line in lines)
+    assert any(line.split()[:2] == ["1", "NOT_SPEECH"] for line in lines)
     i = next(i for i, line in enumerate(lines) if "dialog passages assigned" in line)
-    assert lines[i + 1] == "(1 of these is quoted text that isn't speech; its voice is left as is)"
+    assert lines[i + 1:] == [""]
+
+
+@pytest.mark.parametrize("one_offs, expected", [
+    ([], "     7  OTHER  Not found in roster: bot (4), gearhead (3)"),
+    (["OTHER:guard"], "     8  OTHER  Not found in roster: bot (4), gearhead (3), ..."),
+    (["OTHER"], "     8  OTHER  Not found in roster: bot (4), gearhead (3), ..."),
+])
+def test_assign_results_name_recurring_others_in_the_other_row(monkeypatch, one_offs, expected):
+    # The OTHER row counts every non-roster speaker but names only the
+    # recurring ones, most first; "..." marks that some (one-off or unnamed)
+    # aren't named.
+    speakers = ["OTHER:gearhead"] * 3 + ["OTHER:bot"] * 4 + one_offs
+    book = make_book([(f'"Line {i}." ', Reason.PARAGRAPH, DIALOG) for i in range(len(speakers))])
+    attributions = AttributionsFile((RangeAttribution(
+        0, len(speakers), UtteranceUtil.range_text_hash(book, 0, len(speakers)),
+        tuple(UtteranceAttribution((i,), speaker) for i, speaker in enumerate(speakers))),))
+
+    lines = print_assign_results(monkeypatch, book, attributions)
+
+    assert expected in lines
+    assert not any(line.startswith("-") for line in lines)

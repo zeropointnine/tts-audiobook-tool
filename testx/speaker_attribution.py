@@ -310,7 +310,7 @@ class PrintListener(AttributionRunListener):
         print(f"\n  attempt {attempt} failed ({error}); retrying in {delay:.0f}s")
 
     def chunk_saved(self, chunk: PlannedChunk, attribution: RangeAttribution, elapsed: float) -> None:
-        print("  " + AttributionSummary.counts_text(
+        print("  " + counts_text(
             Counter(SpeakerLabelUtil.counting_id(u.speaker) for u in attribution.utterances)))
 
     def chunk_failed(self, chunk: PlannedChunk, error: str) -> None:
@@ -390,19 +390,23 @@ def command_roster(args: argparse.Namespace) -> None:
 
 
 def print_roster(roster: Roster, show_llm_fields: bool) -> None:
-    """Print the roster's user-facing (spoiler-free) fields; descriptions and
-    aliases are LLM-facing and may contain spoilers, so they're shown only
-    when show_llm_fields is set."""
+    """Print the roster's user-facing (spoiler-free) fields, voice hints
+    included; descriptions and aliases are LLM-facing and may contain
+    spoilers, so they're shown only when show_llm_fields is set."""
     narration = roster.narration
     if narration != RosterNarration():
         print(f"\nNarration: {narration.person.value or '?'} person. {narration.notes}")
+        if narration.voice_hint:
+            print(f"  voice: {narration.voice_hint}")
     print(f"\n{'#':>3}  {'id':<20} {'tier':<10} {'gender':<7} name")
     for i, character in enumerate(roster.characters, 1):
         narrator = " [NARRATOR]" if character.is_narrator else ""
         tier = character.prominence.value or "?"
         print(f"{i:>3}  {character.id:<20} {tier:<10} {character.gender:<7} {character.name}{narrator}")
+        indent = " " * 43
+        if character.voice_hint:
+            print(f"{indent} voice: {character.voice_hint}")
         if show_llm_fields:
-            indent = " " * 43
             if character.aliases:
                 print(f"{indent} aliases: {', '.join(character.aliases)}")
             if character.description:
@@ -463,6 +467,11 @@ def speaker_counts(attributions: AttributionsFile, book: Book, start: int, end: 
     no saved result."""
     summary = AttributionSummary.make(attributions, book, start, end)
     return summary.counts, summary.unattributed
+
+
+def counts_text(counts: Counter[str]) -> str:
+    """eg "BARON 20, NARRATOR 15, OTHER 3, UNKNOWN 5" (see SpeakerLabelUtil.sorted_counts)."""
+    return ", ".join(f"{label} {count}" for label, count in SpeakerLabelUtil.sorted_counts(counts))
 
 
 def print_speaker_counts(title: str, counts: Counter[str], unattributed: int = 0) -> None:
@@ -558,7 +567,7 @@ def print_book_summary(attributions: AttributionsFile, book: Book, failures: lis
     summary = AttributionSummary.make(attributions, book)
     print(f"\nFlagged uncertain: {summary.uncertain}")
     if summary.recurring_others:
-        print(f"Recurring OTHER speakers (roster candidates): {AttributionSummary.counts_text(summary.recurring_others)}")
+        print(f"Recurring OTHER speakers (roster candidates): {counts_text(summary.recurring_others)}")
     if failures:
         print(f"\nFailed chunks ({len(failures)}); re-run the same command to retry them:")
         for failure in failures:

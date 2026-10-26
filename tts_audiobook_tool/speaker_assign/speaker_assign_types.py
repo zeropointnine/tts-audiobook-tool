@@ -12,11 +12,14 @@ from dataclasses import dataclass
 
 # Attribution answers other than a roster character id. They're reserved, so no
 # roster character may use them as its id.
-NOT_SPEECH = "NOT_SPEECH"  # the quoted text isn't spoken dialog (a title, sign, written text, ...)
 OTHER = "OTHER"            # a speaker who isn't in the roster; answers may be "OTHER:<short name>"
 UNKNOWN = "UNKNOWN"        # the speaker can't be determined
+NOT_SPEECH = "NOT_SPEECH"  # the quoted text isn't spoken dialog (a title, sign, written text, ...)
 
-RESERVED_SPEAKER_IDS = frozenset({NOT_SPEECH, OTHER, UNKNOWN})
+# Display order: wherever speaker ids are listed, these follow the roster
+# characters, in this order
+RESERVED_SPEAKER_ORDER = (OTHER, UNKNOWN, NOT_SPEECH)
+RESERVED_SPEAKER_IDS = frozenset(RESERVED_SPEAKER_ORDER)
 
 
 @dataclass(frozen=True)

@@ -43,12 +43,23 @@ Rules:
 - If the book is narrated in the first person and the narrator speaks dialog,
   include the narrator as a character with "is_narrator": true. At most one
   character may be the narrator.
-- Avoid spoilers in the user-facing fields: "id", "name" and the narration
-  "notes" are shown to someone who may not have read the book. Base them on
-  how the text refers to the character when they first appear and for most of
-  the book, never on identities, names or events revealed later (secret
-  identities, twists, deaths, late reveals). Give the first-person narrator
-  the id "NARRATOR" unless the text names them from early on.
+- Avoid spoilers in the user-facing fields: "id", "name", "voice_hint" and the
+  narration "notes" and "voice_hint" are shown to someone who may not have
+  read the book. Base them on how the text refers to the character when they
+  first appear and for most of the book, never on identities, names or events
+  revealed later (secret identities, twists, deaths, late reveals). Give the
+  first-person narrator the id "NARRATOR" unless the text names them from
+  early on.
+- "voice_hint" is a short casting note that helps the user choose a reference
+  voice to clone for the character: apparent age, pitch and timbre, accent or
+  dialect, and usual manner of speaking, as terse phrases separated by
+  semicolons (eg "elderly; deep, gravelly; slow and imperious; Scottish").
+  Include only what the text states or clearly implies; leave out anything it
+  doesn't (in particular, don't invent accents). Describe how the character
+  sounds when first met and for most of the book. No plot details.
+- The narration "voice_hint" is the same kind of note for the narration
+  voice: the narrator's own voice in first-person narration, otherwise the
+  voice and tone the narration calls for (eg "warm; unhurried; dry humor").
 - "aliases" and "description" are not shown to the user; they are used to
   attribute dialog in individual chapters. Make them complete, including names
   and facts revealed later in the book, and anything that helps tell this
@@ -63,7 +74,11 @@ Rules:
 
 Respond with only a JSON object, no commentary, in this shape:
 {
-  "narration": {"person": "first" | "third" | "mixed", "notes": "<one spoiler-free sentence>"},
+  "narration": {
+    "person": "first" | "third" | "mixed",
+    "notes": "<one spoiler-free sentence>",
+    "voice_hint": "<terse spoiler-free casting note>"
+  },
   "characters": [
     {
       "id": "ELIZABETH",
@@ -71,6 +86,7 @@ Respond with only a JSON object, no commentary, in this shape:
       "aliases": ["Lizzy", "Miss Bennet", "her sister"],
       "gender": "male" | "female" | "unknown",
       "description": "<one or two sentences: who they are, spoilers allowed>",
+      "voice_hint": "<terse spoiler-free casting note>",
       "is_narrator": false,
       "prominence": "major" | "supporting" | "minor"
     }
@@ -143,6 +159,7 @@ class RosterUtil:
                 description=str(raw.get("description", "")),
                 is_narrator=bool(raw.get("is_narrator")),
                 prominence=Prominence.from_value(raw.get("prominence")),
+                voice_hint=str(raw.get("voice_hint") or "").strip(),
             )
             existing_index = index_by_id.get(char_id)
             if existing_index is not None and RosterUtil.same_character(characters[existing_index], character):
@@ -175,6 +192,7 @@ class RosterUtil:
             narration=RosterNarration(
                 person=NarrativePerson.from_value(narration.get("person")),
                 notes=str(narration.get("notes", "")),
+                voice_hint=str(narration.get("voice_hint") or "").strip(),
             ),
         )
         return NormalizedRoster(roster, tuple(notes))
@@ -191,7 +209,8 @@ class RosterUtil:
     @staticmethod
     def merge_character(target: RosterCharacter, other: RosterCharacter) -> RosterCharacter:
         """A duplicate entry folded into the first one: union of names/aliases, the
-        first non-empty description and known gender, the higher prominence."""
+        first non-empty description, voice hint and known gender, the higher
+        prominence."""
         aliases = list(target.aliases)
         known = target.name_keys()
         for alias in (other.name, *other.aliases):
@@ -202,6 +221,7 @@ class RosterUtil:
             target,
             aliases=tuple(aliases),
             description=target.description or other.description,
+            voice_hint=target.voice_hint or other.voice_hint,
             gender=other.gender if target.gender == "unknown" else target.gender,
             prominence=max(target.prominence, other.prominence, key=lambda p: p.rank),
             is_narrator=target.is_narrator or other.is_narrator,

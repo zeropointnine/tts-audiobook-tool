@@ -18,9 +18,10 @@ def make_roster_file() -> RosterFile:
         characters=(
             RosterCharacter(id="NARRATOR", name="The Physician", aliases=("Simone",),
                             is_narrator=True, prominence=Prominence.MAJOR),
-            RosterCharacter(id="HELENE", name="Hélène", aliases=("madame",), gender="female"),
+            RosterCharacter(id="HELENE", name="Hélène", aliases=("madame",), gender="female",
+                            voice_hint="young; bright, quick"),
         ),
-        narration=RosterNarration(NarrativePerson.FIRST, "A physician at a château."),
+        narration=RosterNarration(NarrativePerson.FIRST, "A physician at a château.", "measured; dry"),
     )
     return RosterFile(
         roster=roster,
@@ -76,6 +77,17 @@ def test_other_format_or_invalid_roster_is_an_error_string(tmp_path) -> None:
         with open(path, "w", encoding="utf-8") as file:
             json.dump(payload, file)
         assert isinstance(SpeakerAssignFileUtil.load_roster_file(project_dir), str)
+
+
+def test_roster_without_voice_hints_loads_with_empty_hints() -> None:
+    # Rosters saved before voice hints existed still load (same format tag).
+    stored = make_roster_file().to_dict()
+    del stored["roster"]["narration"]["voice_hint"]
+    for character in stored["roster"]["characters"]:
+        del character["voice_hint"]
+    roster = RosterFile.from_dict(stored).roster
+    assert roster.narration.voice_hint == ""
+    assert [c.voice_hint for c in roster.characters] == ["", ""]
 
 
 def test_malformed_provenance_loads_as_defaults() -> None:

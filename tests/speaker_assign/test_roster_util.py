@@ -67,6 +67,22 @@ def test_normalize_drops_bad_ids_and_resolves_duplicates() -> None:
     assert len(normalized.notes) == 4
 
 
+def test_normalize_parses_voice_hints() -> None:
+    # Voice hints are read for characters and the narration (trimmed; a null
+    # or missing one is empty), and a merged duplicate keeps the first non-empty hint.
+    normalized = RosterUtil.normalize_roster({
+        "narration": {"person": "third", "voice_hint": " warm; unhurried "},
+        "characters": [
+            {"id": "BARON", "name": "The baron", "voice_hint": None},
+            {"id": "BARON", "name": "the baron", "voice_hint": "elderly; deep, gravelly"},
+            {"id": "MAID", "name": "Maid"},
+        ],
+    })
+    roster = normalized.roster
+    assert roster.narration.voice_hint == "warm; unhurried"
+    assert [c.voice_hint for c in roster.characters] == ["elderly; deep, gravelly", ""]
+
+
 def test_normalize_keeps_only_the_first_narrator() -> None:
     normalized = RosterUtil.normalize_roster({
         "characters": [
