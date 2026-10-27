@@ -73,6 +73,7 @@ def voices_menu(state: State) -> None:
     roster_characters = roster_file.roster.characters
     # Before step 2 has run, every count is zero, so the whole roster is listed
     characters = sort_characters(roster_characters, counts, omit_unused=bool(attributions.ranges))
+    save(preselect_matching_voices(state, characters, voice_map))
 
     subheading = VOICES_DESC
     if not roster_characters:
@@ -292,6 +293,23 @@ def voice_picker_page(
     return chosen
 
 
+def preselect_matching_voices(
+        state: State, characters: Sequence[RosterCharacter], voice_map: VoiceMapFile,
+) -> VoiceMapFile:
+    """Fill unchosen characters by voice name (case-insensitive), keeping saved
+    choices. If names repeat, use the first project voice."""
+    by_name: dict[str, int] = {}
+    for index, voice in enumerate(state.project.voice_references):
+        if voice.name:
+            by_name.setdefault(voice.name.casefold(), index)
+    choices = dict(voice_map.voices)
+    for character in characters:
+        index = by_name.get(character.id.casefold())
+        if character.id not in choices and index is not None:
+            choices[character.id] = index
+    return VoiceMapFile(choices)
+
+
 def sort_characters(
         characters: tuple[RosterCharacter, ...], counts: Counter[str], omit_unused: bool = False,
 ) -> list[RosterCharacter]:
@@ -348,7 +366,10 @@ def make_character_label_width(characters: Sequence[RosterCharacter], counts: Ma
 CHARACTERS_PER_PAGE = 32
 
 VOICES_DESC = \
-"""Sets each character's dialog lines (as identified in step 2) to the voice
+f"""Sets each character's dialog lines (as identified in step 2) to the voice
 chosen for that character.
 
-Choose voices below, then select \"Apply\"."""
+Choose voices below, then select \"Apply\".
+
+{COL_DIM}Tip: A Voice with the same name as a character id
+     will be pre-selected automatically"""

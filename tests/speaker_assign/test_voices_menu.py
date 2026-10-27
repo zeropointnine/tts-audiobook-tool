@@ -88,6 +88,53 @@ def test_voice_map_set_clear_and_set_all() -> None:
     assert VoiceMapFile.all_set_to(["ALICE", "BOB"], None) == VoiceMapFile()
 
 
+def test_preselect_matches_ids_case_insensitively_and_keeps_saved_choices() -> None:
+    # Names match ids, not display names; the first duplicate wins. Existing
+    # choices (even missing voices) and unmatched characters are left alone.
+    state = make_state("", "alice", "ALICE", "bob", "Carol", "Display Name")
+    roster = characters("ALICE", "BOB", "CAROL", "DAVE", "UNMATCHED")
+    roster[3] = RosterCharacter(id="DAVE", name="Display Name")
+    saved = VoiceMapFile({"BOB": 0, "CAROL": 99, "STALE": 2})
+
+    selected = voices_menu.preselect_matching_voices(state, roster, saved)
+
+    assert selected.voices == {"ALICE": 1, "BOB": 0, "CAROL": 99, "STALE": 2}
+    assert saved.voices == {"BOB": 0, "CAROL": 99, "STALE": 2}
+
+
+def test_menu_saves_preselections_and_allows_clearing_before_apply(monkeypatch) -> None:
+    # Defaults are real saved selections, shown by the menu and passed to Apply.
+    # Clearing one during this visit must not immediately preselect it again.
+    state, attributions, _ = make_apply_state()
+    state.project.dir_path = "unused"
+    roster = SimpleNamespace(roster=SimpleNamespace(characters=tuple(characters("ALICE", "BOB", "CAROL"))))
+    files = voices_menu.SpeakerAssignFileUtil
+    monkeypatch.setattr(files, "has_roster", lambda _: True)
+    monkeypatch.setattr(files, "load_roster_file", lambda _: roster)
+    monkeypatch.setattr(files, "load_attributions_file", lambda _: attributions)
+    monkeypatch.setattr(files, "load_voices_file", lambda _: VoiceMapFile({"ALICE": 1}))
+    saved = []
+    monkeypatch.setattr(files, "save_voices_file", lambda _, value: saved.append(value) or "")
+    applied = []
+    monkeypatch.setattr(voices_menu, "run_apply", lambda *args: applied.append(args[-1]) or True)
+    monkeypatch.setattr(voices_menu, "voice_submenu", lambda _, **kwargs: kwargs["on_select"](None))
+
+    def run_menu(state, **kwargs):
+        items = kwargs["items"](state)
+        labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+        bob = next(item for item in items if item.data and item.data.id == "BOB")
+        assert any(label.startswith("BOB (") and label.endswith("-> Voice 3 bob") for label in labels)
+        assert "will be pre-selected automatically" in strip_ansi_codes(kwargs["subheading"])
+        bob.handler(state, bob)
+        items[-1].handler(state, items[-1])
+    monkeypatch.setattr(MenuUtil, "menu", run_menu)
+
+    voices_menu.voices_menu(state)
+
+    assert [value.voices for value in saved] == [{"ALICE": 1, "BOB": 2}, {"ALICE": 1}]
+    assert applied == [VoiceMapFile({"ALICE": 1})]
+
+
 def test_voice_submenu_lists_voices_then_clear_and_reports_choice(monkeypatch) -> None:
     # One item per project voice (current one marked), then the clear item;
     # selecting passes the voice index, or None for clear.
