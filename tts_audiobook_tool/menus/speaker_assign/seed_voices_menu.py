@@ -1,4 +1,4 @@
-"""Optional "Seed voices": appends a named, sample-less project voice for each
+"""Optional "Prep voices list": appends a named, sample-less project voice for each
 chosen character, and maps the character to it for step 3 (see voices_menu)."""
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.util import make_noun, print_feedback, printt
 
 
-SEED_VOICES_LABEL = "Seed voices"
+SEED_VOICES_LABEL = "Prep voices list"
 
 
 def has_attribution_data(project_dir: str) -> bool:
@@ -57,7 +57,7 @@ def seed_voices_menu(state: State) -> None:
         return
 
     subheading = SEED_VOICES_DESC + "\n\n" + "\n".join(make_numbered_columns(ids, counts))
-    MenuUtil.print_screen_heading(state, "Seed voice list", subheading=subheading, breadcrumb="Seed voices")
+    MenuUtil.print_screen_heading(state, "Prep voices list", subheading=subheading, breadcrumb="Prep voices list")
     printt(f'Enter numbers {COL_DIM}(eg, "1-3, 5, 8" or "all")')
     inp = ask.ask_input()
     if not inp:
