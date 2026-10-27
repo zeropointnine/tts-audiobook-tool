@@ -20,6 +20,7 @@ import threading
 import time
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import make_worker_log_file_path
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.model_worker import ModelWorker
@@ -486,8 +487,9 @@ class WorkerSessionMixin(Generic[ResultT], _SessionHostBase):
         )
         log_path = make_worker_log_file_path()
         if log_path:
+            log_link = text_util.make_terminal_hyperlink(log_path, is_file=True)
             message = (
-                f"{message}\nWorker log: {log_path}" if message else f"Worker log: {log_path}"
+                f"{message}\nWorker log: {log_link}" if message else f"Worker log: {log_link}"
             )
         self._show_terminal_summary(
             self.make_worker_reset_result(message, outcome.request.cause)

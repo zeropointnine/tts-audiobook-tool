@@ -621,8 +621,12 @@ def test_generation_preflight_scopes_actual_submitted_lines(monkeypatch, selecte
 
     generate_menu_module.do_generate(state)
 
-    # Fallback queues only remaining lines; stale assignments clamp to the last voice.
-    assert scopes == ([[1, 2]] if selected is None else [[2]])
+    # Fallback queues only remaining lines; stale assignments revert to the first voice.
+    assert scopes == ([[0, 1]] if selected is None else [[0]])
+    assert any(
+        "Warning: 1 voice selection out of range will default to voice 1" in line
+        for line in calls["printed"]
+    )
     assert len(calls["runs"]) == int(valid)
     if valid:
         assert calls["runs"][0]["indices"] == ({1, 2} if selected is None else selected)

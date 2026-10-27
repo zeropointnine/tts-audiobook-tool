@@ -39,13 +39,17 @@ def make_roster_stale_marker(state: State) -> str:
 def characters_menu(state: State) -> None:
 
     def on_summary(_: State, __: MenuItem) -> None:
-        # The breadcrumb names the view, so the screen headings don't repeat it
-        MenuUtil.print_screen_heading(state, "Summary", breadcrumb="Summary")
+        # Fold the current results menu into the title, leaving only its ancestors in the trail.
+        MenuUtil.print_heading(
+            state, f"{RESULTS_HEADING} - Summary", breadcrumb_text=MenuUtil.make_breadcrumb_text(state),
+        )
         if print_characters_info(state):
             ask.ask_enter_to_continue()
 
     def on_expanded(_: State, __: MenuItem) -> None:
-        MenuUtil.print_screen_heading(state, "Expanded", breadcrumb="Expanded")
+        MenuUtil.print_heading(
+            state, f"{RESULTS_HEADING} - Expanded", breadcrumb_text=MenuUtil.make_breadcrumb_text(state),
+        )
         if print_characters_info(state, expanded=True):
             ask.ask_enter_to_continue()
 
@@ -120,7 +124,8 @@ def print_characters_info(state: State, expanded: bool = False) -> bool:
     id_width = max(len("id"), *(len(character.id) for character in characters), *(len(id) for id, _, _ in extra_rows))
     # The first column (count, or # before step 2) is as wide as its header or widest value
     if has_counts:
-        first_width = max(len("count"), *(len(f"{count:,}") for count in counts.values()))
+        first_width = max(len("count"), *(len(f"{count:,}") for count in counts.values()),
+                          *(len(f"{count:,}") for _, count, _ in extra_rows))
     else:
         first_width = max(len("#"), len(str(len(characters))))
     print_gap()
@@ -226,7 +231,8 @@ def make_extra_rows(summary: AttributionSummary, roster_ids: set[str]) -> list[t
     """
     The (id, count, description) rows for counted speakers that aren't roster
     characters: unknown ids, then the reserved answers. The OTHER row names its
-    recurring speakers.
+    recurring speakers. Non-speech results are grouped under OTHER for display
+    only; stored labels and summary counts retain their original meaning.
     """
     # Ids neither in the roster nor reserved shouldn't occur (a new roster
     # discards saved ids), but are listed rather than hidden
@@ -240,8 +246,10 @@ def make_extra_rows(summary: AttributionSummary, roster_ids: set[str]) -> list[t
         if summary.counts[OTHER] > sum(summary.recurring_others.values()):
             speakers += ", ..."
         descriptions[OTHER] += f": {speakers}"
-    reserved = [(label, summary.counts[label], descriptions[label])
-                for label in RESERVED_SPEAKER_ORDER if summary.counts[label]]
+    display_counts = summary.counts.copy()
+    display_counts[OTHER] += display_counts.pop(NOT_SPEECH, 0)
+    reserved = [(label, display_counts[label], descriptions[label])
+                for label in RESERVED_SPEAKER_ORDER if label in descriptions and display_counts[label]]
     return [*others, *reserved]
 
 
@@ -249,13 +257,12 @@ def print_extra_rows(
         rows: list[tuple[str, int, str]], first_width: int, id_width: int, tier_gender_gap: bool = False,
 ) -> None:
     """Prints the non-roster rows; with `tier_gender_gap`, descriptions line up with the table's name column."""
-    gap = " " * (TIER_WIDTH + GENDER_WIDTH + 4) if tier_gender_gap else ""
+    gap = f"{'-':<{TIER_WIDTH}}  {'-':<{GENDER_WIDTH}}  " if tier_gender_gap else ""
     for label, count, description in rows:
         printt(f"{count:>{first_width},}  {COL_ACCENT}{label:<{id_width}}{COL_DEFAULT}  {gap}{COL_DIM}{description}")
 
 
 RESERVED_LABEL_DESCRIPTIONS = {
-    OTHER: "Not found in roster",
+    OTHER: "Non-roster speakers or non-dialogue text",
     UNKNOWN: "Speaker couldn't be determined",
-    NOT_SPEECH: "Quoted text that isn't speech, like a sign or title",
 }

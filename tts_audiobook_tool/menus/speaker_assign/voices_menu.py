@@ -184,7 +184,7 @@ def characters_page_menu(
 def make_apply_label(
         book: Book, characters: Sequence[RosterCharacter], attributions: AttributionsFile, voice_map: VoiceMapFile,
 ) -> str:
-    """Eg "Apply (changes voice for 12 of 40 lines)": the lines whose voice
+    """Eg "Apply (changes voice for 12 of 40 selected lines)": the lines whose voice
     would change, of all the lines in the chosen characters' passages. Just
     "Apply" while no chosen voice covers any line."""
     roster_ids = {character.id for character in characters}
@@ -194,7 +194,7 @@ def make_apply_label(
         return "Apply"
     changed = len(plan.changed_lines(book))
     return (f"Apply {COL_DIM}(changes voice for {COL_ACCENT}{changed:,}{COL_DIM} "
-            f"of {total:,} {make_noun('line', 'lines', total)})")
+            f"of {total:,} selected {make_noun('line', 'lines', total)})")
 
 
 def run_apply(

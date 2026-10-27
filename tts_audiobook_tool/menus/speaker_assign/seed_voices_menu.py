@@ -160,4 +160,4 @@ def make_numbered_columns(ids: Sequence[str], counts: Mapping[str, int]) -> list
 COLUMN_THRESHOLD = 10
 COLUMN_GAP = 4
 
-SEED_VOICES_DESC = "Appends new (unconfigured) voice items for each item selected."
+SEED_VOICES_DESC = "Appends new, named voice items for each item selected."

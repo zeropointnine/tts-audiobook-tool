@@ -76,9 +76,9 @@ def run_generation(
 
 @pytest.mark.parametrize(
     ("requested_index", "expected_index"),
-    [(-2, 0), (-1, 0), (2, 1), (100, 1)],
+    [(-2, 0), (-1, 0), (2, 0), (100, 0)],
 )
-def test_line_voice_invalid_index_clamps_to_nearest_valid_voice(
+def test_line_voice_invalid_index_defaults_to_first_voice(
         requested_index: int,
         expected_index: int,
 ) -> None:
@@ -103,7 +103,7 @@ def test_line_voice_uses_explicit_phrase_voice_index() -> None:
 
 def test_line_voice_without_voice_samples_uses_the_default_voice_slot() -> None:
     # A project always has at least one voice; with no samples configured that
-    # is one sample-less voice, so the (stale) phrase index clamps to it.
+    # is one sample-less voice, so the (stale) phrase index defaults to it.
     index, voice_tag = run_generation(
         [make_phrase_group(1)],
         [0],

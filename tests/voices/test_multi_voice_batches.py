@@ -129,12 +129,12 @@ def test_retry_round_without_voice_map_is_single_voiceless_group() -> None:
     ]
 
 
-def test_effective_voice_indices_clamps_stale_and_unassigned() -> None:
+def test_effective_voice_indices_defaults_stale_and_unassigned_to_first() -> None:
     groups = [
         make_phrase_group(1, -1),  # unassigned -> voice sample 1
         make_phrase_group(1, 0),
         make_phrase_group(1, 1),
-        make_phrase_group(1, 9),  # stale -> clamped to last
+        make_phrase_group(1, 9),  # stale -> first voice
     ]
 
-    assert effective_voice_indices(groups, [0, 1, 2, 3], 2) == {0: 0, 1: 0, 2: 1, 3: 1}
+    assert effective_voice_indices(groups, [0, 1, 2, 3], 2) == {0: 0, 1: 0, 2: 1, 3: 0}

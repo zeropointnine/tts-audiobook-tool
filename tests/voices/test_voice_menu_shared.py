@@ -560,7 +560,7 @@ def test_voice_item_label_includes_current_model_instructions(monkeypatch):
     project.voice_references.append(Voice("", instructions={"other_model": "ignored"}))
     assert plain(2) == "Voice 3: no sample set"
     label, _ = VoiceMenuShared.make_voice_sample_item_label(project, tts_type, 2)
-    assert label == "Voice 3: no sample set"  # Inherit the menu item's normal colour
+    assert label == f"Voice 3: {voice_menu_shared.COL_DIM}no sample set{voice_menu_shared.COL_DEFAULT}"
 
 
 def test_voice_item_label_hides_instructions_when_mode_does_not_use_them(monkeypatch):

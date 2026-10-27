@@ -81,12 +81,15 @@ def get_chat_blockers(state: State) -> list[ReadinessIssue]:
     errors = []
 
     if is_microphone_input_mode(state.prefs.chat_input_mode):
-        # Microphone chat still requires an input device and enabled STT.
+        # Microphone chat still requires an input device in echo mode.
         sound_input_error = SoundInputDeviceInfo.get_check_error()
         if sound_input_error:
             errors.append(ReadinessIssue("microphone", sound_input_error))
 
-        if state.prefs.stt_variant == SttVariant.DISABLED:
+        if (
+            not getattr(state.prefs, "chat_echo_override", False)
+            and state.prefs.stt_variant == SttVariant.DISABLED
+        ):
             errors.append(
                 ReadinessIssue(
                     "Whisper model enabled",

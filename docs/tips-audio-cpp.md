@@ -54,3 +54,5 @@ For most single-GPU setups, use `"max_loaded_models": 1`.
 
 After adding or changing config entries, restart the server to apply them.
 
+![Alt text](tips-audio-cpp-example.png)<br>
+*Figure 1: Screenshot of app, with audio.cpp configured with a dozen or so TTS models*

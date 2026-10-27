@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class VoiceSpatialPolicy:
     """Snapshot shared by export and realtime, independent of selected range.
 
-    A phrase group's (clamped) voice index identifies the voice used for
+    A phrase group's effective voice index identifies the voice used for
     generation, so its stereo position and room reverb follow that voice.
     """
 
@@ -52,8 +52,8 @@ class VoiceSpatialPolicy:
         """The stereo position of the voice that generated a phrase group with this `voice_index`."""
         if not self.voice_pans:
             return 0.0
-        # Same clamp as generation: stale indices use the nearest voice
-        return self.voice_pans[min(max(index, 0), len(self.voice_pans) - 1)]
+        # Match generation's fallback to voice 0 for stale assignments.
+        return self.voice_pans[ProjectVoiceUtil.get_effective_voice_index(index, len(self.voice_pans))]
 
     @property
     def stereo_position_summary(self) -> float | None:
@@ -67,8 +67,8 @@ class VoiceSpatialPolicy:
         """The room reverb of the voice that generated a phrase group with this `voice_index`."""
         if not self.voice_reverbs:
             return RoomReverb.OFF
-        # Same clamp as generation: stale indices use the nearest voice
-        return self.voice_reverbs[min(max(index, 0), len(self.voice_reverbs) - 1)]
+        # Match generation's fallback to voice 0 for stale assignments.
+        return self.voice_reverbs[ProjectVoiceUtil.get_effective_voice_index(index, len(self.voice_reverbs))]
 
     @property
     def room_reverb_summary(self) -> RoomReverb | None:

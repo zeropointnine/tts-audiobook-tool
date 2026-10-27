@@ -231,7 +231,7 @@ def count_out_of_range_voice_indices(
         num_voice_values: int,
 ) -> int:
     """
-    Count per-line voice selections that are stale (past the end of the voice sample list) and will be clamped.
+    Count stale per-line voice selections that will revert to voice 1.
     """
     return sum(
         1 for index in indices
@@ -375,7 +375,7 @@ def do_generate(state: State) -> None:
                 "selections",
                 num_invalid_voice_indices,
             )
-            printt(f"- {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range and will be clamped")
+            printt(f"- {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range will default to voice 1")
 
     # Print validation setting
     printt(make_validation_confirmation_line(state))

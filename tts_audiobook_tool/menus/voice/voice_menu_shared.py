@@ -853,7 +853,7 @@ class VoiceMenuShared:
                 parts.append("no instructions set")
         if not parts:
             # Eg Qwen3-TTS CustomVoice without instructions: the speaker's default delivery
-            parts.append(ProjectVoiceUtil.make_no_voice_value_text(project))
+            parts.append(f"{COL_DIM}{ProjectVoiceUtil.make_no_voice_value_text(project)}{COL_DEFAULT}")
         title = VoiceMenuShared.make_voice_title(voice, index)
         label = f"{title}: " + f"{COL_DIM};{COL_DEFAULT} ".join(parts)
         return label, is_long

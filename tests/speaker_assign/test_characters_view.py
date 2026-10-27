@@ -27,6 +27,32 @@ def print_characters(
     return lines
 
 
+@pytest.mark.parametrize("index, view", [(0, "Summary"), (1, "Expanded")])
+def test_heading_folds_results_into_title(monkeypatch, index, view):
+    # Both screen titles include the results view instead of repeating it in the breadcrumb.
+    from tts_audiobook_tool.menus.menu_util import MenuFrame, MenuUtil
+
+    state = cast(State, SimpleNamespace())
+    frames = [MenuFrame(heading=heading) for heading in (
+        "Main", "Voices", "Auto-assign character voices", characters_view.RESULTS_HEADING,
+    )]
+    monkeypatch.setattr(MenuUtil, "menu_frames", frames)
+    headings = []
+    monkeypatch.setattr(MenuUtil, "print_heading", lambda state, title, **kwargs: headings.append((title, kwargs)))
+    monkeypatch.setattr(characters_view, "print_characters_info", lambda state, **kwargs: False)
+
+    def choose_view(state, *, items, **kwargs):
+        items[index].handler(state, items[index])
+
+    monkeypatch.setattr(MenuUtil, "menu", choose_view)
+    characters_view.characters_menu(state)
+
+    assert headings == [(f"Character/dialog results - {view}", {
+        "breadcrumb_text": "Main > Voices > Auto-assign character voices >",
+    })]
+    assert MenuUtil.menu_frames == frames
+
+
 def make_roster_file(book, ids) -> RosterFile:
     return RosterFile(
         Roster(tuple(RosterCharacter(id=id, name=id.title()) for id in ids)),
@@ -103,7 +129,7 @@ def test_after_attribution_lists_characters_by_count_then_reserved_rows(monkeypa
 
     assert lines[0].split() == ["count", "id", "tier", "gender", "name"]
     assert [line.split()[:2] for line in lines[1:7]] == [
-        ["1", "CAROL"], ["1", "ALICE"], ["1", "BOB"], ["0", "DAVE"], ["1", "UNKNOWN"], ["1", "NOT_SPEECH"],
+        ["1", "CAROL"], ["1", "ALICE"], ["1", "BOB"], ["0", "DAVE"], ["1", "OTHER"], ["1", "UNKNOWN"],
     ]
     assert any("5 of 6 dialog passages assigned" in line for line in lines)
 
@@ -115,29 +141,46 @@ def test_expanded_view_shows_counts_and_reserved_rows(monkeypatch):
     lines = print_characters(monkeypatch, book, make_roster_file(book, sorted(ROSTER_IDS)), attributions, expanded=True)
 
     assert any(line.startswith("[1] id: ALICE") and line.endswith("count: 1") for line in lines)
-    assert any(line.split()[:2] == ["1", "NOT_SPEECH"] for line in lines)
+    assert any(line.split()[:2] == ["1", "OTHER"] for line in lines)
+    assert not any("NOT_SPEECH" in line for line in lines)
     assert not any(line.startswith("Full roster data") for line in lines)
 
 
-def test_not_speech_is_listed_as_a_row(monkeypatch):
-    # NOT_SPEECH is a table row like any other id, so the rows add up to the
-    # progress total and no extra note is printed for it.
+def test_not_speech_is_displayed_under_other(monkeypatch):
+    # Non-speech-only results still produce an OTHER row, keeping the progress total intact.
     book, attributions = make_fixture()
     lines = print_characters(monkeypatch, book, make_roster_file(book, sorted(ROSTER_IDS)), attributions)
 
     assert any(line.split()[1:2] == ["UNKNOWN"] for line in lines)
-    assert any(line.split()[:2] == ["1", "NOT_SPEECH"] for line in lines)
+    assert any(line.split()[:2] == ["1", "OTHER"] for line in lines)
+    assert not any("NOT_SPEECH" in line for line in lines)
     i = next(i for i, line in enumerate(lines) if "dialog passages assigned" in line)
     assert lines[i + 1] == ""
     assert lines[i + 2].startswith("Full roster data")
 
 
+@pytest.mark.parametrize("label", ["OTHER", "UNKNOWN"])
+@pytest.mark.parametrize("summary", [False, True])
+def test_reserved_rows_have_white_dashes_only_in_summary(monkeypatch, label, summary):
+    # Summary placeholders fill both columns in the default color; expanded rows stay compact.
+    lines = []
+    monkeypatch.setattr(characters_view, "printt", lines.append)
+    description = characters_view.RESERVED_LABEL_DESCRIPTIONS[label]
+
+    characters_view.print_extra_rows([(label, 1, description)], 5, 10, tier_gender_gap=summary)
+
+    columns = f"{'-':<10}  {'-':<7}  " if summary else ""
+    assert lines == [f"    1  {COL_ACCENT}{label:<10}{COL_DEFAULT}  {columns}{COL_DIM}{description}"]
+
+
 @pytest.mark.parametrize("one_offs, expected", [
-    ([], "Not found in roster: bot (4), gearhead (3)"),
-    (["OTHER:guard"], "Not found in roster: bot (4), gearhead (3), ..."),
-    (["OTHER"], "Not found in roster: bot (4), gearhead (3), ..."),
+    ([], "Non-roster speakers or non-dialogue text: bot (4), gearhead (3)"),
+    (["OTHER:guard"], "Non-roster speakers or non-dialogue text: bot (4), gearhead (3), ..."),
+    (["OTHER"], "Non-roster speakers or non-dialogue text: bot (4), gearhead (3), ..."),
+    (["NOT_SPEECH"], "Non-roster speakers or non-dialogue text: bot (4), gearhead (3)"),
 ])
-def test_other_row_names_recurring_others(monkeypatch, one_offs, expected):
+@pytest.mark.parametrize("expanded", [False, True])
+def test_other_row_names_recurring_others(monkeypatch, one_offs, expected, expanded):
     # The OTHER row counts every non-roster speaker but names only the
     # recurring ones, most first; "..." marks that some (one-off or unnamed)
     # aren't named.
@@ -147,8 +190,14 @@ def test_other_row_names_recurring_others(monkeypatch, one_offs, expected):
         0, len(speakers), UtteranceUtil.range_text_hash(book, 0, len(speakers)),
         tuple(UtteranceAttribution((i,), speaker) for i, speaker in enumerate(speakers))),))
 
-    lines = print_characters(monkeypatch, book, make_roster_file(book, sorted(ROSTER_IDS)), attributions)
+    original_counts = characters_view.AttributionSummary.make(attributions, book).counts.copy()
+    lines = print_characters(
+        monkeypatch, book, make_roster_file(book, sorted(ROSTER_IDS)), attributions, expanded=expanded,
+    )
 
+    assert not any("NOT_SPEECH" in line for line in lines)
+    assert characters_view.AttributionSummary.make(attributions, book).counts == original_counts
+    assert [u.speaker for u in attributions.ranges[0].utterances] == speakers
     row = next(line for line in lines if line.split()[1:2] == ["OTHER"])
     assert row.split()[0] == str(len(speakers))
     assert row.endswith(expected)

@@ -53,8 +53,8 @@ The app uses a plain-text, hotkey-based console interface.
 ### How to create an audiobook (quick summary)
 
 1. Assign a working project directory.
-2. Select a short reference audio clip for the voice clone. Adjust various model knobs to taste.
-3. Select the source EPUB or text file.
+2. Select the source EPUB or text file.
+3. Select a short reference audio clip for the voice clone.
 4. Generate. Wait.
 5. Concatenate the generated sound segments to create the finished audiobook file.
 6. Use the optional web browser player to play and read your audiobook.
@@ -823,7 +823,7 @@ The app uses sane, conservative defaults, which should allow you to start genera
 
 The app saves its state between sessions, so you can interrupt the program at any time and resume later.
 
-Additionally, setting "chapter cut points" can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full job is completed.
+Setting "chapter cut points" can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full job is completed.
 
 
 ### Voice cloning
@@ -836,7 +836,7 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare a fe
 
 ### VRAM considerations
 
-The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which needs to runs concurrently with the currently active TTS model to validate its output. If you are getting out of memory errors, try one of the following:
+The app ideally wants to use ~2-4 GB extra VRAM for the Whisper speech-to-text model, which needs to runs concurrently with the currently active TTS model to validate its output. If you are getting out of memory errors, try one of the following:
 
 - Use large-v3-turbo instead of large-v3 (saves a gig or two of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
 - Force Whisper to use system memory instead of running on the GPU (runs much slower, ofc) (`Options` > `Whisper device` > `CPU`)

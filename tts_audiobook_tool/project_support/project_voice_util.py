@@ -143,14 +143,14 @@ class ProjectVoiceUtil:
 
     @staticmethod
     def get_effective_voice_index(requested_index: int, num_voices: int) -> int:
-        """Clamp a per-line assignment (eg one left stale by a removed voice), as inference does."""
-        return min(max(requested_index, 0), num_voices - 1)
+        """Use voice 0 for an invalid per-line assignment, as inference does."""
+        return requested_index if 0 <= requested_index < num_voices else 0
 
     @staticmethod
     def get_job_voice_indices(project: Project, phrase_indices: Iterable[int] | None = None) -> list[int]:
         """Voice slots to pre-flight, without changing the list or advancing rotation.
 
-        Uses the job's clamped line assignments. None denotes a literal
+        Uses the job's effective line assignments. None denotes a literal
         prompt/chat with no line assignment (slot 0); an explicitly empty job
         uses no voices.
         """

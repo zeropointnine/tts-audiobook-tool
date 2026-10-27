@@ -71,6 +71,16 @@ def stop_model_worker():
     Interrupts().clear()
 
 
+@pytest.mark.parametrize("path", ["/tmp/worker log.log", ""])
+def test_worker_log_hint_uses_file_hyperlink(monkeypatch, path) -> None:
+    # Diagnostic errors link the worker log, but omit the hint when no path is available.
+    monkeypatch.setattr(ModelWorker, "_worker_log_hint", staticmethod(lambda: path))
+    expected = "Failure"
+    if path:
+        expected += f" Worker log: {text_util.make_terminal_hyperlink(path, is_file=True)}"
+    assert ModelWorker._with_log_hint("Failure") == expected
+
+
 def test_spawned_model_worker_starts_and_shuts_down() -> None:
     assert ModelWorker.start() == ""
     assert ModelWorker.is_alive()

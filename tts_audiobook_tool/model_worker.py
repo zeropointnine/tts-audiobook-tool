@@ -18,6 +18,7 @@ from contextlib import nullcontext
 from multiprocessing.context import BaseContext
 from typing import Any, Callable, TextIO
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.model_worker_protocol import (
     AudioFileUpsampled,
@@ -2227,7 +2228,7 @@ class ModelWorker:
         log_path = cls._worker_log_hint()
         if not log_path:
             return message
-        return f"{message} Worker log: {log_path}"
+        return f"{message} Worker log: {text_util.make_terminal_hyperlink(log_path, is_file=True)}"
 
     @classmethod
     def _dispatch_console_event(

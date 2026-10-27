@@ -304,8 +304,8 @@ def test_apply_label_counts_changing_lines_of_those_covered() -> None:
         return strip_ansi_codes(voices_menu.make_apply_label(book, roster, attributions, voice_map))
 
     assert label(VoiceMapFile()) == "Apply"
-    assert label(VoiceMapFile({"ALICE": 2, "CAROL": 2})) == "Apply (changes voice for 2 of 3 lines)"
-    assert label(VoiceMapFile({"CAROL": 2})) == "Apply (changes voice for 0 of 1 line)"
+    assert label(VoiceMapFile({"ALICE": 2, "CAROL": 2})) == "Apply (changes voice for 2 of 3 selected lines)"
+    assert label(VoiceMapFile({"CAROL": 2})) == "Apply (changes voice for 0 of 1 selected line)"
 
 
 def test_run_apply_declined_changes_nothing(monkeypatch, quiet_apply) -> None:

@@ -815,6 +815,11 @@ def test_escape_snaps_scrolled_log_to_bottom(monkeypatch, fake_worker, tmp_path)
 
 
 def test_second_escape_hard_resets_worker_immediately(monkeypatch, fake_worker, tmp_path) -> None:
+    from tts_audiobook_tool import text_util
+    from tts_audiobook_tool.textual import worker_session
+
+    log_path = str(tmp_path / "worker log.log")
+    monkeypatch.setattr(worker_session, "make_worker_log_file_path", lambda: log_path)
     cancel_calls: list[str] = []
     reset_calls: list[int] = []
 
@@ -854,8 +859,9 @@ def test_second_escape_hard_resets_worker_immediately(monkeypatch, fake_worker, 
             assert app.terminal_result is not None
             assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
             assert app.terminal_result.hard_reset_cause is HardResetCause.USER_ESCALATION
-            # The WORKER_RESET message points at the worker's own log file.
-            assert "Worker log" in app.terminal_result.message
+            # The reset summary makes the worker log clickable, including paths with spaces.
+            link = text_util.make_terminal_hyperlink(log_path, is_file=True)
+            assert f"Worker log: {link}" in app.terminal_result.message
             # Once the job has stopped, the header prompt line switches to
             # the continue hint.
             assert "to continue" in str(

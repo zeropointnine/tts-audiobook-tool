@@ -803,7 +803,7 @@ class GenerateUtil:
                         "voice_selection_index values (see make_multi_voice_rounds)"
                     )
                 else:
-                    # Silently clamp invalid (presumably stale) index to the nearest valid voice index
+                    # Invalid (presumably stale) assignments fall back to voice 0.
                     voice_selection_index = ProjectVoiceUtil.get_effective_voice_index(
                         phrase_groups[indices[0]].voice_index, len(voice_values),
                     )
@@ -974,7 +974,7 @@ class GenerateUtil:
     ) -> int | None:
         """
         The voice sample index a single line will be generated with (same
-        clamping as `generate()`), or None for a model without voice samples.
+        fallback as `generate()`), or None for a model without voice samples.
         """
         voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
         if not voice_values:
@@ -1187,8 +1187,7 @@ def effective_voice_indices(
     Maps each item index to the voice sample index that `GenerateUtil.generate`
     will actually use for that line.
 
-    A stale out-of-range per-line selection is clamped to the nearest valid
-    voice sample index.
+    A stale out-of-range per-line selection falls back to voice sample index 0.
     """
     return {
         index: ProjectVoiceUtil.get_effective_voice_index(phrase_groups[index].voice_index, num_voice_values)

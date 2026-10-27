@@ -59,8 +59,14 @@ def test_echo_readiness_does_not_require_llm_endpoint(monkeypatch) -> None:
     assert readiness.get_chat_blockers(state) == []
 
 
-def test_microphone_readiness_retains_input_requirements(monkeypatch) -> None:
-    state = make_state(ChatInputMode.MIC_ENTER)
+@pytest.mark.parametrize("mode", [ChatInputMode.MIC_ENTER, ChatInputMode.MIC_IMMEDIATE])
+@pytest.mark.parametrize("echo_override", [False, True])
+def test_microphone_readiness_retains_input_requirements(
+    monkeypatch, mode, echo_override
+) -> None:
+    # Echo mode suppresses the STT blocker, but not microphone-device errors.
+    state = make_state(mode)
+    state.prefs.chat_echo_override = echo_override
     monkeypatch.setattr(
         readiness.SoundInputDeviceInfo, "get_check_error", lambda: "no mic"
     )
@@ -70,10 +76,11 @@ def test_microphone_readiness_retains_input_requirements(monkeypatch) -> None:
     )
 
     issues = readiness.get_chat_blockers(state)
-    assert [issue.short for issue in issues] == [
-        "microphone",
-        "Whisper model enabled",
-    ]
+    assert [issue.short for issue in issues] == (
+        ["microphone"]
+        if echo_override
+        else ["microphone", "Whisper model enabled"]
+    )
 
 
 def test_runner_checks_textual_before_readiness(monkeypatch) -> None:

@@ -1449,7 +1449,7 @@ def test_realtime_save_writes_exactly_what_was_played(
                 get_tts_model_type=lambda: TtsModelType.require_by_id("chatterbox_local"),
                 voice_references=[
                     Voice(f"voice{i}.flac", room_reverb=(
-                        room_reverb if other_voice_reverb is None or i == min(voice_index, voice_count - 1)
+                        room_reverb if other_voice_reverb is None or i == (voice_index if 0 <= voice_index < voice_count else 0)
                         else other_voice_reverb
                     ))
                     for i in range(voice_count)

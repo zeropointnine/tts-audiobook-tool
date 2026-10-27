@@ -46,9 +46,9 @@ def pans_project(pans, model="chatterbox_local"):
 
 
 @pytest.mark.parametrize("pans,index,pan", [
-    ([], 1, 0), ([0, .25], -1, 0), ([0, .25], 1, .25), ([0, .25], 99, .25), ([0, .25, 0], 99, 0),
+    ([], 1, 0), ([0, .25], -1, 0), ([0, .25], 1, .25), ([0, .25], 99, 0), ([0, .25, 0], 99, 0),
 ])
-def test_segments_use_their_voices_position_clamped_like_generation(pans, index, pan):
+def test_segments_use_their_voices_position_with_generation_fallback(pans, index, pan):
     assert VoiceSpatialPolicy.from_project(pans_project(pans)).pan_for_voice_index(index) == pan
 
 
@@ -109,7 +109,7 @@ def voices_project(reverbs, spread=RoomReverbStereo.MONO, model="chatterbox_loca
 SMALL, MEDIUM, OFF = RoomReverb.SMALL_DRR22, RoomReverb.MEDIUM_DRR21, RoomReverb.OFF
 
 
-@pytest.mark.parametrize("index,expected", [(-1, SMALL), (1, OFF), (99, MEDIUM)])
+@pytest.mark.parametrize("index,expected", [(-1, SMALL), (1, OFF), (99, SMALL)])
 def test_segments_use_their_voices_room(index, expected):
     policy = VoiceSpatialPolicy.from_project(voices_project([SMALL, OFF, MEDIUM]))
     assert policy.room_reverb_for_voice_index(index) is expected
