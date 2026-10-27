@@ -1,7 +1,7 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import COL_DIM, COL_DIM_ITALICS, COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.menus.speaker_assign import assign_menu, voices_menu
+from tts_audiobook_tool.menus.speaker_assign import assign_menu, seed_voices_menu, voices_menu
 from tts_audiobook_tool.menus.speaker_assign.characters_view import (
     VIEW_RESULTS_LABEL,
     characters_menu,
@@ -66,6 +66,12 @@ class SpeakerAssignMenu:
                     lambda _: VIEW_RESULTS_LABEL + make_roster_stale_marker(state),
                     lambda _, __: characters_menu(state),
                     blank_line_before=True,
+                ))
+            if seed_voices_menu.has_attribution_data(state.project.dir_path):
+                items.append(MenuItem(
+                    seed_voices_menu.SEED_VOICES_LABEL,
+                    lambda _, __: seed_voices_menu.seed_voices_menu(state),
+                    superlabel="Other",
                 ))
             return items
 

@@ -389,6 +389,7 @@ def test_static_menus_compose_voice_samples_and_model_seed(monkeypatch, module_n
         f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: b",
         f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 3: c",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_CLEAR_VOICES,
     ]
     # Model-specific items sit between the voice list and the selection controls
     expected.extend({

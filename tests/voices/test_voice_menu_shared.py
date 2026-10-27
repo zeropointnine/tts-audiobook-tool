@@ -228,7 +228,77 @@ def test_voice_list_pages_through_more_voices_with_add_on_last_page(monkeypatch)
     assert get_string_from(state, menus[-1]["breadcrumb"]) == "Voices 3-4"
     page_2[-1].handler(state, page_2[-1])
     page_3 = menus[-1]["items"](state)
-    assert [label.split(":")[0] for label in labels(page_3)] == ["Voice 5", voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]
+    assert [label.split(":")[0] for label in labels(page_3)] == [
+        "Voice 5", voice_menu_shared.LABEL_ADD_VOICE_SAMPLE, voice_menu_shared.LABEL_CLEAR_VOICES]
+
+
+def make_clear_state(monkeypatch, voice_references):
+    project = Project(tts_model_type="mira_local", voice_references=voice_references)
+    state = cast(State, SimpleNamespace(project=project))
+    monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
+    monkeypatch.setattr(voice_menu_shared, "printt", lambda *args, **kwargs: None)
+    monkeypatch.setattr(voice_menu_shared, "print_feedback", lambda *args, **kwargs: None)
+    return state
+
+
+def test_clear_resets_voice_list_after_confirmation(monkeypatch):
+    # Clear follows Add; once confirmed, the list is one default voice (so
+    # Clear is no longer offered) and the clear callback runs since a voice
+    # had a sample. Declining changes nothing.
+    state = make_clear_state(monkeypatch, [
+        {"file_name": "a.flac", "transcript": "text"}, {"file_name": "", "name": "bob"}])
+    monkeypatch.setattr(voice_menu_shared.Project, "save", lambda _: "")
+    events = []
+    make_items = lambda: VoiceMenuShared.make_voice_sample_items(
+        state, state.project.get_tts_model_type(), on_clear_callback=lambda: events.append("clear"))
+    clear = make_items()[-1]
+    assert get_string_from(state, clear.label) == voice_menu_shared.LABEL_CLEAR_VOICES
+
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_confirm", lambda *_: False)
+    assert clear.handler(state, clear) is False
+    assert len(state.project.voice_references) == 2
+
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_confirm", lambda *_: True)
+    assert clear.handler(state, clear) is False  # The first page stays open
+    assert state.project.voice_references == [Voice()]
+    assert events == ["clear"]
+    assert get_string_from(state, make_items()[-1].label) == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE
+
+
+def test_clear_restores_voice_list_when_saving_fails(monkeypatch):
+    # In-memory voices must match the project file after a failed save.
+    state = make_clear_state(monkeypatch, [{"file_name": "a.flac", "transcript": "text"}])
+    original = list(state.project.voice_references)
+    errors = []
+    monkeypatch.setattr(voice_menu_shared.Project, "save", lambda _: "disk full")
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_confirm", lambda *_: True)
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_error", errors.append)
+
+    assert VoiceMenuShared.clear_voices_from_menu(state) is False
+    assert state.project.voice_references == original
+    assert errors == ["disk full"]
+
+
+def test_clear_on_a_later_page_closes_it_and_the_pages_before(monkeypatch):
+    # After Clear on page 3, pages 2 and 3 are empty, so both close; page 1 stays.
+    state = make_clear_state(monkeypatch, [{"file_name": "", "name": f"v{i}"} for i in range(5)])
+    monkeypatch.setattr(voice_menu_shared, "VOICES_PER_PAGE", 2)
+    monkeypatch.setattr(voice_menu_shared.Project, "save", lambda _: "")
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_confirm", lambda *_: True)
+    results = []
+
+    def run_page(**kwargs):
+        # Page 2 opens page 3 via "More voices..."; page 3 selects Clear
+        s = kwargs["state"]
+        items = kwargs["items"](s)
+        results.append(items[-1].handler(s, items[-1]))
+    monkeypatch.setattr(voice_menu_shared.MenuUtil, "menu", run_page)
+
+    items = VoiceMenuShared.make_voice_sample_items(state, state.project.get_tts_model_type())
+    more = items[-1]
+    assert more.handler(state, more) is False
+    assert results == [True, True]  # Page 3's Clear, then page 2's "More voices..."
+    assert state.project.voice_references == [Voice()]
 
 
 def test_later_voice_page_closes_when_removals_empty_it(monkeypatch):
@@ -564,7 +634,7 @@ def test_voice_menu_duration_warning_tracks_current_model_on_redraw(monkeypatch)
         assert (f"{voice_menu_shared.COL_ERROR}*" in label) == warned
 
 
-@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 4), (1, 4), (2, 5), (9, 12)])
+@pytest.mark.parametrize("voice_count, expected_item_count", [(0, 4), (1, 5), (2, 6), (9, 13)])
 def test_voice_items_end_with_selection_items(
         monkeypatch,
         voice_count: int,
@@ -582,11 +652,13 @@ def test_voice_items_end_with_selection_items(
 
     assert len(items) == expected_item_count
     labels = [get_string_from(state, item.label) for item in items]
-    # No samples still means one (sample-less) voice
+    # No samples still means one (sample-less) voice, which has nothing to clear
+    expected = [voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]
+    if voice_count:
+        expected.append(voice_menu_shared.LABEL_CLEAR_VOICES)
     voice_count = max(voice_count, 1)
     for index, label in enumerate(labels[:voice_count]):
         assert f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {index + 1}: " in label
-    expected = [voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]
     assert items[-2].blank_line_before
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     expected.append(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)

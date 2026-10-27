@@ -8,7 +8,6 @@ from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, get_string_from
 from tts_audiobook_tool.menus.speaker_assign import voices_menu
 from tts_audiobook_tool.menus.speaker_assign.voices_menu import (
-    make_apply_preview,
     make_character_label,
     make_character_subheading,
     run_apply,
@@ -17,12 +16,11 @@ from tts_audiobook_tool.menus.speaker_assign.voices_menu import (
 )
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.speaker_assign.roster import RosterCharacter
-from tts_audiobook_tool.speaker_assign.voice_apply import VoiceApplyPlan
 from tts_audiobook_tool.speaker_assign.voice_map import VoiceMapFile
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_util import strip_ansi_codes
 
-from tests.speaker_assign.test_voice_apply import ROSTER_IDS, make_fixture
+from tests.speaker_assign.test_voice_apply import make_fixture
 
 
 def make_state(*voice_names: str) -> State:
@@ -53,11 +51,28 @@ def test_character_label_shows_count_and_chosen_voice() -> None:
     assert strip_ansi_codes(make_character_label(state, "DAVE", 0, 5)) == "DAVE (0) -> Voice 6 (missing)"
 
 
+def test_character_labels_line_up_their_arrows() -> None:
+    # Padded to the widest "ID (count)" of the whole list (every page), so the
+    # arrows form a column; a label without a voice isn't padded.
+    state = make_state("", "bob")
+    roster = characters("SUNDAY_AHZMUNDIN", "CHIMP", "ALICE")
+    counts = Counter({"SUNDAY_AHZMUNDIN": 473, "CHIMP": 232})
+    width = voices_menu.make_character_label_width(roster, counts)
+    assert width == len("SUNDAY_AHZMUNDIN (473)")
+    labels = [strip_ansi_codes(make_character_label(state, c.id, counts[c.id], 1, width)) for c in roster]
+    assert labels == [
+        "SUNDAY_AHZMUNDIN (473) -> Voice 2 bob",
+        "CHIMP (232)            -> Voice 2 bob",
+        "ALICE (0)              -> Voice 2 bob",
+    ]
+    assert strip_ansi_codes(make_character_label(state, "CHIMP", 232, None, width)) == "CHIMP (232)"
+
+
 def test_character_subheading_shows_name_details_and_voice_hint() -> None:
     # The voice picker's subheading: the name, known gender and narrator flag,
     # then the voice hint on its own line (omitted when there is none).
     baron = RosterCharacter(id="BARON", name="Baron de Verdira", gender="male", voice_hint="elderly; deep")
-    assert strip_ansi_codes(make_character_subheading(baron)) == "Baron de Verdira (male)\nvoice: elderly; deep"
+    assert strip_ansi_codes(make_character_subheading(baron)) == "Baron de Verdira (male)\nvoice hint: elderly; deep"
     narrator = RosterCharacter(id="NARRATOR", name="The physician", is_narrator=True)
     assert strip_ansi_codes(make_character_subheading(narrator)) == "The physician (narrator)"
 
@@ -158,6 +173,37 @@ def test_character_pages_chain_through_more_and_repeat_actions(monkeypatch) -> N
     assert strip_ansi_codes(menus[2]["heading"]) == "Map to voices (5-5 of 5)"
 
 
+def test_apply_on_a_later_character_page_closes_every_page(monkeypatch) -> None:
+    # Apply closes its page once done; each earlier page's "More characters..."
+    # then reports done too, so the whole menu exits. Before that, returning
+    # from a later page keeps the earlier one open.
+    monkeypatch.setattr(voices_menu, "CHARACTERS_PER_PAGE", 2)
+    state = make_state()
+    roster = characters("A", "B", "C", "D", "E")
+    done = False
+    results = []
+
+    def apply(_, __) -> bool:
+        nonlocal done
+        done = True
+        return done
+
+    def make_action_items() -> list[MenuItem]:
+        return [MenuItem("Apply", apply)]
+
+    def run_page(state, **kwargs):
+        # Each page selects its last-but-one item ("More characters...") if
+        # it has one, else Apply
+        items = kwargs["items"](state)
+        item = items[-2] if len(items) > 1 and "More" in str(items[-2].label) else items[-1]
+        results.append(item.handler(state, item))
+    monkeypatch.setattr(MenuUtil, "menu", run_page)
+
+    voices_menu.characters_page_menu(
+        state, roster, 0, lambda c: MenuItem(c.id, lambda _, __: None), make_action_items, "", lambda: done)
+    assert results == [True, True, True]  # Page 3's Apply, then pages 2 and 1
+
+
 def make_apply_state():
     book, attributions = make_fixture()
     saved = []
@@ -176,46 +222,55 @@ def characters(*ids: str) -> list[RosterCharacter]:
 
 @pytest.fixture
 def quiet_apply(monkeypatch):
-    """Stubs the console interactions of run_apply; returns printed feedback."""
-    feedback = []
+    """Stubs the console interactions of run_apply (confirming); returns
+    printed feedback and, after it, the confirmation prompts."""
+    feedback, prompts = [], []
     monkeypatch.setattr(voices_menu, "print_feedback", lambda message, **_: feedback.append(message))
-    monkeypatch.setattr(voices_menu, "printt", lambda *args, **kwargs: None)
-    monkeypatch.setattr(MenuUtil, "print_screen_heading", lambda *args, **kwargs: None)
-    monkeypatch.setattr(voices_menu.ask, "ask_confirm", lambda *args: True)
-    return feedback
+    monkeypatch.setattr(voices_menu.ask, "ask_confirm", lambda message="": prompts.append(message) or True)
+    return feedback, prompts
 
 
-def test_apply_preview_groups_by_voice_and_warns() -> None:
-    # Characters sharing a voice share a row; unchosen speakers are listed as
-    # unchanged, NOT_SPEECH included like any other id; stale results and
-    # existing audio each add a note.
-    state, attributions, _ = make_apply_state()
-    voice_map = VoiceMapFile({"ALICE": 2, "CAROL": 2, "BOB": 0})
-    plan = VoiceApplyPlan.make(state.project.book, ROSTER_IDS, attributions, voice_map)
-    changed = plan.changed_lines(state.project.book)
-    lines = [strip_ansi_codes(line) for line in make_apply_preview(
-        state, characters("ALICE", "BOB", "CAROL"), voice_map, plan, changed, generated={1})]
-
-    assert "  Voice 1 general  BOB (1)" in lines
-    assert "  Voice 3 bob      ALICE (1), CAROL (1)" in lines
-    assert any(line.startswith("  Unchanged") and "UNKNOWN (1)" in line and "NOT_SPEECH (1)" in line
-               for line in lines)
-    assert "3 lines change voice. Voices already set on these lines are replaced." in lines
-    text = "\n".join(lines)
-    assert "1 passage skipped" in text
-    assert "1 of these lines already have generated audio" in text
-
-
-def test_run_apply_sets_voices_and_saves_text(monkeypatch, quiet_apply) -> None:
+def test_run_apply_confirms_then_sets_voices_and_saves_text(monkeypatch, quiet_apply) -> None:
+    # The standard confirmation prompt (the Apply label gives the line count);
+    # ALICE's passage spans 2 lines.
+    feedback, prompts = quiet_apply
     state, attributions, saved = make_apply_state()
     monkeypatch.setattr(ProjectTextIOUtil, "save_book", lambda project: saved.append("text") or "")
 
-    run_apply(state, characters("ALICE", "BOB", "CAROL"), attributions, VoiceMapFile({"ALICE": 2}))
+    assert run_apply(state, characters("ALICE", "BOB", "CAROL"), attributions, VoiceMapFile({"ALICE": 2}))
 
+    assert prompts == [""]  # ie, ask_confirm's default message
     groups = state.project.book.flat_phrase_groups
     assert [groups[line].voice_index for line in (1, 2, 3)] == [2, 2, 1]
     assert saved == ["text"]
-    assert quiet_apply == ["Updated 2 lines"]
+    assert feedback == ["Updated 2 lines"]
+
+
+def test_apply_label_counts_changing_lines_of_those_covered() -> None:
+    # Of the lines in the chosen characters' passages, those whose voice would
+    # change (line 6, CAROL's, already has voice 2); no count without a choice.
+    state, attributions, _ = make_apply_state()
+    book = state.project.book
+    roster = characters("ALICE", "BOB", "CAROL")
+
+    def label(voice_map: VoiceMapFile) -> str:
+        return strip_ansi_codes(voices_menu.make_apply_label(book, roster, attributions, voice_map))
+
+    assert label(VoiceMapFile()) == "Apply"
+    assert label(VoiceMapFile({"ALICE": 2, "CAROL": 2})) == "Apply (changes voice for 2 of 3 lines)"
+    assert label(VoiceMapFile({"CAROL": 2})) == "Apply (changes voice for 0 of 1 line)"
+
+
+def test_run_apply_declined_changes_nothing(monkeypatch, quiet_apply) -> None:
+    state, attributions, saved = make_apply_state()
+    monkeypatch.setattr(voices_menu.ask, "ask_confirm", lambda *args: False)
+    monkeypatch.setattr(ProjectTextIOUtil, "save_book", lambda project: pytest.fail("must not save"))
+
+    assert not run_apply(state, characters("ALICE", "BOB", "CAROL"), attributions, VoiceMapFile({"ALICE": 2}))
+
+    groups = state.project.book.flat_phrase_groups
+    assert [groups[line].voice_index for line in (1, 2)] == [1, 1]
+    assert quiet_apply[0] == []
 
 
 def test_run_apply_rolls_back_when_saving_fails(monkeypatch, quiet_apply) -> None:
@@ -225,7 +280,7 @@ def test_run_apply_rolls_back_when_saving_fails(monkeypatch, quiet_apply) -> Non
     monkeypatch.setattr(ProjectTextIOUtil, "save_book", lambda project: "disk full")
     monkeypatch.setattr(voices_menu.ask, "ask_error", errors.append)
 
-    run_apply(state, characters("ALICE", "BOB", "CAROL"), attributions, VoiceMapFile({"ALICE": 2}))
+    assert not run_apply(state, characters("ALICE", "BOB", "CAROL"), attributions, VoiceMapFile({"ALICE": 2}))
 
     groups = state.project.book.flat_phrase_groups
     assert [groups[line].voice_index for line in (1, 2)] == [1, 1]
@@ -239,9 +294,10 @@ def test_run_apply_refuses_missing_voices_and_reports_no_ops(quiet_apply, monkey
     monkeypatch.setattr(voices_menu.ask, "ask_error", errors.append)
     roster = characters("ALICE", "BOB", "CAROL")
 
-    run_apply(state, roster, attributions, VoiceMapFile({"ALICE": 7}))
+    assert not run_apply(state, roster, attributions, VoiceMapFile({"ALICE": 7}))
     assert errors and "ALICE" in errors[0]
 
-    run_apply(state, roster, attributions, VoiceMapFile())
-    run_apply(state, roster, attributions, VoiceMapFile({"CAROL": 2}))  # Line 6 already has voice 2
-    assert quiet_apply == ["No voices chosen", "Nothing to change: the dialog lines already have these voices"]
+    assert not run_apply(state, roster, attributions, VoiceMapFile())
+    # Line 6 already has voice 2
+    assert not run_apply(state, roster, attributions, VoiceMapFile({"CAROL": 2}))
+    assert quiet_apply[0] == ["No voices chosen", "Nothing to change: the dialog lines already have these voices"]

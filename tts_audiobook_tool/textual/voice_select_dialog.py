@@ -12,9 +12,11 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, Static
 
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR
-from tts_audiobook_tool.project_support.project_voice_util import VOICE_NAME_MAX_LENGTH
 
 LABEL_UNNAMED = "unnamed"
+# Names are cut to this many characters: every column is as wide as the
+# widest entry, and columns that don't fit the screen are left off
+DISPLAY_NAME_MAX_LENGTH = 12
 INPUT_PROMPT = "Enter voice number: "
 
 # Spaces between voice columns
@@ -162,7 +164,7 @@ class VoiceSelectDialog(ModalScreen[int | None]):
         self.grid_layout: VoiceGridLayout | None = None
 
     def display_name(self, voice_index: int) -> str:
-        name = self.voice_names[voice_index][:VOICE_NAME_MAX_LENGTH]
+        name = self.voice_names[voice_index][:DISPLAY_NAME_MAX_LENGTH]
         return name or LABEL_UNNAMED
 
     def entry_ansi(self, voice_index: int) -> str:

@@ -311,11 +311,12 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
         f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: suzie yeung hanya 1_4",
         f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: second",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
+        voice_menu_shared.LABEL_CLEAR_VOICES,
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
         f"{voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES} (uses LLM; optional)",
     ]
     # Only the sample list carries its shared superlabel; no model headings.
-    assert [item.superlabel for item in items] == [voice_menu_shared.LABEL_VOICE_SAMPLES_SUPERLABEL, "", "", "", ""]
+    assert [item.superlabel for item in items] == [voice_menu_shared.LABEL_VOICE_SAMPLES_SUPERLABEL, "", "", "", "", ""]
 
     items = ModelCatalogMenu.make_items(state, definition(ECHO_ID))
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [

@@ -36,10 +36,14 @@ def make_state(model_id="mira_local", voice_count=0, dir_path="/example/book"):
     return cast(State, SimpleNamespace(project=project))
 
 
-def sample_group_prefixes(voice_count):
-    """Expected (ANSI-stripped) label prefixes of the shared voice list (voices and Add)."""
+def sample_group_prefixes(voice_count, cleared=False):
+    """Expected (ANSI-stripped) label prefixes of the shared voice list (voices,
+    Add, and Clear unless the list is just the one default voice)."""
     prefixes = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(voice_count)]
-    return [*prefixes, voice_menu_shared.LABEL_ADD_VOICE_SAMPLE]  # One page (see VOICES_PER_PAGE)
+    prefixes.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)  # One page (see VOICES_PER_PAGE)
+    if not cleared:
+        prefixes.append(voice_menu_shared.LABEL_CLEAR_VOICES)
+    return prefixes
 
 
 def selection_group_prefixes(voice_count):
@@ -136,7 +140,7 @@ def test_all_local_voice_menus_keep_sample_selection_group(
         # The requirement replaces "no sample set" when the model requires a voice
         required = VoiceMenuShared.get_voice_sample_required_label(state.project, 0)
         assert labels[0].startswith(f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: {required or 'no sample set'}")
-    expected = sample_group_prefixes(max(voice_count, 1))
+    expected = sample_group_prefixes(max(voice_count, 1), cleared=voice_count == 0)
     assert len(labels) == len(expected)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, expected))
 
@@ -336,7 +340,7 @@ def test_remote_voice_factory_tracks_backend_changes(monkeypatch, next_id):
     assert callable(captured["items"])
     state.project.tts_model_type = next_id
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in captured["items"](state)]
-    assert len(labels) == 5
+    assert len(labels) == 6
     expected = sample_group_prefixes(2) + selection_group_prefixes(2)
     assert all(label.startswith(prefix) for label, prefix in zip(labels, expected, strict=True))
     assert labels[2] == voice_menu_shared.LABEL_ADD_VOICE_SAMPLE

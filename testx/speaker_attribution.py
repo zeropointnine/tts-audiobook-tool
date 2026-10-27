@@ -397,7 +397,7 @@ def print_roster(roster: Roster, show_llm_fields: bool) -> None:
     if narration != RosterNarration():
         print(f"\nNarration: {narration.person.value or '?'} person. {narration.notes}")
         if narration.voice_hint:
-            print(f"  voice: {narration.voice_hint}")
+            print(f"  voice hint: {narration.voice_hint}")
     print(f"\n{'#':>3}  {'id':<20} {'tier':<10} {'gender':<7} name")
     for i, character in enumerate(roster.characters, 1):
         narrator = " [NARRATOR]" if character.is_narrator else ""
@@ -405,7 +405,7 @@ def print_roster(roster: Roster, show_llm_fields: bool) -> None:
         print(f"{i:>3}  {character.id:<20} {tier:<10} {character.gender:<7} {character.name}{narrator}")
         indent = " " * 43
         if character.voice_hint:
-            print(f"{indent} voice: {character.voice_hint}")
+            print(f"{indent} voice hint: {character.voice_hint}")
         if show_llm_fields:
             if character.aliases:
                 print(f"{indent} aliases: {', '.join(character.aliases)}")

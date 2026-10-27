@@ -108,7 +108,7 @@ def print_characters_info(state: State, expanded: bool = False) -> bool:
         if narration.notes.strip():
             printt(f"{COL_DIM_ITALICS}{narration.notes.strip()}")
         if narration.voice_hint.strip():
-            printt(f"{COL_DIM}voice: {COL_DEFAULT}{narration.voice_hint.strip()}")
+            printt(f"{COL_DIM}voice hint: {COL_DEFAULT}{narration.voice_hint.strip()}")
         has_printed = True
 
     characters: Sequence[RosterCharacter] = roster.characters
@@ -189,7 +189,7 @@ def print_characters_table(
             f"{tier:<{TIER_WIDTH}}  {character.gender:<{GENDER_WIDTH}}  {character.name}{narrator}"
         )
         if character.voice_hint.strip():
-            printt(f"{hint_indent}{COL_DIM}voice: {character.voice_hint.strip()}")
+            printt(f"{hint_indent}{COL_DIM}voice hint: {character.voice_hint.strip()}")
 
 
 def print_characters_expanded(
@@ -215,7 +215,7 @@ def print_characters_expanded(
         printt(f"{indent}{COL_DIM}name: {COL_DEFAULT}{character.name}")
         printt(f"{indent}{COL_DIM}aliases: {COL_DEFAULT}{aliases}")
         if character.voice_hint.strip():
-            printt(f"{indent}{COL_DIM}voice: {COL_DEFAULT}{character.voice_hint.strip()}")
+            printt(f"{indent}{COL_DIM}voice hint: {COL_DEFAULT}{character.voice_hint.strip()}")
         if character.description.strip():
             printt()
             printt(f"{COL_DIM_ITALICS}{character.description.strip()}")

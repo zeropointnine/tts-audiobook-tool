@@ -33,7 +33,7 @@ def _settings_registry():
 INSTRUCTIONS_PREVIEW_LENGTH = 40
 
 # User-facing voice name (`Voice.name`) validation
-VOICE_NAME_MAX_LENGTH = 12
+VOICE_NAME_MAX_LENGTH = 64
 VOICE_NAME_ONE_WORD_ERROR = "Name must be one word (no spaces)"
 VOICE_NAME_TOO_LONG_ERROR = f"Name must be at most {VOICE_NAME_MAX_LENGTH} characters"
 VOICE_NAME_UNIQUE_ERROR = "Name must be unique"
@@ -593,6 +593,23 @@ class ProjectVoiceUtil:
             project.voice_references = previous_entries
             return -1, error
         return len(project.voice_references) - 1, ""
+
+    @staticmethod
+    def is_voice_list_cleared(project: Project) -> bool:
+        """Whether the voice list is just the one default voice."""
+        voices = project.voice_references
+        return len(voices) == 1 and voices[0].is_default
+
+    @staticmethod
+    def clear_voices_and_save(project: Project) -> str:
+        """Reset the voice list to a single default voice. Returns the save
+        error, in which case the previous list is restored, or ""."""
+        previous = project.voice_references
+        project.voice_references = ensure_voice_slot([])
+        error = project.save()
+        if error:
+            project.voice_references = previous
+        return error
 
     @staticmethod
     def remove_voice_at_index_and_save(project: Project, tts_type: TtsModelType, index: int) -> str:

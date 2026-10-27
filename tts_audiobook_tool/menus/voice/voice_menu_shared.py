@@ -20,7 +20,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
 from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
-from tts_audiobook_tool.project_support.project_voice_util import VOICE_NAME_MAX_LENGTH, ProjectVoiceUtil
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -36,6 +36,7 @@ from tts_audiobook_tool.transcriber import Transcriber
 LABEL_VOICE_SAMPLE_ITEM = "Voice"  # "Voice N: <name> (<duration>); "<instructions>""
 LABEL_VOICE_SAMPLES_SUPERLABEL = "Voice list"
 LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sample-less) voice
+LABEL_CLEAR_VOICES = "Clear"  # Follows Add; resets the list to one default voice
 LABEL_MORE_VOICES = "More voices..."  # Opens the next page of voices
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
 LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Auto-assign character voices"
@@ -616,7 +617,7 @@ class VoiceMenuShared:
 
         def make_page_items(s: State, start: int) -> list[MenuItem]:
             """The page of voices from `start`, then "More voices..." when any
-            follow, else Add."""
+            follow, else Add and (unless the list is already cleared) Clear."""
             count = len(ProjectVoiceUtil.get_voice_values(s.project, tts_type))
             end = min(start + VOICES_PER_PAGE, count)
 
@@ -635,13 +636,21 @@ class VoiceMenuShared:
                     superlabel=LABEL_VOICE_SAMPLES_SUPERLABEL if index == 0 else "",
                     superlabel_no_blank_line=True,
                 ))
+            def on_more(s2: State, _: MenuItem) -> bool:
+                VoiceMenuShared.voices_page_menu(s2, end, make_page_items)
+                # Clear (on the last page) can leave this page empty too
+                return start >= len(s2.project.voice_references)
+
+            def on_clear(s2: State, _: MenuItem) -> bool:
+                cleared = VoiceMenuShared.clear_voices_from_menu(s2, on_clear_callback)
+                return cleared and start > 0  # A later page closes; the first redraws
+
             if end < count:
-                items.append(MenuItem(
-                    make_more_voices_label(count - end),
-                    lambda s2, _: VoiceMenuShared.voices_page_menu(s2, end, make_page_items),
-                ))
+                items.append(MenuItem(make_more_voices_label(count - end), on_more))
             else:
                 items.append(MenuItem(LABEL_ADD_VOICE_SAMPLE, add_voice))
+                if not ProjectVoiceUtil.is_voice_list_cleared(s.project):
+                    items.append(MenuItem(LABEL_CLEAR_VOICES, on_clear))
             return items
 
         return make_page_items(state, 0)
@@ -1118,7 +1127,7 @@ class VoiceMenuShared:
         is reported and not saved."""
         current = state.project.voice_references[index].name
         printt('Enter a name for this voice (or "/clear" to clear):')
-        printt(f"{COL_DIM}(One word, no spaces, up to {VOICE_NAME_MAX_LENGTH} characters)")
+        printt(f"{COL_DIM}(One word, no spaces)")
         value = ask.ask_input(lower=False, prefill=current).strip()
         if not value or value == current:
             return
@@ -1381,6 +1390,28 @@ class VoiceMenuShared:
                 return False
         ProjectVoiceUtil.remove_voice_at_index_and_save(state.project, tts_type, index)
         print_feedback(f"Reset {label} to default" if is_only else f"Removed {label}")
+        return True
+
+    @staticmethod
+    def clear_voices_from_menu(state: State, on_clear_callback: Callable | None = None) -> bool:
+        """Resets the voice list to a single default voice after confirmation.
+        Returns True if it was cleared. `on_clear_callback` runs when any voice
+        had a sample (see make_voice_sample_items)."""
+        project = state.project
+        count = len(project.voice_references)
+        printt(f"Clear the voice list? {make_noun('Its voice', f'All {count:,} voices', count)} "
+               f"will be replaced by a single default voice.")
+        if not ask.ask_confirm():
+            return False
+        had_sample = ProjectVoiceUtil.has_any_voice_sample(project)
+        error = ProjectVoiceUtil.clear_voices_and_save(project)
+        if error:
+            ask.ask_error(error)
+            return False
+        PlaySoundUtil.stop_sound_async()
+        if on_clear_callback and had_sample:
+            on_clear_callback()
+        print_feedback("Voice list cleared")
         return True
 
     @staticmethod

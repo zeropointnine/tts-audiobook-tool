@@ -1,8 +1,9 @@
 """Step 3: choosing a project voice for each roster character (see plans/llm-speaker-attribution.md)."""
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_types import Book
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.voice.voice_menu_shared import (
@@ -17,11 +18,10 @@ from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
 from tts_audiobook_tool.speaker_assign.attribution_summary import AttributionSummary
 from tts_audiobook_tool.speaker_assign.roster import RosterCharacter
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
-from tts_audiobook_tool.speaker_assign.speaker_label_util import SpeakerLabelUtil
 from tts_audiobook_tool.speaker_assign.voice_apply import VoiceApplyPlan
 from tts_audiobook_tool.speaker_assign.voice_map import VoiceMapFile
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.util import make_hotkey_string, make_noun, print_feedback, printt
+from tts_audiobook_tool.util import make_noun, print_feedback
 
 
 def make_step_label(state: State) -> str:
@@ -102,24 +102,42 @@ def voices_menu(state: State) -> None:
             on_select=lambda index: save(VoiceMapFile.all_set_to(ids, index)),
         )
 
+    label_width = make_character_label_width(characters, counts)
+
     def make_item(character: RosterCharacter) -> MenuItem:
         return MenuItem(
-            make_character_label(state, character.id, counts[character.id], voice_map.get(character.id)),
+            make_character_label(
+                state, character.id, counts[character.id], voice_map.get(character.id), label_width),
             on_character,
             data=character,
         )
 
+    applied = False
+
+    def on_apply(_: State, __: MenuItem) -> bool:
+        # Once applied, this menu is done: closes this page (and, through
+        # is_done, any pages before it)
+        nonlocal applied
+        applied = run_apply(state, characters, attributions, voice_map)
+        return applied
+
+    # The Apply label's counts, recomputed only when the choices change (the
+    # lines' voices only change on Apply, which closes this menu)
+    apply_label_cache: tuple[VoiceMapFile, str] | None = None
+
+    def make_apply_label_cached(_: State) -> str:
+        nonlocal apply_label_cache
+        if apply_label_cache is None or apply_label_cache[0] is not voice_map:
+            apply_label_cache = (voice_map, make_apply_label(state.project.book, characters, attributions, voice_map))
+        return apply_label_cache[1]
+
     def make_action_items() -> list[MenuItem]:
         return [
             MenuItem("Set all to...", on_set_all),
-            MenuItem(
-                "Apply",
-                lambda _, __: run_apply(state, characters, attributions, voice_map),
-                blank_line_before=True,
-            ),
+            MenuItem(make_apply_label_cached, on_apply, blank_line_before=True),
         ]
 
-    characters_page_menu(state, characters, 0, make_item, make_action_items, subheading)
+    characters_page_menu(state, characters, 0, make_item, make_action_items, subheading, lambda: applied)
 
 
 def characters_page_menu(
@@ -129,23 +147,26 @@ def characters_page_menu(
         make_item: Callable[[RosterCharacter], MenuItem],
         make_action_items: Callable[[], list[MenuItem]],
         subheading: str,
+        is_done: Callable[[], bool] = lambda: False,
 ) -> None:
     """One page of the character list: up to CHARACTERS_PER_PAGE characters,
     then "More characters..." (opens the next page as a submenu) when any are
     left, then the action items, which every page repeats. Paging keeps the
     menu within the hotkeys available; the list is sorted by dialog count, so
-    the later pages hold the minor speakers."""
+    the later pages hold the minor speakers. Returning from a later page once
+    `is_done()` closes this page too."""
     page = characters[start:start + CHARACTERS_PER_PAGE]
     end = start + len(page)
     remaining = len(characters) - end
 
+    def on_more(_: State, __: MenuItem) -> bool:
+        characters_page_menu(state, characters, end, make_item, make_action_items, subheading, is_done)
+        return is_done()
+
     def items_maker(_: State) -> list[MenuItem]:
         items = [make_item(character) for character in page]
         if remaining:
-            items.append(MenuItem(
-                f"More characters... {COL_DIM}({remaining:,})",
-                lambda _, __: characters_page_menu(state, characters, end, make_item, make_action_items, subheading),
-            ))
+            items.append(MenuItem(f"More characters... {COL_DIM}({remaining:,})", on_more))
         return items + make_action_items()
 
     if start == 0:
@@ -159,39 +180,50 @@ def characters_page_menu(
     MenuUtil.menu(state, heading=heading, items=items_maker, subheading=subheading, breadcrumb=breadcrumb)
 
 
+def make_apply_label(
+        book: Book, characters: Sequence[RosterCharacter], attributions: AttributionsFile, voice_map: VoiceMapFile,
+) -> str:
+    """Eg "Apply (changes voice for 12 of 40 lines)": the lines whose voice
+    would change, of all the lines in the chosen characters' passages. Just
+    "Apply" while no chosen voice covers any line."""
+    roster_ids = {character.id for character in characters}
+    plan = VoiceApplyPlan.make(book, roster_ids, attributions, voice_map)
+    total = len(plan.line_voices)
+    if not total:
+        return "Apply"
+    changed = len(plan.changed_lines(book))
+    return (f"Apply {COL_DIM}(changes voice for {COL_ACCENT}{changed:,}{COL_DIM} "
+            f"of {total:,} {make_noun('line', 'lines', total)})")
+
+
 def run_apply(
         state: State, characters: list[RosterCharacter], attributions: AttributionsFile, voice_map: VoiceMapFile,
-) -> None:
-    """Previews the voices to apply, asks to confirm, then sets them on the
-    dialog lines and saves the project text."""
+) -> bool:
+    """Asks to confirm, then sets the chosen voices on the dialog lines and saves the project text. Returns
+    whether they were applied."""
     project = state.project
     book = project.book
     roster_ids = {character.id for character in characters}
     chosen = {character_id: index for character_id, index in voice_map.voices.items() if character_id in roster_ids}
     if not chosen:
         print_feedback("No voices chosen")
-        return
+        return False
     missing = [character_id for character_id, index in chosen.items() if index >= len(project.voice_references)]
     if missing:
         ask.ask_error(f"Chosen voice doesn't exist for: {', '.join(missing)}. Choose another voice first.")
-        return
+        return False
     plan = VoiceApplyPlan.make(book, roster_ids, attributions, voice_map)
     if not plan.applied:
         print_feedback("No dialog has been assigned to the chosen characters (step 2)")
-        return
+        return False
     changed = plan.changed_lines(book)
     if not changed:
         print_feedback("Nothing to change: the dialog lines already have these voices")
-        return
+        return False
 
-    segments = project.sound_segments
-    generated = set(segments.sound_segments_map.keys()) if segments is not None else set()
-    MenuUtil.print_screen_heading(state, "Apply voices", breadcrumb="Apply")
-    for line in make_apply_preview(state, characters, voice_map, plan, changed, generated):
-        printt(line)
-    printt()
-    if not ask.ask_confirm(f"Apply? Press {make_hotkey_string('Y')} to confirm: "):
-        return
+    # The Apply label already gives the line count
+    if not ask.ask_confirm():
+        return False
 
     previous = plan.apply(book)
     if previous:
@@ -199,48 +231,9 @@ def run_apply(
         if error:
             VoiceApplyPlan.restore(book, previous)
             ask.ask_error(f"Couldn't save the project text: {error}")
-            return
+            return False
     print_feedback(f"Updated {len(previous):,} {make_noun('line', 'lines', len(previous))}")
-
-
-def make_apply_preview(
-        state: State,
-        characters: list[RosterCharacter],
-        voice_map: VoiceMapFile,
-        plan: VoiceApplyPlan,
-        changed: list[int],
-        generated: set[int],
-) -> list[str]:
-    """The confirmation text: characters grouped by voice (with their dialog
-    passage counts), what's left unchanged, and any warnings."""
-    voice_references = state.project.voice_references
-    by_voice: dict[int, list[str]] = {}
-    for character in characters:  # Most passages first
-        index = voice_map.get(character.id)
-        if index is not None:
-            by_voice.setdefault(index, []).append(
-                f"{COL_ACCENT}{character.id}{COL_DEFAULT} ({plan.applied[character.id]:,})")
-    rows = [(VoiceMenuShared.make_voice_title(voice_references[index], index), ", ".join(names))
-            for index, names in sorted(by_voice.items())]
-    unchanged_counts = SpeakerLabelUtil.sorted_counts(plan.unchanged)
-    if unchanged_counts:
-        unchanged = ", ".join(f"{label} ({count:,})" for label, count in unchanged_counts)
-        rows.append(("Unchanged", f"{unchanged} {COL_DIM}(no voice chosen)"))
-    width = max(len(title) for title, _ in rows)
-
-    lines = ["Dialog passages per character:", ""]
-    lines += [f"  {title:<{width}}  {names}" for title, names in rows]
-    lines.append("")
-    lines.append(f"{len(changed):,} {make_noun('line changes', 'lines change', len(changed))} voice. "
-                 f"Voices already set on these lines are replaced.")
-    if plan.skipped:
-        lines.append(f"{COL_DIM}{plan.skipped:,} {make_noun('passage', 'passages', plan.skipped)} skipped: "
-                     f"the project text changed after they were assigned (re-run step 2).")
-    with_audio = sum(1 for line in changed if line in generated)
-    if with_audio:
-        lines.append(f"{COL_DIM}{with_audio:,} of these lines already have generated audio, "
-                     f"which keeps its old voice until regenerated.")
-    return lines
+    return True
 
 
 def voice_submenu(
@@ -316,22 +309,38 @@ def make_character_subheading(character: RosterCharacter) -> str:
                if part and part != "unknown"]
     lines = [f"{COL_DEFAULT}{character.name}" + (f" {COL_DIM}({', '.join(details)})" if details else "")]
     if character.voice_hint.strip():
-        lines.append(f"{COL_DIM}voice: {COL_DEFAULT}{character.voice_hint.strip()}")
+        lines.append(f"{COL_DIM}voice hint: {COL_DEFAULT}{character.voice_hint.strip()}")
     return "\n".join(lines)
 
 
-def make_character_label(state: State, character_id: str, count: int, voice_index: int | None) -> str:
-    """Eg "BOB (50) -> Voice 1 bob"; just "BOB (50)" when no voice is chosen."""
+def make_character_label(
+        state: State, character_id: str, count: int, voice_index: int | None, width: int = 0,
+) -> str:
+    """Eg "BOB (50) -> Voice 1 bob"; just "BOB (50)" when no voice is chosen.
+    "BOB (50)" is padded to `width` so the arrows line up in a column (see
+    make_character_label_width)."""
+    head = make_character_label_head(character_id, count)
     label = f"{COL_DEFAULT}{character_id} {COL_DIM}({count:,})"
     if voice_index is None:
         return label
-    label += f" {COL_DEFAULT}->"
+    label += " " * (width - len(head)) + f" {COL_DEFAULT}->"
     voice_references = state.project.voice_references
     if voice_index >= len(voice_references):
         # Eg the voice was removed after it was chosen
         return label + f" {COL_ERROR}Voice {voice_index + 1} (missing)"
     title = VoiceMenuShared.make_voice_title(voice_references[voice_index], voice_index)
     return label + f" {COL_ACCENT}{title}"
+
+
+def make_character_label_head(character_id: str, count: int) -> str:
+    """The (uncolored) part of a character label before the arrow."""
+    return f"{character_id} ({count:,})"
+
+
+def make_character_label_width(characters: Sequence[RosterCharacter], counts: Mapping[str, int]) -> int:
+    """The widest label head, over every page, so the arrows stay in the same
+    column from page to page."""
+    return max((len(make_character_label_head(c.id, counts.get(c.id, 0))) for c in characters), default=0)
 
 
 # Characters listed per page: the 35 auto-assigned hotkeys (1-9, a-z) minus

@@ -43,7 +43,7 @@ By themselves, these models are unreliable at book scale. The app wraps them in 
 - Silence trimming and reduction of excessive pauses, plus semantically-aware pause modulation at segment boundaries to improve prosody
 - EBU R128 loudness normalization plus optional 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) generative upsampler
 
-A single project can utilize multiple voice-clone samples. An optional step applies an LLM-assisted character identification pass on the text to map character lines to voice clones.
+A single project can utilize multiple voice-clone samples. An optional step applies an LLM-assisted character identification pass on the text to map character lines to voice clones, enabling "full-cast audio drama" productions.
 
 It also includes a realtime audiobook playback mode and a voice chat feature, useful for voice/model testing.
 

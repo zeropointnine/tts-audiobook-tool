@@ -145,6 +145,8 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
                                      "Add/remove voice samples")) for label in rendered_labels)
     expected = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(max(sample_count, 1))]
     expected.append(voice_menu_shared.LABEL_ADD_VOICE_SAMPLE)
+    if sample_count:  # Not shown for the one default voice
+        expected.append(voice_menu_shared.LABEL_CLEAR_VOICES)
     # Speakers are per voice (voice submenu), not Voices menu items
     expected.append(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     expected.append(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
@@ -285,8 +287,8 @@ def test_qwen_voice_menu_has_no_model_global_instruction_controls(monkeypatch, m
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in captured["items"]]
     assert not any(label.startswith(("Instructions", "Clear instructions")) for label in labels)
     # Shared voice rows may still preview this voice's instructions.
-    # Default voice, Add, then Edit voice/line selections and Auto-assign
+    # The voice, Add, Clear, then Edit voice/line selections and Auto-assign
     # character voices (speakers are per voice).
-    assert len(labels) == 4
+    assert len(labels) == 5
     assert labels[-2].startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     assert labels[-1].startswith(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
