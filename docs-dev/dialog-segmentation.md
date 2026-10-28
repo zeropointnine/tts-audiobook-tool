@@ -256,7 +256,7 @@ The import-time dialog-segmentation path sets `PhraseGroup.is_dialog` on every r
 
 The flag is independent of `voice_index`: assigning any voice, including voice sample 1, leaves a dialog line flagged. The flag is carried over when the text editor splits a line or edits its text. Other consumers:
 
-- "Auto-assign character voices" attributes the flagged lines (grouped into utterances by opening quote marks) to characters, and requires text imported with dialog segmentation enabled; otherwise the user must re-import.
+- "Auto-identify characters" attributes the flagged lines (grouped into utterances by opening quote marks) to characters, and requires text imported with dialog segmentation enabled; otherwise the user must re-import.
 
 Detection assigns no voice. At the end of an import that found dialog, the user is asked (default no) whether to assign the dialog lines to zero-based `voice_index = 1`—voice sample 2 in the UI. The assignment takes effect directly; every line always uses its own (clamped) `voice_index`. Multi-item batching honors line assignments: each generation round is split into per-voice sub-batches (groups of batches), so every line is generated with its own voice sample.
 
@@ -380,7 +380,7 @@ Because detection also splits segments, which renumbers lines (and so invalidate
 
 ### Voices are a separate step
 
-Detection marks dialog but assigns no voice. The import's opt-in voice-sample-2 assignment gives a two-voice narration/dialog default regardless of speaker; per-character voices come from "Auto-assign character voices" or manual line editing.
+Detection marks dialog but assigns no voice. The import's opt-in voice-sample-2 assignment gives a two-voice narration/dialog default regardless of speaker; per-character voices come from "Auto-identify characters" or manual line editing.
 
 ### Punctuation after the closing quote
 

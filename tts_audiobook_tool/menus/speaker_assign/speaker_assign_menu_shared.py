@@ -1,4 +1,4 @@
-"""Helpers shared by the speaker assignment (auto-assign character voices) menus."""
+"""Helpers shared by the speaker assignment (Auto-identify characters) menus."""
 import os
 import tempfile
 

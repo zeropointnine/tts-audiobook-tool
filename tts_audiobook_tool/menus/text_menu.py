@@ -67,16 +67,22 @@ class TextMenu:
 
                 items.append(
                     MenuItem(
-                        make_subst_label, lambda _, __: TextMenu.word_substitutions_menu(state),
+                        "View/edit text lines", lambda _, __: TextMenu.edit_text(state),
                         superlabel=" ", superlabel_no_blank_line=True
-                    )
+                    ),
                 )
 
                 items.append(
                     MenuItem(
-                        "View/edit text lines", lambda _, __: TextMenu.edit_text(state),
-                        superlabel=" ", superlabel_no_blank_line=True
-                    ),
+                        TextMenu.make_book_title_label,
+                        lambda _, __: TextMenu.edit_book_title(state),
+                        superlabel="Other"
+                    )
+                )
+                items.append(
+                    MenuItem(
+                        make_subst_label, lambda _, __: TextMenu.word_substitutions_menu(state),
+                    )
                 )
 
             return items
@@ -85,6 +91,34 @@ class TextMenu:
             state, make_heading, make_items,
             hint=HINT_LINE_BREAKS, breadcrumb="Text"
         )
+
+    @staticmethod
+    def make_book_title_label(state: State) -> str:
+        title = state.project.book.title
+        value = make_currently_string(
+            title or "none", color_code=COL_ACCENT if title else COL_DIM
+        )
+        return f"Book title {value}"
+
+    @staticmethod
+    def edit_book_title(state: State) -> None:
+        current = state.project.book.title
+        prompt = "Enter book title"
+        if current:
+            prompt += f" {COL_DIM}(or /clear)"
+        value = ask.ask_input(f"{prompt}: ", lower=False, prefill=current).strip()
+        if not value:
+            return
+        title = "" if value == "/clear" else value
+        if title == current:
+            return
+        state.project.book.title = title
+        error = ProjectTextIOUtil.save_book(state.project)
+        if error:
+            state.project.book.title = current
+            ask.ask_error(error)
+            return
+        print_feedback("Title set")
 
     @staticmethod
     def edit_text(state: State) -> None:
@@ -533,7 +567,7 @@ DIALOG_SEGMENTATION_DESC = \
 f"""Detects and splits dialog from surrounding narration,
 making it easier to assign different voices.
 For example, {COL_DIM}He said, "Hello."{COL_DEFAULT} becomes {COL_DIM}He said,{COL_DEFAULT} and {COL_DIM}"Hello."{COL_DEFAULT}
-Is required by the "Auto-assign character voices" feature.
+Is required by the "Auto-identify characters" feature.
 
 For single-voice narration, leave this off to preserve natural flow."""
 

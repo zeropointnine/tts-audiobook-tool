@@ -888,7 +888,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 **2026-10-25**
 
-- Added **Auto-assign character voices** (`Voices > Auto-assign character voices`). Uses an LLM to work out which character speaks each line of dialog, so main characters can each get their own voice.
+- Added **Auto-identify characters** (`Voices > Auto-identify characters`). Uses an LLM to work out which character speaks each line of dialog, so main characters can each get their own voice.
 
 **2026-10-21**
 

@@ -174,7 +174,7 @@ def test_describe_http_error_points_at_an_extra_param_the_error_names() -> None:
     body = "Invalid type for 'max_completion_tokens': expected an integer, but got a string instead."
     text = LlmRequestUtil.describe_error(make_http_error(400, body), prefs)  # type: ignore[arg-type]
     assert 'mentions the extra param "max_completion_tokens".' in text
-    assert "Extra params (Auto-assign character voices)" in text
+    assert "Extra params (Auto-identify characters)" in text
     assert "context window" not in text
 
 

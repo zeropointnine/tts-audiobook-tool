@@ -30,6 +30,92 @@ def stub_editor_construction(monkeypatch) -> None:
     monkeypatch.setattr(text_menu_module, "TextEditor", lambda _: object())
 
 
+@pytest.mark.parametrize("has_text", [False, True])
+def test_text_menu_word_substitutions_last_under_other(monkeypatch, has_text) -> None:
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(phrase_groups=[object()] if has_text else [])))
+    captured_items: list[MenuItem] = []
+    monkeypatch.setattr(
+        text_menu_module.MenuUtil,
+        "menu",
+        lambda state, heading, items, **kwargs: captured_items.extend(items(state)),
+    )
+
+    TextMenu.menu(state)
+
+    if has_text:
+        assert captured_items[-3].label == "View/edit text lines"
+        assert captured_items[-2].label is TextMenu.make_book_title_label
+        assert captured_items[-2].superlabel == "Other"
+        assert captured_items[-1].label is text_menu_module.make_subst_label
+        assert not captured_items[-1].superlabel
+    else:
+        assert all(item.label is not text_menu_module.make_subst_label for item in captured_items)
+
+
+@pytest.mark.parametrize("title", ["", "My Book"])
+def test_book_title_label(title) -> None:
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(book=SimpleNamespace(title=title))))
+
+    label = TextMenu.make_book_title_label(state)
+
+    assert strip_ansi_codes(label) == f"Book title (currently: {title or 'none'})"
+    if not title:
+        assert f"{COL_DIM}none" in label
+
+
+@pytest.mark.parametrize(
+    "current, response, expected, saved",
+    [
+        ("", "My Book", "My Book", True),
+        ("Old Title", "New Title", "New Title", True),
+        ("Old Title", "/clear", "", True),
+        ("Old Title", "", "Old Title", False),
+        ("Old Title", "Old Title", "Old Title", False),
+        ("", "/clear", "", False),
+    ],
+)
+def test_edit_book_title(monkeypatch, current, response, expected, saved) -> None:
+    # Editing preserves case, prefills the title, and only persists actual changes.
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(book=SimpleNamespace(title=current))))
+    saves = []
+    feedback = []
+
+    def ask_input(message, *, lower, prefill):
+        assert message == "Enter book title" + (f" {COL_DIM}(or /clear)" if current else "") + ": "
+        assert lower is False
+        assert prefill == current
+        return response
+
+    monkeypatch.setattr(text_menu_module.ask, "ask_input", ask_input)
+    monkeypatch.setattr(
+        text_menu_module.ProjectTextIOUtil, "save_book",
+        lambda project: saves.append(project.book.title) or "",
+    )
+    monkeypatch.setattr(text_menu_module, "print_feedback", feedback.append)
+
+    TextMenu.edit_book_title(state)
+
+    assert state.project.book.title == expected
+    assert saves == ([expected] if saved else [])
+    assert feedback == (["Title set"] if saved else [])
+
+
+def test_edit_book_title_save_failure_restores_title(monkeypatch) -> None:
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(book=SimpleNamespace(title="Old Title"))))
+    errors = []
+    feedback = []
+    monkeypatch.setattr(text_menu_module.ask, "ask_input", lambda *args, **kwargs: "New Title")
+    monkeypatch.setattr(text_menu_module.ProjectTextIOUtil, "save_book", lambda _: "Disk full")
+    monkeypatch.setattr(text_menu_module.ask, "ask_error", errors.append)
+    monkeypatch.setattr(text_menu_module, "print_feedback", feedback.append)
+
+    TextMenu.edit_book_title(state)
+
+    assert state.project.book.title == "Old Title"
+    assert errors == ["Disk full"]
+    assert feedback == []
+
+
 def test_text_menu_saved_editor_result_does_not_report_error(monkeypatch) -> None:
     errors: list[str] = []
     stub_editor_construction(monkeypatch)

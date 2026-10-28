@@ -77,10 +77,10 @@ class SpeakerAssignMenu:
 
         MenuUtil.menu(
             state,
-            heading="Auto-assign character voices",
+            heading="Auto-identify characters",
             items=items_maker,
             subheading=subheading,
-            breadcrumb="Auto-assign character voices",
+            breadcrumb="Auto-identify characters",
         )
 
 

@@ -20,7 +20,7 @@ class ExtraParamsTarget:
 
 EXTRA_PARAMS_TARGETS = (
     ExtraParamsTarget("LLM Chat", "llm_chat_extra_params", '{"thinking": {"type": "disabled"}}'),
-    ExtraParamsTarget("Auto-assign character voices", "llm_speaker_assign_extra_params", '{"thinking": {"type": "enabled"}}'),
+    ExtraParamsTarget("Auto-identify characters", "llm_speaker_assign_extra_params", '{"thinking": {"type": "enabled"}}'),
 )
 
 
@@ -74,7 +74,7 @@ class LlmSettingsMenu:
 
         subheading = (
             "Configuration for the app's LLM integration, used by the \"LLM Chat\"\n"
-            "and \"Auto-assign character voices\" features."
+            "and \"Auto-identify characters\" features."
         )
         MenuUtil.menu(
             state,

@@ -685,7 +685,7 @@ class Prefs(Saveable):
 
     @property
     def llm_speaker_assign_extra_params(self) -> dict:
-        """Extra LLM request params for the Auto-assign character voices feature."""
+        """Extra LLM request params for the Auto-identify characters feature."""
         return self._llm_speaker_assign_extra_params
 
     @llm_speaker_assign_extra_params.setter

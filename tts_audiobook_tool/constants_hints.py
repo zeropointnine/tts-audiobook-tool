@@ -231,7 +231,7 @@ To generate dialog using voices other than the narrator's:
 (1) Add more voice samples
 (2) Assign voices to the dialog lines: in Voices > Edit voice/line selections
     (press [D] to select all dialog lines), or per character using
-    Voices > Auto-assign character voices."""
+    Voices > Auto-identify characters."""
 )
 
 HINT_LLM_API_KEY_REMOVED = Hint(

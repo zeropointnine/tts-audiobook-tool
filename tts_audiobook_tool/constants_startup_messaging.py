@@ -29,7 +29,7 @@ STARTUP_VERSION_MESSAGES: list[tuple[int, str]] = [
     ),
     (
         4,
-        f"Voices > Auto-assign character voices:\n"
+        f"Voices > Auto-identify characters:\n"
         "Automatically identify speaking lines by character using LLM."
     )
 ]

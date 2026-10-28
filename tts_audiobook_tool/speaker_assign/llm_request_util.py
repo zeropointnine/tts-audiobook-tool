@@ -32,7 +32,7 @@ CANCEL_GRACE_SECONDS = 1.0
 
 HTTP_ERROR_BODY_MAX_CHARS = 600
 
-EXTRA_PARAMS_MENU_PATH = "Options > LLM settings > Extra params (Auto-assign character voices)"
+EXTRA_PARAMS_MENU_PATH = "Options > LLM settings > Extra params (Auto-identify characters)"
 
 # Lowercase phrases in a 400 response body that indicate the request exceeded
 # the model's context window (eg OpenAI/DeepSeek "maximum context length is...",

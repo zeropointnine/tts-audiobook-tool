@@ -39,7 +39,7 @@ LABEL_ADD_VOICE_SAMPLE = "Add"  # Follows the listed voices; adds a default (sam
 LABEL_CLEAR_VOICES = "Clear"  # Follows Add; resets the list to one default voice
 LABEL_MORE_VOICES = "More voices..."  # Opens the next page of voices
 LABEL_EDIT_VOICE_SELECTIONS = "Edit voice/line selections"
-LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Auto-assign character voices"
+LABEL_AUTO_ASSIGN_CHARACTER_VOICES = "Auto-identify characters"
 
 # Per-voice submenu labels
 LABEL_VOICE_NAME = "Name"
@@ -682,7 +682,7 @@ class VoiceMenuShared:
     @staticmethod
     def make_voice_selection_items(state: State, tts_type: TtsModelType) -> list[MenuItem]:
         """The closing group of every Voices menu: Edit voice/line selections
-        and Auto-assign character voices. Added by `menu_wrapper`."""
+        and Auto-identify characters. Added by `menu_wrapper`."""
         items: list[MenuItem] = []
         items.append(VoiceMenuShared.make_assign_voice_samples_to_text_lines_item(tts_type))
         items.append(VoiceMenuShared.make_auto_assign_character_voices_item())

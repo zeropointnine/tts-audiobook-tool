@@ -34,7 +34,7 @@ def test_heading_folds_results_into_title(monkeypatch, index, view):
 
     state = cast(State, SimpleNamespace())
     frames = [MenuFrame(heading=heading) for heading in (
-        "Main", "Voices", "Auto-assign character voices", characters_view.RESULTS_HEADING,
+        "Main", "Voices", "Auto-identify characters", characters_view.RESULTS_HEADING,
     )]
     monkeypatch.setattr(MenuUtil, "menu_frames", frames)
     headings = []
@@ -48,7 +48,7 @@ def test_heading_folds_results_into_title(monkeypatch, index, view):
     characters_view.characters_menu(state)
 
     assert headings == [(f"Character/dialog results - {view}", {
-        "breadcrumb_text": "Main > Voices > Auto-assign character voices >",
+        "breadcrumb_text": "Main > Voices > Auto-identify characters >",
     })]
     assert MenuUtil.menu_frames == frames
 
