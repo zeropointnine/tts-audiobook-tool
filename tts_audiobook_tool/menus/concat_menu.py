@@ -746,7 +746,7 @@ ROOM_REVERB_STEREO_TITLE = "Room reverb stereo effect"
 
 ROOM_REVERB_STEREO_SUBHEADING = \
 """Spreads room reverb across left and right channels, for a wider sense of space.
-Applies only voices that have room reverb see (see voice sample submenu)."""
+Applies only to voices that have room reverb set (see voice sample submenu)."""
 
 REASON_PAUSES_SUBHEADING = \
 """Controls the silence inserted between generated segments."""

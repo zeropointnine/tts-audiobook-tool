@@ -357,6 +357,61 @@ def test_base_manual_selection_replaces_selection_and_highlights_highest_line(
     run(exercise())
 
 
+@pytest.mark.parametrize(
+    ("start_y", "line_indices", "expected_y"),
+    [
+        # The final row is above the view and the span doesn't fit: the final
+        # row is bottom-aligned (Textual alone would put it at the top).
+        pytest.param(150, {0, 50}, lambda height: 51 - height, id="above-bottom-aligns"),
+        # The final row is below the view and the span doesn't fit.
+        pytest.param(0, {60, 120}, lambda height: 121 - height, id="below-bottom-aligns"),
+        # The span fits: the view scrolls the least distance revealing all of it.
+        pytest.param(150, {40, 45}, lambda height: 40, id="span-above-fits"),
+        pytest.param(0, {100, 105}, lambda height: 106 - height, id="span-below-fits"),
+        # A fully visible final row keeps the view, even with rows hidden above.
+        pytest.param(50, {0, 55}, lambda height: 50, id="visible-keeps-view"),
+    ],
+)
+def test_base_manual_selection_scrolls_to_reveal_rows_above_final_row(
+    start_y: int, line_indices: set[int], expected_y
+) -> None:
+    app = StubContentApp(make_long_project(200), phrase_indices=list(range(200)))
+
+    async def exercise() -> None:
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            option_list.scroll_to(y=start_y, animate=False, immediate=True)
+            await pilot.pause()
+            app.handle_manual_selection(line_indices)
+            await pilot.pause()
+
+            assert app.selected_index == max(line_indices)
+            height = option_list.scrollable_content_region.height
+            assert option_list.scroll_offset.y == expected_y(height)
+
+    run(exercise())
+
+
+def test_selection_end_shows_start_of_final_row_taller_than_viewport() -> None:
+    # Rows are 30 lines tall, taller than the viewport, so bottom-aligning the
+    # final row would hide its start; its first line is shown instead.
+    project = StubProject(
+        [StubPhraseGroup("\n".join(f"{index}" for _ in range(30))) for index in range(10)]
+    )
+    app = StubContentApp(project, phrase_indices=list(range(10)))
+
+    async def exercise() -> None:
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            app.handle_manual_selection({2, 5})
+            await pilot.pause()
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            assert option_list.scroll_offset.y == option_list._index_to_line[5]
+
+    run(exercise())
+
+
 def test_base_manual_selection_with_no_matching_rows_leaves_selection_unchanged() -> None:
     project = StubProject(
         [

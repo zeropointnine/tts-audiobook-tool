@@ -12,7 +12,11 @@ from tts_audiobook_tool.app_types import (
 )
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile, RangeAttribution
+from tts_audiobook_tool.speaker_assign.attribution import (
+    AttributionsFile,
+    RangeAttribution,
+    UtteranceAttribution,
+)
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
 from tts_audiobook_tool.textual.content_textual_app import (
@@ -1513,7 +1517,8 @@ def test_confirmation_previews_assignment_cleanup_without_clearing_it(tmp_path, 
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")])])
     project.dir_path = str(tmp_path)
     saved = AttributionsFile((RangeAttribution(
-        0, 2, UtteranceUtil.range_text_hash(project.book, 0, 2), (),
+        0, 2, UtteranceUtil.range_text_hash(project.book, 0, 2),
+        (UtteranceAttribution((0, 1), "ALICE"),),
     ),))
     assert SpeakerAssignFileUtil.save_attributions_file(project.dir_path, saved) == ""
     app = make_loaded_editor(project)
@@ -1525,7 +1530,8 @@ def test_confirmation_previews_assignment_cleanup_without_clearing_it(tmp_path, 
     dialog = app.make_confirmation_dialog()
     copy = "\n".join(dialog.copy_lines)
     assert Text.from_ansi(dialog.copy_lines[-1]).plain == (
-        "• Saved dialog assignments for affected passages"
+        "• Saved dialog assignments for 2 dialog lines (1 chunk). Re-run step 2 "
+        "to reassign them; voices already applied to lines are kept."
     )
     assert '"Run dialog attribution" again' not in copy
     assert "roster and voice mappings" not in copy

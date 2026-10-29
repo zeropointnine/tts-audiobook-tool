@@ -49,6 +49,7 @@ from tts_audiobook_tool.textual.textual_shared import (
     dialog_marker,
     has_dialog_detection,
 )
+from tts_audiobook_tool.util import make_noun
 
 
 _HEADER_LINES_DEFAULT = [
@@ -763,7 +764,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             )
         removals = self._make_audio_removal_items()
         if cleanup.removed_count:
-            removals.append("Saved dialog assignments for affected passages")
+            removals.append(self._make_assignment_removal_item(cleanup))
         if not removals:
             return SaveChangesDialog()
         heading = (
@@ -779,6 +780,21 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
                 *(f"{COL_ERROR}• {item}" for item in removals),
             ],
             left_align_from_line=3,
+        )
+
+    @staticmethod
+    def _make_assignment_removal_item(cleanup: AttributionInvalidation) -> str:
+        """Describe the saved step-2 results lost, and that applied voices stay."""
+        chunks = f"{cleanup.removed_count} {make_noun('chunk', 'chunks', cleanup.removed_count)}"
+        line_count = cleanup.removed_line_count
+        if line_count:
+            lines = f"{line_count:,} dialog {make_noun('line', 'lines', line_count)}"
+            head = f"Saved dialog assignments for {lines} ({chunks})."
+        else:
+            head = f"Saved dialog assignments ({chunks})."
+        return (
+            f"{head} Re-run step 2 to reassign them; voices already "
+            "applied to lines are kept."
         )
 
     def _make_audio_removal_items(self) -> list[str]:

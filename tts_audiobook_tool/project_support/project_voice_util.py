@@ -147,6 +147,16 @@ class ProjectVoiceUtil:
         return requested_index if 0 <= requested_index < num_voices else 0
 
     @staticmethod
+    def get_voice_line_counts(project: Project) -> list[int]:
+        """Number of text lines using each voice, by effective assignment (as inference does)."""
+        num_voices = len(project.voice_references)
+        counts = [0] * num_voices
+        if num_voices:
+            for group in project.phrase_groups:
+                counts[ProjectVoiceUtil.get_effective_voice_index(group.voice_index, num_voices)] += 1
+        return counts
+
+    @staticmethod
     def get_job_voice_indices(project: Project, phrase_indices: Iterable[int] | None = None) -> list[int]:
         """Voice slots to pre-flight, without changing the list or advancing rotation.
 

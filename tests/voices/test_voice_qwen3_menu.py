@@ -1,3 +1,4 @@
+import re
 from types import SimpleNamespace
 from typing import cast
 
@@ -124,23 +125,25 @@ def test_qwen_voice_samples_are_available_without_inspection(monkeypatch, model_
     VoiceQwen3Menu.menu(state)
 
     assert rendered_labels
+    # Without the line count shown once there's more than one voice
+    first_row = re.sub(r" \(\d+ lines?\)$", "", rendered_labels[0])
     first = f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: "
     if model_type in ("custom_voice", "voice_design"):
         # These checkpoints can't clone: sample details are hidden even when
         # stored, and no voice has instructions here. VoiceDesign treats that
         # as a non-blocking hint; CustomVoice needs (error-colored) a speaker per voice.
         if model_type == "voice_design":
-            assert rendered_labels[0] == f"{first}no instructions set"
+            assert first_row == f"{first}no instructions set"
             assert voice_menu_shared.COL_ERROR not in raw_labels[0]
         else:
-            assert rendered_labels[0] == f"{first}no speaker (required)"
+            assert first_row == f"{first}no speaker (required)"
             assert voice_menu_shared.COL_ERROR in raw_labels[0]
     elif sample_count == 0:
         # The Base checkpoint uses (and requires) a voice clone sample
-        assert rendered_labels[0] == f"{first}required"
+        assert first_row == f"{first}required"
         assert voice_menu_shared.COL_ERROR in raw_labels[0]
     else:
-        assert rendered_labels[0] == f"{first}voice_0"
+        assert first_row == f"{first}voice_0"
     assert not any(label.startswith(("Select Qwen3-TTS model", "Temperature", "Seed",
                                      "Add/remove voice samples")) for label in rendered_labels)
     expected = [f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} {i + 1}: " for i in range(max(sample_count, 1))]

@@ -41,7 +41,7 @@ By themselves, these models are unreliable at book scale. The app wraps them in 
 - Error detection using speech-to-text verification, with retry logic that keeps the most accurate take
 - Rational text segmentation at paragraph/sentence/phrase boundaries
 - Silence trimming and reduction of excessive pauses, plus semantically-aware pause modulation at segment boundaries to improve prosody
-- EBU R128 loudness normalization plus optional 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) generative upsampler
+- Optional post-processing: loudness normalization, 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) upsampler, per-voice stereo positioning, room reverb
 
 A single project can utilize multiple voice-clone samples. An optional step applies an LLM-assisted character identification pass on the text to map character lines to voice clones, enabling "full-cast audio drama" productions.
 
@@ -851,8 +851,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 | ----------------------- | -------------------- | --------------- | --------------------------- |
 | Breeze TTS 2            | GTX 3080 Ti, Linux   | ~100% realtime  | batch size=1
 | Breeze TTS 2            | GTX 3080 Ti, Linux   | 600% realtime   | batch size=10
-| Chatterbox Multilingual | RTX 4090, Windows    | 200% realtime   |
-| Chatterbox Multilingual | GTX 3080 Ti, Linux   | 250% realtime (yes really) |
+| Chatterbox Multilingual | GTX 3080 Ti, Linux   | 250% realtime   |
 | Chatterbox Multilingual | Macbook Pro M1 (MPS) | 20-35% realtime |
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  |
 | Chatterbox Turbo        | Macbook Pro M1       | ~70% realtime   |
@@ -861,7 +860,6 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 | Fish S2-Pro             | RTX 4090, Windows    | 150% realtime   |
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  |
 | Higgs V2                | RTX 4090, Windows    | ~200% realtime  |
-| Higgs V3                | GTX 3080 Ti, Linux   | 500%+ realtime  | audio.cpp, q8
 | IndexTTS2               | RTX 4090, Windows    | ~150% realtime  |
 | IndexTTS2               | GTX 3080 Ti, Windows | ~90% realtime   |
 | IndexTTS2               | Macbook Pro M1 (MPS) | ~20% realtime   |
@@ -875,12 +873,11 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 | Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 300% realtime   | batch size=5
 | Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 100% realtime   | batch size=1
 | GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  |
-| MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
+| MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes rly) | batch size=10
 | MiraTTS                 | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
 | VibeVoice-Large 7B      | RTX 4090, Windows    | 600%+ realtime  | batch size=10, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000% realtime  | batch size=10, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1, default steps
-| VibeVoice 1.5B          | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1, default steps
 | VibeVoice 1.5B          | Macbook Pro M1       | ~40% realtime   |
 
 
@@ -888,7 +885,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 **2026-10-25**
 
-- Added **Auto-identify characters** (`Voices > Auto-identify characters`). Uses an LLM to work out which character speaks each line of dialog, so main characters can each get their own voice.
+- Added **Auto-identify characters** (`Voices > Auto-identify characters`). Uses an LLM to determine which character speaks what dialog, which can then be assigned to your configured voices. Love this feature, personally...
 
 **2026-10-21**
 

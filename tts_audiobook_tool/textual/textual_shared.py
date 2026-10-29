@@ -597,6 +597,56 @@ class NonWrappingOptionList(OptionList):
             )
         return strip
 
+    def highlight_selection_end(
+        self, last_index: int, first_index: int | None = None
+    ) -> None:
+        """Highlight the final row of a multi-row selection, keeping earlier
+        selected rows in view where possible.
+
+        Textual's highlight scroll moves the least distance, which puts a row
+        above the viewport at the top and hides the rest of the selection.
+        Instead, the view is judged from where it was before the highlight
+        moved: a fully visible final row keeps the view unchanged; otherwise
+        the span from ``first_index`` is shown when it fits, or else the final
+        row is aligned to the bottom of the viewport.
+        """
+        original_y = self.scroll_offset.y
+        self.highlighted = last_index
+        if self.highlighted != last_index or not self.is_mounted:
+            return
+        target_y = self.selection_end_scroll_y(original_y, last_index, first_index)
+        if target_y is not None:
+            self.scroll_to(y=target_y, animate=False, immediate=True)
+
+    def selection_end_scroll_y(
+        self, window_top: int, last_index: int, first_index: int | None
+    ) -> int | None:
+        """Return the scroll y for ``highlight_selection_end``, or None when
+        the row geometry is unavailable."""
+        self._update_lines()
+        viewport_height = self.scrollable_content_region.height
+        last_top = self._index_to_line.get(last_index)
+        if last_top is None or viewport_height <= 0:
+            return None
+        last_bottom = last_top + self._heights[last_index]
+        if last_top >= window_top and last_bottom <= window_top + viewport_height:
+            return window_top
+
+        span_top = last_top
+        if first_index is not None:
+            span_top = min(span_top, self._index_to_line.get(first_index, last_top))
+        if last_bottom - span_top <= viewport_height:
+            # Whole span fits: scroll the least distance that reveals it
+            target_y = (
+                span_top if span_top < window_top else last_bottom - viewport_height
+            )
+        elif last_bottom - last_top >= viewport_height:
+            # The final row alone fills the viewport, so show its start
+            target_y = last_top
+        else:
+            target_y = last_bottom - viewport_height
+        return max(0, min(target_y, round(self.max_scroll_y)))
+
     def prepare_navigation(self, extend_selection: bool) -> None:
         """Record navigation mode and collapse selection for unshifted movement."""
         self.extend_selection = extend_selection and self.multi_select_enabled

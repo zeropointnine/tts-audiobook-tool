@@ -38,6 +38,7 @@ def test_cleanup_is_previewed_then_persisted_without_touching_configuration(tmp_
     plan = AttributionInvalidation.plan(project_dir, changed)
     assert isinstance(plan, AttributionInvalidation)
     assert plan.removed_count == removed
+    assert plan.removed_line_count == removed  # one utterance line per saved range
     assert SpeakerAssignFileUtil.load_attributions_file(project_dir) == saved
     assert plan.commit() == ""
     assert SpeakerAssignFileUtil.load_attributions_file(project_dir) == AttributionsFile(tuple(saved.valid_ranges(changed)))

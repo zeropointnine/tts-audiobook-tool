@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.voice import Voice, VoiceCrop
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.voice import voice_menu_shared
@@ -232,6 +233,23 @@ def test_voice_list_pages_through_more_voices_with_add_on_last_page(monkeypatch)
         "Voice 5", voice_menu_shared.LABEL_ADD_VOICE_SAMPLE, voice_menu_shared.LABEL_CLEAR_VOICES]
 
 
+@pytest.mark.parametrize("voice_count", [1, 3])
+def test_voice_rows_show_line_counts_only_with_multiple_voices(monkeypatch, voice_count):
+    # Each voice row ends with how many lines use it (an out-of-range assignment
+    # counts toward voice 1, as in inference), but only when there's more than one voice.
+    project = Project(tts_model_type="mira_local", voice_references=[{"file_name": ""}] * voice_count)
+    project.phrase_groups = [
+        PhraseGroup([Phrase("Hello.", Reason.SENTENCE)], voice_index=index) for index in [0, 1, 9]
+    ]
+    state = cast(State, SimpleNamespace(project=project))
+    items = VoiceMenuShared.make_voice_sample_items(state, project.get_tts_model_type())
+    labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items[:voice_count]]
+    if voice_count == 1:
+        assert "line" not in labels[0]
+    else:
+        assert [label.rsplit(" (", 1)[1] for label in labels] == ["2 lines)", "1 line)", "0 lines)"]
+
+
 def make_clear_state(monkeypatch, voice_references):
     project = Project(tts_model_type="mira_local", voice_references=voice_references)
     state = cast(State, SimpleNamespace(project=project))
@@ -435,9 +453,10 @@ def test_voice_sample_items_mark_only_long_samples_with_one_footnote(monkeypatch
     m = voice_menu_shared
     marker = f"{m.COL_ERROR}*{m.COL_DIM}"
     labels = [get_string_from(state, item.label) for item in items[:3]]
-    assert labels[0].endswith(f"(15.1s{marker}){m.COL_DEFAULT}")
-    assert labels[1].endswith(f"(14.6s){m.COL_DEFAULT}")
-    assert labels[2].endswith(f"(16.0s{marker}){m.COL_DEFAULT}")
+    # Each row is followed by its line count (there's more than one voice)
+    assert f"(15.1s{marker}){m.COL_DEFAULT} " in labels[0]
+    assert f"(14.6s){m.COL_DEFAULT} " in labels[1]
+    assert f"(16.0s{marker}){m.COL_DEFAULT} " in labels[2]
     assert all(item.sublabel is None for item in items)
 
 

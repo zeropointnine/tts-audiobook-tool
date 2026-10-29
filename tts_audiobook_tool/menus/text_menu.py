@@ -504,7 +504,7 @@ def ask_assign_dialog_voice(state: State, dialog_line_count: int) -> None:
     """
     lines_noun = make_noun("line", "lines", dialog_line_count)
     prompt = (
-        f"Assign the {dialog_line_count} dialog {lines_noun} to voice sample 2? "
+        f"Assign the {dialog_line_count} dialog {lines_noun} to voice sample 2?\n"
         f"Press {make_hotkey_string('Y')} to confirm: "
     )
     if not ask.ask_confirm(prompt):

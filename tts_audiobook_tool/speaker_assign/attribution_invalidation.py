@@ -18,6 +18,8 @@ class AttributionInvalidation:
     project_dir: str
     kept: AttributionsFile
     removed_count: int
+    # Distinct utterance lines in the removed ranges, for the save confirmation
+    removed_line_count: int = 0
 
     @staticmethod
     def plan(project_dir: str, book: Book) -> AttributionInvalidation | str:
@@ -25,7 +27,10 @@ class AttributionInvalidation:
         if isinstance(saved, str):
             return saved
         kept = AttributionsFile(tuple(saved.valid_ranges(book)))
-        return AttributionInvalidation(project_dir, kept, len(saved.ranges) - len(kept.ranges))
+        kept_keys = {r.key for r in kept.ranges}
+        removed = [r for r in saved.ranges if r.key not in kept_keys]
+        removed_lines = {line for r in removed for u in r.utterances for line in u.lines}
+        return AttributionInvalidation(project_dir, kept, len(removed), len(removed_lines))
 
     def commit(self) -> str:
         if not self.removed_count:

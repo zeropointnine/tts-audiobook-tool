@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_types.voice import Voice
-from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.menus.speaker_assign.voices_menu import sort_characters
 from tts_audiobook_tool.project_support.project_voice_util import VOICE_NAME_MAX_LENGTH
@@ -124,24 +124,32 @@ class SeedPlan:
     def make_message(self) -> str:
         count = len(self.added)
         if count:
-            message = (f"Added {count:,} {make_noun('item', 'items', count)}, "
-                       f"mapped to {make_noun('its character', 'their characters', count)} in step 3.")
+            lines = [
+                f"Added {count:,} {make_noun('voice', 'voices', count)} to the project, "
+                f"named after {make_noun('its character', 'their characters', count)}.",
+                f"Step 3 (Map to voices) has been pre-filled to use "
+                f"{make_noun('it', 'them', count)}; you can change it there.",
+                "",
+            ]
         else:
-            message = "Added 0 items."
+            lines = ["No voices added."]
         if self.skipped:
-            message += (f" Skipped {self.skipped:,} "
-                        f"{make_noun('item which already exists', 'items which already exist', self.skipped)}.")
-        return message
+            lines.append(
+                f"Skipped {self.skipped:,} {make_noun('character', 'characters', self.skipped)}: "
+                f"{make_noun('a voice with that name already exists', 'voices with those names already exist', self.skipped)}."
+            )
+        return "\n".join(lines)
 
 
 def make_numbered_columns(ids: Sequence[str], counts: Mapping[str, int]) -> list[str]:
-    """Eg "[1] DUDE (55)" per line, the dialog passage count dimmed; past
-    COLUMN_THRESHOLD items, two columns (numbered down the first, then down
-    the second)."""
+    """Eg "1) DUDE (55)" per line, the dialog passage count dimmed; numbers are
+    right-aligned (padded to the widest one). Past COLUMN_THRESHOLD items, two
+    columns (numbered down the first, then down the second)."""
+    number_width = len(str(len(ids)))
     # (visible text, colored text) per entry; padding goes by the visible length
     entries = [
-        (f"[{number}] {character_id} ({counts.get(character_id, 0):,})",
-         f"{COL_DEFAULT}[{number}] {character_id} {COL_DIM}({counts.get(character_id, 0):,})")
+        (f"{number:>{number_width}}) {character_id} ({counts.get(character_id, 0):,})",
+         f"{COL_ACCENT}{number:>{number_width}}{COL_DIM}) {COL_DEFAULT}{character_id} {COL_DIM}({counts.get(character_id, 0):,})")
         for number, character_id in enumerate(ids, 1)
     ]
     if len(entries) <= COLUMN_THRESHOLD:

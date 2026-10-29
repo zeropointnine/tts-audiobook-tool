@@ -107,21 +107,27 @@ def assign_menu(state: State) -> None:
     # No new heading for the handlers below: confirmations and runs print
     # directly below the menu
 
-    def on_start(_: State, __: MenuItem) -> None:
-        if not check_llm_configured(state):
-            return
-        run_assign(state)
-        refresh()
+    # A run that completes every chunk exits back to the parent menu, for the next step
 
-    def on_start_over(_: State, __: MenuItem) -> None:
+    def on_start(_: State, __: MenuItem) -> bool:
         if not check_llm_configured(state):
-            return
+            return False
+        if run_assign(state):
+            return True
+        refresh()
+        return False
+
+    def on_start_over(_: State, __: MenuItem) -> bool:
+        if not check_llm_configured(state):
+            return False
         printt("Existing dialog assignments will be replaced.")
         printt()
         if not ask.ask_confirm(""):
-            return
-        run_assign(state, start_over=True)
+            return False
+        if run_assign(state, start_over=True):
+            return True
         refresh()
+        return False
 
     def on_clear(_: State, __: MenuItem) -> None:
         printt("Existing dialog assignments will be deleted.")
@@ -173,7 +179,7 @@ def make_subheading(state: State, data: AssignData) -> str:
     return "\n".join(lines)
 
 
-def run_assign(state: State, start_over: bool = False) -> None:
+def run_assign(state: State, start_over: bool = False) -> bool:
     """
     Attributes the remaining chunks (AttributionRunner), saving after each.
     Control-c once stops after the current chunk; twice stops immediately
@@ -183,17 +189,19 @@ def run_assign(state: State, start_over: bool = False) -> None:
     results. The saved results stay on disk until the first new chunk is
     saved over them, so a run that fails or is cancelled before then keeps
     them.
+
+    Returns True if the run completed every chunk.
     """
     book = state.project.book
     prefs = state.prefs
     data = load_assign_data(state)
     if isinstance(data, str):
         ask.ask_error(data)
-        return
+        return False
     attributions = AttributionsFile() if start_over else data.attributions
     if AssignPlan.make(book, attributions).is_complete:
         ask.ask_enter_to_continue("All dialog has already been assigned.")
-        return
+        return False
 
     if RosterUtil.is_stale(data.roster_file.section_text_hashes, book):
         printt(f"{COL_DIM}{ROSTER_TEXT_NOTICE}")
@@ -236,6 +244,7 @@ def run_assign(state: State, start_over: bool = False) -> None:
         stop_requested=lambda: stop.presses() >= 1,
         listener=PrintingListener(book, status),
     )
+    print_accent_separator("Running...")
     started = time.monotonic()
     Interrupts().set("llm")
     try:
@@ -279,6 +288,12 @@ def run_assign(state: State, start_over: bool = False) -> None:
         print_accent_separator("Character/dialog results")
         print_characters_info(state)
     ask.ask_enter_to_continue()
+    return is_complete_run(result.outcome, bool(result.failures))
+
+
+def is_complete_run(outcome: RunOutcome, has_failures: bool) -> bool:
+    """Whether a run attributed every chunk: finished, with no failed chunks."""
+    return outcome == RunOutcome.FINISHED and not has_failures
 
 
 def play_outcome_sound(outcome: RunOutcome, has_failures: bool) -> None:
@@ -286,7 +301,7 @@ def play_outcome_sound(outcome: RunOutcome, has_failures: bool) -> None:
     The done sound for a run that completed every chunk. No sound for one that
     ended in errors (aborted, or finished with failed chunks) or that the user stopped.
     """
-    if outcome == RunOutcome.FINISHED and not has_failures:
+    if is_complete_run(outcome, has_failures):
         app_support.play_done_sound()
 
 

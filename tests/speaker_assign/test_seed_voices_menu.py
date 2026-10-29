@@ -36,9 +36,13 @@ def test_plan_maps_added_characters_to_their_new_voices() -> None:
 
 
 @pytest.mark.parametrize("added, skipped, expected", [
-    (1, 0, "Added 1 item, mapped to its character in step 3."),
-    (2, 1, "Added 2 items, mapped to their characters in step 3. Skipped 1 item which already exists."),
-    (0, 2, "Added 0 items. Skipped 2 items which already exist."),
+    (1, 0, "Added 1 voice to the project, named after its character.\n"
+           "Step 3 (Map to voices) has been pre-filled to use it; you can change it there.\n"),
+    (2, 1, "Added 2 voices to the project, named after their characters.\n"
+           "Step 3 (Map to voices) has been pre-filled to use them; you can change it there.\n\n"
+           "Skipped 1 character: a voice with that name already exists."),
+    (0, 2, "No voices added.\n"
+           "Skipped 2 characters: voices with those names already exist."),
 ])
 def test_plan_message(added: int, skipped: int, expected: str) -> None:
     plan = SeedPlan(added=tuple((f"C{i}", f"C{i}") for i in range(added)), skipped=skipped)
@@ -48,18 +52,19 @@ def test_plan_message(added: int, skipped: int, expected: str) -> None:
 def test_numbered_list_shows_counts_and_uses_two_columns_past_ten_items() -> None:
     # Each id is followed by its (dimmed) dialog count. Numbered down the first
     # column, then the second; the first gets the extra row. Columns align by
-    # visible width, color codes aside.
+    # visible width, color codes aside; numbers are right-aligned to the widest.
     def plain(lines: list[str]) -> list[str]:
         return [strip_ansi_codes(line) for line in lines]
 
-    assert plain(make_numbered_columns(["A", "B"], {"A": 1234, "B": 5})) == ["[1] A (1,234)", "[2] B (5)"]
+    assert plain(make_numbered_columns(["A", "B"], {"A": 1234, "B": 5})) == ["1) A (1,234)", "2) B (5)"]
     ids = [f"ID{i}" for i in range(1, 12)]
     counts = {"ID1": 100, "ID2": 5}
     lines = plain(make_numbered_columns(ids, counts))
     assert len(lines) == 6
-    assert lines[0] == "[1] ID1 (100)    [7] ID7 (0)"
-    assert lines[1] == "[2] ID2 (5)      [8] ID8 (0)"
-    assert lines[5] == "[6] ID6 (0)"
+    assert lines[0] == " 1) ID1 (100)     7) ID7 (0)"
+    assert lines[1] == " 2) ID2 (5)       8) ID8 (0)"
+    assert lines[4] == " 5) ID5 (0)      11) ID11 (0)"
+    assert lines[5] == " 6) ID6 (0)"
 
 
 @pytest.fixture
@@ -102,11 +107,13 @@ def test_seed_appends_in_list_order_and_maps_characters(monkeypatch, seed_state)
     state, recorded = seed_state
     run_seed(monkeypatch, state, "3, 1-2, 9")
 
-    assert strip_ansi_codes(recorded["subheading"]).endswith("[1] ALICE (1)\n[2] BOB (1)\n[3] CAROL (1)")
+    assert strip_ansi_codes(recorded["subheading"]).endswith("1) ALICE (1)\n2) BOB (1)\n3) CAROL (1)")
     assert [voice.name for voice in state.project.voice_references] == ["", "carol", "ALICE", "BOB"]
     assert recorded["saved_map"].voices == {"ALICE": 2, "BOB": 3}
     assert recorded["messages"] == [
-        "Added 2 items, mapped to their characters in step 3. Skipped 1 item which already exists."]
+        "Added 2 voices to the project, named after their characters.\n"
+        "Step 3 (Map to voices) has been pre-filled to use them; you can change it there.\n\n"
+        "Skipped 1 character: a voice with that name already exists."]
 
 
 def test_seed_rejects_bad_syntax_without_saving(monkeypatch, seed_state) -> None:

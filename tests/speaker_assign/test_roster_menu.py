@@ -162,9 +162,11 @@ def test_create_roster_outcome_sound(monkeypatch, tmp_path, outcome, expected):
     )
     monkeypatch.setattr(LlmRequestUtil, "send_cancellable", lambda *_, **__: result)
 
-    create_roster(state)
+    saved = create_roster(state)
 
     assert played == expected
+    # Only a saved roster reports success (which exits the step's menu)
+    assert saved == (outcome == "success")
 
 
 @pytest.mark.parametrize("confirmed", [False, True])

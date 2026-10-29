@@ -982,17 +982,33 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
             return
 
         highest_visible_index = max(matching_rows, key=lambda row: row[1])[0]
-        option_list = self.query_one("#line-list", OptionList)
-        with option_list.prevent(OptionList.OptionHighlighted):
-            option_list.highlighted = highest_visible_index
-        self.selected_index = highest_visible_index
-        self.selection_anchor_index = highest_visible_index
-        self.selected_indices = {visible_index for visible_index, _ in matching_rows}
-        self.update_inactive_selection_style()
-        self.update_selection_status()
+        self.apply_selection(
+            {visible_index for visible_index, _ in matching_rows},
+            highest_visible_index,
+        )
         count = len(matching_rows)
         line_noun = "line" if count == 1 else "lines"
         self.show_status_toast(left=f"Selected {count} {line_noun}")
+
+    def apply_selection(self, selected_indices: set[int], highlighted_index: int) -> None:
+        """Replace the selection with rows chosen by an operation (not by
+        cursor navigation), highlighting and anchoring ``highlighted_index``.
+
+        The highlighted row is treated as the end of the selection: the view
+        favors keeping earlier selected rows visible above it (see
+        ``NonWrappingOptionList.highlight_selection_end``).
+        """
+        selected_indices = selected_indices | {highlighted_index}
+        option_list = self.query_one("#line-list", NonWrappingOptionList)
+        with option_list.prevent(OptionList.OptionHighlighted):
+            option_list.highlight_selection_end(
+                highlighted_index, min(selected_indices)
+            )
+        self.selected_index = highlighted_index
+        self.selection_anchor_index = highlighted_index
+        self.selected_indices = selected_indices
+        self.update_inactive_selection_style()
+        self.update_selection_status()
 
     def mutate_selected_items(
         self,

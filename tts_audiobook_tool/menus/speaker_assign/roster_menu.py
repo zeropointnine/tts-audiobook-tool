@@ -58,13 +58,14 @@ def roster_menu(state: State) -> None:
     )
 
 
-def on_select_roster_start(state: State, _item: MenuItem) -> None:
+def on_select_roster_start(state: State, _item: MenuItem) -> bool:
     if not check_llm_configured(state):
-        return
+        return False
     # No new heading: the confirmation and the run print directly below the menu
     if not confirm_roster_replacement(state):
-        return
-    create_roster(state)
+        return False
+    # Back to the parent menu once the roster is made, for the next step
+    return create_roster(state)
 
 
 def confirm_roster_replacement(state: State) -> bool:
@@ -146,12 +147,12 @@ class RosterDependents:
 
 # ---
 
-def create_roster(state: State) -> None:
+def create_roster(state: State) -> bool:
     """
     The full-book roster request: sends the book to the LLM (control-c
     cancels), then saves the roster and prints it. Nothing is saved or
     deleted unless a valid roster comes back. Doesn't ask before replacing
-    saved data (see confirm_roster_replacement).
+    saved data (see confirm_roster_replacement). Returns True if a roster was saved.
     """
     project_dir = state.project.dir_path
     book = state.project.book
@@ -165,17 +166,18 @@ def create_roster(state: State) -> None:
                 "\nDialog segmentation must be enabled when importing text."
             )
         ask.ask_error(message)
-        return
+        return False
 
     try:
         llm = LlmRequestUtil.make_session(prefs, ROSTER_SYSTEM_PROMPT)
     except ValueError as e:
         ask.ask_error(f"Can't use the LLM settings: {e}")
-        return
+        return False
 
     message = RosterUtil.build_message(book)
     input_chars = len(ROSTER_SYSTEM_PROMPT) + len(message)
 
+    print_accent_separator("Making request")
     printt(f"{COL_DEFAULT}Book text: {COL_DIM}{len(book.sections)} sections, {utterance_count:,} dialog passages")
     print_llm_info(prefs)
     printt(f"{COL_DEFAULT}Input size: {COL_DIM}{input_chars:,} chars "
@@ -216,10 +218,10 @@ def create_roster(state: State) -> None:
             feedback += (f"\n{COL_DIM}The request was abandoned before the response started; "
                          f"the LLM provider may still process it.")
         ask.ask_enter_to_continue(feedback)
-        return
+        return False
     if result.error is not None:
         fail(LlmRequestUtil.describe_error(result.error, prefs))
-        return
+        return False
 
     # A zero reasoning count isn't evidence of no reasoning (see LlmSession), so omit it
     reasoning_part = f"{len(result.reasoning):,} reasoning chars, " if result.reasoning else ""
@@ -233,7 +235,7 @@ def create_roster(state: State) -> None:
 
     if result.hit_output_limit:
         fail(LlmRequestUtil.describe_output_limit(result))
-        return
+        return False
     if not result.reply.strip():
         # The provider didn't report why (otherwise caught above); a likely cause
         hint = (
@@ -242,7 +244,7 @@ def create_roster(state: State) -> None:
             if result.reasoning else ""
         )
         fail(f"Empty reply from the LLM.{hint}")
-        return
+        return False
 
     try:
         normalized = RosterUtil.normalize_roster(AttributionReplyUtil.extract_json(result.reply))
@@ -254,7 +256,7 @@ def create_roster(state: State) -> None:
         if path:
             error += f"\nThe reply was saved to: {path}"
         fail(error)
-        return
+        return False
     for note in normalized.notes:
         printt(f"{COL_DIM}{note}")
     if normalized.notes:
@@ -271,7 +273,7 @@ def create_roster(state: State) -> None:
     error = SpeakerAssignFileUtil.save_roster_file(project_dir, roster_file)
     if error:
         fail(error)
-        return
+        return False
 
     # A new roster may have different character ids, invalidating the
     # attributions and voice mappings made with the previous one
@@ -280,7 +282,7 @@ def create_roster(state: State) -> None:
         error = dependents.delete(project_dir)
         if error:
             fail(error)
-            return
+            return False
         printt(f"{COL_DIM}Discarded {dependents.describe()} made with the previous roster")
         printt()
 
@@ -288,6 +290,7 @@ def create_roster(state: State) -> None:
     print_accent_separator("Roster summary")
     if print_characters_info(state):
         ask.ask_enter_to_continue()
+    return True
 
 
 CANCEL_EVENT_FEEDBACK = {

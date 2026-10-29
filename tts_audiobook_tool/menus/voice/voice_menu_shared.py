@@ -626,9 +626,15 @@ class VoiceMenuShared:
                 # A later page closes once removals have emptied it
                 return start >= len(s2.project.voice_references)
 
+            # Each voice's line count, only once there's a choice of voices
+            line_counts = ProjectVoiceUtil.get_voice_line_counts(s.project) if count > 1 else []
+
             items: list[MenuItem] = []
             for index in range(start, end):
                 label, _ = VoiceMenuShared.make_voice_sample_item_label(s.project, tts_type, index)
+                if index < len(line_counts):
+                    lines = line_counts[index]
+                    label += f" {COL_DIM}({lines:,} {make_noun('line', 'lines', lines)})"
                 items.append(MenuItem(
                     label,
                     on_voice,
