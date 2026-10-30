@@ -26,6 +26,7 @@ def make_session(
         project=project,
     )
     sound_stream = MagicMock()
+    sound_stream.channels = 1
     sound_stream.play_position_samples = 0
     sound_stream.is_playback_complete = True
     session = ResponseSession(
@@ -600,7 +601,13 @@ def test_save_chat_output_saves_concatenated_sounds(tmp_path, monkeypatch) -> No
 
 @pytest.mark.parametrize(
     ("room_reverb", "room_reverb_stereo", "channels"),
-    [("off", "mono", 1), ("medium_drr21", "mono", 1), ("medium_drr21", "all_w100", 2)],
+    [
+        ("off", "mono", 1),
+        ("off", "all_w100", 2),
+        ("medium_drr21", "mono", 1),
+        ("medium_drr21", "all_w100", 2),
+        ("medium_drr21", "all_w100", 1),  # Actual mono fallback overrides the stereo request.
+    ],
 )
 def test_non_streaming_tts_applies_room_reverb(
     monkeypatch, room_reverb: str, room_reverb_stereo: str, channels: int
@@ -647,11 +654,26 @@ def test_non_streaming_tts_applies_room_reverb(
     np.testing.assert_array_equal(played, session.saved_turn_sounds[0].data)
     # Alignment always gets the dry mono sound, the same length as what's played
     assert aligned[0].data.ndim == 1 and len(aligned[0].data) == len(played)
-    np.testing.assert_array_equal(aligned[0].data[: len(speech)], speech)
+    # The speech is loudness leveled (one gain toward the project's target)
+    from tts_audiobook_tool.app_types import NormalizationType
+    from tts_audiobook_tool.sound.loudness_leveling import LoudnessLeveling
+    specs = NormalizationType.DEFAULT.value
+    leveled = LoudnessLeveling.level(Sound(speech, APP_SAMPLE_RATE), specs, channels=channels).sound
+    np.testing.assert_allclose(aligned[0].data[: len(speech)], leveled.data, atol=1e-6)
+    assert LoudnessLeveling.measure_lufs(Sound(aligned[0].data[:len(speech)], APP_SAMPLE_RATE)) == pytest.approx(
+        LoudnessLeveling.target_lufs(specs, channels), abs=0.1
+    )
+    assert np.max(np.abs(played)) <= 10 ** (LoudnessLeveling.ceiling_db_for(specs) / 20) + 1e-6
     pause = played[len(speech):]
     assert len(pause) > 0
     if room_reverb == "off":
-        np.testing.assert_array_equal(played, aligned[0].data)
+        expected = aligned[0].data if channels == 1 else np.repeat(aligned[0].data[:, None], 2, axis=1)
+        np.testing.assert_array_equal(played, expected)
+        # Stereo duplication must hit the preset, not add 3 LU to the mono target.
+        import pyloudnorm as pyln
+        assert pyln.Meter(APP_SAMPLE_RATE).integrated_loudness(played[:len(speech)]) == pytest.approx(
+            specs.i, abs=0.1
+        )
     else:
         # The reverb tail decays into the (otherwise silent) pause
         assert np.any(pause != 0)
@@ -659,3 +681,60 @@ def test_non_streaming_tts_applies_room_reverb(
         if channels == 2:
             assert not np.allclose(pause[:, 0], pause[:, 1])
     assert session.snapshot().spoken_segments == ((text, 0, len(played)),)
+
+
+@pytest.mark.parametrize("channels", [1, 2])
+@pytest.mark.parametrize("preset", ["default", "stronger"])
+def test_non_streaming_chat_limits_reverb_mix_before_playback_and_save(monkeypatch, channels, preset) -> None:
+    from tts_audiobook_tool.constants import APP_SAMPLE_RATE
+    from tts_audiobook_tool.sound.loudness_leveling import LoudnessLeveling
+
+    # Force high wet peaks in both speech and pause; alignment must still receive
+    # dry mono audio while playback and saving share the final limited mix.
+    session = make_session(project_payload={"normalization_type": preset})
+    session.sound_stream.sample_rate = APP_SAMPLE_RATE
+    session.sound_stream.channels = channels
+    monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(can_stream=False))
+    speech = (np.random.default_rng(7).standard_normal(APP_SAMPLE_RATE) * 0.1).astype(np.float32)
+    monkeypatch.setattr(
+        ModelWorker, "synthesize_chat_blocking",
+        lambda *_args, **_kwargs: ((Sound(speech, APP_SAMPLE_RATE),), ""),
+    )
+    wet_sounds: list[Sound] = []
+
+    def apply_room(sound, send_end):
+        assert send_end == len(speech)
+        data = np.full(len(sound.data), 0.9, dtype=np.float32)
+        if channels == 2:
+            data = np.stack([data, data * 0.5], axis=1)
+        wet = Sound(data, sound.sr)
+        wet_sounds.append(wet)
+        return wet
+
+    monkeypatch.setattr(session, "get_room_reverb", lambda: SimpleNamespace(apply=apply_room))
+    aligned: list[Sound] = []
+
+    def align(text, sound, start, end, is_first):
+        aligned.append(sound)
+        return [(text, start, end)]
+
+    monkeypatch.setattr(session, "make_spoken_segments", align)
+    session.sound_stream.add_data.side_effect = lambda data: (0, len(data))
+    text = "A sentence."
+    session.pending_sentences = [text]
+    session.tts_q.put((text, Reason.SENTENCE))
+    session.tts_q.put(None)
+    session.tts_worker()
+
+    session.sound_stream.add_data.assert_called_once()
+    played = session.sound_stream.add_data.call_args.args[0]
+    assert len(played) > len(speech)
+    ceiling = 10 ** (LoudnessLeveling.ceiling_db_for(session.project.normalization_type.value) / 20)
+    assert np.max(np.abs(wet_sounds[0].data)) > ceiling
+    assert np.max(np.abs(played)) <= ceiling + 1e-6
+    assert np.max(np.abs(played[len(speech):])) <= ceiling + 1e-6
+    np.testing.assert_array_equal(session.saved_turn_sounds[0].data, played)
+    assert aligned[0].data.ndim == 1
+    np.testing.assert_array_equal(aligned[0].data[len(speech):], 0)
+    if channels == 2:
+        np.testing.assert_allclose(played[:, 1], played[:, 0] * 0.5, atol=1e-6)

@@ -1358,7 +1358,8 @@ class TestCropVoiceSampleMenu:
                 async with app.run_test(size=(80, 24)) as pilot:
                     # Reversing a coarse step crosses a truncation boundary:
                     # 0.1 -> 0.6 -> 0.09999999999999998.
-                    await pilot.press("S", "A", "enter")
+                    # The range is clean, so ESC exits without a dialog.
+                    await pilot.press("S", "A", "escape")
             asyncio.run(exercise())
             assert app.return_value is not None
             return app.return_value

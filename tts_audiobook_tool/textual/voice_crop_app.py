@@ -2,8 +2,9 @@
 
 Runs over one voice sample's audio: hotkeys adjust the crop span, preview
 plays exactly what `ProjectVoiceUtil.apply_voice_crop_and_save` will write
-(including the silence-trim post-processing), and ENTER commits through the
-caller. See docs-dev/voice-sample-crop.md.
+(including the silence-trim post-processing), and ESC finishes: a changed
+range prompts "Save changes before exiting?" like the other Textual editors,
+and a confirmed save commits through the caller. See docs-dev/voice-sample-crop.md.
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound import waveform_util
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.sound.waveform_util import WAVEFORM_BLOCK_CHARS, WAVEFORM_LEVELS_PER_ROW
+from tts_audiobook_tool.textual.save_changes_dialog import ExitDecision, SaveChangesDialog
 from tts_audiobook_tool.textual.textual_shared import can_textual
 
 __all__ = [
@@ -291,7 +293,7 @@ class VoiceCropApp(App[VoiceCropResult]):
             f"Press [{COL_ACCENT}D/F{COL_DEFAULT}] to adjust end point",
             f"Press [{COL_ACCENT}P{COL_DEFAULT}] to preview",
             f"Press [{COL_ACCENT}X{COL_DEFAULT}] to reset trim",
-            f"Press [{COL_ACCENT}ENTER{COL_DEFAULT}] to save, [{COL_ACCENT}ESC{COL_DEFAULT}] to cancel",
+            f"Press [{COL_ACCENT}ESC{COL_DEFAULT}] to finish",
             "",
             f"{COL_DIM}Avoid trimming in the middle of words{COL_DEFAULT}",
             f"{COL_DIM}This is a non-destructive edit{COL_DEFAULT}",
@@ -379,8 +381,7 @@ class VoiceCropApp(App[VoiceCropResult]):
         Binding("p", "preview", show=False),
         Binding("P", "preview_tail", show=False),
         Binding("x", "revert", show=False),
-        Binding("enter", "save", show=False),
-        Binding("escape", "cancel", show=False),
+        Binding("escape", "finish", show=False),
     ]
 
     def action_adjust(self, boundary: str, delta: float) -> None:
@@ -476,11 +477,13 @@ class VoiceCropApp(App[VoiceCropResult]):
         PlaySoundUtil.stop_sound_async()
         self.exit(VoiceCropResult(saved=False, cleared=True))
 
-    def action_save(self) -> None:
-        self._cancel_preview_animation()
-        PlaySoundUtil.stop_sound_async()
-        # Compare the actual slice boundaries before silence trimming. Float
-        # drift from reversing an adjustment must not trigger retranscription.
+    def is_dirty(self) -> bool:
+        """Whether the range differs from the initial one at sample precision.
+
+        Compares the actual slice boundaries before silence trimming: float
+        drift from reversing an adjustment must not count as a change (and
+        so must not trigger retranscription).
+        """
         current_samples = tuple(
             SoundUtil.seconds_to_sample_index(seconds, self.sound.sr)
             for seconds in (self.start_s, self.end_s)
@@ -489,15 +492,23 @@ class VoiceCropApp(App[VoiceCropResult]):
             SoundUtil.seconds_to_sample_index(seconds, self.sound.sr)
             for seconds in self.initial
         )
-        if current_samples == initial_samples:
-            self.exit(VoiceCropResult(saved=False))
-            return
-        self.exit(VoiceCropResult(saved=True, start_s=self.start_s, end_s=self.end_s))
+        return current_samples != initial_samples
 
-    def action_cancel(self) -> None:
+    def action_finish(self) -> None:
         self._cancel_preview_animation()
         PlaySoundUtil.stop_sound_async()
-        self.exit(VoiceCropResult(saved=False))
+        if not self.is_dirty():
+            self.exit(VoiceCropResult(saved=False))
+            return
+        self.refresh_bar()  # clear a stopped preview's playhead
+        self.push_screen(SaveChangesDialog(), self._handle_exit_decision)
+
+    def _handle_exit_decision(self, decision: ExitDecision | None) -> None:
+        if decision == ExitDecision.CONFIRM:
+            self.exit(VoiceCropResult(saved=True, start_s=self.start_s, end_s=self.end_s))
+        elif decision == ExitDecision.DISCARD:
+            self.exit(VoiceCropResult(saved=False))
+        # CANCEL keeps the editor open with the current range.
 
     def action_ignore_ctrl_q(self) -> None:
         """Override Textual's built-in Ctrl+Q quit binding."""

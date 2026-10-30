@@ -22,7 +22,7 @@ from project_settings_test_support import get_setting, set_setting
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
 from tts_audiobook_tool.app_types import Book, BookSection
-from tts_audiobook_tool.app_types import ExportType, NormalizationType, SectionMarkerMode
+from tts_audiobook_tool.app_types import ExportType, SectionMarkerMode
 from tts_audiobook_tool.state import State
 
 
@@ -321,7 +321,6 @@ class TestAppMetadata(unittest.TestCase):
                 "chapter_mode": SectionMarkerMode.BOOKMARKS.id,
             })
             project.export_type = ExportType.AAC
-            project.normalization_type = NormalizationType.DISABLED
             project.use_break_sound_effect = False
             project._sound_segments = SimpleNamespace(get_best_file_for=lambda _: "segment.flac")
 

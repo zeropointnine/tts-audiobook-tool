@@ -217,7 +217,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
 
     assert plain_option_lines(state) == [
         "  - Section break sound effects: True",
-        "  - Loudness normalization: Stronger",
+        f"  - Loudness: {NormalizationType.STRONGER.value.label}",
         "  - Generative upsampling: True",
         "  - Treble EQ: Moderate",
         "  - Channel output: Mono",
@@ -239,7 +239,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Maximum silence inside segments: True 1.00s",
         "  - Minimum sentence silence inside segments: True",
         "  - Section break sound effects: True",
-        "  - Loudness normalization: ACX standard",
+        f"  - Loudness: {NormalizationType.DEFAULT.value.label}",
         "  - Generative upsampling: True",
         "  - Room reverb: Larger room",
         "  - Room reverb stereo effect: Wide",
@@ -254,7 +254,7 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     project.high_shelf = HighShelfEq.MODERATE.id
 
     assert plain_option_lines(state)[1] == (
-        "  - Loudness normalization: ACX standard"
+        f"  - Loudness: {NormalizationType.DEFAULT.value.label}"
     )
 
     project.high_shelf = HighShelfEq.STRONGER.id
@@ -268,23 +268,27 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
         "  - Maximum silence inside segments: True 0.35s"
     )
 
-    project.normalization_type = NormalizationType.DISABLED
     project.use_upsampler = False
     project.use_break_sound_effect = False
     project.high_shelf = HighShelfEq.DISABLED.id
     project.limit_silence_gaps = False
 
-    assert plain_option_lines(state) == ["  - Channel output: Mono"]
+    # Loudness leveling is always applied, so it is always listed
+    assert plain_option_lines(state) == [
+        f"  - Loudness: {NormalizationType.DEFAULT.value.label}", "  - Channel output: Mono",
+    ]
+    loudness_line = f"  - Loudness: {NormalizationType.DEFAULT.value.label}"
 
     # The confirmation reflects the shared channel policy, not voice counts.
     with patch.object(concat_menu.VoiceSpatialPolicy, "from_project", return_value=SimpleNamespace(
         requested_channels=2, room_reverb_summary=RoomReverb.OFF, stereo_position_summary=0.0,
     )):
-        assert plain_option_lines(state) == ["  - Channel output: Stereo"]
+        assert plain_option_lines(state) == [loudness_line, "  - Channel output: Stereo"]
 
     # Stereo position, listed before room reverb (same order as the voice sample submenu)
     project.voice_references = [Voice("a.flac", pan=-0.3, room_reverb=RoomReverb.SMALL_DRR22)]
     assert plain_option_lines(state) == [
+        loudness_line,
         "  - Stereo position: Left 30",
         "  - Room reverb: Small room, light",
         "  - Room reverb stereo effect: Wide",
@@ -292,16 +296,16 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     ]
     project.voice_references = [Voice("a.flac", pan=-0.3), Voice("b.flac")]
     assert plain_option_lines(state) == [
-        "  - Stereo position: Varies by voice", "  - Channel output: Stereo",
+        loudness_line, "  - Stereo position: Varies by voice", "  - Channel output: Stereo",
     ]
 
     # Each voice's own room is applied; differing voices are summarized
     project.voice_references = [Voice("a.flac", room_reverb=RoomReverb.SMALL_DRR22), Voice("b.flac")]
     assert plain_option_lines(state) == [
-        "  - Room reverb: Varies by voice", "  - Room reverb stereo effect: Wide", "  - Channel output: Stereo",
+        loudness_line, "  - Room reverb: Varies by voice", "  - Room reverb stereo effect: Wide", "  - Channel output: Stereo",
     ]
     project.voice_references = [Voice("a.flac"), Voice("b.flac")]
-    assert plain_option_lines(state) == ["  - Channel output: Mono"]
+    assert plain_option_lines(state) == [loudness_line, "  - Channel output: Mono"]
 
 
 def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_single_book_section() -> None:
@@ -632,7 +636,7 @@ def test_concat_menu_offers_room_reverb_stereo_after_generative_upsampling() -> 
         items = menu.call_args.args[2](state)
 
     labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
-    index = labels.index("Room reverb stereo effect (currently: Centered (no spread))")
+    index = labels.index("Room reverb stereo effect (currently: None)")
     assert labels[index - 1].startswith("Generative upsampling")
     # Room reverb itself moved to the per-voice settings
     assert not [label for label in labels if label.startswith("Room reverb (")]
@@ -652,9 +656,9 @@ def test_room_reverb_stereo_item_always_shows() -> None:
         return [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
 
     # Shown whether or not the voice in use has reverb on
-    assert "Room reverb stereo effect (currently: Centered (no spread))" in labels()
+    assert "Room reverb stereo effect (currently: None)" in labels()
     project.voice_references = [Voice("v.flac", room_reverb=RoomReverb.SMALL_DRR22)]
-    assert "Room reverb stereo effect (currently: Centered (no spread))" in labels()
+    assert "Room reverb stereo effect (currently: None)" in labels()
 
 
 def test_room_reverb_stereo_menu_writes_project_setting() -> None:
@@ -667,7 +671,7 @@ def test_room_reverb_stereo_menu_writes_project_setting() -> None:
         ConcatMenu.room_reverb_stereo_menu(state)
         kwargs = options_menu.call_args.kwargs
         assert kwargs["heading_text"] == "Room reverb stereo effect"
-        assert kwargs["labels"] == ["Centered (no spread)", "Wide", "Wider"]
+        assert kwargs["labels"] == ["None", "Wide", "Wider"]
         assert kwargs["default_value"] is RoomReverbStereo.MONO
 
         kwargs["on_select"](RoomReverbStereo.ALL_W100)

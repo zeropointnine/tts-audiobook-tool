@@ -95,42 +95,44 @@ class ConcreteSegment(Segment):
 # ---
 
 class NormalizationSpecs(NamedTuple):
+    """
+    Loudness target for per-segment loudness leveling (see sound/loudness_leveling.py)
+    """
     id: str
     label: str
     description: str
+    # Integrated loudness target, LUFS
     i: float
+    # Loudness range, LU. Not used by leveling; only by the dev-only whole-file
+    # loudnorm in LoudnessNormalizationUtil
     lra: float
+    # Peak ceiling, dBTP
     tp: float
 
 NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(
     id="default",
-    label="ACX standard",
-    description="Approximates ACX loudness and peak requirements for conventional audiobook delivery",
+    label="Normal",
+    description="Based on ACX audiobook guidelines",
     i=-19.0,
     lra=9.0,
     tp=-3.0,
 )
 NORMALIZATION_SPECS_STRONGER = NormalizationSpecs(
     id="stronger",
-    label="Stronger",
-    description="Produces louder, more tightly controlled audio for mobile and noisy environments",
+    label="Louder",
+    description="For listening on the go or in noisy environments",
     i=-16.0,
     lra=6.0,
     tp=-2.5,
 )
-NORMALIZATION_SPECS_DISABLED = NormalizationSpecs(
-    id="none",
-    label="Disabled",
-    description="Skips final loudness normalization",
-    i=0,
-    lra=0,
-    tp=0,
-)
+
+# Leveling is always on, so the former "Disabled" (id "none") adopts the
+# default loudness preset.
+NORMALIZATION_LEGACY_IDS = { "none": "default" }
 
 class NormalizationType(Enum):
     DEFAULT = NORMALIZATION_SPECS_DEFAULT
     STRONGER = NORMALIZATION_SPECS_STRONGER
-    DISABLED = NORMALIZATION_SPECS_DISABLED
 
     @staticmethod
     @cache
@@ -139,6 +141,7 @@ class NormalizationType(Enum):
 
     @staticmethod
     def from_id(s: str) -> NormalizationType | None:
+        s = NORMALIZATION_LEGACY_IDS.get(s, s)
         for item in NormalizationType:
             if s == item.value.id:
                 return item
@@ -222,7 +225,8 @@ class RoomTone(tuple[str, float | None, str], Enum):
     Constant low-level noise bed added under the whole output (concat and
     realtime playback; see sound/noise_bed.py).
     Value shape: (id, level_dbfs or None when off, label); `id` is the JSON
-    serialization value. Levels are noise RMS before loudness normalization.
+    serialization value. Levels are noise RMS relative to un-leveled speech
+    (shifted by LoudnessLeveling.reference_offset_db when rendered).
     """
 
     OFF = ("off", None, "Off")
@@ -312,7 +316,7 @@ class RoomReverbStereo(tuple[str, float, bool, str], Enum):
     reflections are spread as well as the late tail.
     """
 
-    MONO = ("mono", 0.0, False, "Centered (no spread)")
+    MONO = ("mono", 0.0, False, "None")
     LATE_W100 = ("late_w100", 1.0, False, "Wide")
     ALL_W100 = ("all_w100", 1.0, True, "Wider")
 

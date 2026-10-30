@@ -12,16 +12,17 @@ The project setting `room_tone` ("Room tone" in the Create menu) adds one consta
 noise bed under the whole output: segments, inserted pauses and break effects alike. Durations and
 timing maps are unchanged.
 
-| `RoomTone` | Level (noise RMS, dBFS, before loudness normalization) |
+| `RoomTone` | Level (noise RMS, dBFS, relative to un-leveled speech) |
 |---|---|
 | `OFF` (default) | none |
 | `LOW` | -75 |
 | `MEDIUM` | -70 |
 | `HIGH` | -65 |
 
-Loudness normalization applies one gain to the whole file afterwards, so the bed's final level
-shifts by the same amount as the speech (several dB either way, depending on how loud the model's
-output was).
+The levels were chosen against un-leveled, peak-normalized speech (about -16 LUFS). Loudness
+leveling shifts the bed by the same offset as typical speech (`LoudnessLeveling.reference_offset_db`:
+-3 dB for ACX in mono, a further -3 dB in stereo), so the bed keeps its level relative to the speech
+(see [loudness-leveling.md](../docs/loudness-leveling.md)).
 
 Projects saved with the earlier bool `fill_room_tone` load as `HIGH` (`true`, the old fill level)
 or `OFF` (`false`).
@@ -104,5 +105,5 @@ limit, fades, concat wiring) and [`tests/audio/test_room_tone_setting.py`](../te
 ## Open questions
 
 - **Levels** were chosen by reasoning, not listening tests across models and voices.
-- **ACX:** with a quiet model output, normalization can lift `HIGH` toward the -60 dBFS
-  noise-floor limit. Worth checking on an export.
+- **ACX:** the bed's final level no longer depends on how loud the model's output was (it is offset
+  from the leveling target), so `HIGH` lands at a fixed -68 dBFS (mono) / -71 dBFS per channel (stereo).

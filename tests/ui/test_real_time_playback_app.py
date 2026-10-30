@@ -9,7 +9,7 @@ from textual.geometry import Size
 from textual.widgets import Input, Rule, Static
 
 from tts_audiobook_tool import real_time_playback
-from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo, RoomTone, SttVariant
+from tts_audiobook_tool.app_types import NormalizationType, RoomReverb, RoomReverbStereo, RoomTone, SttVariant
 from tts_audiobook_tool.app_types.validation_result import SkippedResult
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.app_support.interrupts import Interrupts
@@ -818,7 +818,7 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
     monkeypatch.setattr(
         real_time_playback.SoundPipeline,
         "prepare_generated_sound_for_playback",
-        lambda sound, high_shelf, limit_silence_gaps, limit_silence_gaps_duration: sound,
+        lambda sound, high_shelf, limit_silence_gaps, limit_silence_gaps_duration, **_kwargs: sound,
     )
     monkeypatch.setattr(
         real_time_playback.ProjectBookUtil,
@@ -872,6 +872,7 @@ def test_start_impl_emits_segment_text_and_checks_validation_runway(
                 get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
                 voice_references=[],
                 room_tone=RoomTone.OFF,
+                normalization_type=NormalizationType.DEFAULT,
                 room_reverb_stereo=RoomReverbStereo.MONO,
             ),
         ),
@@ -1018,7 +1019,7 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
     monkeypatch.setattr(
         real_time_playback.SoundPipeline,
         "prepare_generated_sound_for_playback",
-        lambda sound, high_shelf, limit_silence_gaps, limit_silence_gaps_duration: sound,
+        lambda sound, high_shelf, limit_silence_gaps, limit_silence_gaps_duration, **_kwargs: sound,
     )
     monkeypatch.setattr(real_time_playback, "BreakEffectTracker", FakeBreakEffectTracker)
     monkeypatch.setattr(
@@ -1072,6 +1073,7 @@ def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
                 get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
                 voice_references=[],
                 room_tone=RoomTone.OFF,
+                normalization_type=NormalizationType.DEFAULT,
                 room_reverb_stereo=RoomReverbStereo.MONO,
             ),
         ),
@@ -1318,6 +1320,7 @@ def test_realtime_save_writes_exactly_what_was_played(
     break_effect: bool,
     ending: str = "normal",
     other_voice_reverb: RoomReverb | None = None,
+    hot_mixed_output: bool = False,
 ) -> None:
     # Saved realtime segments are free-standing artifacts of the playback: the
     # file must hold the post-processed audio (reverb, room tone bed, pause)
@@ -1390,14 +1393,21 @@ def test_realtime_save_writes_exactly_what_was_played(
     class TrackingNoiseBed(noise_bed_type):
         def apply(self, sound, is_last=False):
             bed_calls.append((len(sound.data), is_last))
-            return super().apply(sound, is_last=is_last)
+            mixed = super().apply(sound, is_last=is_last)
+            if hot_mixed_output and mixed.data.size:
+                # Simulate a post-mix peak in speech, the pause/effect, and the
+                # drained tail; every emitted chunk must pass the safety limiter.
+                data = mixed.data.copy()
+                data[len(data) // 2] = 0.95
+                mixed = Sound(data, mixed.sr)
+            return mixed
 
     monkeypatch.setattr(real_time_playback, "NoiseBed", TrackingNoiseBed)
     if break_effect:
         monkeypatch.setattr(real_time_playback.BreakEffectTracker, "next_break_effect", lambda *args, **kwargs: object())
         monkeypatch.setattr(
             real_time_playback.SoundPipeline, "make_break_effect_sound",
-            lambda *args: Sound(np.full(24000, .05, dtype=np.float32), 48000),
+            lambda *args, **_kwargs: Sound(np.full(24000, .05, dtype=np.float32), 48000),
         )
 
     monkeypatch.setattr(real_time_playback, "SoundDeviceStream", fake_stream_factory)
@@ -1416,7 +1426,7 @@ def test_realtime_save_writes_exactly_what_was_played(
     )
     monkeypatch.setattr(
         real_time_playback.SoundPipeline, "prepare_generated_sound_for_playback",
-        lambda sound, high_shelf, limit_silence_gaps, limit_silence_gaps_duration: sound,
+        lambda sound, high_shelf, limit_silence_gaps, limit_silence_gaps_duration, **_kwargs: sound,
     )
     monkeypatch.setattr(real_time_playback.ProjectBookUtil, "get_section_start_indices", lambda project: [])
     monkeypatch.setattr(
@@ -1455,6 +1465,7 @@ def test_realtime_save_writes_exactly_what_was_played(
                     for i in range(voice_count)
                 ],
                 room_tone=RoomTone.HIGH,
+                normalization_type=NormalizationType.DEFAULT,
                 room_reverb_stereo=room_reverb_stereo,
             ),
         ),
@@ -1522,6 +1533,10 @@ def test_realtime_save_writes_exactly_what_was_played(
         # second drain can duplicate the final wet frames.
         assert spatial_processors[0].drain_tail() is None
     for chunk in played:
+        if hot_mixed_output:
+            ceiling = 10 ** (real_time_playback.LoudnessLeveling.ceiling_db_for(
+                NormalizationType.DEFAULT.value) / 20)
+            assert np.max(np.abs(chunk)) <= ceiling + 1e-6
         assert chunk.ndim == (1 if expected_channels == 1 else 2)
         if expected_channels == 2:
             assert chunk.shape[1] == 2
@@ -1558,6 +1573,21 @@ def test_realtime_save_writes_exactly_what_was_played(
             np.testing.assert_array_equal(pause_start[:, 0], pause_start[:, 1])
     if warnings:
         assert "voice positioning" in printed[warnings[0]]
+
+
+@pytest.mark.parametrize("ending", ["normal", "one", "failed", "cancelled"])
+@pytest.mark.parametrize("break_effect", [False, True])
+def test_realtime_limits_pauses_effects_and_final_tail(monkeypatch, ending, break_effect) -> None:
+    # Exercise both pre-drained and late-drained tails, including a failed or
+    # cancelled final generation. Saved audio must still equal limited playback.
+    test_realtime_save_writes_exactly_what_was_played(
+        monkeypatch,
+        RoomReverb.MEDIUM_DRR21,
+        RoomReverbStereo.ALL_W100,
+        True, 2, 1, 0, break_effect,
+        ending=ending,
+        hot_mixed_output=True,
+    )
 
 
 @pytest.mark.parametrize(

@@ -13,7 +13,7 @@ version that has this feature) are not shown any messages.
 
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT
 
-STARTUP_VERSION_CODE = 4
+STARTUP_VERSION_CODE = 5
 
 # (version code, message), ascending by version code
 STARTUP_VERSION_MESSAGES: list[tuple[int, str]] = [
@@ -31,5 +31,10 @@ STARTUP_VERSION_MESSAGES: list[tuple[int, str]] = [
         4,
         f"Voices > Auto-identify characters:\n"
         "Automatically identify speaking lines by character using LLM."
+    ),
+    (
+        5,
+        "Improved loudness normalization: \"Create > Loudness\" now defaults\n"
+        "to \"Normal\", and the whole-file normalization pass has been removed."
     )
 ]

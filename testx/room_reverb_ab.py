@@ -214,17 +214,17 @@ def render_variant(
 
 
 def save_variant(
-        data: np.ndarray, path: Path, normalization: NormalizationType, label: str
+        data: np.ndarray, path: Path, normalization: NormalizationType | None, label: str
 ) -> str:
     peak = float(np.max(np.abs(data)))
     if peak > 1.0:
-        if normalization == NormalizationType.DISABLED:
+        if normalization is None:
             print(f"  {label}: peak {peak:.3f} > 1.0, clipping")
             data = np.clip(data, -1.0, 1.0)
         else:
             # Normalization sets the final level anyway, so scale rather than clip
             data = data / peak
-    if normalization == NormalizationType.DISABLED:
+    if normalization is None:
         soundfile.write(str(path), data, APP_SAMPLE_RATE, subtype="PCM_24")
         return ""
     temp_path = str(path.with_name("_prenorm_" + path.name))
@@ -332,7 +332,7 @@ def run_stereo(
         dry: np.ndarray,
         chunks: list[int],
         room_tone: RoomTone,
-        normalization: NormalizationType,
+        normalization: NormalizationType | None,
 ) -> int:
     sr = APP_SAMPLE_RATE
     out_dir = Path(args.out_dir or os.path.join(args.project, "reverb_ab", "stereo"))
@@ -414,11 +414,11 @@ def main() -> int:
             return 1
         dry, chunks, project_room_tone, normalization = result
         if args.no_normalize:
-            normalization = NormalizationType.DISABLED
+            normalization = None
         room_tone = project_room_tone if args.room_tone == "project" else RoomTone.get_by_id(args.room_tone)
         assert room_tone is not None
         print(f"Rendered {len(chunks)} segments, {len(dry) / sr:.1f}s")
-        print(f"Room tone: {room_tone.label}  Normalization: {normalization.value.label}")
+        print(f"Room tone: {room_tone.label}  Normalization: {normalization.value.label if normalization else 'Disabled'}")
         print()
         return run_stereo(args, dry, chunks, room_tone, normalization)
 
@@ -434,12 +434,12 @@ def main() -> int:
         return 1
     dry, chunks, project_room_tone, normalization = result
     if args.no_normalize:
-        normalization = NormalizationType.DISABLED
+        normalization = None
     room_tone = project_room_tone if args.room_tone == "project" else RoomTone.get_by_id(args.room_tone)
     assert room_tone is not None
 
     print(f"Rendered {len(chunks)} segments, {len(dry) / sr:.1f}s")
-    print(f"Room tone: {room_tone.label}  Normalization: {normalization.value.label}")
+    print(f"Room tone: {room_tone.label}  Normalization: {normalization.value.label if normalization else 'Disabled'}")
     print()
 
     # One IR per distinct room

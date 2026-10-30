@@ -115,7 +115,7 @@ class ConcatMenu:
             items.append(
                 MenuItem(
                     lambda _: make_menu_label(
-                        label="Loudness normalization",
+                        label="Loudness",
                         value=state.project.normalization_type.value.label,
                     ),
                     lambda _, __: ConcatMenu.normalization_menu(state),
@@ -275,18 +275,16 @@ class ConcatMenu:
         def on_select(value: NormalizationType) -> None:
             state.project.normalization_type = value
             state.project.save()
-            print_feedback(f"Normalization set to: {value.value.label}")
+            print_feedback(f"Loudness set to: {value.value.label}")
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Loudness normalization",
+            heading_text="Loudness",
             labels=[item.value.label for item in list(NormalizationType)],
             values=[item for item in list(NormalizationType)],
             current_value=state.project.normalization_type,
             default_value=list(NormalizationType)[0],
             on_select=on_select,
-            sublabels=[item.value.description for item in NormalizationType],
-            subheading=LOUDNORM_SUBHEADING,
         )
 
     @staticmethod
@@ -537,8 +535,8 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
         add(MIN_SEGMENT_SENTENCE_SILENCE_TITLE, True)
     if state.project.use_break_sound_effect:
         add("Section break sound effects", True)
-    if state.project.normalization_type != NormalizationType.DISABLED:
-        add("Loudness normalization", state.project.normalization_type.value.label)
+    # Always applied (per-segment loudness leveling)
+    add("Loudness", state.project.normalization_type.value.label)
     if state.project.use_upsampler:
         add("Generative upsampling", True)
     spatial_policy = VoiceSpatialPolicy.from_project(state.project)
@@ -683,11 +681,6 @@ def make_limit_silence_gaps_label(state: State) -> str:
         value=value,
         default=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     )
-
-LOUDNORM_SUBHEADING = \
-"""Applies a final pass after concatenation to standardize overall loudness and
-control peaks. Choose Stronger for a louder, more consistent presentation on
-mobile devices or in noisy environments."""
 
 SUBDIVIDE_SUBHEADING = \
 """Affects text highlighting in the player/reader app.

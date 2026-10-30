@@ -121,7 +121,7 @@ class TestVoiceCropApp:
 
     def test_adjust_and_save(self):
         app = VoiceCropApp(make_sound(10.0), "a", None)
-        run_app_exercise(app, ["s", "s", "d", "enter"])
+        run_app_exercise(app, ["s", "s", "d", "escape", "y"])
         assert app.return_value is not None
         assert app.return_value.saved
         assert app.return_value.start_s == pytest.approx(0.1)
@@ -129,7 +129,7 @@ class TestVoiceCropApp:
 
     def test_shifted_adjustments_use_one_second_steps(self):
         app = VoiceCropApp(make_sound(10.0), "a", None)
-        run_app_exercise(app, ["S", "D", "enter"])
+        run_app_exercise(app, ["S", "D", "escape", "y"])
         assert app.return_value is not None
         assert app.return_value.start_s == pytest.approx(1.0)
         assert app.return_value.end_s == pytest.approx(9.0)
@@ -146,8 +146,9 @@ class TestVoiceCropApp:
         asyncio.run(exercise())
 
     def test_unchanged_is_noop(self):
+        # A clean editor exits on ESC without the save-changes dialog.
         app = VoiceCropApp(make_sound(10.0), "a", None)
-        run_app_exercise(app, ["enter"])
+        run_app_exercise(app, ["escape"])
         assert app.return_value is not None
         assert not app.return_value.saved
         assert not app.return_value.cleared
@@ -168,7 +169,7 @@ class TestVoiceCropApp:
         before = SoundUtil.trim(sound, *initial)
         before_trimmed, _, _ = SilenceUtil.trim_silence_ends(before)
         app = VoiceCropApp(sound, "a", initial)
-        run_app_exercise(app, [*keys, "enter"])
+        run_app_exercise(app, [*keys, "escape"])
 
         after = SoundUtil.trim(sound, app.start_s, app.end_s)
         after_trimmed, _, _ = SilenceUtil.trim_silence_ends(after)
@@ -184,18 +185,46 @@ class TestVoiceCropApp:
         sound = make_sound(10.0)
         app = VoiceCropApp(sound, "a", (0.1, 7.8))
         app.start_s += 1 / sound.sr
-        run_app_exercise(app, ["enter"])
+        run_app_exercise(app, ["escape", "y"])
         assert app.return_value is not None
         assert app.return_value.saved
 
-    def test_escape_cancels(self):
+    def test_dirty_escape_discard(self):
+        # ESC on a changed range asks to save; "No" exits without saving.
         app = VoiceCropApp(make_sound(10.0), "a", None)
-        run_app_exercise(app, ["escape"])
+        run_app_exercise(app, ["s", "escape", "n"])
         assert app.return_value is not None
         assert not app.return_value.saved
+        assert not app.return_value.cleared
 
-    @pytest.mark.parametrize("exit_key", ["escape", "enter", "x"])
-    def test_ctrl_q_is_ignored_during_preview(self, monkeypatch, exit_key):
+    def test_dirty_escape_dialog_cancel_keeps_editing(self):
+        # ESC inside the dialog returns to the editor with the range intact,
+        # and editor hotkeys are inert while the dialog is up.
+        from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
+
+        app = VoiceCropApp(make_sound(10.0), "a", None)
+
+        async def exercise() -> None:
+            async with app.run_test(size=(80, 24)) as pilot:
+                await pilot.press("s", "escape")
+                assert isinstance(app.screen, SaveChangesDialog)
+                await pilot.press("s")
+                assert app.start_s == pytest.approx(0.05)
+                await pilot.press("escape")
+                assert not isinstance(app.screen, SaveChangesDialog)
+                assert app.is_running and app.return_value is None
+                assert app.start_s == pytest.approx(0.05)
+                await pilot.press("enter")
+                assert app.is_running and app.return_value is None
+                await pilot.press("escape", "y")
+        asyncio.run(exercise())
+
+        assert app.return_value is not None
+        assert app.return_value.saved
+        assert app.return_value.start_s == pytest.approx(0.05)
+
+    @pytest.mark.parametrize("exit_keys", [("escape", "n"), ("escape", "y"), ("x",)])
+    def test_ctrl_q_is_ignored_during_preview(self, monkeypatch, exit_keys):
         from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 
         app = VoiceCropApp(make_sound(10.0), "a", (1.0, 5.0))
@@ -212,14 +241,14 @@ class TestVoiceCropApp:
                 assert app.return_value is None
                 assert playback_calls == before
                 assert (app.start_s, app.end_s) == (1.05, 5.0)
-                await pilot.press(exit_key)
+                await pilot.press(*exit_keys)
         asyncio.run(exercise())
 
         assert "play" in playback_calls
         assert playback_calls[-1] == "stop"
         assert app.return_value is not None
-        assert app.return_value.saved == (exit_key == "enter")
-        assert app.return_value.cleared == (exit_key == "x")
+        assert app.return_value.saved == (exit_keys == ("escape", "y"))
+        assert app.return_value.cleared == (exit_keys == ("x",))
 
     def test_cleared(self):
         app = VoiceCropApp(make_sound(10.0), "a", (1.0, 5.0))
@@ -230,7 +259,7 @@ class TestVoiceCropApp:
     def test_min_span_wall(self):
         app = VoiceCropApp(make_sound(10.0), "a", None)
         # 8 one-second steps reach the 2 s minimum from 10 s; the 9th hits the wall.
-        run_app_exercise(app, ["D"] * 9 + ["enter"])
+        run_app_exercise(app, ["D"] * 9 + ["escape", "y"])
         assert app.return_value is not None
         assert app.return_value.saved
         assert app.return_value.end_s - app.return_value.start_s == pytest.approx(2.0)
@@ -250,7 +279,7 @@ class TestVoiceCropApp:
                 for key in ("a", "s", "d", "f", "A", "S", "D", "F"):
                     await pilot.press(key)
                     assert (app.start_s, app.end_s) == (0.0, sound.duration)
-                await pilot.press("p", "enter")
+                await pilot.press("p", "escape")
         asyncio.run(exercise())
 
         assert len(played) == 1
@@ -273,7 +302,8 @@ class TestVoiceCropApp:
 
         header, info, bar, durations = asyncio.run(exercise())
         assert "Trim voice sample: a" in str(header)
-        assert "A/S" in str(info) and "D/F" in str(info) and "ENTER" in str(info)
+        assert "A/S" in str(info) and "D/F" in str(info) and "ESC" in str(info)
+        assert "ENTER" not in str(info)
         assert "to reset trim" in str(info)
         assert "Avoid trimming in the middle of words" in str(info)
         assert "crop" not in (str(header) + str(info) + str(durations)).lower()

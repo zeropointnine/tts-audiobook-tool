@@ -8,7 +8,7 @@ from rich.text import Text
 from textual.timer import Timer
 from textual.widgets import Input, OptionList, Rule, Static
 
-from tts_audiobook_tool.app_types import HighShelfEq, Sound
+from tts_audiobook_tool.app_types import HighShelfEq, NormalizationType, Sound
 from tts_audiobook_tool.constants import APP_SAMPLE_RATE
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
@@ -57,6 +57,7 @@ class StubWordSubstitutionsProject:
     high_shelf: HighShelfEq = HighShelfEq.DISABLED
     limit_silence_gaps: bool = False
     limit_silence_gaps_duration: float = 0.5
+    normalization_type: NormalizationType = NormalizationType.DEFAULT
 
     def save(self) -> str:
         self.save_calls += 1
@@ -571,6 +572,7 @@ def test_preview_shapes_playback_with_project_settings() -> None:
                     high_shelf=HighShelfEq.MODERATE,
                     limit_silence_gaps=True,
                     limit_silence_gaps_duration=1.25,
+                    loudness=NormalizationType.DEFAULT.value,
                 )
                 play.assert_called_once_with(shaped)
 

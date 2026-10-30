@@ -68,8 +68,8 @@ whole export is stereo,
 including dry voices' segments (centered): the reverb processor outputs `(n, 2)`, the noise bed adds the same bed to both channels
 (so room tone stays centered), and the ffmpeg stream is opened with `-ac 2`. With reverb off the
 spread setting does nothing. Stereo output is requested by active stereo reverb or by an
-off-center voice (see below), decided once per run for the whole project (not the selected range). Loudness normalization measures stereo per BS.1770
-(channels summed), so the target is met as before; chapters (M4B) and app metadata were checked on
+off-center voice (see below), decided once per run for the whole project (not the selected range). Loudness leveling aims each mono segment 3 dB lower
+in stereo output, since BS.1770 sums the channels, so the target is met as before; chapters (M4B) and app metadata were checked on
 real stereo FLAC and M4B exports, and the app's own loader downmixes to mono.
 
 `make_stereo_irs` (mid/side per spread part, early/late split by a 6 ms crossfade at the end of the
@@ -119,20 +119,21 @@ gains. Voice chat is excluded from the voice-pan policy.
 
 The boosted-side gain can exceed unity (`+0.25`: approximately 0.786 left, 1.176 right; `+0.3`:
 about +1.6 dB; full pan: +3 dB). DSP sums floating-point dry and wet signals and then hard-clips at
-±1 before the 16-bit stream, so loud peaks of a strongly panned voice can clip; this is accepted
-(a balance law that only attenuates the far side was considered, but would make panned voices
-quieter than centered ones). Downstream export normalization preserves channel balance. No
-per-channel normalization is applied.
+±1 before the 16-bit stream. Loudness leveling lowers each segment's peak ceiling by its voice's pan
+boost, so the panned channel stays under the limit (a balance law that only attenuates the far side
+was considered, but would make panned voices quieter than centered ones). No per-channel
+normalization is applied.
 
 ## Signal chain
 
 Per held segment in concat (`ConcatUtil.concatenate_sound_segments`, `flush_pending`):
 
     segment (resample, treble EQ, sentence-gap extension, gap limiting)
+      -> loudness leveling (gain + peak limiter; see docs/loudness-leveling.md)
       -> pause or break effect appended (pause modulation rules)
       -> direct voice pan + parallel room reverb (narration only)
       -> room tone noise bed
-      -> ffmpeg stream -> loudness normalization (whole file) -> metadata
+      -> mix safety limiter -> ffmpeg stream -> metadata
 
 - **Narration only:** `apply(sound, send_end=narration_end, room_reverb=...)` feeds only the
   segment into its voice's room; the appended pause or break effect passes through dry, with every

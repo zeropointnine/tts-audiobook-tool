@@ -170,6 +170,6 @@ def do_start(state: State) -> None:
     )
 
 REAL_TIME_SUBHEADING = (
-    'Uninterrupted playback requires inference to be faster-than-realtime.\n'
-    'Validation/retry activates when there is 60 seconds of buffered audio.'
+    f'For uninterrupted playback, TTS inference must be to be faster-than-realtime.\n'
+    f'Validation/retry activates when there is {COL_ACCENT}60{COL_DEFAULT} seconds of buffered audio.'
 )

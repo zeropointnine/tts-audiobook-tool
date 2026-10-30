@@ -14,7 +14,7 @@ from tts_audiobook_tool.project_support.project_serialization_util import (
 )
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
-from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormalizationUtil
+from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
 
@@ -101,7 +101,7 @@ def _make_minimal_concat_state() -> State:
     )
 
 
-def test_concat_unloads_lava_sr_before_normalization() -> None:
+def test_concat_unloads_lava_sr_before_final_output_processing() -> None:
     events: list[str] = []
 
     def concatenate(*args: object, **kwargs: object) -> ConcatRenderResult:
@@ -112,8 +112,8 @@ def test_concat_unloads_lava_sr_before_normalization() -> None:
         events.append("LavaSR unloaded")
         return ""
 
-    def normalize(**kwargs: object) -> str:
-        events.append("normalization started")
+    def save_metadata(*args: object, **kwargs: object) -> str:
+        events.append("final file processing started")
         return "stop after order assertion"
 
     with patch.object(
@@ -125,7 +125,9 @@ def test_concat_unloads_lava_sr_before_normalization() -> None:
     ), patch.object(
         ModelWorker, "clear_models_if_running_blocking", side_effect=unload
     ), patch.object(
-        LoudnessNormalizationUtil, "normalize_file", side_effect=normalize
+        AppMetadata, "save_to_flac", side_effect=save_metadata
+    ), patch(
+        "tts_audiobook_tool.concat_util.save_abr_metadata_debug_json", return_value=""
     ), patch(
         "tts_audiobook_tool.concat_util.app_support.log_unload_memory_snapshot"
     ), patch(
@@ -139,7 +141,7 @@ def test_concat_unloads_lava_sr_before_normalization() -> None:
     assert events == [
         "upsampling finished",
         "LavaSR unloaded",
-        "normalization started",
+        "final file processing started",
     ]
 
 
@@ -155,8 +157,8 @@ def test_concat_unloads_lava_sr_when_upsampling_is_interrupted() -> None:
     ), patch.object(
         ModelWorker, "clear_models_if_running_blocking", return_value=""
     ) as unload, patch.object(
-        LoudnessNormalizationUtil, "normalize_file"
-    ) as normalize, patch(
+        AppMetadata, "save_to_flac"
+    ) as save_metadata, patch(
         "tts_audiobook_tool.concat_util.app_support.log_unload_memory_snapshot"
     ), patch(
         "tts_audiobook_tool.concat_util.delete_silently"
@@ -167,7 +169,7 @@ def test_concat_unloads_lava_sr_when_upsampling_is_interrupted() -> None:
 
     assert error == "Interrupted by user"
     unload.assert_called_once_with()
-    normalize.assert_not_called()
+    save_metadata.assert_not_called()
 
 
 def test_use_upsampler_serialization_field_remains_compatible() -> None:

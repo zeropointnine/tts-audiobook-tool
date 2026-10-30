@@ -20,6 +20,7 @@ from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.app_types.phrase import Reason
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.sound.loudness_leveling import LoudnessLeveling
 from tts_audiobook_tool.sound.room_reverb import RoomReverbProcessor
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
@@ -564,6 +565,8 @@ class _ResponseEngine:
                     high_shelf=self.project.get_high_shelf(),
                     limit_silence_gaps=self.project.limit_silence_gaps,
                     limit_silence_gaps_duration=self.project.limit_silence_gaps_duration,
+                    loudness=self.project.normalization_type.value,
+                    output_channels=self.sound_stream.channels,
                 )
                 speech_len = len(sound.data)
                 sound = SoundPipeline.append_pause_or_section_effect(
@@ -583,6 +586,9 @@ class _ResponseEngine:
                     # Safety net (reverb skips audio it can't process): keep
                     # the turn's sounds in the same shape, so they concatenate
                     sound = Sound(SoundUtil.as_stereo(sound.data), sound.sr)
+                # Reverb can raise peaks above the dry segment's ceiling. Limit
+                # the full mixed segment, including its pause, before saving or playback.
+                sound = LoudnessLeveling.limit_mix(sound, self.project.normalization_type.value)[0]
                 self.saved_turn_sounds.append(sound)
 
                 if not self.interrupt_requested.is_set():

@@ -165,6 +165,7 @@ def test_concatenate_does_not_append_break_effect_to_final_segment(reason: Reaso
         break_effect=None,
         preceding_silence=0.0,
         following_silence=0.0,
+        effect_level_offset_db=0.0,
     )
 
 
@@ -176,7 +177,7 @@ def concatenate_with_mocks(phrases: list[Phrase]) -> list[Reason | None]:
     sound = Sound(np.zeros(48000, dtype=np.float32), 48000)
     decisions: list[Reason | None] = []
 
-    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence):
+    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence, **_kwargs):
         decisions.append(break_effect)
         return sound_in
 
@@ -206,7 +207,7 @@ def test_concatenate_passes_edge_pseudo_silence_to_break_effects() -> None:
     phrases = [Phrase("One", Reason.SENTENCE), Phrase("Two", Reason.SPACE_BREAK), Phrase("Three", Reason.SENTENCE)]
     calls: list[tuple[Reason | None, float, float]] = []
 
-    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence):
+    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence, **_kwargs):
         calls.append((break_effect, preceding_silence, following_silence))
         return sound_in
 
@@ -236,7 +237,7 @@ def test_concatenate_applies_rule1_per_section_and_missing_leading_audio() -> No
     ]
     decisions: list[Reason | None] = []
 
-    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence):
+    def fake_append(sound_in, reason, reason_pauses, break_effect, preceding_silence, following_silence, **_kwargs):
         decisions.append(break_effect)
         return sound_in
 

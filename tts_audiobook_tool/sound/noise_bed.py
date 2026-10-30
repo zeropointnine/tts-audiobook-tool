@@ -8,7 +8,8 @@ TTS output generally has no steady background of its own (its noise comes and
 goes with the vocalizations), so the bed is not matched to the audio: it is a
 fixed, deliberately neutral background. See docs-dev/room-tone.md.
 
-Levels are noise RMS in dBFS, before loudness normalization. Durations never change.
+Levels are noise RMS in dBFS relative to un-leveled speech; callers shift them by
+LoudnessLeveling.reference_offset_db. Durations never change.
 """
 
 from __future__ import annotations

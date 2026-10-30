@@ -360,6 +360,7 @@ class WordSubstitutionsApp(ContentTextualApp[WordSubstitutionsResult]):
             high_shelf=self.project.get_high_shelf(),
             limit_silence_gaps=self.project.limit_silence_gaps,
             limit_silence_gaps_duration=self.project.limit_silence_gaps_duration,
+            loudness=self.project.normalization_type.value,
         )
         self.preview_sound_id = PlaySoundUtil.play_sound_async(sound)
         if self.preview_status_timer is not None:

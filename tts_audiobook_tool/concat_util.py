@@ -15,7 +15,7 @@ from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool.app_support import dev_hooks_loader
 from tts_audiobook_tool.system_support.browser import get_chromium_info, launch_player_with_chromium
-from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, RoomReverb, RoomReverbStereo, Sound
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationSpecs, RoomReverb, RoomReverbStereo, Sound
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
@@ -23,7 +23,7 @@ from tts_audiobook_tool.project_support.voice_spatial_policy import VoiceSpatial
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
-from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormalizationUtil
+from tts_audiobook_tool.sound.loudness_leveling import LevelingStats, LoudnessLeveling
 from tts_audiobook_tool.sound import m4b_chapter_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
@@ -307,16 +307,12 @@ class ConcatUtil:
         # Intermediate file paths etc
 
         is_aac = (state.project.export_type == ExportType.AAC)
-        should_normalize = (state.project.normalization_type != NormalizationType.DISABLED)
 
-        concat_suffix = ".m4b" if is_aac and not should_normalize else ".flac" # tricky
-        concat_path = stem_path + " [concat]" + concat_suffix
-
+        # Loudness is leveled per segment during concatenation, so the
+        # concatenated file is already in the final codec
         suffix = ".m4b" if is_aac else ".flac"
-        if should_normalize:
-            norm_path = stem_path + " [norm]" + suffix
-        else:
-            norm_path = ""
+        concat_path = stem_path + " [concat]" + suffix
+
         if is_aac and m4b_chapter_util.has_multiple_chapters(state.project, index_start, index_end):
             chapter_meta_path = stem_path + " [chaptermeta]" + suffix
         else:
@@ -328,7 +324,7 @@ class ConcatUtil:
             # TODO: add delete-as-you-go logic instead
             if state.prefs.save_debug_files:
                 return
-            paths = [ concat_path, norm_path, chapter_meta_path]
+            paths = [ concat_path, chapter_meta_path]
             if not keep_final:
                 paths.append(final_path)
             for path in paths:
@@ -382,11 +378,12 @@ class ConcatUtil:
                 voice_pans=voice_pans,
                 voice_reverbs=voice_reverbs,
                 stereo_required=spatial_policy.requested_channels == 2,
+                loudness=state.project.normalization_type.value,
             )
         finally:
             # LavaSR lives in the model worker. Always explicitly unload it at
             # the end of the upsampling phase—even on interruption or failure—
-            # before normalization or any later output-processing step begins.
+            # before any later output-processing step begins.
             if use_upsampler:
                 app_support.log_unload_memory_snapshot("upscale operation finished")
                 upsampler_unload_error = ModelWorker.clear_models_if_running_blocking()
@@ -403,23 +400,7 @@ class ConcatUtil:
             gap_trim_maps = result.gap_trim_maps
             last_path = concat_path
 
-        # [2] Loudness-normalized file
-        #     Ideally, this would go at the very end due to taking the most time but can't be helped
-
-        if norm_path:
-            err = LoudnessNormalizationUtil.normalize_file(
-                source_flac=last_path,
-                specs=state.project.normalization_type.value,
-                dest_path=norm_path,
-                aac_bitrate=state.prefs.aac_bitrate
-            )
-            if err:
-                delete_intermediate_files()
-                return "", err
-            else:
-                last_path = norm_path
-
-        # [3] Chapter (M4B) metadata
+        # [2] Chapter (M4B) metadata
         #     Must be done before custom metadata
         #     Also, can't be easily combined into other save operation
         #     Both due to ffmpeg limitations
@@ -441,7 +422,7 @@ class ConcatUtil:
             else:
                 last_path = chapter_meta_path
 
-        # [4] App metadata (final file)
+        # [3] App metadata (final file)
 
         phrases = [item[0] for item in phrases_and_paths]
         base_timed_phrases = TimedPhrase.make_list_using(phrases, durations)
@@ -557,6 +538,7 @@ class ConcatUtil:
         voice_pans: list[float] | None = None,
         voice_reverbs: list[RoomReverb] | None = None,
         stereo_required: bool = False,
+        loudness: NormalizationSpecs | None = None,
     ) -> ConcatRenderResult | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
@@ -606,6 +588,12 @@ class ConcatUtil:
         :param stereo_required:
             Project-level stereo requirement, even if this range has no panned
             speech. Nonzero voice_pans also require stereo for low-level callers.
+        :param loudness:
+            Loudness target. Each segment is leveled to it (one gain, then a
+            peak limiter) before panning, and the room tone and break effects
+            are shifted to keep their level relative to the speech; a final
+            safety limiter runs on the mixed output (see LoudnessLeveling).
+            None leaves levels untouched.
 
         Returns a ConcatRenderResult: the duration of each added segment (for app
         metadata) plus the gap-cut maps needed to remap STT word timings.
@@ -635,6 +623,13 @@ class ConcatUtil:
         has_reverb = any(reverb.design is not None and reverb.drr_db is not None for reverb in voice_reverbs)
         channels = 2 if (stereo_required or any(pan != 0 for pan in voice_pans)
                          or (has_reverb and room_reverb_stereo.is_stereo)) else 1
+
+        # Levels authored against un-leveled speech (room tone, break effects)
+        # move with the loudness target
+        level_offset_db = LoudnessLeveling.reference_offset_db(loudness, channels) if loudness is not None else 0.0
+        if room_tone_db is not None:
+            room_tone_db += level_offset_db
+        leveling_stats = LevelingStats()
 
         to_aac_not_flac = dest_path.lower().endswith(tuple(AAC_SUFFIXES))
         process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac, aac_bitrate, channels=channels)
@@ -710,6 +705,7 @@ class ConcatUtil:
                 break_effect=break_effect,
                 preceding_silence=end_pseudo,
                 following_silence=start_pseudo,
+                effect_level_offset_db=level_offset_db,
             )
 
             # Pan only direct narration; room sound stays independent of voice
@@ -726,6 +722,11 @@ class ConcatUtil:
                 if noise_bed is None:
                     noise_bed = NoiseBed(sound.sr, room_tone_db)
                 sound = noise_bed.apply(sound, is_last=is_final_segment)
+
+            # Room reverb adds to the leveled narration's peaks
+            if loudness is not None:
+                sound, mix_reduction_db = LoudnessLeveling.limit_mix(sound, loudness)
+                leveling_stats.add_mix(mix_reduction_db)
 
             durations[idx] = sound.duration
             duration_sum += sound.duration
@@ -796,6 +797,15 @@ class ConcatUtil:
             if gap_trims or insertions:
                 gap_trim_maps[i] = GapTrimMap(result.duration, gap_trims, insertions)
 
+            # Loudness leveling: after all per-segment shaping (high shelf
+            # included, which affects K-weighted loudness), before the pause
+            # and panning. Pseudo-silence detection below is relative to the
+            # segment's peak, so it's unaffected by the gain.
+            if loudness is not None:
+                leveled = LoudnessLeveling.level(curr_sound, loudness, pan=voice_pans[i], channels=channels)
+                leveling_stats.add(leveled)
+                curr_sound = leveled.sound
+
             if Interrupts().did_interrupt:
                 Interrupts().clear()
                 ConcatUtil.close_ffmpeg_stream(process)
@@ -821,20 +831,27 @@ class ConcatUtil:
         printt()
 
         if print_progress:
-            ConcatUtil.print_render_metrics(gap_trim_maps)
+            ConcatUtil.print_render_metrics(gap_trim_maps, leveling_stats if loudness is not None else None, loudness)
 
         Interrupts().clear()
         ConcatUtil.close_ffmpeg_stream(process)
         return ConcatRenderResult(durations=durations, gap_trim_maps=gap_trim_maps)
 
     @staticmethod
-    def print_render_metrics(gap_trim_maps: list[GapTrimMap | None]) -> None:
+    def print_render_metrics(
+        gap_trim_maps: list[GapTrimMap | None],
+        leveling_stats: LevelingStats | None = None,
+        loudness: NormalizationSpecs | None = None,
+    ) -> None:
         """
         Prints post-render metrics as a single contiguous block, followed by
         one blank line (nothing at all if there's nothing to report).
         """
         lines: list[str] = []
         gap_maps = [gap_map for gap_map in gap_trim_maps if gap_map]
+
+        if leveling_stats is not None and loudness is not None and leveling_stats.count:
+            lines.append(leveling_stats.summary(loudness))
 
         insertion_count = sum(len(gap_map.insertions) for gap_map in gap_maps)
         if insertion_count:
@@ -931,10 +948,10 @@ class ConcatUtil:
         Converts float audio data to 16-bit PCM format. Stereo is (n, 2), which
         `tobytes` writes interleaved, as s16le expects.
         """
-        # Assuming audio_data is float, convert to 16-bit PCM
-        # This is a standard conversion for float arrays in range [-1.0, 1.0]
-        # if audio_data.dtype is not float, raise ValueError("Expecting float")
-        pcm_data = (audio_data * 32767).astype(np.int16) # type: ignore
+        # Float audio in [-1.0, 1.0] to 16-bit PCM. Out-of-range floats don't
+        # saturate when cast to int16 (they wrap around, ie loud crackles), so
+        # clip first as a safety net.
+        pcm_data = (np.clip(audio_data, -1.0, 1.0) * 32767).astype(np.int16) # type: ignore
 
         try:
             process.stdin.write(pcm_data.tobytes()) # type: ignore

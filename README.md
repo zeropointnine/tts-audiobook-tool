@@ -41,7 +41,8 @@ By themselves, these models are unreliable at book scale. The app wraps them in 
 - Error detection using speech-to-text verification, with retry logic that keeps the most accurate take
 - Rational text segmentation at paragraph/sentence/phrase boundaries
 - Silence trimming and reduction of excessive pauses, plus semantically-aware pause modulation at segment boundaries to improve prosody
-- Optional post-processing: loudness normalization, 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) upsampler, per-voice stereo positioning, room reverb
+- Per-segment loudness leveling, so voice clones and lines match in loudness (ACX-style or louder target)
+- Optional post-processing: 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) upsampler, per-voice stereo positioning, room reverb
 
 A single project can utilize multiple voice-clone samples. An optional step applies an LLM-assisted character identification pass on the text to map character lines to voice clones, enabling "full-cast audio drama" productions.
 
@@ -882,6 +883,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 
 # Update highlights
+
+**2026-10-30**
+
+- **Improved loudness leveling** in exports and realtime playback. Loudness is now normalized segment by segment. Removed the now-redundant, time-consuming whole-file normalization pass.
 
 **2026-10-25**
 

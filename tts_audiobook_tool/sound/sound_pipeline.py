@@ -6,9 +6,10 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from tts_audiobook_tool.app_types import HighShelfEq, Sound
+from tts_audiobook_tool.app_types import HighShelfEq, NormalizationSpecs, Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.sound.loudness_leveling import LoudnessLeveling
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
@@ -111,7 +112,8 @@ class SoundPipeline:
         App's standard post-processing treatment on generated sounds.
 
         - Trims silence from both ends
-        - Applies peak normalization.
+        - Applies peak normalization. This is only a predictable storage level;
+          perceived loudness is evened out at render time (loudness leveling).
         - Does *not* touch samplerate.
 
         If the input is entirely silence, the returned Sound's data.size will be 0.
@@ -226,6 +228,9 @@ class SoundPipeline:
         high_shelf: HighShelfEq,
         limit_silence_gaps: bool = False,
         limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
+        loudness: NormalizationSpecs | None = None,
+        pan: float = 0.0,
+        output_channels: int = 1,
     ) -> Sound:
         """
         Applies interactive playback shaping to freshly generated audio.
@@ -235,6 +240,9 @@ class SoundPipeline:
         - Limit silence gaps (optional)
         - Resample to 48k if not already
         - Apply high shelf (optional)
+        - Loudness leveling, when `loudness` is given; `pan` is the stereo
+          position the sound will be panned to afterwards, `output_channels`
+          the playback channel count (see `apply_loudness_leveling`)
         """
         sound = SoundPipeline.limit_silence_gaps_if_enabled(
             sound,
@@ -242,7 +250,24 @@ class SoundPipeline:
             max_gap_duration=limit_silence_gaps_duration,
         )
         sound = SoundPipeline.resample_for_app(sound)
-        return SoundPipeline.apply_high_shelf(sound, high_shelf)
+        sound = SoundPipeline.apply_high_shelf(sound, high_shelf)
+        if loudness is not None:
+            sound = SoundPipeline.apply_loudness_leveling(
+                sound, loudness, pan=pan, output_channels=output_channels)
+        return sound
+
+    @staticmethod
+    def apply_loudness_leveling(
+            sound: Sound, loudness: NormalizationSpecs, pan: float = 0.0, output_channels: int = 1,
+    ) -> Sound:
+        """
+        Brings the segment to the loudness target and limits its peaks (see
+        LoudnessLeveling). Must run before voice panning, with that `pan`, so
+        the louder panned channel stays under the peak ceiling too. Stereo
+        output is aimed 3 dB lower per segment, so the stereo whole measures
+        on target.
+        """
+        return LoudnessLeveling.level(sound, loudness, pan=pan, channels=output_channels).sound
 
     @staticmethod
     def make_break_effect_sound(
@@ -251,6 +276,7 @@ class SoundPipeline:
         sr: int,
         preceding_silence: float = 0.0,
         following_silence: float = 0.0,
+        level_offset_db: float = 0.0,
     ) -> Sound | str:
         """
         Builds the inserted audio for a break sound effect (SPACE_BREAK or
@@ -262,6 +288,11 @@ class SoundPipeline:
         already at the end of the preceding segment and the start of the
         following one. They count toward the gap, so only the padding shrinks;
         the effect itself is never trimmed. See `SoundUtil.center_in_silence`.
+
+        `level_offset_db`: gain for the asset. The assets' levels are authored
+        against un-leveled speech, so leveled output passes
+        `LoudnessLeveling.reference_offset_db` to keep the effect's level
+        relative to the speech.
 
         Shared by concat and realtime playback. Returns an error string if the
         reason has no effect or the asset can't be loaded.
@@ -276,6 +307,9 @@ class SoundPipeline:
         result = SoundFileUtil.load(path, sr)
         if isinstance(result, str):
             return f"{path}: {result}"
+        if level_offset_db:
+            gain = 10 ** (level_offset_db / 20)
+            result = Sound(np.clip(result.data * gain, -1.0, 1.0).astype(result.data.dtype), result.sr)
         return SoundUtil.center_in_silence(
             result,
             reason_pauses.get_pause_for(break_effect),
@@ -291,6 +325,7 @@ class SoundPipeline:
         break_effect: Reason | None,
         preceding_silence: float = 0.0,
         following_silence: float = 0.0,
+        effect_level_offset_db: float = 0.0,
     ) -> Sound:
         """
         Appends the trailing break effect or pause for a segment.
@@ -310,6 +345,8 @@ class SoundPipeline:
             pause. For a break effect only its padding shrinks; the effect
             itself is never trimmed. Used by the concat flow's pseudo-silence
             compensation.
+        :param effect_level_offset_db:
+            Gain for the break effect asset (see `make_break_effect_sound`).
         """
 
         if break_effect is not None:
@@ -317,6 +354,7 @@ class SoundPipeline:
                 break_effect, reason_pauses, sound.sr,
                 preceding_silence=preceding_silence,
                 following_silence=following_silence,
+                level_offset_db=effect_level_offset_db,
             )
             if isinstance(result, str):
                 printt(f"{COL_ERROR}Couldn't load break sound effect: {result}")

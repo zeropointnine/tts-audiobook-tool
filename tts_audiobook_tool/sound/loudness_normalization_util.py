@@ -12,6 +12,10 @@ class LoudnessNormalizationUtil:
     """
     Two-Pass Loudness Normalization (to EBU R128 / ITU-R BS.1770 specifications)
 
+    Whole-file ffmpeg loudnorm. No longer part of the export flow, which levels
+    loudness per segment instead (see sound/loudness_leveling.py); kept for
+    dev scripts that level-match whole renders (eg testx/room_reverb_ab.py).
+
     I = integrated loudness - average loudness over whole clip; measured in LUFS
     LRA = loudness range - dynamic range; lower values = less dynamic range / more compression
     TP = true peak - highest peak after processing; acts as a limiter, prevents clipping

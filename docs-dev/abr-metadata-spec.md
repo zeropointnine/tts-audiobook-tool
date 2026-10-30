@@ -520,9 +520,10 @@ follow the stricter interpretation above.
 ## Compatibility notes
 
 - FLAC and MP4-family ABR files carry the same JSON payload, only the container-level tag location differs.
-- When loudness normalization converts a FLAC input containing valid ABR metadata to an
-  AAC-family output, it reloads that payload from the FLAC and writes it to the MP4
-  custom tag. FLAC-to-FLAC normalization relies on FFmpeg preserving the FLAC metadata.
+- The dev-only whole-file loudness normalization (`LoudnessNormalizationUtil`), when it converts
+  a FLAC input containing valid ABR metadata to an AAC-family output, reloads that payload from
+  the FLAC and writes it to the MP4 custom tag. FLAC-to-FLAC normalization relies on FFmpeg
+  preserving the FLAC metadata. Exports no longer use it (loudness is leveled per segment).
 - The optional `*.abr.metadata.json` debug sidecar is not part of the container format; it is only a developer/debug artifact mirroring the embedded payload.
 - File naming such as `.abr.flac` or `.abr.m4b` is a project convention, not part of the metadata spec itself.
 - Older ABR files may omit `type`; this does not imply either provenance value, and adding it does not require a version bump.

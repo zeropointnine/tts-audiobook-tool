@@ -482,7 +482,8 @@ class Server:
             sound=sound,
             high_shelf=self._project.get_high_shelf(),
             limit_silence_gaps=self._project.limit_silence_gaps,
-            limit_silence_gaps_duration=self._project.limit_silence_gaps_duration
+            limit_silence_gaps_duration=self._project.limit_silence_gaps_duration,
+            loudness=self._project.normalization_type.value,
         )
 
         if phrase_group.last_reason != Reason.UNDEFINED:

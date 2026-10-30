@@ -42,6 +42,7 @@ from tts_audiobook_tool.real_time_playback_events import (
     RealTimePlaybackStarted,
 )
 from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPhase, ModelUnhealthy
+from tts_audiobook_tool.sound.loudness_leveling import LoudnessLeveling
 from tts_audiobook_tool.sound.noise_bed import NoiseBed
 from tts_audiobook_tool.sound.voice_spatial import VoiceSpatialProcessor
 from tts_audiobook_tool.project_support.voice_spatial_policy import VoiceSpatialPolicy
@@ -191,11 +192,20 @@ def _start_impl(
     # Constant noise bed under the output (same setting as concat). Created
     # lazily at the first segment's sample rate; one per run, so the noise
     # stream is seamless across segments.
+    # Each segment is loudness leveled like in concat; levels authored against
+    # un-leveled speech (room tone, break effects) move with the target.
+    # Channels are the requested ones: leveling runs before the output stream
+    # opens (device fallback to mono is rare, and only shifts levels by 3 dB).
+    spatial_policy = VoiceSpatialPolicy.from_project(state.project)
+    loudness = state.project.normalization_type.value
+    loudness_channels = spatial_policy.requested_channels
+    level_offset_db = LoudnessLeveling.reference_offset_db(loudness, loudness_channels)
     room_tone_db = state.project.room_tone.level_db
+    if room_tone_db is not None:
+        room_tone_db += level_offset_db
     noise_bed: NoiseBed | None = None
     # Snapshot the whole project's channel policy, independent of this range.
     # One spatial/room processor per run, created after device fallback.
-    spatial_policy = VoiceSpatialPolicy.from_project(state.project)
     spatial: VoiceSpatialProcessor | None = None
     # Keep only the latest successful save pending: a later failure/cancel can
     # make it the final segment, whose artifact must include the drained room.
@@ -291,6 +301,9 @@ def _start_impl(
             high_shelf=state.project.get_high_shelf(),
             limit_silence_gaps=state.project.limit_silence_gaps,
             limit_silence_gaps_duration=state.project.limit_silence_gaps_duration,
+            loudness=loudness,
+            pan=spatial_policy.pan_for_voice_index(phrase_group.voice_index),
+            output_channels=loudness_channels,
         )
 
         if sound.data.size > 0 and abs(sound.duration - original_duration) > 0.01:
@@ -312,7 +325,8 @@ def _start_impl(
             )
             effect_result = (
                 SoundPipeline.make_break_effect_sound(
-                    break_effect, state.project.reason_pauses, sound.sr)
+                    break_effect, state.project.reason_pauses, sound.sr,
+                    level_offset_db=level_offset_db)
                 if break_effect is not None
                 else None
             )
@@ -372,6 +386,13 @@ def _start_impl(
             if appended_sound is not None and appended_sound.size > 0:
                 appended_sound = noise_bed.apply(
                     Sound(appended_sound.astype(sound.data.dtype), sound.sr)).data
+
+        # Final safety limiter, as in concat: reverb can push narration and
+        # the tails carried by the appended pause/effect past the ceiling.
+        sound = LoudnessLeveling.limit_mix(sound, loudness)[0]
+        if appended_sound is not None:
+            appended_sound = LoudnessLeveling.limit_mix(
+                Sound(appended_sound, sound.sr), loudness)[0].data
 
         # Add sound to the stream, capturing the half-open sample range it
         # occupies so the app can show which source text is being played.
@@ -433,6 +454,7 @@ def _start_impl(
         if tail is not None and tail.data.size > 0:
             if noise_bed is not None:
                 tail = noise_bed.apply(tail, is_last=True)
+            tail = LoudnessLeveling.limit_mix(tail, loudness)[0]
             tail_start, tail_end = stream.add_data(tail.data)
             if pending_save is not None:
                 group, saved_index, validation, played = pending_save
