@@ -370,6 +370,7 @@ def test_confirmed_exit_applies_staged_markers_and_saves(monkeypatch) -> None:
         ],
         [],
     )
+    project.create_files = "1"
     saves: list[Project] = []
     monkeypatch.setattr(Project, "save", lambda self: saves.append(self) or "")
 
@@ -384,6 +385,7 @@ def test_confirmed_exit_applies_staged_markers_and_saves(monkeypatch) -> None:
             assert app.is_running is False
 
         assert project.markers == {1}
+        assert project.create_files == ""
         assert app.staged_markers == {1}
         assert app.return_value == EditorSaved()
 
@@ -428,6 +430,8 @@ def test_save_failure_rolls_back_markers_and_records_error(monkeypatch) -> None:
         ],
         [],
     )
+    # A failed marker edit must also roll back selection invalidation.
+    project.create_files = "1"
     monkeypatch.setattr(Project, "save", lambda self: "disk full")
 
     async def exercise() -> None:
@@ -436,6 +440,7 @@ def test_save_failure_rolls_back_markers_and_records_error(monkeypatch) -> None:
             await pilot.pause()
 
         assert project.markers == set()
+        assert project.create_files == "1"
         assert app.return_value == EditorSaveFailed("Save failed: disk full")
 
     run(exercise())

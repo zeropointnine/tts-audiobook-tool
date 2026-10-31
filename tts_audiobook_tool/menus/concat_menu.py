@@ -595,7 +595,6 @@ def ask_output_indices_and_make(state: State) -> None:
             return
         output_indices, range_string = result
         bookmark_indices = []
-        ProjectUtil.persist_concat_files_range_string(state.project, range_string)
 
         noun = make_noun('file', 'files', len(output_indices))
         s = f"Will create the following {type_string} {noun}:"
@@ -610,6 +609,7 @@ def ask_output_indices_and_make(state: State) -> None:
         b = ask.ask_confirm()
         if not b:
             return
+        ProjectUtil.persist_concat_files_range_string(state.project, range_string)
 
     else:
 

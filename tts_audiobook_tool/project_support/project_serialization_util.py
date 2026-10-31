@@ -360,9 +360,10 @@ class ProjectSerializationUtil:
                 d['generate_range'] = 'none'
 
         # Optional keys: absent in projects saved before they existed, so no warning
-        for key in ('concat_files_range_string', 'concat_files_range_basis'):
-            if not isinstance(d.get(key, ''), str):
-                d[key] = ''
+        if 'create_files' not in d:
+            d['create_files'] = d.get('concat_files_range_string', '')
+        if not isinstance(d['create_files'], str):
+            d['create_files'] = ''
 
         if 'markers' in d:
             phrase_groups = d.get('phrase_groups', [])
@@ -965,8 +966,7 @@ class ProjectSerializationUtil:
             "word_substitutions_json_string": json.dumps(project.word_substitutions),
 
             "generate_range": project.generate_range_string,
-            "concat_files_range_string": project.concat_files_range_string,
-            "concat_files_range_basis": project.concat_files_range_basis,
+            "create_files": project.create_files,
             "markers": sorted(project.markers),
             "subdivide_phrases": project.subdivide_phrases,
             "export_type": project.export_type.id,

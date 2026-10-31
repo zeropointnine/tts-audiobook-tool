@@ -349,11 +349,13 @@ class SectionMarkersEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             self.exit(EditorSaveFailed(f"{label} editor was not initialized"))
             return
 
+        original_create_files = self.project.create_files
         self.project.markers = self.staged_markers
 
         error = self.project.save()
         if error:
             self.project.markers = self.original_markers
+            self.project.create_files = original_create_files
             self.exit(EditorSaveFailed(f"Save failed: {error}"))
             return
 

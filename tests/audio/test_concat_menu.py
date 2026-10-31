@@ -108,9 +108,8 @@ def make_files_mode_project(num_lines: int, markers: set[int]) -> Project:
     })
 
 
-def test_concat_files_range_string_invalidates_when_file_layout_changes() -> None:
-    # The saved file numbers only apply to the cut points and line count they
-    # were entered against; changing either one drops the prefill.
+def test_concat_files_range_string_invalidates_when_marker_count_changes() -> None:
+    # Moving boundaries preserves file numbering; adding one clears it for good.
     project = make_files_mode_project(6, {2, 4})
     with patch.object(Project, "save", return_value="") as save:
         concat_menu.ProjectUtil.persist_concat_files_range_string(project, "1, 3")
@@ -119,19 +118,21 @@ def test_concat_files_range_string_invalidates_when_file_layout_changes() -> Non
     assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == "1, 3"
 
     project.markers = {2, 5}
-    assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == ""
-    # Restoring the original cut points makes it valid again
-    project.markers = {2, 4}
+    assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == "1, 3"
+    project.phrase_groups = project.phrase_groups[:5]
     assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == "1, 3"
 
-    project.phrase_groups = project.phrase_groups[:5]
+    project.markers = {1, 2, 4}
+    assert project.create_files == ""
+    project.markers = {2, 4}
     assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == ""
 
 
-def test_ask_output_indices_and_make_prefills_and_persists_file_numbers() -> None:
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_ask_output_indices_and_make_prefills_and_persists_file_numbers(confirmed: bool) -> None:
+    # Only a confirmed selection replaces the previously saved prefill.
     project = make_files_mode_project(6, {2, 4})
-    project.concat_files_range_string = "2"
-    project.concat_files_range_basis = concat_menu.ProjectUtil.make_concat_files_range_basis(project)
+    project.create_files = "2"
     project._sound_segments = SimpleNamespace(num_generated=lambda: 6)
     state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(project_dir="/tmp")))
     infos = [concat_menu.OutputRangeInfo(i, i * 2, i * 2 + 1, {i * 2: "a.wav"}) for i in range(3)]
@@ -141,14 +142,17 @@ def test_ask_output_indices_and_make_prefills_and_persists_file_numbers() -> Non
             patch.object(concat_menu, "printt"), \
             patch.object(concat_menu, "print_accent_separator"), \
             patch.object(concat_menu.ask, "ask_input", return_value="3, 1") as ask_input, \
-            patch.object(concat_menu.ask, "ask_confirm", return_value=False), \
+            patch.object(concat_menu.ask, "ask_confirm", return_value=confirmed), \
+            patch.object(concat_menu.ConcatUtil, "make_files") as make_files, \
             patch.object(Project, "save", return_value="") as save:
         concat_menu.ask_output_indices_and_make(state)
 
     ask_input.assert_called_once_with(prefill="2")
-    save.assert_called_once()
-    assert project.concat_files_range_string == "1, 3"
-    assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == "1, 3"
+    assert save.call_count == int(confirmed)
+    assert make_files.call_count == int(confirmed)
+    expected = "1, 3" if confirmed else "2"
+    assert project.create_files == expected
+    assert concat_menu.ProjectUtil.get_concat_files_range_string(project) == expected
 
 
 def test_start_shows_split_file_list_before_file_number_prompt() -> None:
@@ -159,8 +163,7 @@ def test_start_shows_split_file_list_before_file_number_prompt() -> None:
             chapter_mode=SectionMarkerMode.FILES,
             markers=[9],
             phrase_groups=[None] * 6947,
-            concat_files_range_string="",
-            concat_files_range_basis="",
+            create_files="",
             sound_segments=SimpleNamespace(num_generated=lambda: 1021),
         ),
         prefs=SimpleNamespace(project_dir="/tmp"),

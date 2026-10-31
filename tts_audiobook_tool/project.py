@@ -92,11 +92,24 @@ class Project(BaseModel):
             return SectionMarkerMode.FILES
         return chapter_mode
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        # Invalidate at mutation time, so restoring a previous layout cannot
+        # resurrect an obsolete selection. Initialization keeps loaded values.
+        invalidate = False
+        if name in self.__dict__:
+            if name == 'chapter_mode':
+                invalidate = self.chapter_mode != value
+            elif name == 'marker_indices':
+                invalidate = len(self.marker_indices) != len(value)
+        super().__setattr__(name, value)
+        if invalidate:
+            super().__setattr__('create_files', '')
+
     def normalize_chapter_mode(self) -> bool:
         valid_mode = self.get_validated_chapter_mode()
         if valid_mode == self.chapter_mode:
             return False
-        super().__setattr__('chapter_mode', valid_mode)
+        self.chapter_mode = valid_mode
         return True
 
     # --- Fields ---
@@ -207,13 +220,10 @@ class Project(BaseModel):
     # - string literal "none" means no selection
     generate_range_string: str = Field(default="", alias="generate_range")
 
-    # Output file numbers last entered at the "create audiobook files" prompt,
+    # Output file numbers last confirmed at the "create audiobook files" prompt,
     # as a normalized range string (eg, "1-3, 5" or "all").
-    # Only valid while the file cut points and number of text lines it was
-    # entered against are unchanged, as recorded by `concat_files_range_basis`.
-    # (see `ProjectUtil.get_concat_files_range_string()`)
-    concat_files_range_string: str = ""
-    concat_files_range_basis: str = ""
+    # Cleared when the marker count or section-marker mode changes.
+    create_files: str = ""
 
     marker_indices: set[int] = Field(default_factory=set, alias="markers")
     subdivide_phrases: bool = False
