@@ -32,7 +32,11 @@ def stub_editor_construction(monkeypatch) -> None:
 
 @pytest.mark.parametrize("has_text", [False, True])
 def test_text_menu_word_substitutions_last_under_other(monkeypatch, has_text) -> None:
-    state = cast(State, SimpleNamespace(project=SimpleNamespace(phrase_groups=[object()] if has_text else [])))
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(
+        phrase_groups=[object()] if has_text else [],
+        book=SimpleNamespace(text_source_kind="plain_text"),
+        dir_path="",
+    )))
     captured_items: list[MenuItem] = []
     monkeypatch.setattr(
         text_menu_module.MenuUtil,
@@ -50,6 +54,30 @@ def test_text_menu_word_substitutions_last_under_other(monkeypatch, has_text) ->
         assert not captured_items[-1].superlabel
     else:
         assert all(item.label is not text_menu_module.make_subst_label for item in captured_items)
+
+
+def test_text_menu_offers_reapply_formatting_only_for_epub_text(monkeypatch) -> None:
+    # The re-apply action needs an EPUB source; it sits under "Other", before
+    # word substitutions (which stay last).
+    def labels_for(text_source_kind: str) -> list:
+        state = cast(State, SimpleNamespace(project=SimpleNamespace(
+            phrase_groups=[object()],
+            book=SimpleNamespace(text_source_kind=text_source_kind),
+            dir_path="",
+        )))
+        captured_items: list[MenuItem] = []
+        monkeypatch.setattr(
+            text_menu_module.MenuUtil,
+            "menu",
+            lambda state, heading, items, **kwargs: captured_items.extend(items(state)),
+        )
+        TextMenu.menu(state)
+        return [item.label for item in captured_items]
+
+    epub_labels = labels_for("epub")
+    assert epub_labels[-2] == "Re-apply formatting from EPUB"
+    assert epub_labels[-1] is text_menu_module.make_subst_label
+    assert "Re-apply formatting from EPUB" not in labels_for("plain_text")
 
 
 @pytest.mark.parametrize("title", ["", "My Book"])

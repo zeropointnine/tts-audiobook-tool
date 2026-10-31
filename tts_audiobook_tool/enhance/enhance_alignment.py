@@ -124,7 +124,7 @@ def align_phrases_with_state(
         return [], state, False
     if not transcribed_words:
         for segment_index, phrase in enumerate(phrases):
-            record(TimedPhrase(phrase.text, 0.0, 0.0))
+            record(TimedPhrase(phrase.text, 0.0, 0.0, fmt=phrase.fmt))
             show_progress(segment_index)
         return result, state, False
 
@@ -142,7 +142,7 @@ def align_phrases_with_state(
         num_words = len(text_normed.split())
 
         if not text_normed:
-            record(TimedPhrase(segment.text, 0.0, 0.0))
+            record(TimedPhrase(segment.text, 0.0, 0.0, fmt=segment.fmt))
             show_progress(segment_index)
             continue
 
@@ -224,7 +224,8 @@ def align_phrases_with_state(
                 TimedPhrase(
                     segment.text,
                     start_time,
-                    end_time
+                    end_time,
+                    fmt=segment.fmt,
             ))
 
             if print_info and PRINT_VERBOSE:
@@ -241,7 +242,7 @@ def align_phrases_with_state(
 
         else:
             record(
-                TimedPhrase(segment.text, 0.0, 0.0)
+                TimedPhrase(segment.text, 0.0, 0.0, fmt=segment.fmt)
             )
 
             was_max_skip = state.max_skip_words
@@ -264,7 +265,7 @@ def align_phrases_with_state(
             for remaining_segment_index in range(segment_index + 1, len(phrases)):
                 remaining_seg = phrases[remaining_segment_index]
                 record(TimedPhrase(
-                    remaining_seg.text, 0.0, 0.0
+                    remaining_seg.text, 0.0, 0.0, fmt=remaining_seg.fmt
                 ))
             if segment_index + 1 < len(phrases):
                 show_progress(len(phrases) - 1)

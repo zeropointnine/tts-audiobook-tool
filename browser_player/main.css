@@ -786,6 +786,21 @@ html, body {
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Display formatting carried by ABR leaves (text-format.js) */
+.fmtBold {
+    font-weight: bold;
+}
+.fmtItalic {
+    font-style: italic;
+}
+.fmtUnderline {
+    text-decoration: underline;
+}
+.fmtHeading {
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
 .segmentGroup {
     display: inline;
     padding: 0.1em 0;

@@ -5,6 +5,7 @@ from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
+from tts_audiobook_tool.text_ops.epub_format_reapply import reapply_epub_formatting
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
@@ -79,6 +80,13 @@ class TextMenu:
                         superlabel="Other"
                     )
                 )
+                if TextMenu.is_epub_project(state.project):
+                    items.append(
+                        MenuItem(
+                            "Re-apply formatting from EPUB",
+                            lambda _, __: TextMenu.reapply_epub_formatting(state),
+                        )
+                    )
                 items.append(
                     MenuItem(
                         make_subst_label, lambda _, __: TextMenu.word_substitutions_menu(state),
@@ -119,6 +127,90 @@ class TextMenu:
             ask.ask_error(error)
             return
         print_feedback("Title set")
+
+    @staticmethod
+    def is_epub_project(project: Project) -> bool:
+        if project.book.text_source_kind == "epub":
+            return True
+        # Projects predating text_source_kind still have the EPUB copy
+        return bool(project.dir_path) and os.path.exists(
+            os.path.join(project.dir_path, PROJECT_TEXT_EPUB_FILE_NAME)
+        )
+
+    @staticmethod
+    def reapply_epub_formatting(state: State) -> None:
+        """
+        Sets the display formatting of the project text (for the browser player)
+        from an EPUB, without changing text, audio or any other project data.
+        See docs-dev/text-formatting-layer.md
+        """
+        MenuUtil.print_screen_heading(state, "Re-apply formatting from EPUB")
+        printt(REAPPLY_FORMATTING_DESC)
+        printt()
+
+        project = state.project
+        epub_path = os.path.join(project.dir_path, PROJECT_TEXT_EPUB_FILE_NAME) if project.dir_path else ""
+        if epub_path and os.path.exists(epub_path):
+            link = text_util.make_terminal_hyperlink(epub_path, epub_path, is_file=True)
+            printt(f"Source: {link}")
+            printt()
+            if not ask.ask_confirm(f"Press {make_hotkey_string('Y')} to continue: "):
+                return
+        else:
+            printt("The project's copy of the imported EPUB was not found.")
+            printt("Select the EPUB file the project text was imported from.")
+            printt()
+            epub_path = EpubMenuUtil.ask_epub_path(state.prefs)
+            if not epub_path:
+                return
+
+        phrases = [phrase for group in project.phrase_groups for phrase in group.phrases]
+        previous_fmts = [phrase.fmt for phrase in phrases]
+
+        def revert() -> None:
+            for phrase, fmt in zip(phrases, previous_fmts, strict=True):
+                phrase.fmt = fmt
+
+        print(f"{COL_DIM_ITALICS}Reading EPUB file... ", end="", flush=True)
+        try:
+            result = reapply_epub_formatting(project.book, epub_path)
+        except Exception as e:
+            print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
+            revert()
+            ask.ask_error(str(e) if isinstance(e, ImportError) else f"Error reading EPUB: {e}")
+            return
+        print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
+        if isinstance(result, str):
+            revert()
+            ask.ask_error(result)
+            return
+
+        error = ProjectTextIOUtil.save_book(project)
+        if error:
+            revert()
+            ask.ask_error(error)
+            return
+
+        for warning in result.significant_warnings:
+            printt(f"- {warning}")
+        printt(
+            f"Formatting applied to {COL_ACCENT}{result.num_paired_sections}{COL_DEFAULT} "
+            f"of {result.num_sections} {make_noun('section', 'sections', result.num_sections)}; "
+            f"{COL_ACCENT}{result.num_formatted_phrases}{COL_DEFAULT} formatted "
+            f"{make_noun('phrase', 'phrases', result.num_formatted_phrases)}"
+        )
+        if result.unpaired_section_titles:
+            titles = ", ".join(title or "(untitled)" for title in result.unpaired_section_titles)
+            printt(f"{COL_DIM}Sections with no matching EPUB section (left unchanged): {titles}")
+        if result.num_unmatched_words:
+            printt(
+                f"{COL_DIM}{result.num_unmatched_words} of {result.num_words} words no longer match "
+                f"the EPUB text (eg, edited lines) and are unformatted"
+            )
+        printt()
+        printt("Re-export the audiobook to include the formatting in the browser player.")
+        printt()
+        ask.ask_enter_to_continue()
 
     @staticmethod
     def edit_text(state: State) -> None:
@@ -577,6 +669,12 @@ Good for fixing mispronounced names and unusual words.
 
 {COL_DIM}Eg, mapping "Nguyen" to "win" so the model pronounces it correctly.
 Works best with a bit of experimentation."""
+
+REAPPLY_FORMATTING_DESC = \
+"""Sets the text's display formatting (bold, italics, underline, headings)
+from the EPUB, for use by the browser player. Project text, generated audio,
+markers and dialog assignments are not changed. Lines whose text was edited
+since import lose formatting where their words no longer match the EPUB."""
 
 UNCOMMON_WORDS_DESC = \
 f"""Words in the project text not found in the app's

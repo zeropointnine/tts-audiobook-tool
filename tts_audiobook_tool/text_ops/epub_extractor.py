@@ -19,6 +19,9 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.text_ops.heading_end_detector import recompute_heading_ends
+from tts_audiobook_tool.text_ops import text_format
+from tts_audiobook_tool.text_ops.format_attach import attach_formatting_to_groups
+from tts_audiobook_tool.text_ops.text_format import StyledText
 
 
 @dataclass(frozen=True)
@@ -45,12 +48,16 @@ class EpubTextChapter:
     title: str
     href: str
     text: str
+    # Source styles for display formatting; None when the chapter has none.
+    # Its words match `text`; whitespace may differ (see text_format.align_masks).
+    styled: StyledText | None = None
 
 
 @dataclass
 class EpubTextSlice:
     text: str
     navigation_target: EpubNavigationTarget | None = None
+    styled: StyledText | None = None
 
 
 @dataclass
@@ -60,6 +67,7 @@ class EpubTextExtractionResult:
     significant_warnings: list[str] = field(default_factory=list)
     slices: list[EpubTextSlice] = field(default_factory=list)
     has_unresolved_navigation_target: bool = False
+    styled: StyledText | None = None
 
 
 @dataclass
@@ -72,6 +80,14 @@ class EpubImportResult:
     phrase_groups: list[PhraseGroup]
     raw_text: str
     section_start_indices: list[int]
+    chapters: list[EpubTextChapter]
+    book_title: str = ""
+    warnings: list[str] = field(default_factory=list)
+    significant_warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class EpubChapterExtraction:
     chapters: list[EpubTextChapter]
     book_title: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -173,6 +189,23 @@ class BeautifulSoupEpubChapterTextExtractor:
         "var",
         "wbr",
     }
+    # Display formatting captured for the browser player
+    # (see docs-dev/text-formatting-layer.md). Inline `style` attributes are
+    # also honored; stylesheet (class-based) formatting is not.
+    STYLE_BY_TAG = {
+        "b": text_format.BOLD,
+        "strong": text_format.BOLD,
+        "i": text_format.ITALIC,
+        "em": text_format.ITALIC,
+        "cite": text_format.ITALIC,
+        "u": text_format.UNDERLINE,
+        "h1": text_format.HEADING,
+        "h2": text_format.HEADING,
+        "h3": text_format.HEADING,
+        "h4": text_format.HEADING,
+        "h5": text_format.HEADING,
+        "h6": text_format.HEADING,
+    }
 
     def extract_text(self, chapter: EpubSourceChapter) -> EpubTextExtractionResult:
         BeautifulSoup = self.import_beautiful_soup()
@@ -189,18 +222,22 @@ class BeautifulSoupEpubChapterTextExtractor:
 
         root = soup.body or soup
         pieces: list[str] = []
+        # Style mask of each styled text piece, keyed by its index in `pieces`
+        piece_styles: dict[int, int] = {}
         self.append_node_text(
             root,
             pieces,
             stats,
             target_fragments=target_fragments,
             anchor_piece_indices=anchor_piece_indices,
+            piece_styles=piece_styles,
         )
         text = self.normalize_output_text("".join(pieces))
         slices, navigation_warnings, has_unresolved_navigation_target = self.make_text_slices(
             chapter,
             pieces,
             anchor_piece_indices,
+            piece_styles,
         )
         warnings.extend(navigation_warnings)
         significant_warnings.extend(navigation_warnings)
@@ -226,6 +263,7 @@ class BeautifulSoupEpubChapterTextExtractor:
             significant_warnings=significant_warnings,
             slices=slices,
             has_unresolved_navigation_target=has_unresolved_navigation_target,
+            styled=self.make_styled_text(pieces, piece_styles) if piece_styles else None,
         )
 
     @classmethod
@@ -284,7 +322,14 @@ class BeautifulSoupEpubChapterTextExtractor:
             stats: EpubTextExtractionStats,
             target_fragments: set[str] | None = None,
             anchor_piece_indices: dict[str, int] | None = None,
+            piece_styles: dict[int, int] | None = None,
+            style: int = 0,
     ) -> None:
+        """
+        `piece_styles`, when given, receives the display-style mask of each
+        styled text piece by its index in `pieces`; `style` is the mask
+        inherited from ancestor elements.
+        """
         name = getattr(node, "name", None)
 
         if target_fragments and anchor_piece_indices is not None and hasattr(node, "get"):
@@ -310,16 +355,22 @@ class BeautifulSoupEpubChapterTextExtractor:
         if name == "li":
             pieces.append("- ")
         content_start = len(pieces)
+        if piece_styles is not None:
+            style = self.get_node_style(node, style)
 
         if not hasattr(node, "children"):
+            piece_count = len(pieces)
             self.append_text_node(str(node), pieces)
+            self.record_piece_style(pieces, piece_styles, piece_count, style)
         else:
             for child in node.children:
                 if self.is_comment_node(child):
                     continue
                 child_name = getattr(child, "name", None)
                 if child_name is None:
+                    piece_count = len(pieces)
                     self.append_text_node(str(child), pieces, name, child, stats)
+                    self.record_piece_style(pieces, piece_styles, piece_count, style)
                 else:
                     self.append_node_text(
                         child,
@@ -327,6 +378,8 @@ class BeautifulSoupEpubChapterTextExtractor:
                         stats,
                         target_fragments=target_fragments,
                         anchor_piece_indices=anchor_piece_indices,
+                        piece_styles=piece_styles,
+                        style=style,
                     )
 
         if is_block:
@@ -335,6 +388,78 @@ class BeautifulSoupEpubChapterTextExtractor:
             # of paragraph boundaries contributed by nested layout wrappers.
             is_spacer = not any(piece.strip() for piece in pieces[content_start:])
             self.ensure_block_boundary(pieces, line_breaks=3 if is_spacer else 2)
+
+    @classmethod
+    def get_node_style(cls, node: Any, inherited_style: int) -> int:
+        """Display-style mask of an element, given the mask of its ancestors."""
+        style = inherited_style | cls.STYLE_BY_TAG.get(getattr(node, "name", None) or "", 0)
+        css = node.get("style") if hasattr(node, "get") else None
+        if isinstance(css, str) and css:
+            style = cls.apply_inline_css_style(style, css)
+        return style
+
+    @staticmethod
+    def apply_inline_css_style(style: int, css: str) -> int:
+        declarations: dict[str, str] = {}
+        for declaration in css.split(";"):
+            prop, separator, value = declaration.partition(":")
+            if separator:
+                value = value.replace("!important", "").strip().lower()
+                declarations[prop.strip().lower()] = value
+
+        font_style = declarations.get("font-style")
+        if font_style in ("italic", "oblique"):
+            style |= text_format.ITALIC
+        elif font_style == "normal":
+            style &= ~text_format.ITALIC
+
+        font_weight = declarations.get("font-weight")
+        if font_weight is not None:
+            if font_weight in ("bold", "bolder") or (font_weight.isdigit() and int(font_weight) >= 600):
+                style |= text_format.BOLD
+            elif font_weight in ("normal", "lighter") or font_weight.isdigit():
+                style &= ~text_format.BOLD
+
+        decoration = declarations.get("text-decoration-line", declarations.get("text-decoration"))
+        if decoration is not None:
+            decoration_values = decoration.split()
+            if "underline" in decoration_values:
+                style |= text_format.UNDERLINE
+            elif "none" in decoration_values:
+                style &= ~text_format.UNDERLINE
+        return style
+
+    @staticmethod
+    def record_piece_style(
+            pieces: list[str],
+            piece_styles: dict[int, int] | None,
+            previous_piece_count: int,
+            style: int,
+    ) -> None:
+        if piece_styles is None or not style:
+            return
+        for index in range(previous_piece_count, len(pieces)):
+            piece_styles[index] = style
+
+    @staticmethod
+    def make_styled_text(
+            pieces: list[str],
+            piece_styles: dict[int, int],
+            start: int = 0,
+            end: int | None = None,
+    ) -> StyledText:
+        """
+        Styled source text for pieces[start:end]. Not whitespace-normalized:
+        its words match `normalize_output_text` of the same pieces, which is all
+        `text_format.align_masks` requires.
+        """
+        texts: list[str] = []
+        masks: list[int] = []
+        for index in range(start, len(pieces) if end is None else end):
+            text = unescape(pieces[index]).replace("\xa0", " ")
+            texts.append(text)
+            masks.extend([piece_styles.get(index, 0)] * len(text))
+        return StyledText("".join(texts), masks)
 
     @staticmethod
     def ensure_block_boundary(pieces: list[str], line_breaks: int = 2) -> None:
@@ -362,8 +487,15 @@ class BeautifulSoupEpubChapterTextExtractor:
             chapter: EpubSourceChapter,
             pieces: list[str],
             anchor_piece_indices: dict[str, int],
+            piece_styles: dict[int, int] | None = None,
     ) -> tuple[list[EpubTextSlice], list[str], bool]:
         warnings: list[str] = []
+
+        def make_styled(start: int, end: int | None) -> StyledText | None:
+            if not piece_styles:
+                return None
+            return cls.make_styled_text(pieces, piece_styles, start, end)
+
         has_unresolved_navigation_target = False
         targets_by_piece_index: dict[int, EpubNavigationTarget] = {}
 
@@ -416,14 +548,16 @@ class BeautifulSoupEpubChapterTextExtractor:
             raw_text = "".join(pieces[start_piece_index:piece_index])
             normalized_text = cls.normalize_output_text(raw_text)
             if normalized_text or current_target is not None:
-                slices.append(EpubTextSlice(normalized_text, current_target))
+                slices.append(EpubTextSlice(
+                    normalized_text, current_target, make_styled(start_piece_index, piece_index)
+                ))
             current_target = target
             start_piece_index = piece_index
 
         raw_text = "".join(pieces[start_piece_index:])
         normalized_text = cls.normalize_output_text(raw_text)
         if normalized_text or current_target is not None or not slices:
-            slices.append(EpubTextSlice(normalized_text, current_target))
+            slices.append(EpubTextSlice(normalized_text, current_target, make_styled(start_piece_index, None)))
         return slices, warnings, has_unresolved_navigation_target
 
     @classmethod
@@ -540,6 +674,74 @@ class EpubExtractor:
             dialog_segmentation: bool = False,
             extractor: EpubChapterTextExtractor | None = None
     ) -> EpubImportResult:
+        extraction = EpubExtractor.extract_import_chapters(epub_path, extractor)
+        warnings = extraction.warnings
+        significant_warnings = extraction.significant_warnings
+
+        phrase_groups: list[PhraseGroup] = []
+        markers: list[int] = []
+        raw_text_parts: list[str] = []
+        sections: list[BookSection] = []
+        format_mismatch_titles: list[str] = []
+
+        for chapter in extraction.chapters:
+            chapter_text = chapter.text
+            chapter_phrase_groups = PhraseGrouper.text_to_groups(
+                chapter_text,
+                max_words=max_words,
+                strategy=segmentation_strategy,
+                pysbd_lang=language_code,
+                dialog_segmentation=dialog_segmentation,
+            )
+            # Display formatting is attached after segmentation, which only
+            # rearranges whitespace (see docs-dev/text-formatting-layer.md)
+            if chapter.styled is not None and chapter.styled.has_styles:
+                alignment = attach_formatting_to_groups(chapter_phrase_groups, chapter.styled)
+                if not alignment.is_exact:
+                    format_mismatch_titles.append(chapter.title or chapter.href)
+            if phrase_groups:
+                markers.append(len(phrase_groups))
+            EpubExtractor.mark_last_phrase_as_section(chapter_phrase_groups)
+            sections.append(
+                BookSection(title=chapter.title, phrase_groups=chapter_phrase_groups)
+            )
+            phrase_groups.extend(chapter_phrase_groups)
+            raw_text_parts.append(chapter_text)
+
+        if format_mismatch_titles:
+            # Diagnostic only: formatting is decorative and never blocks import
+            L.w(f"EPUB formatting partially unmatched in sections: {format_mismatch_titles}")
+
+        # The same text/title-only pass runs again after confirmed editor saves.
+        recompute_heading_ends(sections, language_code)
+        raw_text = "\n\n".join(raw_text_parts)
+
+        if not phrase_groups:
+            warning = "EPUB import produced no text segments."
+            warnings.append(warning)
+            significant_warnings.append(warning)
+            L.w(warning)
+
+        return EpubImportResult(
+            phrase_groups=phrase_groups,
+            raw_text=raw_text,
+            section_start_indices=markers,
+            chapters=extraction.chapters,
+            book_title=extraction.book_title,
+            warnings=warnings,
+            significant_warnings=significant_warnings,
+        )
+
+    @staticmethod
+    def extract_import_chapters(
+            epub_path: str,
+            extractor: EpubChapterTextExtractor | None = None,
+    ) -> EpubChapterExtraction:
+        """
+        Loads, extracts and assembles the logical sections that EPUB import keeps,
+        in order: one per project `BookSection` created by `import_epub`.
+        Also used to re-apply formatting to an existing project.
+        """
         source_chapters, book_title, warnings, significant_warnings = EpubExtractor.load_source_chapters(epub_path)
         EpubExtractor.log_warnings(warnings)
         EpubExtractor.log_warnings([warning for warning in significant_warnings if warning not in warnings])
@@ -567,12 +769,7 @@ class EpubExtractor:
             significant_warnings,
         )
 
-        phrase_groups: list[PhraseGroup] = []
-        markers: list[int] = []
-        raw_text_parts: list[str] = []
         kept_chapters: list[EpubTextChapter] = []
-        sections: list[BookSection] = []
-
         for chapter in text_chapters:
             chapter_text = chapter.text
             if not chapter_text.strip():
@@ -589,37 +786,9 @@ class EpubExtractor:
                 significant_warnings.append(warning)
                 EpubExtractor.log_warnings([warning])
                 continue
-            chapter_phrase_groups = PhraseGrouper.text_to_groups(
-                chapter_text,
-                max_words=max_words,
-                strategy=segmentation_strategy,
-                pysbd_lang=language_code,
-                dialog_segmentation=dialog_segmentation,
-            )
-            if phrase_groups:
-                markers.append(len(phrase_groups))
-            EpubExtractor.mark_last_phrase_as_section(chapter_phrase_groups)
-            sections.append(
-                BookSection(title=chapter.title, phrase_groups=chapter_phrase_groups)
-            )
-            phrase_groups.extend(chapter_phrase_groups)
-            raw_text_parts.append(chapter_text)
             kept_chapters.append(chapter)
 
-        # The same text/title-only pass runs again after confirmed editor saves.
-        recompute_heading_ends(sections, language_code)
-        raw_text = "\n\n".join(raw_text_parts)
-
-        if not phrase_groups:
-            warning = "EPUB import produced no text segments."
-            warnings.append(warning)
-            significant_warnings.append(warning)
-            L.w(warning)
-
-        return EpubImportResult(
-            phrase_groups=phrase_groups,
-            raw_text=raw_text,
-            section_start_indices=markers,
+        return EpubChapterExtraction(
             chapters=kept_chapters,
             book_title=book_title,
             warnings=warnings,
@@ -665,6 +834,7 @@ class EpubExtractor:
                 title=source_chapter.title,
                 href=source_chapter.href,
                 text=result.text,
+                styled=result.styled,
             )
             for source_chapter, result in extracted_chapters
             if result.text.strip()
@@ -678,21 +848,36 @@ class EpubExtractor:
     ) -> tuple[list[EpubTextChapter], bool]:
         text_chapters: list[EpubTextChapter] = []
         text_parts: list[str] = []
+        # Parallel to text_parts; None where a part has no styles
+        styled_parts: list[StyledText | None] = []
         current_target: EpubNavigationTarget | None = None
         fallback_title = ""
         fallback_href = ""
         used_navigation = False
 
         def flush_text_chapter() -> None:
-            nonlocal text_parts, current_target, fallback_title, fallback_href, used_navigation
+            nonlocal text_parts, styled_parts, current_target, fallback_title, fallback_href, used_navigation
             if not text_parts:
                 return
             # Merged pseudo-sections keep a section-like boundary: two blank lines between parts.
             title = current_target.title if current_target is not None else fallback_title
             href = current_target.href if current_target is not None else fallback_href
-            text_chapters.append(EpubTextChapter(title=title, href=href, text="\n\n\n".join(text_parts)))
+            separator = "\n\n\n"
+            styled = None
+            if any(part is not None for part in styled_parts):
+                styled = StyledText.join(
+                    [
+                        part if part is not None else StyledText.plain(text)
+                        for text, part in zip(text_parts, styled_parts)
+                    ],
+                    separator,
+                )
+            text_chapters.append(EpubTextChapter(
+                title=title, href=href, text=separator.join(text_parts), styled=styled,
+            ))
             used_navigation = used_navigation or current_target is not None
             text_parts = []
+            styled_parts = []
             current_target = None
             fallback_title = ""
             fallback_href = ""
@@ -707,7 +892,7 @@ class EpubExtractor:
                     if not target.fragment
                 ]
                 document_target = max(document_targets, key=lambda target: target.order, default=None)
-                slices = [EpubTextSlice(result.text, document_target)]
+                slices = [EpubTextSlice(result.text, document_target, result.styled)]
             for text_slice in slices:
                 if text_slice.navigation_target is not None:
                     if text_parts:
@@ -726,6 +911,8 @@ class EpubExtractor:
                         fallback_title = source_chapter.title
                         fallback_href = source_chapter.href
                     text_parts.append(text_slice.text)
+                    styled = text_slice.styled
+                    styled_parts.append(styled if styled is not None and styled.has_styles else None)
 
             if (
                 not result.text.strip()

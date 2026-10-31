@@ -3,20 +3,25 @@ from enum import Enum
 from functools import total_ordering
 
 from tts_audiobook_tool.app_support import app_text
-from tts_audiobook_tool.text_ops import roman_heading
+from tts_audiobook_tool.text_ops import roman_heading, text_format
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
 """ Phrase, PhraseGroup, and Reason classes"""
 
 class Phrase:
-    def __init__(self, text: str, reason: Reason):
+    def __init__(self, text: str, reason: Reason, fmt: str | None = None):
         self._text = text
         self.reason = reason
+        # Optional display-formatting markup of `text` (see text_ops/text_format.py
+        # and docs-dev/text-formatting-layer.md). Opaque to the app: only carried
+        # along into ABR metadata for the browser player. Never affects TTS.
+        self.fmt = fmt
         self._words = app_text.get_words(self._text, vocalizable_only=False)
         self._presentable_text_memo: str | None = None
 
     def __eq__(self, other: Any):
+        # `fmt` is display-only and deliberately excluded
         if not isinstance(other, Phrase):
             return NotImplemented
         return self._text == other._text and self.reason == other.reason
@@ -31,6 +36,9 @@ class Phrase:
 
     @text.setter
     def text(self, value: str) -> None:
+        if value != self._text:
+            # Business rule: changing the text drops its formatting
+            self.fmt = None
         self._text = value
         self._words = app_text.get_words(self._text, vocalizable_only=False)
         self._presentable_text_memo = None
@@ -53,10 +61,14 @@ class Phrase:
         return len(self._words)
 
     def to_json_dict(self) -> dict:
-        return {
+        result = {
             "text": self.text,
             "reason": self.reason.json_value # Not currently used by reader
         }
+        if self.fmt is not None:
+            # Written only when set
+            result["fmt"] = self.fmt
+        return result
 
     @staticmethod
     def phrases_from_json_dicts(list_of_dicts: list[dict]) -> list[Phrase] | str:
@@ -87,7 +99,12 @@ class Phrase:
                 and app_text.has_trailing_ornamental_line(text)
             ):
                 reason = Reason.SPACE_BREAK
-            phrase = Phrase(text=text, reason=reason)
+            # Stale or malformed formatting (eg, a hand-edited file) is dropped
+            # silently rather than treated as a load error.
+            fmt = item.get("fmt")
+            if not text_format.is_valid_for(fmt, text):
+                fmt = None
+            phrase = Phrase(text=text, reason=reason, fmt=fmt)
             result.append(phrase)
 
         return result
@@ -214,7 +231,8 @@ class PhraseGroup:
 
     def as_flattened_phrase(self) -> Phrase:
         reason = self.phrases[-1].reason if self.phrases else Reason.UNDEFINED
-        return Phrase(self.text, reason)
+        fmt = text_format.join([(phrase.text, phrase.fmt) for phrase in self.phrases])
+        return Phrase(self.text, reason, fmt=fmt)
 
     def to_json_dict_list(self) -> list[dict]:
         return [phrase.to_json_dict() for phrase in self.phrases]

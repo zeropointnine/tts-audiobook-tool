@@ -515,17 +515,55 @@ class BookText {
     _appendFlatSegment(textBlock, index, addSectionDividers) {
         const split = BookText._splitTextSegment(this.textSegments[index].text);
         this._appendText(textBlock, split.before);
-        textBlock.appendChild(this._makeSegmentSpan(index, split.content));
+        const contentMasks = this._getContentMasks(index, split);
+        textBlock.appendChild(this._makeSegmentSpan(index, split.content, contentMasks));
         this._appendTrailingText(textBlock, split.after, addSectionDividers);
+    }
+
+    /**
+     * Display-format masks for a leaf's split content, or null when the leaf
+     * has no valid formatting.
+     */
+    _getContentMasks(index, split) {
+        const segment = this.textSegments[index];
+        const masks = TextFormat.masksFor(segment.fmt, segment.text);
+        if (!masks) {
+            return null;
+        }
+        const offset = (split.before || "").length;
+        return masks.slice(offset, offset + split.content.length);
     }
 
     _appendSegmentGroup(textBlock, group, addSectionDividers) {
         const firstIndex = group.startIndex;
         const lastIndex = group.endIndex - 1;
         const splits = [];
+        const contentMasks = [];
         for (let i = firstIndex; i <= lastIndex; i++) {
-            splits.push(BookText._splitTextSegment(this.textSegments[i].text));
+            const split = BookText._splitTextSegment(this.textSegments[i].text);
+            splits.push(split);
+            contentMasks.push(this._getContentMasks(i, split));
         }
+
+        // Whitespace between two child leaves (outside both leaf spans) takes the
+        // styles shared by the adjacent visible characters, so that eg an
+        // underline continues across a phrase boundary.
+        const bridgeMask = (leftOffset) => {
+            const left = splits[leftOffset];
+            const right = splits[leftOffset + 1];
+            return TextFormat.edgeVisibleMask(left.content, contentMasks[leftOffset], true)
+                & TextFormat.edgeVisibleMask(right.content, contentMasks[leftOffset + 1], false);
+        };
+        const appendSeparator = (parent, text, mask) => {
+            if (!text) {
+                return;
+            }
+            if (mask && !text.includes("\n")) {
+                TextFormat.appendRun(parent, text, mask);
+            } else {
+                this._appendText(parent, text);
+            }
+        };
 
         // Keep surrounding structural whitespace outside the inline group. All
         // separators between child leaves remain inside and receive group tint.
@@ -542,19 +580,20 @@ class BookText {
         groupSpan.dataset.leafCount = group.leafCount;
 
         for (let i = firstIndex; i <= lastIndex; i++) {
-            const split = splits[i - firstIndex];
+            const offset = i - firstIndex;
+            const split = splits[offset];
             if (i > firstIndex) {
-                this._appendText(groupSpan, split.before);
+                appendSeparator(groupSpan, split.before, bridgeMask(offset - 1));
             }
 
-            groupSpan.appendChild(this._makeSegmentSpan(i, split.content));
+            groupSpan.appendChild(this._makeSegmentSpan(i, split.content, contentMasks[offset]));
             this.segmentGroupSpans[i] = groupSpan;
 
             if (i < lastIndex) {
                 // Section-divider markup is block content and must not be put
                 // inside an inline group. Valid producer data does not place a
                 // structural divider between children of one generated phrase.
-                this._appendText(groupSpan, split.after);
+                appendSeparator(groupSpan, split.after, bridgeMask(offset));
             }
         }
 
@@ -562,13 +601,20 @@ class BookText {
         this._appendTrailingText(textBlock, splits.at(-1).after, addSectionDividers);
     }
 
-    _makeSegmentSpan(index, content) {
+    /**
+     * @param {Array<number>|null} contentMasks - Display-format masks parallel to content
+     */
+    _makeSegmentSpan(index, content, contentMasks = null) {
         const segment = this.textSegments[index];
         const span = document.createElement("span");
         span.id = `segment-${index}`;
         span.className = `textSegment ${BookText._isPlayableSegment(segment) ? "hasAudio" : "noAudio"}`;
         span.dataset.segmentIndex = index;
-        span.textContent = content;
+        if (contentMasks) {
+            TextFormat.appendStyledText(span, content, contentMasks);
+        } else {
+            span.textContent = content;
+        }
         this.spans[index] = span;
         return span;
     }

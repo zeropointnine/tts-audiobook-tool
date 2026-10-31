@@ -126,6 +126,42 @@ def test_subdivided_metadata_nests_valid_sidecars_and_keeps_flat_leaf_indices() 
     assert group_start_indices == [0, 2]
 
 
+def test_subdivided_metadata_takes_fmt_from_current_project_phrases() -> None:
+    # Sidecar leaves come from generation time and carry no formatting; each
+    # leaf takes its project phrase's fmt, but only while the leaf text still
+    # matches that phrase. Missing-audio leaves copy their phrase's fmt directly.
+    groups = [
+        PhraseGroup([
+            Phrase("First phrase, ", Reason.PHRASE, fmt="<i>First</i> phrase, "),
+            Phrase("second phrase. ", Reason.SENTENCE, fmt="<b>second</b> phrase. "),
+        ]),
+        PhraseGroup([Phrase("No audio.", Reason.SENTENCE, fmt="<u>No</u> audio.")]),
+    ]
+    timed_groups = [TimedPhrase(groups[0].text, 0.0, 3.0), TimedPhrase(groups[1].text, 0.0, 0.0)]
+    sidecar_path = MagicMock()
+    sidecar_path.exists.return_value = True
+    sidecar_segments = [
+        TimedPhrase("First phrase, ", 0.0, 1.0),
+        TimedPhrase("second phrase (old). ", 1.0, 2.5),
+    ]
+
+    with patch("tts_audiobook_tool.concat_util.get_segment_stt_info_path", return_value=sidecar_path), \
+         patch("tts_audiobook_tool.concat_util.SegmentTranscriptUtil.load_timed_phrases", return_value=sidecar_segments):
+        segments, _, _ = make_subdivided_timed_phrases(
+            timed_phrases=timed_groups,
+            phrase_groups=groups,
+            sound_paths=["generated.flac", ""],
+            sound_durations=[3.0, 0.0],
+            bookmark_indices=[],
+        )
+
+    assert isinstance(segments[0], list) and isinstance(segments[1], list)
+    assert [segment.fmt for segment in segments[0]] == ["<i>First</i> phrase, ", None]
+    assert [segment.fmt for segment in segments[1]] == ["<u>No</u> audio."]
+    assert TimedPhrase.to_dict(segments[0][0])["fmt"] == "<i>First</i> phrase, "
+    assert "fmt" not in TimedPhrase.to_dict(segments[0][1])
+
+
 def test_subdivided_metadata_keeps_parse_failure_as_flat_segment() -> None:
     group = PhraseGroup([Phrase("Original group.", Reason.SENTENCE)])
     original = TimedPhrase(group.text, 0.0, 2.0)

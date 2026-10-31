@@ -16,18 +16,31 @@ class TimedPhrase:
     It is only written to a dict when asked for (`to_dict(..., include_reason=True)`),
     so the app metadata format is unaffected. None means unknown (e.g. a sidecar
     written before it was recorded).
+
+    `fmt` is the optional display-formatting markup of `text` (see
+    text_ops/text_format.py). It is written to dicts whenever set; only ABR
+    metadata leaves carry it.
     """
 
-    # Class-level default so TimedPhrase objects unpickled from before this
-    # attribute existed (enhance artifacts) still have it.
+    # Class-level defaults so TimedPhrase objects unpickled from before these
+    # attributes existed (enhance artifacts) still have them.
     reason: Reason | None = None
+    fmt: str | None = None
 
-    def __init__(self, text: str, time_start: float, time_end: float, reason: Reason | str | None = None):
+    def __init__(
+            self,
+            text: str,
+            time_start: float,
+            time_end: float,
+            reason: Reason | str | None = None,
+            fmt: str | None = None,
+    ):
         self.text = text
         self.time_start = time_start
         self.time_end = time_end
         # A str is the JSON form, as read from a sidecar
         self.reason = Reason.from_json_value(reason) if isinstance(reason, str) else reason
+        self.fmt = fmt
 
     def __str__(self) -> str:
         s1 = ellipsize(self.text.strip(), 50)
@@ -49,6 +62,7 @@ class TimedPhrase:
             time_start=time_start,
             time_end=time_end,
             reason=phrase.reason,
+            fmt=phrase.fmt,
         )
 
     @staticmethod
@@ -64,6 +78,8 @@ class TimedPhrase:
         }
         if include_reason and timed_text_segment.reason is not None:
             d["reason"] = timed_text_segment.reason.json_value
+        if timed_text_segment.fmt is not None:
+            d["fmt"] = timed_text_segment.fmt
         return d
 
     @staticmethod

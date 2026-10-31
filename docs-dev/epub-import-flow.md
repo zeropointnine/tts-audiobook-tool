@@ -158,7 +158,7 @@ It is intentionally more deliberate than raw `BeautifulSoup.get_text()`:
 - retains source-position information needed for fragment-aware slices,
 - warns when no readable body text is found.
 
-The extractor does **not** preserve visual formatting such as italics, bold, underline, CSS layout, inline links, images, or footnote structure. That omission is a design choice: the current import path feeds audiobook generation, whose source-of-truth text model is plain text segmented into phrase groups.
+The plain text it produces carries no visual formatting. Headings, bold, italics and underline (semantic tags and inline `style` attributes) are captured alongside it as styled text and attached to the segmented phrases as the optional, display-only `Phrase.fmt`; see [Display Formatting Layer](text-formatting-layer.md). CSS layout, stylesheet-based formatting, inline links, images and footnote structure are not preserved. The source-of-truth text model remains plain text segmented into phrase groups.
 
 ---
 
@@ -448,7 +448,7 @@ The important architectural rule is that structured reader data should remain an
 
 ## Phase 2b: Formatting-Preserving Conversion
 
-Phase 2b is the future target for preserving enough source formatting to produce a richer reader representation.
+Phase 2b is the future target for preserving enough source formatting to produce a richer reader representation. Inline emphasis and headings are already carried per phrase by the [display formatting layer](text-formatting-layer.md); the remaining scope is document structure beyond that.
 
 Formatting likely worth preserving:
 

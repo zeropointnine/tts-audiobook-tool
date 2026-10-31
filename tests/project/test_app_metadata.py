@@ -137,6 +137,31 @@ class TestAppMetadata(unittest.TestCase):
         self.assertEqual(result.sections, [AppMetadataSection(title="All", start_index=0, end_index=2)])
         self.assertNotIn("future_field", result.to_json_string())
 
+    def test_app_metadata_round_trips_valid_fmt_and_ignores_invalid_fmt(self):
+        """
+        Leaf display formatting survives load/save (eg, when metadata is re-embedded),
+        while malformed or stale markup is dropped without rejecting the file.
+        """
+        payload = {
+            "version": 5,
+            "text_segments": [
+                {"text": "It was cold. ", "time_start": 0.0, "time_end": 1.0, "fmt": "It was <i>cold</i>. "},
+                [
+                    {"text": "Stale. ", "time_start": 1.0, "time_end": 2.0, "fmt": "<b>Other.</b> "},
+                    {"text": "Bad.", "time_start": 2.0, "time_end": 3.0, "fmt": "<b>Bad.</i>"},
+                ],
+            ],
+        }
+
+        result = AppMetadata.get_from_json_string(json.dumps(payload))
+
+        self.assertIsInstance(result, AppMetadata)
+        assert isinstance(result, AppMetadata)
+        segments = json.loads(result.to_json_string())["text_segments"]
+        self.assertEqual(segments[0]["fmt"], "It was <i>cold</i>. ")
+        self.assertNotIn("fmt", segments[1][0])
+        self.assertNotIn("fmt", segments[1][1])
+
     def test_app_metadata_still_rejects_sections_missing_known_fields(self):
         """Tolerating extra keys must not relax validation of the required ones."""
         payload = {

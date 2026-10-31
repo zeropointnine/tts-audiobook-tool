@@ -1147,6 +1147,17 @@ def make_subdivided_timed_phrases(
         def map_segment_time(time: float) -> float:
             return time if gap_trim_map is None else gap_trim_map.map_time(time)
 
+        # Sidecar leaves are force-aligned 1:1 with the group's phrases at generation
+        # time; display formatting comes from the current project phrases, used
+        # only where the leaf text still matches.
+        group_phrases = phrase_groups[i].phrases
+        leaf_fmts = [
+            group_phrases[k].fmt
+            if len(subdivided_timed_phrases) == len(group_phrases) and group_phrases[k].text == item.text
+            else None
+            for k, item in enumerate(subdivided_timed_phrases)
+        ]
+
         updated_subdivisions: list[TimedPhrase] = []
         offset = original_timed_phrase.time_start
         previous_mapped_time_end = 0.0
@@ -1161,7 +1172,9 @@ def make_subdivided_timed_phrases(
             # onto the previous leaf, so keep the leaves non-decreasing anyway.
             time_end = max(time_end, time_start)
             previous_mapped_time_end = time_end - offset
-            updated_subdivisions.append(TimedPhrase(item.text, time_start, time_end))
+            updated_subdivisions.append(
+                TimedPhrase(item.text, time_start, time_end, fmt=leaf_fmts[subdivided_index])
+            )
 
         # Set the last item's time_end using the duration of the source audio clip
         # rather than the transcription end word timestamp. This prevents

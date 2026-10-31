@@ -265,7 +265,28 @@ Semantics:
 - `text`: text displayed for that leaf segment
 - `time_start`: leaf start time in seconds, or `0` when the leaf has no playable audio in this ABR file
 - `time_end`: leaf end time in seconds, or `0` when the leaf has no playable audio in this ABR file
+- `fmt` (optional): display-formatting markup of `text`; see below
 - a nested list records that its leaves subdivide the same generated phrase; it does not represent a book section
+
+#### `fmt` (optional leaf field)
+
+String: the leaf's `text` with the tags `<h>` (heading), `<b>`, `<i>` and `<u>`, and
+with literal `&`, `<` and `>` escaped as `&amp;`, `&lt;` and `&gt;`:
+
+```json
+{"text": "It was very cold. ", "fmt": "It was <i>very</i> cold. ", "time_start": 2.35, "time_end": 4.8}
+```
+
+- Markup is self-contained per leaf: properly nested, with every tag closed in the leaf.
+- It applies only when its stripped text equals `text` exactly. Readers must ignore a
+  malformed or non-matching `fmt` (render `text` plainly) and must not reject the file.
+- Writers omit `fmt` for unformatted leaves.
+- `fmt` is display-only. It does not take part in bookmarks, sections, playback
+  identity or timing.
+
+This optional field was added under the version 5 forward-compatibility rule and does not
+change the ABR version. Production rules and rationale are in
+[Display Formatting Layer](text-formatting-layer.md).
 
 The **conceptual flattened sequence** used elsewhere in this specification is obtained by
 traversing `text_segments` from left to right and replacing each nested list with its
@@ -443,6 +464,8 @@ The browser player rejects the payload unless it is a JSON object with a non-emp
 - `sections` defaulting to `[]`; malformed or out-of-bounds section entries are dropped
 - `project_snapshot` defaulting to `{}`
 - `type` is currently ignored
+- a string leaf `fmt` is passed through and validated when rendered; invalid markup
+  renders as plain text, and non-string values are treated as absent
 
 The browser ignores unrecognized fields at every level. It rejects files declaring a
 `version` above its supported ceiling (`MetadataUtil.MAX_SUPPORTED_ABR_VERSION`) before
@@ -466,6 +489,7 @@ compatible bookmark and playback state.
 - accepts legacy flat arrays and version 4+ mixed flat/nested arrays
 - ignores unrecognized fields at every level; they are not preserved when loaded
   metadata is serialized again
+- preserves a leaf `fmt` that is valid for its `text` and drops any other value
 - preserves subdivision nesting when loaded metadata is serialized again
 - rejects empty nested lists, deeper nesting, malformed segment objects, an invalid
   `title`, `version`, top-level collection type, `project_snapshot`, or section descriptor
@@ -526,6 +550,7 @@ An ABR payload should satisfy the following:
   - `text` as a string
   - `time_start` as a finite number
   - `time_end` as a finite number
+  - optionally `fmt` as a string (a non-matching value is ignored, not an error)
 - the conceptual flattened sequence contains at least one leaf
 - `bookmarks`, if present, is an array of integer flattened-leaf indices
 - `has_section_break_audio`, if present, is a boolean

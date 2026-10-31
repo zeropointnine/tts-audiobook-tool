@@ -151,6 +151,8 @@ class MetadataUtil {
             const flatIndex = textSegments.length;
             textSegments.push({
                 text: rawSegment.text,
+                // Optional display formatting; validated when rendered (TextFormat)
+                fmt: typeof rawSegment.fmt === "string" ? rawSegment.fmt : null,
                 time_start: timeStart,
                 time_end: timeEnd,
                 playable: timeEnd > timeStart,

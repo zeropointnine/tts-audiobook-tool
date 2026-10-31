@@ -8,6 +8,7 @@ from tts_audiobook_tool.app_types import *
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
+from tts_audiobook_tool.text_ops import text_format
 from tts_audiobook_tool.util import *
 
 
@@ -76,8 +77,12 @@ def _app_metadata_dict_to_timed_phrase(item: dict) -> TimedPhrase | str:
         value = item.get(field_name)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return f"Bad type for {field_name}: {type(value)}"
+    # Optional display formatting; invalid or stale markup is ignored, not an error
+    fmt = item.get("fmt")
+    if not text_format.is_valid_for(fmt, text):
+        fmt = None
     # Read known keys only; unrecognized keys are ignored (ABR v5+)
-    return TimedPhrase(text, item["time_start"], item["time_end"])
+    return TimedPhrase(text, item["time_start"], item["time_end"], fmt=fmt)
 
 
 def app_metadata_dicts_to_text_segments(

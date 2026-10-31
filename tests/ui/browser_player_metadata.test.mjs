@@ -140,6 +140,21 @@ test("ignores unrecognized fields in payload, leaves and sections", () => {
     assert.deepEqual(plain(result.sections), [{ title: "All", start_index: 0, end_index: 2 }]);
 });
 
+// Leaf display formatting is passed through for rendering; non-string values
+// are treated as absent rather than as errors.
+test("carries optional leaf fmt strings through normalization", () => {
+    const result = MetadataUtil.normalizeAppMetadata({
+        version: 5,
+        text_segments: [
+            { ...segment("It was cold.", 0, 1), fmt: "It was <i>cold</i>." },
+            [{ ...segment("Plain.", 1, 2), fmt: 42 }],
+        ],
+    });
+
+    assert.notEqual(typeof result, "string");
+    assert.deepEqual(plain(result.textSegments.map((item) => item.fmt)), ["It was <i>cold</i>.", null]);
+});
+
 test("rejects malformed nested and timed-segment entries", () => {
     const invalidCases = [
         { raw: [], expected: "missing required field" },
