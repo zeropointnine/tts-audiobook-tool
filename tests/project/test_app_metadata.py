@@ -108,6 +108,49 @@ class TestAppMetadata(unittest.TestCase):
                 }))
                 self.assertIsInstance(result, str)
 
+    def test_app_metadata_ignores_unrecognized_fields(self):
+        """
+        ABR v5 requires readers to ignore unrecognized fields in the payload,
+        segment leaves (flat and nested) and section descriptors, so additive
+        producer data never makes a file unloadable. Ignored fields are not
+        carried through re-serialization.
+        """
+        extra = {"future_field": {"anything": [1, 2]}}
+        payload = {
+            **extra,
+            "version": 5,
+            "text_segments": [
+                {"text": "Flat. ", "time_start": 0.0, "time_end": 1.0, **extra},
+                [{"text": "Nested.", "time_start": 1.0, "time_end": 2.0, **extra}],
+            ],
+            "sections": [{"title": "All", "start_index": 0, "end_index": 2, **extra}],
+        }
+
+        result = AppMetadata.get_from_json_string(json.dumps(payload))
+
+        self.assertIsInstance(result, AppMetadata)
+        assert isinstance(result, AppMetadata)
+        flat, nested = result.timed_phrases
+        assert isinstance(flat, TimedPhrase) and isinstance(nested, list)
+        self.assertEqual(flat.text, "Flat. ")
+        self.assertEqual(nested[0].text, "Nested.")
+        self.assertEqual(result.sections, [AppMetadataSection(title="All", start_index=0, end_index=2)])
+        self.assertNotIn("future_field", result.to_json_string())
+
+    def test_app_metadata_still_rejects_sections_missing_known_fields(self):
+        """Tolerating extra keys must not relax validation of the required ones."""
+        payload = {
+            "version": 5,
+            "text_segments": [{"text": "Hello.", "time_start": 0.0, "time_end": 1.0}],
+            "sections": [{"title": "All", "start_index": 0}],
+        }
+
+        result = AppMetadata.get_from_json_string(json.dumps(payload))
+
+        self.assertIsInstance(result, str)
+        assert isinstance(result, str)
+        self.assertIn("end_index", result)
+
     def test_app_metadata_parses_legacy_raw_text_and_missing_sections(self):
         payload = {
             "version": 2,

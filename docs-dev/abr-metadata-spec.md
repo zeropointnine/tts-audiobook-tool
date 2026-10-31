@@ -95,7 +95,7 @@ The embedded value is a JSON object.
 ```json
 {
   "title": "Example Book",
-  "version": 4,
+  "version": 5,
   "type": "generated",
   "bookmarks": [0, 1],
   "text_segments": [
@@ -164,7 +164,7 @@ String identifying how the audio file was created:
 
 Older ABR files may omit this field. Absence means the origin is unknown; do not
 infer `"generated"` from a missing field or from the `project_snapshot` value.
-This additive field does not change the ABR format version (currently `4`). The
+This additive field did not change the ABR format version (then `4`). The
 browser player does not use it for playback or navigation and may ignore it.
 
 ### `version` (optional in stored data, written by current producers)
@@ -176,13 +176,16 @@ Version history:
 - `1`: original timed-text and bookmark payload; a missing version implies version 1
 - `2`: adds `project_snapshot`
 - `3`: adds structural `sections` metadata
-- `4` (current): allows one-level nested lists in `text_segments` to preserve phrase subdivisions
+- `4`: allows one-level nested lists in `text_segments` to preserve phrase subdivisions
+- `5` (current): requires readers to ignore unrecognized fields (see
+  [Forward compatibility](#forward-compatibility-unrecognized-fields)); the payload shape is
+  otherwise unchanged from version 4
 
 Backward compatibility rule:
 
 - if `version` is missing, the file should be treated as ABR version `1`
 - ABR version `1` means there is no `project_snapshot`
-- version 4 readers should continue accepting the flat `text_segments` shape written by versions 1–3
+- version 4+ readers should continue accepting the flat `text_segments` shape written by versions 1–3
 
 Version `3` added `sections`, which provide structural overlay ranges over the
 conceptually flattened `text_segments` leaves. They do not create a nested per-section
@@ -277,7 +280,7 @@ Notes:
 - Segment timing is derived from concatenated export timing, not from container chapter metadata.
 - Some leaves may have `time_start = 0` and `time_end = 0` when no playable audio exists for that item in this ABR file.
 - Zero-timed leaves can be outside the rendered/exported range, missing generated audio, or non-verbal/formatting-related text.
-- Flat arrays remain valid in version 4 and are the only shape written by versions 1–3.
+- Flat arrays remain valid in version 4+ and are the only shape written by versions 1–3.
 
 ### `bookmarks` (optional, recommended)
 
@@ -441,7 +444,11 @@ The browser player rejects the payload unless it is a JSON object with a non-emp
 - `project_snapshot` defaulting to `{}`
 - `type` is currently ignored
 
-The browser accepts both legacy flat arrays and version 4 mixed flat/nested arrays. It
+The browser ignores unrecognized fields at every level. It rejects files declaring a
+`version` above its supported ceiling (`MetadataUtil.MAX_SUPPORTED_ABR_VERSION`) before
+validating any other field.
+
+The browser accepts both legacy flat arrays and version 4+ mixed flat/nested arrays. It
 normalizes them once into a flat leaf sequence plus ranges describing explicitly nested
 groups. Playback, bookmarks, sections, navigation, and persisted identity all use flat
 leaf indices. The browser rejects empty or deeper-nested groups and malformed timed
@@ -456,7 +463,9 @@ compatible bookmark and playback state.
 - defaults missing `title`, `version`, `bookmarks`, `has_section_break_audio`,
   `project_snapshot`, and `sections`; missing `type` remains unknown and is omitted on re-serialization
 - accepts and preserves `type` when it is `"generated"` or `"conversion"`; rejects other values
-- accepts legacy flat arrays and version 4 mixed flat/nested arrays
+- accepts legacy flat arrays and version 4+ mixed flat/nested arrays
+- ignores unrecognized fields at every level; they are not preserved when loaded
+  metadata is serialized again
 - preserves subdivision nesting when loaded metadata is serialized again
 - rejects empty nested lists, deeper nesting, malformed segment objects, an invalid
   `title`, `version`, top-level collection type, `project_snapshot`, or section descriptor
@@ -470,7 +479,7 @@ compatible bookmark and playback state.
 Writers producing ABR-compatible files should:
 
 - write `title` when known, using `""` when no title is available
-- write `version` explicitly as `4` for the current format
+- write `version` explicitly as `5` for the current format
 - write `type` as `"generated"` for TTS exports or `"conversion"` for enhanced pre-existing audio
 - always include `text_segments`
 - use nesting only for non-empty, one-level subdivision lists
@@ -478,6 +487,27 @@ Writers producing ABR-compatible files should:
 - write `has_section_break_audio` explicitly as a boolean
 - write `sections` when structural section information is known
 - write `project_snapshot` as the project settings snapshot when such data exists
+
+---
+
+## Forward compatibility: unrecognized fields
+
+From version 5, readers must ignore any field they do not recognize instead of
+rejecting the payload. This applies to:
+
+- the top-level payload object,
+- every timed segment leaf object in `text_segments`, flat or nested,
+- every `sections` descriptor.
+
+Known fields keep their validation rules: a reader still rejects a payload whose
+recognized fields are missing or malformed. An unrecognized field never makes a payload
+invalid, and readers need not preserve it when re-serializing.
+
+This lets later producers add optional, additive data (for example per-leaf display
+annotations) that older v5+ readers render without, rather than failing to open the
+file. A new field whose absence or omission would make a reader misbehave still
+requires a version bump. `project_snapshot` contents follow the project settings
+spec, not this rule.
 
 ---
 
@@ -507,6 +537,8 @@ An ABR payload should satisfy the following:
   above)
 - `raw_text`, if present in legacy files, may be ignored by consumers
 - `project_snapshot`, if present, is an object
+- unrecognized fields in the payload, segment leaves, and section descriptors are
+  ignored, not treated as errors
 
 For full structured text-block support, section ranges should additionally be ordered,
 contiguous, non-overlapping, non-empty, and cover the complete flattened leaf sequence.
@@ -533,6 +565,11 @@ follow the stricter interpretation above.
   both the legacy flat shape and the new mixed shape. The Python reader preserves nesting
   when round-tripping, while the browser normalizes to flat leaves plus group ranges.
 - Browser-player versions predating ABR v4 support do not understand nested entries.
+- Browser-player versions predating ABR v5 support reject version 5 files through their
+  version ceiling, even though a v5 file without additional fields is otherwise
+  identical to version 4.
+- Python app versions predating ABR v5 support reject text segment leaves and section
+  descriptors carrying unrecognized keys.
 - The browser player's localStorage identity rules are documented separately in `docs/browser-player-identity.md`.
 
 ---
@@ -542,7 +579,7 @@ follow the stricter interpretation above.
 ```json
 {
   "title": "Hello World",
-  "version": 4,
+  "version": 5,
   "type": "generated",
   "bookmarks": [0],
   "text_segments": [
@@ -572,6 +609,7 @@ ABR metadata is:
 - extended in version 2 to also carry `project_snapshot` for project settings import
 - extended in version 3 to also carry structural `sections` overlay metadata
 - extended in version 4 to preserve generated-phrase subdivisions as one-level nested lists
+- extended in version 5 to require readers to ignore unrecognized fields
 - indexed for bookmarks and sections through its conceptual flattened leaf sequence
 - optionally mirrored during concat into a standalone debug JSON sidecar for inspection
 

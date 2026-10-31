@@ -104,7 +104,7 @@ abrPlayer:v3:position:${positionId}
 abrPlayer:v3:bookmarks:${textId}
 ```
 
-`v3` is the browser storage namespace version, not the opened file's embedded ABR version. It remains unchanged for ABR v4 because flattened bookmark indices and playback identity semantics are unchanged; older and newer ABR payloads are normalized into the same browser identity model.
+`v3` is the browser storage namespace version, not the opened file's embedded ABR version. It remains unchanged for ABR v4 and v5 because flattened bookmark indices and playback identity semantics are unchanged (identity uses leaf `text` and timing only, so fields ignored under v5 never affect it); older and newer ABR payloads are normalized into the same browser identity model.
 
 Legacy keys are intentionally not read:
 

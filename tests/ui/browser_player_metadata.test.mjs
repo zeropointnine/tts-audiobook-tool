@@ -122,6 +122,24 @@ test("accepts metadata at the maximum supported version", () => {
     assert.equal(result.version, MetadataUtil.MAX_SUPPORTED_ABR_VERSION);
 });
 
+// ABR v5 requires readers to ignore unrecognized fields at every level,
+// so additive producer data never prevents a file from opening.
+test("ignores unrecognized fields in payload, leaves and sections", () => {
+    const withExtra = (value) => ({ ...value, future_field: { anything: [1, 2] } });
+    const result = MetadataUtil.normalizeAppMetadata(withExtra({
+        version: 5,
+        text_segments: [
+            withExtra(segment("Flat. ", 0, 1)),
+            [withExtra(segment("Nested.", 1, 2))],
+        ],
+        sections: [withExtra({ title: "All", start_index: 0, end_index: 2 })],
+    }));
+
+    assert.notEqual(typeof result, "string");
+    assert.deepEqual(plain(result.textSegments.map((item) => item.text)), ["Flat. ", "Nested."]);
+    assert.deepEqual(plain(result.sections), [{ title: "All", start_index: 0, end_index: 2 }]);
+});
+
 test("rejects malformed nested and timed-segment entries", () => {
     const invalidCases = [
         { raw: [], expected: "missing required field" },

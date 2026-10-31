@@ -6,7 +6,8 @@ class MetadataUtil {
 
     // Highest ABR metadata spec version this player understands. Files
     // declaring a newer version are rejected before any field validation.
-    static MAX_SUPPORTED_ABR_VERSION = 4;
+    // Unrecognized fields are ignored, as ABR v5 requires of readers.
+    static MAX_SUPPORTED_ABR_VERSION = 5;
 
     static async loadAppMetadata(file, url) {
 
@@ -117,7 +118,7 @@ class MetadataUtil {
     /**
      * Normalize the ABR wire representation into one flat, leaf-indexed playback
      * sequence plus lightweight ranges for entries that were explicitly nested.
-     * Bookmarks and sections in ABR v4 use these flattened leaf indices.
+     * Bookmarks and sections in ABR v4+ use these flattened leaf indices.
      */
     static normalizeTextSegments(rawTextSegments) {
         if (!Array.isArray(rawTextSegments) || rawTextSegments.length === 0) {

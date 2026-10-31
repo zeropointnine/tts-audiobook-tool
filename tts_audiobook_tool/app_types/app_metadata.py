@@ -32,10 +32,17 @@ class AppMetadataSection(NamedTuple):
     def dicts_to_list(dicts: list[dict]) -> list[AppMetadataSection] | str:
         result: list[AppMetadataSection] = []
         for d in dicts:
-            try:
-                section = AppMetadataSection(**d)
-            except Exception as e:
-                return f"Error with section dict {json.dumps(d)} - {e}"
+            # Read known keys only; unrecognized keys are ignored (ABR v5+)
+            if not isinstance(d, dict):
+                return f"Bad type for section item: {type(d)}"
+            missing = [key for key in AppMetadataSection._fields if key not in d]
+            if missing:
+                return f"Error with section dict {json.dumps(d)} - missing {', '.join(missing)}"
+            section = AppMetadataSection(
+                title=d["title"],
+                start_index=d["start_index"],
+                end_index=d["end_index"],
+            )
             if not isinstance(section.title, str):
                 return f"Bad type for section title: {type(section.title)}"
             if not isinstance(section.start_index, int) or section.start_index < 0:
@@ -69,10 +76,8 @@ def _app_metadata_dict_to_timed_phrase(item: dict) -> TimedPhrase | str:
         value = item.get(field_name)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return f"Bad type for {field_name}: {type(value)}"
-    try:
-        return TimedPhrase(**item)
-    except Exception as e:
-        return f"Error with dict {json.dumps(item)} - {e}"
+    # Read known keys only; unrecognized keys are ignored (ABR v5+)
+    return TimedPhrase(text, item["time_start"], item["time_end"])
 
 
 def app_metadata_dicts_to_text_segments(
