@@ -70,7 +70,8 @@ extension, gap limiting) and before the pause, panning, reverb and room tone:
    than `MIN_MEASURE_SECONDS` (0.4 s) or silent.
 2. **Gain** = target − measured, **clamped** to +`MAX_BOOST_DB` (6) / −`MAX_CUT_DB` (10). The clamp limits how
    far a segment is moved (a whispered or shouted line, or a glitch, isn't dragged all the way), not the final
-   level. Unmeasurable segments get `reference_offset_db`, ie "assume it was at typical loudness".
+   level. Unmeasurable segments get `reference_offset_db`, ie "assume it was at typical loudness". The voice's
+   volume (see [Voice volume](#voice-volume)) is added after the clamp.
 3. **Limit** peaks with a lookahead limiter to the preset's ceiling (`ceiling_db_for`): `tp −
    TRUE_PEAK_MARGIN_DB` (0.5, covering inter-sample peaks and AAC overshoot), lowered further by the voice's **pan
    boost**. The center-unity pan law raises the louder channel by up to +3 dB (+1.6 dB at pan 0.3), so the
@@ -108,6 +109,25 @@ don't saturate in that cast; they wrap around, which would come out as loud crac
    absorbs float rounding).
 
 Audio already under the ceiling is returned untouched.
+
+### Voice volume
+
+Each voice has a volume (`Voice.volume`, 30-100% of amplitude, default 100; Effects > Volume in the voice
+sample submenu), for deliberately quieter voices. Leveling would undo a gain applied before it, so the
+volume's dB (`20·log10(pct/100)`: 70% = -3.1 dB, 50% = -6.0 dB, 30% = -10.5 dB) is passed to `level` as
+`volume_db` and added to the leveling gain **after the clamp, before the limiter**:
+
+- leveling can't undo it, and the clamp doesn't absorb it;
+- a turned-down segment isn't limited as if it were at full level (multiplying the limited output would
+  needlessly flatten peaks that would have fit);
+- it scales the narration only, before panning and the reverb send, so the voice and its room are both
+  quieter (unchanged dry/wet balance); pauses, break effects and room tone keep their levels.
+
+Attenuation only: a boost after leveling would push peaks past the ceiling. Volume lowers the file's integrated
+loudness below the preset's target in proportion to how much speech is turned down; that is intended.
+`LevelingResult.gain_db` and the clamp count report the leveling gain alone. Applies in concat and realtime
+playback (per the phrase group's voice, via `VoiceSpatialPolicy`); not in voice chat, the server or the
+pronunciation preview, and not where leveling doesn't run.
 
 ## Where it runs
 

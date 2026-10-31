@@ -92,7 +92,7 @@ def show_startup_version_messages(prefs: Prefs) -> None:
     if messages:
         hint = Hint(
             "",
-            f"New features/changes:",
+            f"New features or changes:",
             "\n".join(f"- {message}" for message in messages),
         )
         hints.show_hint(hint)

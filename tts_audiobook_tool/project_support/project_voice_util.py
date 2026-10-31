@@ -867,6 +867,16 @@ class ProjectVoiceUtil:
         return project.save()
 
     @staticmethod
+    def set_voice_volume_at_index_and_save(project: Project, index: int, volume: int) -> str:
+        """Set one entry's volume (percent, VOLUME_MIN to VOLUME_MAX)."""
+        if index < 0 or index >= len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        entries = list(project.voice_references)
+        entries[index] = replace(entries[index], volume=volume)
+        project.voice_references = entries
+        return project.save()
+
+    @staticmethod
     def set_voice_crop_transcript_at_index_and_save(project: Project, index: int, transcript: str) -> str:
         """Edit one entry's crop transcript (the cropped span's transcript)."""
         if index < 0 or index >= len(project.voice_references):

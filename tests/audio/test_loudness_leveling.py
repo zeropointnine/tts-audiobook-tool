@@ -108,6 +108,29 @@ class TestLevel:
         panned_peak = np.max(np.abs(result.sound.data)) * max(center_unity_pan_gains(pan))
         assert panned_peak <= 10 ** ((STRONGER.tp - LoudnessLeveling.TRUE_PEAK_MARGIN_DB) / 20) + 1e-6
 
+    @pytest.mark.parametrize("rms", [0.004, 0.08, 0.25])
+    def test_volume_lowers_the_leveled_segment_and_isnt_absorbed_by_the_clamp(self, rms: float) -> None:
+        # Volume is applied on top of the (clamped) leveling gain: a segment
+        # comes out exactly volume_db below where leveling alone puts it,
+        # including one whose leveling gain hit the clamp
+        full = LoudnessLeveling.level(Sound(noise(3.0, rms), SR), ACX)
+        quieter = LoudnessLeveling.level(Sound(noise(3.0, rms), SR), ACX, volume_db=-6.0)
+        assert quieter.gain_db == full.gain_db and quieter.clamped == full.clamped
+        full_lufs = LoudnessLeveling.measure_lufs(full.sound)
+        quieter_lufs = LoudnessLeveling.measure_lufs(quieter.sound)
+        assert full_lufs is not None and quieter_lufs is not None
+        assert quieter_lufs == pytest.approx(full_lufs - 6.0, abs=0.05)
+
+    def test_volume_applies_before_the_limiter(self) -> None:
+        # A peaky segment that needs limiting at full volume needs none once
+        # turned down: it isn't limited as if it were at full level
+        data = noise(3.0, 0.1)
+        data[SR] = 0.99
+        full = LoudnessLeveling.level(Sound(data, SR), STRONGER)
+        quieter = LoudnessLeveling.level(Sound(data, SR), STRONGER, volume_db=-10.0)
+        assert full.limiter_reduction_db > 0
+        assert quieter.limiter_reduction_db == 0
+
 
 def test_mix_limiter_catches_peaks_added_after_leveling() -> None:
     # Eg room reverb adding to already-limited narration: the mixed chunk is
@@ -132,6 +155,18 @@ class TestConcatWiring:
         levels = [LoudnessLeveling.measure_lufs(Sound(chunk, SR)) for chunk in streamed]
         assert levels[0] == pytest.approx(ACX.i, abs=0.3)
         assert levels[1] == pytest.approx(ACX.i, abs=0.3)
+
+    def test_concat_applies_each_segments_voice_volume_after_leveling(self) -> None:
+        # Same input loudness spread as above; the second voice at -6 dB ends
+        # up 6 dB under the target rather than being leveled back up
+        phrases = [Phrase("One.", Reason.SENTENCE), Phrase("Two.", Reason.SENTENCE)]
+        streamed = concatenate_streamed(
+            phrases, [noise(3.0, 0.05), noise(3.0, 0.16, seed=2)], SR, loudness=ACX,
+            voice_volume_dbs=[0.0, -6.0],
+        )
+        levels = [LoudnessLeveling.measure_lufs(Sound(chunk, SR)) for chunk in streamed]
+        assert levels[0] == pytest.approx(ACX.i, abs=0.3)
+        assert levels[1] == pytest.approx(ACX.i - 6.0, abs=0.3)
 
     def test_room_tone_and_break_effects_move_with_the_target(self) -> None:
         # Both are authored against un-leveled speech, so they are shifted by

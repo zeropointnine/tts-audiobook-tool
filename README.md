@@ -887,6 +887,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 **2026-10-30**
 
 - **Improved loudness leveling** in exports and realtime playback. Loudness is now normalized segment by segment. Removed the now-redundant, time-consuming whole-file normalization pass.
+- Added **per-voice volume** setting. Useful when a certain voice clone tends to overpower the mix, etc.
 
 **2026-10-25**
 

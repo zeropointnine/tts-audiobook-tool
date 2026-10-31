@@ -304,6 +304,7 @@ def _start_impl(
             loudness=loudness,
             pan=spatial_policy.pan_for_voice_index(phrase_group.voice_index),
             output_channels=loudness_channels,
+            volume_db=spatial_policy.volume_db_for_voice_index(phrase_group.voice_index),
         )
 
         if sound.data.size > 0 and abs(sound.duration - original_duration) > 0.01:

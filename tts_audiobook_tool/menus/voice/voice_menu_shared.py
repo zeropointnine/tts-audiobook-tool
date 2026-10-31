@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING, Callable
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import RoomReverb, SttVariant
-from tts_audiobook_tool.app_types.voice import Voice, stereo_position_label, stereo_position_to_percent
+from tts_audiobook_tool.app_types.voice import (
+    VOLUME_DEFAULT, VOLUME_MAX, VOLUME_MIN, Voice, stereo_position_label, stereo_position_to_percent, volume_label,
+)
 from tts_audiobook_tool import ask
 
 if TYPE_CHECKING:
@@ -58,6 +60,7 @@ DEFAULT_PRESET_LABEL = "Preset"
 SUBLABEL_SAMPLE_UNUSED_WITH_PRESET = "Not used: {preset_label} takes precedence"
 LABEL_EFFECTS_SUPERLABEL = "Effects"
 LABEL_STEREO_POSITION = "Stereo position"
+LABEL_VOLUME = "Volume"
 LABEL_ROOM_REVERB = "Room reverb"
 
 # Max length of the transcript preview under the edit-transcription item
@@ -1060,6 +1063,10 @@ class VoiceMenuShared:
                 superlabel=LABEL_EFFECTS_SUPERLABEL,
             ))
             items.append(MenuItem(
+                make_menu_label(LABEL_VOLUME, volume_label(voice.volume), volume_label(VOLUME_DEFAULT)),
+                lambda s2, _: VoiceMenuShared.ask_volume(s2, i),
+            ))
+            items.append(MenuItem(
                 make_menu_label(LABEL_ROOM_REVERB, voice.room_reverb.label, RoomReverb.get_default().label),
                 lambda s2, _: VoiceMenuShared.room_reverb_submenu(s2, i),
             ))
@@ -1205,6 +1212,30 @@ class VoiceMenuShared:
             ask.ask_error(err)
         else:
             print_feedback(f"{LABEL_STEREO_POSITION} set to: {stereo_position_label(pan)}")
+
+    @staticmethod
+    def ask_volume(state: State, index: int) -> None:
+        """Prompt for the voice's volume, VOLUME_MIN to VOLUME_MAX percent."""
+        current = state.project.voice_references[index].volume
+        printt(f"Enter volume, from {VOLUME_MIN} to {VOLUME_MAX} (percent):")
+        value = ask.ask_input(prefill=str(current))
+        if not value:
+            return
+        try:
+            volume = int(round(float(value.rstrip("%"))))
+        except (ValueError, OverflowError):
+            ask.ask_error("Bad value")
+            return
+        if not VOLUME_MIN <= volume <= VOLUME_MAX:
+            ask.ask_error("Out of range")
+            return
+        if volume == current:
+            return
+        err = ProjectVoiceUtil.set_voice_volume_at_index_and_save(state.project, index, volume)
+        if err:
+            ask.ask_error(err)
+        else:
+            print_feedback(f"{LABEL_VOLUME} set to: {volume_label(volume)}")
 
     @staticmethod
     def room_reverb_submenu(state: State, index: int) -> None:

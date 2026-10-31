@@ -231,6 +231,7 @@ class SoundPipeline:
         loudness: NormalizationSpecs | None = None,
         pan: float = 0.0,
         output_channels: int = 1,
+        volume_db: float = 0.0,
     ) -> Sound:
         """
         Applies interactive playback shaping to freshly generated audio.
@@ -242,7 +243,8 @@ class SoundPipeline:
         - Apply high shelf (optional)
         - Loudness leveling, when `loudness` is given; `pan` is the stereo
           position the sound will be panned to afterwards, `output_channels`
-          the playback channel count (see `apply_loudness_leveling`)
+          the playback channel count, `volume_db` the voice's volume, applied
+          after leveling (see `apply_loudness_leveling`)
         """
         sound = SoundPipeline.limit_silence_gaps_if_enabled(
             sound,
@@ -253,21 +255,23 @@ class SoundPipeline:
         sound = SoundPipeline.apply_high_shelf(sound, high_shelf)
         if loudness is not None:
             sound = SoundPipeline.apply_loudness_leveling(
-                sound, loudness, pan=pan, output_channels=output_channels)
+                sound, loudness, pan=pan, output_channels=output_channels, volume_db=volume_db)
         return sound
 
     @staticmethod
     def apply_loudness_leveling(
             sound: Sound, loudness: NormalizationSpecs, pan: float = 0.0, output_channels: int = 1,
+            volume_db: float = 0.0,
     ) -> Sound:
         """
         Brings the segment to the loudness target and limits its peaks (see
         LoudnessLeveling). Must run before voice panning, with that `pan`, so
         the louder panned channel stays under the peak ceiling too. Stereo
         output is aimed 3 dB lower per segment, so the stereo whole measures
-        on target.
+        on target. The voice's `volume_db` then lowers it from the target.
         """
-        return LoudnessLeveling.level(sound, loudness, pan=pan, channels=output_channels).sound
+        return LoudnessLeveling.level(
+            sound, loudness, pan=pan, channels=output_channels, volume_db=volume_db).sound
 
     @staticmethod
     def make_break_effect_sound(

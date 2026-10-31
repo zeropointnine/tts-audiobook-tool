@@ -1,10 +1,11 @@
-"""Run-scoped narration positioning, room reverb, and output-channel policy (no live TTS)."""
+"""Run-scoped narration positioning, volume, room reverb, and output-channel policy (no live TTS)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import RoomReverb, RoomReverbStereo
+from tts_audiobook_tool.app_types.voice import VOLUME_DEFAULT, volume_to_db
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 if TYPE_CHECKING:
@@ -16,7 +17,7 @@ class VoiceSpatialPolicy:
     """Snapshot shared by export and realtime, independent of selected range.
 
     A phrase group's effective voice index identifies the voice used for
-    generation, so its stereo position and room reverb follow that voice.
+    generation, so its stereo position, volume and room reverb follow that voice.
     """
 
     voice_count: int
@@ -26,6 +27,8 @@ class VoiceSpatialPolicy:
     # Per voice slot (`Voice.pan`).
     voice_pans: tuple[float, ...] = ()
     room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO
+    # Per voice slot (`Voice.volume`, percent).
+    voice_volumes: tuple[int, ...] = ()
 
     @classmethod
     def from_project(cls, project: Project) -> VoiceSpatialPolicy:
@@ -46,6 +49,7 @@ class VoiceSpatialPolicy:
             voice_reverbs=voice_reverbs,
             room_reverb_stereo=project.room_reverb_stereo,
             voice_pans=voice_pans,
+            voice_volumes=tuple(voice.volume for voice in project.voice_references),
         )
 
     def pan_for_voice_index(self, index: int) -> float:
@@ -61,6 +65,25 @@ class VoiceSpatialPolicy:
         distinct = set(self.voice_pans)
         if not distinct:
             return 0.0
+        return distinct.pop() if len(distinct) == 1 else None
+
+    def volume_for_voice_index(self, index: int) -> int:
+        """The volume (percent) of the voice that generated a phrase group with this `voice_index`."""
+        if not self.voice_volumes:
+            return VOLUME_DEFAULT
+        # Match generation's fallback to voice 0 for stale assignments.
+        return self.voice_volumes[ProjectVoiceUtil.get_effective_voice_index(index, len(self.voice_volumes))]
+
+    def volume_db_for_voice_index(self, index: int) -> float:
+        """`volume_for_voice_index` as a gain in dB (<= 0)."""
+        return volume_to_db(self.volume_for_voice_index(index))
+
+    @property
+    def volume_summary(self) -> int | None:
+        """The one volume heard in output, or None when it varies by voice."""
+        distinct = set(self.voice_volumes)
+        if not distinct:
+            return VOLUME_DEFAULT
         return distinct.pop() if len(distinct) == 1 else None
 
     def room_reverb_for_voice_index(self, index: int) -> RoomReverb:

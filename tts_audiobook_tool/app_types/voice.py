@@ -15,6 +15,8 @@ On disk an entry is a flat JSON object:
         "room_reverb": "off",               # RoomReverb id, always written
         "pan": -0.3,                        # optional stereo position, -1 (left) to 1 (right);
                                             # written only when not centered
+        "volume": 70,                       # optional volume percent, 30 to 100, applied after
+                                            # loudness leveling; written only when not 100
         "presets": {"<model id>": "alba"},  # optional per-TTS-model preset voice ids (eg a Pocket
                                             # predefined voice, a Qwen3-TTS CustomVoice speaker);
                                             # written only when non-empty
@@ -43,6 +45,7 @@ CROP_TRANSCRIPT_FIELD = "crop_transcript"
 CROP_FIELDS = (CROP_FILE_NAME_FIELD, CROP_START_FIELD, CROP_END_FIELD, CROP_TRANSCRIPT_FIELD)
 ROOM_REVERB_FIELD = "room_reverb"
 PAN_FIELD = "pan"
+VOLUME_FIELD = "volume"
 PRESETS_FIELD = "presets"
 INSTRUCTIONS_FIELD = "instructions"
 NAME_FIELD = "name"
@@ -59,6 +62,23 @@ def stereo_position_label(pan: float) -> str:
     if percent == 0:
         return "Center"
     return f"{'Left' if percent < 0 else 'Right'} {abs(percent)}"
+
+
+# Voice volume, in percent of amplitude. Attenuation only: a boost after
+# leveling would push peaks past the limiter's ceiling.
+VOLUME_MIN = 30
+VOLUME_MAX = 100
+VOLUME_DEFAULT = 100
+
+
+def volume_label(volume: int) -> str:
+    """eg "70%"."""
+    return f"{volume}%"
+
+
+def volume_to_db(volume: int) -> float:
+    """Gain in dB of a volume percent (100 -> 0 dB, 50 -> -6.0 dB)."""
+    return 20 * math.log10(volume / 100)
 
 
 def normalize_crop_file_name(value: Any) -> str | None:
@@ -103,9 +123,11 @@ class Voice:
     never affects generation), reference sample, its transcript, optional crop, room reverb,
     stereo position (`pan`, -1 full left to 1 full right, 0 centered), model
     preset voice ids (`presets`, keyed by TTS model id, for models with
-    built-in voices), and voice `instructions` keyed by TTS model id (for
-    "instruct" models). Empty strings / empty maps mean unused; an empty
-    `file_name` means the voice has no sample. `Voice()` is the default voice."""
+    built-in voices), voice `instructions` keyed by TTS model id (for
+    "instruct" models), and `volume` (percent, `VOLUME_MIN` to `VOLUME_MAX`,
+    applied after loudness leveling). Empty strings / empty maps mean unused;
+    an empty `file_name` means the voice has no sample. `Voice()` is the
+    default voice."""
 
     file_name: str = ""
     transcript: str = ""
@@ -117,6 +139,7 @@ class Voice:
     # TTS model id -> instructions. Treat as read-only; excluded from hashing.
     instructions: dict[str, str] = field(default_factory=dict, hash=False)
     name: str = ""
+    volume: int = VOLUME_DEFAULT
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str):
@@ -125,6 +148,9 @@ class Voice:
         if not (math.isfinite(pan) and -1.0 <= pan <= 1.0):
             raise ValueError("pan must be finite and between -1 and 1")
         object.__setattr__(self, "pan", pan)
+        if (isinstance(self.volume, bool) or not isinstance(self.volume, int)
+                or not VOLUME_MIN <= self.volume <= VOLUME_MAX):
+            raise ValueError(f"volume must be an int between {VOLUME_MIN} and {VOLUME_MAX}")
         for name in ("presets", "instructions"):
             value = getattr(self, name)
             if not isinstance(value, dict) or not all(
@@ -150,9 +176,14 @@ class Voice:
     def crop_range(self) -> tuple[float, float] | None:
         return (self.crop.start, self.crop.end) if self.crop is not None else None
 
+    @property
+    def volume_db(self) -> float:
+        return volume_to_db(self.volume)
+
     def to_dict(self) -> dict[str, Any]:
         """The on-disk form. `room_reverb` is always written; `pan` only when nonzero;
-        `name`, `presets` and `instructions` only when non-empty."""
+        `volume` only when not the default; `name`, `presets` and `instructions`
+        only when non-empty."""
         result: dict[str, Any] = {}
         if self.name:
             result[NAME_FIELD] = self.name
@@ -166,6 +197,8 @@ class Voice:
         result[ROOM_REVERB_FIELD] = self.room_reverb.id
         if self.pan != 0:
             result[PAN_FIELD] = self.pan
+        if self.volume != VOLUME_DEFAULT:
+            result[VOLUME_FIELD] = self.volume
         if self.presets:
             result[PRESETS_FIELD] = dict(self.presets)
         if self.instructions:
@@ -188,7 +221,9 @@ class Voice:
         a warning). Malformed crop metadata drops only the crop; an unknown
         `room_reverb` id loads as Off. A missing `room_reverb` key (all
         pre-v5 data) takes `default_room_reverb`. A missing or non-numeric
-        `pan` loads as centered; an out-of-range one is clamped. A missing or
+        `pan` loads as centered; an out-of-range one is clamped. Likewise a
+        missing or non-numeric `volume` loads as the default, and an
+        out-of-range one is clamped (a fractional one is rounded). A missing or
         non-object `presets` / `instructions` (including a legacy plain string)
         loads as an empty map. A missing or non-string `name` loads as "".
         """
@@ -221,6 +256,7 @@ class Voice:
             presets=_parse_str_map(raw, PRESETS_FIELD, where, index),
             instructions=_parse_str_map(raw, INSTRUCTIONS_FIELD, where, index),
             name=_parse_name(raw, where, index),
+            volume=_parse_volume(raw, where, index),
         )
 
 
@@ -264,6 +300,20 @@ def _parse_pan(raw: dict, where: str, index: int) -> float:
         L.w(f"{where}[{index}]: invalid pan ({value!r}); using center")
         return 0.0
     return min(max(float(value), -1.0), 1.0)
+
+
+def _parse_volume(raw: dict, where: str, index: int) -> int:
+    """The default when absent or malformed (with a warning); rounded and clamped
+    to [VOLUME_MIN, VOLUME_MAX]."""
+    from tts_audiobook_tool.l import L
+
+    if VOLUME_FIELD not in raw:
+        return VOLUME_DEFAULT
+    value = raw[VOLUME_FIELD]
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        L.w(f"{where}[{index}]: invalid volume ({value!r}); using {VOLUME_DEFAULT}")
+        return VOLUME_DEFAULT
+    return min(max(int(round(value)), VOLUME_MIN), VOLUME_MAX)
 
 
 def _parse_crop(raw: dict, where: str, index: int) -> VoiceCrop | None:

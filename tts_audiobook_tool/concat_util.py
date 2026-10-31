@@ -349,6 +349,10 @@ class ConcatUtil:
             spatial_policy.room_reverb_for_voice_index(group.voice_index)
             for group in state.project.phrase_groups
         ]
+        voice_volume_dbs = [
+            spatial_policy.volume_db_for_voice_index(group.voice_index)
+            for group in state.project.phrase_groups
+        ]
 
         # [1] Concatenated audio file
 
@@ -377,6 +381,7 @@ class ConcatUtil:
                 room_reverb_stereo=state.project.room_reverb_stereo,
                 voice_pans=voice_pans,
                 voice_reverbs=voice_reverbs,
+                voice_volume_dbs=voice_volume_dbs,
                 stereo_required=spatial_policy.requested_channels == 2,
                 loudness=state.project.normalization_type.value,
             )
@@ -537,6 +542,7 @@ class ConcatUtil:
         room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO,
         voice_pans: list[float] | None = None,
         voice_reverbs: list[RoomReverb] | None = None,
+        voice_volume_dbs: list[float] | None = None,
         stereo_required: bool = False,
         loudness: NormalizationSpecs | None = None,
     ) -> ConcatRenderResult | str:
@@ -585,6 +591,10 @@ class ConcatUtil:
             one room per preset (see VoiceSpatialProcessor): only an entry's
             narration feeds its room; pauses and break effects stay dry, and
             every room's tail keeps decaying under whatever follows.
+        :param voice_volume_dbs:
+            Per-entry voice volume as a gain in dB (<= 0), aligned like
+            `voice_pans`. Applied on top of loudness leveling, so only when
+            `loudness` is given. None keeps every voice at full volume.
         :param stereo_required:
             Project-level stereo requirement, even if this range has no panned
             speech. Nonzero voice_pans also require stereo for low-level callers.
@@ -620,6 +630,10 @@ class ConcatUtil:
             voice_reverbs = [room_reverb] * len(phrases_and_paths)
         elif len(voice_reverbs) != len(phrases_and_paths):
             raise ValueError("voice_reverbs must align with phrases_and_paths")
+        if voice_volume_dbs is None:
+            voice_volume_dbs = [0.0] * len(phrases_and_paths)
+        elif len(voice_volume_dbs) != len(phrases_and_paths):
+            raise ValueError("voice_volume_dbs must align with phrases_and_paths")
         has_reverb = any(reverb.design is not None and reverb.drr_db is not None for reverb in voice_reverbs)
         channels = 2 if (stereo_required or any(pan != 0 for pan in voice_pans)
                          or (has_reverb and room_reverb_stereo.is_stereo)) else 1
@@ -800,9 +814,13 @@ class ConcatUtil:
             # Loudness leveling: after all per-segment shaping (high shelf
             # included, which affects K-weighted loudness), before the pause
             # and panning. Pseudo-silence detection below is relative to the
-            # segment's peak, so it's unaffected by the gain.
+            # segment's peak, so it's unaffected by the gain. The voice's
+            # volume lowers the leveled segment; the narration feeds its room
+            # at that level, so the voice's dry/wet balance is unchanged.
             if loudness is not None:
-                leveled = LoudnessLeveling.level(curr_sound, loudness, pan=voice_pans[i], channels=channels)
+                leveled = LoudnessLeveling.level(
+                    curr_sound, loudness, pan=voice_pans[i], channels=channels, volume_db=voice_volume_dbs[i],
+                )
                 leveling_stats.add(leveled)
                 curr_sound = leveled.sound
 

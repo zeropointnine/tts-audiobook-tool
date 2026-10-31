@@ -13,7 +13,7 @@ from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.project_support.voice_spatial_policy import VoiceSpatialPolicy
-from tts_audiobook_tool.app_types.voice import stereo_position_label
+from tts_audiobook_tool.app_types.voice import VOLUME_DEFAULT, stereo_position_label, volume_label
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
@@ -546,6 +546,9 @@ def make_enabled_option_confirmation_lines(state: State) -> list[str]:
             STEREO_POSITION_TITLE,
             stereo_position_label(stereo_position) if stereo_position is not None else "Varies by voice",
         )
+    volume = spatial_policy.volume_summary  # None: differs between voices
+    if volume != VOLUME_DEFAULT:
+        add(VOLUME_TITLE, volume_label(volume) if volume is not None else "Varies by voice")
     room_reverb = spatial_policy.room_reverb_summary  # None: differs between voices
     if room_reverb != RoomReverb.OFF:
         add(ROOM_REVERB_TITLE, room_reverb.label if room_reverb is not None else "Varies by voice")
@@ -732,6 +735,8 @@ ROOM_TONE_SUBHEADING = \
 Is also applied to realtime playback."""
 
 STEREO_POSITION_TITLE = "Stereo position"
+
+VOLUME_TITLE = "Volume"
 
 ROOM_REVERB_TITLE = "Room reverb"
 

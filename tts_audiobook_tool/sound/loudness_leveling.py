@@ -28,6 +28,7 @@ class LevelingResult:
     sound: Sound
     # None when the segment was too short or silent to measure
     measured_lufs: float | None
+    # The leveling gain (clamped), excluding the voice's volume
     gain_db: float
     # Largest gain reduction applied by the limiter (0 when it didn't engage)
     limiter_reduction_db: float
@@ -158,12 +159,17 @@ class LoudnessLeveling:
 
     @staticmethod
     def level(
-            sound: Sound, specs: NormalizationSpecs, pan: float = 0.0, channels: int = 1
+            sound: Sound, specs: NormalizationSpecs, pan: float = 0.0, channels: int = 1,
+            volume_db: float = 0.0,
     ) -> LevelingResult:
         """
         Levels one segment: measure, apply the clamped gain, then limit peaks to
         the target's ceiling (allowing for the pan boost to come).
         `channels`: of the eventual output (see `target_lufs`).
+        `volume_db`: the voice's volume (<= 0), added to the leveling gain after
+        the clamp, so leveling can't undo it and the clamp doesn't absorb it.
+        Before the limiter, so a turned-down segment isn't limited as if it
+        were at full level.
         Mono or (n, ch) input; returns the same shape and dtype.
         """
         if sound.data.size == 0:
@@ -171,7 +177,7 @@ class LoudnessLeveling:
         measured = LoudnessLeveling.measure_lufs(sound)
         gain_db = LoudnessLeveling.gain_db_for(measured, specs, channels)
         clamped = measured is not None and gain_db != LoudnessLeveling.target_lufs(specs, channels) - measured
-        data = sound.data.astype(np.float64) * (10 ** (gain_db / 20))
+        data = sound.data.astype(np.float64) * (10 ** ((gain_db + volume_db) / 20))
         data, reduction_db = LoudnessLeveling.limit(data, sound.sr, LoudnessLeveling.ceiling_db_for(specs, pan))
         return LevelingResult(
             Sound(data.astype(sound.data.dtype), sound.sr), measured, gain_db, reduction_db, clamped

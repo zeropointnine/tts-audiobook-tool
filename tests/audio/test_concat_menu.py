@@ -285,14 +285,17 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     # The confirmation reflects the shared channel policy, not voice counts.
     with patch.object(concat_menu.VoiceSpatialPolicy, "from_project", return_value=SimpleNamespace(
         requested_channels=2, room_reverb_summary=RoomReverb.OFF, stereo_position_summary=0.0,
+        volume_summary=100,
     )):
         assert plain_option_lines(state) == [loudness_line, "  - Channel output: Stereo"]
 
     # Stereo position, listed before room reverb (same order as the voice sample submenu)
-    project.voice_references = [Voice("a.flac", pan=-0.3, room_reverb=RoomReverb.SMALL_DRR22)]
+    # Volume between them, also as in the submenu
+    project.voice_references = [Voice("a.flac", pan=-0.3, room_reverb=RoomReverb.SMALL_DRR22, volume=70)]
     assert plain_option_lines(state) == [
         loudness_line,
         "  - Stereo position: Left 30",
+        "  - Volume: 70%",
         "  - Room reverb: Small room, light",
         "  - Room reverb stereo effect: Wide",
         "  - Channel output: Stereo",
@@ -309,6 +312,10 @@ def test_enabled_option_confirmation_lines_only_include_enabled_options() -> Non
     ]
     project.voice_references = [Voice("a.flac"), Voice("b.flac")]
     assert plain_option_lines(state) == [loudness_line, "  - Channel output: Mono"]
+    project.voice_references = [Voice("a.flac", volume=70), Voice("b.flac")]
+    assert plain_option_lines(state) == [
+        loudness_line, "  - Volume: Varies by voice", "  - Channel output: Mono",
+    ]
 
 
 def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_single_book_section() -> None:

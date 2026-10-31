@@ -92,7 +92,7 @@ fixed bitrate, with fewer bits per channel.
 
 Each voice stores a stereo position, `Voice.pan` (-1 full left to 1 full right, 0 centered;
 written to disk only when nonzero, clamped on load, a malformed value loads as centered). The UI
-("Stereo position", the first Effects item of the voice sample submenu, before Room reverb)
+("Stereo position", the first Effects item of the voice sample submenu, before Volume and Room reverb)
 prompts for -100 to 100, stored as hundredths, and displays `Center`, `Left 30`, `Right 30`.
 
 Direct narration uses center-unity equal-power panning: `theta = (pan + 1) * pi/4`,
@@ -129,7 +129,7 @@ normalization is applied.
 Per held segment in concat (`ConcatUtil.concatenate_sound_segments`, `flush_pending`):
 
     segment (resample, treble EQ, sentence-gap extension, gap limiting)
-      -> loudness leveling (gain + peak limiter; see docs/loudness-leveling.md)
+      -> loudness leveling (gain + voice volume + peak limiter; see docs/loudness-leveling.md)
       -> pause or break effect appended (pause modulation rules)
       -> direct voice pan + parallel room reverb (narration only)
       -> room tone noise bed

@@ -244,14 +244,15 @@ def test_submenu_items_for_one_and_multiple_samples(monkeypatch, count):
         expected.append(menu.LABEL_RESET_VOICE_SAMPLE)
     expected.extend([
         menu.make_menu_label(menu.LABEL_STEREO_POSITION, "Center", "Center"),
+        menu.make_menu_label(menu.LABEL_VOLUME, "100%", "100%"),
         menu.make_menu_label(menu.LABEL_ROOM_REVERB, RoomReverb.OFF.label, RoomReverb.OFF.label),
     ])
     assert [get_string_from(state, item.label) for item in items] == expected
     assert items[3].sublabel is None
     # The Effects group starts at Stereo position
-    assert items[-2].superlabel == menu.LABEL_EFFECTS_SUPERLABEL
-    assert not items[-1].superlabel
-    assert items[-2].sublabel is None
+    assert items[-3].superlabel == menu.LABEL_EFFECTS_SUPERLABEL
+    assert not items[-2].superlabel and not items[-1].superlabel
+    assert items[-3].sublabel is None
 
 
 @pytest.mark.parametrize("trimmed, duration, value", [
@@ -329,6 +330,7 @@ def test_submenu_for_sample_less_voice_hides_sample_items(monkeypatch):
         menu.make_menu_label("Voice design/OmniVoice", "none"),
         menu.LABEL_RESET_VOICE_SAMPLE,
         menu.make_menu_label(menu.LABEL_STEREO_POSITION, "Center", "Center"),
+        menu.make_menu_label(menu.LABEL_VOLUME, "100%", "100%"),
         menu.make_menu_label(menu.LABEL_ROOM_REVERB, RoomReverb.OFF.label, RoomReverb.OFF.label),
     ]
 
@@ -468,7 +470,7 @@ def test_stereo_position_label(pan, label):
 
 def test_stereo_position_item_has_no_sublabel(monkeypatch):
     state = make_state(2)
-    item = open_submenu(monkeypatch, state, 0)["items"](state)[-2]
+    item = open_submenu(monkeypatch, state, 0)["items"](state)[-3]
     assert item.sublabel is None
 
 
@@ -479,7 +481,7 @@ def test_stereo_position_prompt_saves_value(monkeypatch, save_error):
     monkeypatch.setattr(Project, "save", saved)
     errors, prompts, feedback = capture(monkeypatch, ["-30"])
     make_items = open_submenu(monkeypatch, state, 1)["items"]
-    item = make_items(state)[-2]
+    item = make_items(state)[-3]
     item.handler(state, item)
     assert prompts == [
         "Enter stereo position, from -100 (full left) to 100 (full right), or 0 for center:",
@@ -492,7 +494,7 @@ def test_stereo_position_prompt_saves_value(monkeypatch, save_error):
     else:
         assert not errors
         assert feedback == [f"{menu.LABEL_STEREO_POSITION} set to: Left 30"]
-        assert get_string_from(state, make_items(state)[-2].label) == menu.make_menu_label(
+        assert get_string_from(state, make_items(state)[-3].label) == menu.make_menu_label(
             menu.LABEL_STEREO_POSITION, "Left 30", "Center",
         )
 
@@ -523,3 +525,50 @@ def test_stereo_position_prompt_prefills_current_and_rounds(monkeypatch):
     menu.VoiceMenuShared.ask_stereo_position(state, 0)
     assert prefills == ["25"]
     assert state.project.voice_references[0].pan == -0.12
+
+
+@pytest.mark.parametrize("save_error", ["", "disk full"])
+def test_volume_prompt_saves_value(monkeypatch, save_error):
+    # Volume sits between Stereo position and Room reverb
+    state = make_state(2)
+    saved = Mock(return_value=save_error)
+    monkeypatch.setattr(Project, "save", saved)
+    errors, prompts, feedback = capture(monkeypatch, ["70"])
+    make_items = open_submenu(monkeypatch, state, 1)["items"]
+    item = make_items(state)[-2]
+    item.handler(state, item)
+    assert prompts == ["Enter volume, from 30 to 100 (percent):"]
+    assert [v.volume for v in state.project.voice_references] == [100, 70]
+    saved.assert_called_once()
+    if save_error:
+        assert errors == [save_error] and not feedback
+    else:
+        assert not errors
+        assert feedback == [f"{menu.LABEL_VOLUME} set to: 70%"]
+        assert get_string_from(state, make_items(state)[-2].label) == menu.make_menu_label(
+            menu.LABEL_VOLUME, "70%", "100%",
+        )
+
+
+@pytest.mark.parametrize("answer, error", [
+    ("", None), ("100", None), ("x", "Bad value"), ("29", "Out of range"), ("101", "Out of range"),
+    ("nan", "Bad value"), ("inf", "Bad value"),
+])
+def test_volume_prompt_cancel_unchanged_or_invalid(monkeypatch, answer, error):
+    state = make_state(1)
+    saved = Mock(return_value="")
+    monkeypatch.setattr(Project, "save", saved)
+    errors, _, feedback = capture(monkeypatch, [answer])
+    menu.VoiceMenuShared.ask_volume(state, 0)
+    assert state.project.voice_references[0].volume == 100
+    assert errors == ([error] if error else [])
+    assert not feedback
+    saved.assert_not_called()
+
+
+def test_volume_prompt_accepts_percent_sign_and_rounds(monkeypatch):
+    state = make_state(1)
+    monkeypatch.setattr(Project, "save", Mock(return_value=""))
+    capture(monkeypatch, ["64.6%"])
+    menu.VoiceMenuShared.ask_volume(state, 0)
+    assert state.project.voice_references[0].volume == 65
