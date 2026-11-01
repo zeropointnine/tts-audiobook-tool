@@ -38,6 +38,7 @@ class EpubSectionSkipDetector:
     CONTENT_ONLY_MAX_WORDS = 700
     CONTENT_ONLY_MAX_CHARS = 4000
     PUBLICATION_METADATA_CONTENT_SIGNAL_THRESHOLD = 2
+    TOC_MAX_WORDS = 3000
     TOC_MIN_ANCHORS = 5
     TOC_MIN_LIST_ITEMS = 5
     TOC_MIN_SHORT_LINES = 5
@@ -172,6 +173,12 @@ class EpubSectionSkipDetector:
             title: str,
             html: str
     ) -> EpubSectionSkipDecision:
+        # A spine document can contain both an embedded TOC and the entire book. Never
+        # discard a large reading document just because it also has TOC-like structure.
+        text = EpubSectionSkipDetector.html_to_text_preview(html)
+        if len(text.split()) > EpubSectionSkipDetector.TOC_MAX_WORDS:
+            return EpubSectionSkipDecision()
+
         has_href_or_title_signal = EpubSectionSkipDetector.has_table_of_contents_href_or_title_signal(href, title)
         has_heading_signal = EpubSectionSkipDetector.has_table_of_contents_heading_signal(html)
         anchor_count = EpubSectionSkipDetector.count_html_anchors(html)

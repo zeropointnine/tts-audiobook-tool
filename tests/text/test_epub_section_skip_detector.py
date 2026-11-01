@@ -257,6 +257,25 @@ class TestEpubSectionSkipDetector(unittest.TestCase):
         self.assertTrue(decision.should_skip)
         self.assertIn("link density", decision.reason)
 
+    def test_detect_table_of_contents_size_ceiling(self):
+        # Protect bundled reading content for every TOC signal, including a single-file book.
+        for signal in ("href", "heading", "links"):
+            for word_count in (3000, 3001):
+                with self.subTest(signal=signal, word_count=word_count):
+                    heading = "<h1>Contents</h1>" if signal == "heading" else ""
+                    links = "".join(f'<p><a href="#c{i}">Chapter</a></p>' for i in range(6))
+                    padding_words = word_count - 6 - (1 if heading else 0)
+                    html = f'<html><body>{heading}{links}<p>{"story " * padding_words}</p></body></html>'
+                    decision = EpubSectionSkipDetector.detect_table_of_contents_skip(
+                        readable_spine_index=0,
+                        readable_spine_count=1,
+                        href="Text/contents.xhtml" if signal == "href" else "Text/book.xhtml",
+                        title="",
+                        html=html,
+                    )
+
+                    self.assertEqual(decision.should_skip, word_count == 3000)
+
     def test_detect_table_of_contents_does_not_skip_short_lines_without_links(self):
         html = "<html><body>" + "".join(f"<p>Short line {i}</p>" for i in range(1, 10)) + "</body></html>"
 
