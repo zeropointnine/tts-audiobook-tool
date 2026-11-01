@@ -884,6 +884,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
+**2026-10-31**
+
+- **Rich(er) text formatting** in the browser player (heading text, boldface, italice, underline). Applies to new projects post-update, or by re-importing EPUB files into existing project and re-generating audio.
+
 **2026-10-30**
 
 - **Improved loudness leveling** in exports and realtime playback. Loudness is now normalized segment by segment. Removed the now-redundant, time-consuming whole-file normalization pass.
@@ -900,7 +904,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 **2026-10-19**
 
-- The **Voices menu** has been revamped. Various global controls are now configurable on a per-voice basis:
+- The **Voices menu** has been revamped. Various previuosly global controls are now configurable on a per-voice basis:
     - **Stereo position** (new) - voices can now be positioned within the stereo field; useful for dialog
     - Room reverb
     - Room reverb stereo effect
