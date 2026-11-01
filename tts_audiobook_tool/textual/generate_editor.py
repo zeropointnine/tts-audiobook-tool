@@ -10,6 +10,7 @@ from rich.text import Text
 from textual.binding import Binding, BindingType
 from textual.widgets import OptionList
 from tts_audiobook_tool import text_util
+from tts_audiobook_tool.app_support.app_text import get_section_marker_label
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types import SoundSegment
 from tts_audiobook_tool.constants import (
@@ -33,7 +34,9 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
 )
 from tts_audiobook_tool.textual.filter_dialog import FilterDialog
+from tts_audiobook_tool.textual.cut_point_selection_dialog import CutPointSelectionDialog
 from tts_audiobook_tool.textual.multi_select_dialog import (
+    CUT_POINTS,
     DIALOG_LINES,
     MANUAL_ENTRY,
     MultiSelectDialog,
@@ -720,7 +723,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
 
     def action_show_multi_select(self) -> None:
         """Show the multi-select dialog: select by voice, all dialog lines
-        (only with dialog detection), or manual entry.
+        (only with dialog detection), cut-point ranges, or manual entry.
 
         Choices select only visible lines; while a filter is active, each item
         shows its visible count alongside its total.
@@ -759,6 +762,10 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
                 visible_voice_line_counts=visible_voice_line_counts,
                 visible_dialog_line_count=visible_dialog_line_count,
                 voices_subheading="Select lines currently assigned to...",
+                has_split_points=bool(self.project.markers),
+                marker_label=get_section_marker_label(
+                    self.project, is_title_case=False, is_singular=True
+                ),
             ),
             self.handle_multi_select,
         )
@@ -774,6 +781,18 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
     def handle_multi_select(self, result: MultiSelectResult) -> None:
         """Select the chosen voice's or dialog lines, or open manual selection."""
         if result is None:
+            return
+        if result == CUT_POINTS:
+            self.push_screen(
+                CutPointSelectionDialog(
+                    self.manual_selection_line_count(),
+                    self.project.markers,
+                    marker_label=get_section_marker_label(
+                        self.project, is_title_case=False, is_singular=True
+                    ),
+                ),
+                self.handle_manual_selection,
+            )
             return
         if result == MANUAL_ENTRY:
             self.action_show_manual_selection()

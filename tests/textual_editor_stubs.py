@@ -101,6 +101,10 @@ class StubProject:
     save_error: str = ""
     book: Book | None = None
     voice_references: list[Voice] = field(default_factory=list)
+    markers: set[int] = field(default_factory=set)
+
+    def has_multiple_book_sections(self) -> bool:
+        return self.book is not None and len(self.book.sections) > 1
 
     def get_tts_model_type(self) -> TtsModelType:
         return TtsModelType.require_by_id("none")

@@ -1128,8 +1128,8 @@ def test_multi_select_lists_voice_editor_items_with_total_counts() -> None:
                 "[1] Voice 1 Alice (3 lines)",
                 "[2] Voice 2 (1 line)",
                 "",
-                "All lines tagged as dialog (2 lines)",
-                "Enter line selections manually",
+                "Lines tagged as dialog (2 lines)",
+                "Enter lines manually",
             ]
             option_list = dialog.query_one("#multi-select-list", OptionList)
             await pilot.press("down", "down")
@@ -1158,8 +1158,8 @@ def test_multi_select_under_filter_shows_visible_counts_and_selects_visible_line
                 "[1] Voice 1 Alice (2/3 lines)",
                 "[2] Voice 2 (0/1 line)",
                 "",
-                "All lines tagged as dialog (1/2 lines)",
-                "Enter line selections manually",
+                "Lines tagged as dialog (1/2 lines)",
+                "Enter lines manually",
             ]
             await pilot.press("1")
             assert len(app.screen_stack) == 1
@@ -1167,6 +1167,36 @@ def test_multi_select_under_filter_shows_visible_counts_and_selects_visible_line
 
             await pilot.press("m", "down", "down", "enter")
             assert app.selected_indices == {0}
+
+    run(exercise())
+
+
+@pytest.mark.parametrize("multiple_sections", [False, True])
+def test_cut_point_selection_under_filter_selects_only_visible_lines(multiple_sections: bool) -> None:
+    # Cut labels retain project line numbers, while selection respects the filter.
+    from tts_audiobook_tool.textual.cut_point_selection_dialog import CutPointSelectionDialog
+
+    app = make_voiced_app()
+    app.project.markers = {1, 3}
+    if multiple_sections:
+        app.project.book = Book(sections=[
+            BookSection(title="First", phrase_groups=app.project.phrase_groups[:2]),
+            BookSection(title="Second", phrase_groups=app.project.phrase_groups[2:]),
+        ])
+    noun = "split point" if multiple_sections else "section marker"
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("f", "2", "m")
+            assert isinstance(app.screen, MultiSelectDialog)
+            assert multi_select_option_texts(app.screen)[-2] == f"Select lines using {noun}s"
+            await pilot.press("end", "up", "enter")
+            assert isinstance(app.screen, CutPointSelectionDialog)
+            assert app.screen.heading == f"Select lines using {noun}s"
+            assert app.screen.labels[1] == f"{noun.capitalize()} 1 up to {noun} 2 (lines 2-3)"
+            await pilot.press("down", "space")
+            assert len(app.screen_stack) == 1
+            assert app.selected_content_line_indices() == {1}
 
     run(exercise())
 

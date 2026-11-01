@@ -3,7 +3,7 @@ from typing import cast
 import pytest
 from rich.text import Text
 from textual.widgets import Button, Input, OptionList
-from tts_audiobook_tool.app_types import BookSection, BookSegmentationSettings
+from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
@@ -638,7 +638,7 @@ def test_multi_select_dialog_lists_voices_with_line_counts() -> None:
                 "[1] Voice 1 Alice (3 lines)",
                 "[2] Voice 2 (1 line)",
                 "",
-                "Enter line selections manually",
+                "Enter lines manually",
             ]
             option_list = dialog.query_one("#multi-select-list", OptionList)
             assert option_list.highlighted == 0
@@ -734,12 +734,46 @@ def test_dialog_lines_item_selects_every_dialog_line() -> None:
             assert isinstance(dialog, MultiSelectDialog)
             assert option_texts(dialog)[-3:] == [
                 "",
-                "All lines tagged as dialog (2 lines)",
-                "Enter line selections manually",
+                "Lines tagged as dialog (2 lines)",
+                "Enter lines manually",
             ]
             await pilot.press("end", "up", "enter")
             assert len(app.screen_stack) == 1
             assert app.selected_indices == {1, 3}
+
+    run(exercise())
+
+
+@pytest.mark.parametrize("multiple_sections", [False, True])
+def test_cut_point_selection_uses_project_lines_not_section_rows(multiple_sections: bool) -> None:
+    # Cut ranges use backing project indices, not the section headings in the list.
+    from tts_audiobook_tool.textual.cut_point_selection_dialog import CutPointSelectionDialog
+
+    app, project = make_voiced_app()
+    project.markers = {1, 3}
+    if multiple_sections:
+        project.book = Book(sections=[
+            BookSection(title="First", phrase_groups=project.phrase_groups[:2]),
+            BookSection(title="Second", phrase_groups=project.phrase_groups[2:]),
+        ])
+    noun = "split point" if multiple_sections else "section marker"
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("m")
+            assert isinstance(app.screen, MultiSelectDialog)
+            assert option_texts(app.screen)[-2] == f"Select lines using {noun}s"
+            await pilot.press("end", "up", "enter")
+            assert isinstance(app.screen, CutPointSelectionDialog)
+            assert app.screen.heading == f"Select lines using {noun}s"
+            assert app.screen.labels == [
+                f"Before {noun} 1 (lines 1-1)",
+                f"{noun.capitalize()} 1 up to {noun} 2 (lines 2-3)",
+                f"{noun.capitalize()} 2 to end (lines 4-4)",
+            ]
+            await pilot.press("down", "enter")
+            assert len(app.screen_stack) == 1
+            assert app.selected_content_line_indices() == {1, 2}
 
     run(exercise())
 
@@ -752,7 +786,7 @@ def test_dialog_lines_item_is_omitted_without_dialog_detection() -> None:
             await pilot.press("m")
             dialog = app.screen
             assert isinstance(dialog, MultiSelectDialog)
-            assert "All lines tagged as dialog" not in " ".join(option_texts(dialog))
+            assert "Lines tagged as dialog" not in " ".join(option_texts(dialog))
 
     run(exercise())
 
@@ -795,7 +829,7 @@ def test_multi_select_list_scrolls_when_dialog_reaches_max_height() -> None:
             assert option_list.scroll_y == 0
             await pilot.press("end")
             await pilot.pause()
-            # 20 voices, the blank row, then manual entry
+            # 20 voices, the blank row, then manual entry (no section markers).
             assert option_list.highlighted == 21
             assert option_list.scroll_y > 0
             # The list is capped to the dialog's space rather than clipped by it,

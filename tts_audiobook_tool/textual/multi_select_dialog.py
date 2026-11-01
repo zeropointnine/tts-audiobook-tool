@@ -16,11 +16,12 @@ from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM, COL_DIM_ITALICS
 DIALOG_LINES: Literal["dialog"] = "dialog"
 # Dialog result requesting the manual line-selection dialog
 MANUAL_ENTRY: Literal["manual"] = "manual"
+CUT_POINTS: Literal["cut_points"] = "cut_points"
 
-MultiSelectResult = int | Literal["dialog", "manual"] | None
+MultiSelectResult = int | Literal["dialog", "manual", "cut_points"] | None
 
-LABEL_DIALOG_LINES = "All lines tagged as dialog"
-LABEL_MANUAL_ENTRY = "Enter line selections manually"
+LABEL_DIALOG_LINES = "Lines tagged as dialog"
+LABEL_MANUAL_ENTRY = "Enter lines manually"
 
 # Rows the dialog uses around its list: border (2), padding (2), and the
 # title plus its trailing blank line (2)
@@ -33,8 +34,8 @@ VOICE_HOTKEY_LABEL_WIDTH = len(f"[{VOICE_HOTKEY_COUNT}] ")
 
 
 class MultiSelectDialog(ModalScreen[MultiSelectResult]):
-    """List the voice samples (with line counts), an optional dialog-lines
-    item, and a manual-entry item.
+    """List voice samples (with line counts), an optional dialog-lines item,
+    cut-point selection, and manual entry.
 
     A blank row separates the voice items from the trailing items, and a dim
     italic subheading can optionally introduce the voice items. The blank row
@@ -42,7 +43,7 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
     skip over.
 
     Dismisses with the chosen zero-based voice index, DIALOG_LINES,
-    MANUAL_ENTRY, or None when cancelled.
+    CUT_POINTS, MANUAL_ENTRY, or None when cancelled.
     """
 
     AUTO_FOCUS = "#multi-select-list"
@@ -113,6 +114,8 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         visible_voice_line_counts: Sequence[int] | None = None,
         visible_dialog_line_count: int | None = None,
         voices_subheading: str = "",
+        has_split_points: bool = False,
+        marker_label: str = "section marker",
     ) -> None:
         """dialog_line_count of None omits the dialog-lines item (eg when the
         text was segmented without dialog detection).
@@ -127,6 +130,8 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         self.voice_line_counts = list(voice_line_counts)
         self.voice_names = list(voice_names)
         self.dialog_line_count = dialog_line_count
+        self.has_split_points = has_split_points
+        self.cut_points_label = f"Select lines using {marker_label}s"
         self.visible_voice_line_counts = (
             list(visible_voice_line_counts)
             if visible_voice_line_counts is not None
@@ -176,6 +181,8 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
         results: list[MultiSelectResult] = []
         if self.dialog_line_count is not None:
             results.append(DIALOG_LINES)
+        if self.has_split_points:
+            results.append(CUT_POINTS)
         results.append(MANUAL_ENTRY)
         return results
 
@@ -217,7 +224,7 @@ class MultiSelectDialog(ModalScreen[MultiSelectResult]):
                 f"{LABEL_DIALOG_LINES} "
                 f"{self.line_count_text(self.dialog_line_count, self.visible_dialog_line_count)}"
             )
-        return Text(LABEL_MANUAL_ENTRY)
+        return Text(self.cut_points_label if result == CUT_POINTS else LABEL_MANUAL_ENTRY)
 
     def on_mount(self) -> None:
         self.fit_list_height()

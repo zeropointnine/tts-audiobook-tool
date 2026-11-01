@@ -47,7 +47,7 @@ class ManualSelectionDialog(ModalScreen[set[int] | None]):
     def compose(self) -> ComposeResult:
         yield Vertical(
             Static(
-                Text.from_ansi(f"{COL_ACCENT}Enter line selection manually"),
+                Text.from_ansi(f"{COL_ACCENT}Enter lines manually"),
                 id="manual-selection-title",
                 markup=False,
             ),
