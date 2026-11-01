@@ -19,7 +19,8 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.text_ops.heading_end_detector import recompute_heading_ends
-from tts_audiobook_tool.text_ops import text_format
+from tts_audiobook_tool.text_ops import epub_css
+from tts_audiobook_tool.text_ops.epub_css import EpubCssResolver, EpubStylesheets
 from tts_audiobook_tool.text_ops.format_attach import attach_formatting_to_groups
 from tts_audiobook_tool.text_ops.text_format import StyledText
 
@@ -41,6 +42,8 @@ class EpubSourceChapter:
     media_type: str
     html: str
     navigation_targets: list[EpubNavigationTarget] = field(default_factory=list)
+    # The document's stylesheets, for display formatting; None when it has none
+    css: EpubCssResolver | None = None
 
 
 @dataclass
@@ -189,23 +192,6 @@ class BeautifulSoupEpubChapterTextExtractor:
         "var",
         "wbr",
     }
-    # Display formatting captured for the browser player
-    # (see docs-dev/text-formatting-layer.md). Inline `style` attributes are
-    # also honored; stylesheet (class-based) formatting is not.
-    STYLE_BY_TAG = {
-        "b": text_format.BOLD,
-        "strong": text_format.BOLD,
-        "i": text_format.ITALIC,
-        "em": text_format.ITALIC,
-        "cite": text_format.ITALIC,
-        "u": text_format.UNDERLINE,
-        "h1": text_format.HEADING,
-        "h2": text_format.HEADING,
-        "h3": text_format.HEADING,
-        "h4": text_format.HEADING,
-        "h5": text_format.HEADING,
-        "h6": text_format.HEADING,
-    }
 
     def extract_text(self, chapter: EpubSourceChapter) -> EpubTextExtractionResult:
         BeautifulSoup = self.import_beautiful_soup()
@@ -231,6 +217,7 @@ class BeautifulSoupEpubChapterTextExtractor:
             target_fragments=target_fragments,
             anchor_piece_indices=anchor_piece_indices,
             piece_styles=piece_styles,
+            css=chapter.css,
         )
         text = self.normalize_output_text("".join(pieces))
         slices, navigation_warnings, has_unresolved_navigation_target = self.make_text_slices(
@@ -324,11 +311,13 @@ class BeautifulSoupEpubChapterTextExtractor:
             anchor_piece_indices: dict[str, int] | None = None,
             piece_styles: dict[int, int] | None = None,
             style: int = 0,
+            css: EpubCssResolver | None = None,
     ) -> None:
         """
         `piece_styles`, when given, receives the display-style mask of each
         styled text piece by its index in `pieces`; `style` is the mask
-        inherited from ancestor elements.
+        inherited from ancestor elements, and `css` resolves the document's
+        stylesheet rules (see docs-dev/text-formatting-layer.md).
         """
         name = getattr(node, "name", None)
 
@@ -356,7 +345,7 @@ class BeautifulSoupEpubChapterTextExtractor:
             pieces.append("- ")
         content_start = len(pieces)
         if piece_styles is not None:
-            style = self.get_node_style(node, style)
+            style = self.get_node_style(node, style, css)
 
         if not hasattr(node, "children"):
             piece_count = len(pieces)
@@ -380,6 +369,7 @@ class BeautifulSoupEpubChapterTextExtractor:
                         anchor_piece_indices=anchor_piece_indices,
                         piece_styles=piece_styles,
                         style=style,
+                        css=css,
                     )
 
         if is_block:
@@ -389,45 +379,26 @@ class BeautifulSoupEpubChapterTextExtractor:
             is_spacer = not any(piece.strip() for piece in pieces[content_start:])
             self.ensure_block_boundary(pieces, line_breaks=3 if is_spacer else 2)
 
-    @classmethod
-    def get_node_style(cls, node: Any, inherited_style: int) -> int:
-        """Display-style mask of an element, given the mask of its ancestors."""
-        style = inherited_style | cls.STYLE_BY_TAG.get(getattr(node, "name", None) or "", 0)
-        css = node.get("style") if hasattr(node, "get") else None
-        if isinstance(css, str) and css:
-            style = cls.apply_inline_css_style(style, css)
-        return style
-
     @staticmethod
-    def apply_inline_css_style(style: int, css: str) -> int:
+    def get_node_style(node: Any, inherited_style: int, css: EpubCssResolver | None = None) -> int:
+        """
+        Display-style mask of an element, given the mask of its ancestors:
+        tag defaults, then stylesheet rules, then its inline `style` attribute.
+        """
+        tag = (getattr(node, "name", None) or "").lower()
         declarations: dict[str, str] = {}
-        for declaration in css.split(";"):
-            prop, separator, value = declaration.partition(":")
-            if separator:
-                value = value.replace("!important", "").strip().lower()
-                declarations[prop.strip().lower()] = value
-
-        font_style = declarations.get("font-style")
-        if font_style in ("italic", "oblique"):
-            style |= text_format.ITALIC
-        elif font_style == "normal":
-            style &= ~text_format.ITALIC
-
-        font_weight = declarations.get("font-weight")
-        if font_weight is not None:
-            if font_weight in ("bold", "bolder") or (font_weight.isdigit() and int(font_weight) >= 600):
-                style |= text_format.BOLD
-            elif font_weight in ("normal", "lighter") or font_weight.isdigit():
-                style &= ~text_format.BOLD
-
-        decoration = declarations.get("text-decoration-line", declarations.get("text-decoration"))
-        if decoration is not None:
-            decoration_values = decoration.split()
-            if "underline" in decoration_values:
-                style |= text_format.UNDERLINE
-            elif "none" in decoration_values:
-                style &= ~text_format.UNDERLINE
-        return style
+        if hasattr(node, "get"):
+            if css is not None:
+                raw_classes = node.get("class") or []
+                classes = frozenset(raw_classes.split() if isinstance(raw_classes, str) else raw_classes)
+                element_id = node.get("id")
+                declarations.update(css.declarations_for(
+                    tag, classes, element_id if isinstance(element_id, str) else None
+                ))
+            inline_css = node.get("style")
+            if isinstance(inline_css, str) and inline_css:
+                declarations.update(epub_css.parse_declarations(inline_css))
+        return epub_css.resolve_style(tag, inherited_style, declarations)
 
     @staticmethod
     def record_piece_style(
@@ -1001,6 +972,7 @@ class EpubExtractor:
         significant_warnings: list[str] = []
         source_chapter_candidates: list[EpubSourceChapter] = []
         source_chapters: list[EpubSourceChapter] = []
+        stylesheets = EpubExtractor.load_stylesheets(book)
         # Scan-window position that only counts text-bearing documents, so image-only cover and
         # insert pages do not consume front/back matter scan budget.
         reading_spine_position = 0
@@ -1059,6 +1031,7 @@ class EpubExtractor:
                 media_type=media_type,
                 html=html,
                 navigation_targets=list(item_navigation_targets),
+                css=EpubExtractor.get_document_css(item, href, html, stylesheets),
             ))
             if EpubSectionSkipDetector.is_text_bearing_spine_document(html):
                 reading_spine_position += 1
@@ -1132,6 +1105,44 @@ class EpubExtractor:
             significant_warnings.append(warning)
 
         return source_chapters, book_title, warnings, significant_warnings
+
+    @staticmethod
+    def load_stylesheets(book: Any) -> EpubStylesheets:
+        """The book's CSS resources by package path, for display formatting."""
+        css_by_path: dict[str, str] = {}
+        try:
+            items = list(getattr(book, "items", []) or [])
+        except Exception:
+            items = []
+        for item in items:
+            if getattr(item, "media_type", "") != "text/css":
+                continue
+            path = EpubExtractor.normalize_toc_href(getattr(item, "file_name", "") or "")
+            content = getattr(item, "content", None)
+            if isinstance(content, bytes):
+                content = content.decode("utf-8", errors="replace")
+            if path and isinstance(content, str):
+                css_by_path[path] = content
+        return EpubStylesheets(css_by_path)
+
+    @staticmethod
+    def get_document_css(item: Any, href: str, html: str, stylesheets: EpubStylesheets) -> EpubCssResolver | None:
+        """
+        Stylesheet resolver for a spine document. Stylesheet links are read from the
+        item's original bytes, because EbookLib's `get_content()` rebuilds `<head>`
+        without them. Any failure only means no stylesheet formatting.
+        """
+        raw = getattr(item, "content", None)
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="replace")
+        if not isinstance(raw, str):
+            raw = html
+        try:
+            refs = epub_css.extract_stylesheet_refs(raw, EpubExtractor.normalize_toc_href(href))
+            return stylesheets.resolver_for(refs)
+        except Exception as e:
+            L.w(f"Could not read stylesheets of {href}: {e}")
+            return None
 
     @staticmethod
     def get_navigation_resource_base_path(book: Any) -> str:

@@ -26,10 +26,13 @@ flow**:
 
 | Tag | Meaning | EPUB sources |
 |---|---|---|
-| `<h>` | heading | `h1`–`h6` |
-| `<b>` | bold | `b`, `strong`, inline `font-weight` ≥ 600 / `bold` |
-| `<i>` | italic | `i`, `em`, `cite`, inline `font-style: italic`/`oblique` |
-| `<u>` | underline | `u`, inline `text-decoration(-line): underline` |
+| `<h>` | heading | `h1`–`h6` elements only (no CSS-based heading detection) |
+| `<b>` | bold | `b`, `strong`; CSS `font-weight` ≥ 600, `bold`, `bolder` |
+| `<i>` | italic | `i`, `em`, `cite`; CSS `font-style: italic`/`oblique` |
+| `<u>` | underline | `u`; CSS `text-decoration(-line)` containing `underline` |
+
+CSS means the document's stylesheets and inline `style` attributes; see
+[Stylesheets](#stylesheets).
 
 Literal `&`, `<` and `>` are escaped as `&amp;`, `&lt;` and `&gt;`. Heading levels are
 deliberately not distinguished.
@@ -76,8 +79,10 @@ Formatting is not threaded through the segmenter, grouper or dialog segmenter.
 Instead:
 
 1. `BeautifulSoupEpubChapterTextExtractor.append_node_text` tracks a style mask
-   down the element tree and records the mask of each emitted text piece by its index
-   in the append-only piece list (the same mechanism used for navigation anchors).
+   down the element tree (tag defaults, then stylesheet rules, then inline `style`;
+   see [Stylesheets](#stylesheets)) and records the mask of each emitted text piece
+   by its index in the append-only piece list (the same mechanism used for
+   navigation anchors).
 2. The extractor builds a `StyledText` (text plus a parallel mask list) for each
    extraction result and navigation slice; section assembly joins them alongside the
    plain text. `EpubTextChapter.styled` is `None` for unstyled sections.
@@ -93,6 +98,43 @@ phrase text is aligned as one concatenated string. When the word sequences diffe
 `difflib` aligns them at word level; unmatched words stay unstyled. Import logs, but
 never surfaces or fails on, an inexact match. Raw text (`project_text_raw.txt`) never
 contains markup.
+
+### Stylesheets
+
+Many EPUBs format emphasis only through CSS classes — eg, Calibre conversions'
+`<span class="italic">`, publisher classes such as `span.ePub-I`, or meaningless
+generated names like `.class4754`. `text_ops/epub_css.py` supports exactly what the
+formatting layer needs. CSS only changes which characters are styled, never the
+extracted text, so it cannot affect segmentation, TTS text or audio identity.
+
+**Loading.** At load time `EpubExtractor.load_stylesheets` collects the book's
+`text/css` resources by package path. For each spine document,
+`get_document_css` reads its `<link rel="stylesheet">` and `<style>` references in
+document order from the item's **original bytes** (EbookLib's `get_content()`
+rebuilds `<head>` without them), and `EpubStylesheets` compiles one
+`EpubCssResolver` per distinct reference list, attached as `EpubSourceChapter.css`.
+Paths resolve relative to the referencing document or stylesheet; external URLs,
+`alternate` stylesheets and missing files are skipped.
+
+**Declarations.** Only `font-style`, `font-weight`, `text-decoration`,
+`text-decoration-line` and the `font` shorthand are read. Everything else is ignored.
+
+**Rules** (settled once; not adjudicated per book):
+
+| Concern | Rule |
+|---|---|
+| Selectors | Simple compound selectors only: `tag`, `.class`, `#id`, `*` and combinations such as `p.a.b`. Combinators, attribute selectors, pseudo-classes and pseudo-elements never match. (Every relevant rule in the sample library was simple; `soupsieve` could add complex selectors later.) |
+| Cascade | Matching rules apply by specificity (id, classes, tag), then source order; inline `style` applies last. `!important` is ignored. |
+| Tag defaults vs CSS | Author CSS overrides tag defaults: `em { font-style: normal }` is not italic. |
+| Inheritance | Italic and bold inherit and can be turned off by a descendant (`normal`, `lighter`). `bolder` makes text bold. `inherit`/`unset`/`revert` take the parent's value; `initial` is normal. |
+| Bold threshold | Numeric weights of 600 and above are bold (any number 1–1000, eg Void Star's 650). |
+| Underline | Propagates to descendants and cannot be cancelled by them (CSS semantics); `text-decoration: none` only removes an element's own underline (eg, on `<u>`). |
+| Links | Not underlined by default; underlined only when a stylesheet says so (some books underline every `<a>`, including chapter titles that link to the contents). |
+| `font` shorthand | Sets style and weight, resetting unmentioned ones to normal (so `font: 1em serif` turns italics off). Invalid shorthands (no size) and system fonts are ignored. |
+| `@media` | Only `all` and `screen` match (plus queries with only feature conditions, assumed to match), so Kindle blocks (`@media amzn-kf8`, `amzn-mobi`) are skipped while `not amzn-mobi` applies. Also applies to `media` attributes and `@import` media lists. |
+| Other at-rules | `@import` is followed (depth-limited), `@supports` is entered, everything else (`@font-face`, `@page`, …) is skipped. |
+| Not representable | Small caps, uppercase, font families, color and size are dropped. |
+| Failure | Malformed CSS or unreadable stylesheets only mean fewer styles. |
 
 ### Re-apply formatting from EPUB
 
@@ -169,8 +211,10 @@ Headings render as inline bold, larger text inside the existing `<pre>` layout.
 
 ## Limitations
 
-- Stylesheet (class-based) formatting, which many EPUBs use, is not interpreted; only
-  semantic tags and inline `style` attributes are.
+- Stylesheet support is deliberately minimal (see [Stylesheets](#stylesheets)):
+  complex selectors are not matched.
+- Headings come only from `h1`–`h6`; headings styled by CSS (large or bold paragraphs)
+  are not detected, by design.
 - Plain-text and manually entered projects have no formatting source.
 - Headings are display-only; they do not influence `HEADING_END` pauses.
 
@@ -189,7 +233,8 @@ formatting in its own field preserves the guarantee that `fmt` never affects aud
 |---|---|
 | `tts_audiobook_tool/text_ops/text_format.py` | Markup grammar, parse/render/join, `StyledText`, word alignment |
 | `tts_audiobook_tool/text_ops/format_attach.py` | Attaching styles to segmented phrases |
-| `tts_audiobook_tool/text_ops/epub_extractor.py` | Style capture during HTML flattening; attach at import |
+| `tts_audiobook_tool/text_ops/epub_extractor.py` | Style capture during HTML flattening; stylesheet loading; attach at import |
+| `tts_audiobook_tool/text_ops/epub_css.py` | Minimal stylesheet parsing, matching and style resolution |
 | `tts_audiobook_tool/text_ops/epub_format_reapply.py` | Re-apply action: section pairing and attach |
 | `tts_audiobook_tool/menus/text_menu.py` | Re-apply menu item |
 | `tts_audiobook_tool/app_types/phrase.py` | `Phrase.fmt`, persistence, flattened join |

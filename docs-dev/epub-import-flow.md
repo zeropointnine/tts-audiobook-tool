@@ -158,7 +158,7 @@ It is intentionally more deliberate than raw `BeautifulSoup.get_text()`:
 - retains source-position information needed for fragment-aware slices,
 - warns when no readable body text is found.
 
-The plain text it produces carries no visual formatting. Headings, bold, italics and underline (semantic tags and inline `style` attributes) are captured alongside it as styled text and attached to the segmented phrases as the optional, display-only `Phrase.fmt`; see [Display Formatting Layer](text-formatting-layer.md). CSS layout, stylesheet-based formatting, inline links, images and footnote structure are not preserved. The source-of-truth text model remains plain text segmented into phrase groups.
+The plain text it produces carries no visual formatting. Headings (`h1`–`h6`), bold, italics and underline (semantic tags, stylesheet rules and inline `style` attributes) are captured alongside it as styled text and attached to the segmented phrases as the optional, display-only `Phrase.fmt`; see [Display Formatting Layer](text-formatting-layer.md). CSS layout, other stylesheet properties, inline links, images and footnote structure are not preserved. The source-of-truth text model remains plain text segmented into phrase groups.
 
 ---
 
