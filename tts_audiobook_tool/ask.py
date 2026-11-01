@@ -173,7 +173,7 @@ def ask_file_path(
     """
     try:
         from tkinter import filedialog
-        printt(console_message)
+        printt(f"{COL_DIM_ITALICS}GUI file dialog: {COL_DEFAULT}{dialog_title.rstrip().rstrip(':')}")
         path = filedialog.askopenfilename(title=dialog_title, filetypes=filetypes, initialdir=initialdir)
         did_tk = True
         if isinstance(path, tuple):
@@ -202,7 +202,7 @@ def ask_dir_path(
     """
     try:
         from tkinter import filedialog
-        printt(console_message)
+        printt(f"{COL_DIM_ITALICS}GUI directory dialog: {COL_DEFAULT}{dialog_title.rstrip().rstrip(':')}")
         path = filedialog.askdirectory(title=dialog_title, initialdir=initialdir, mustexist=mustexist)
         did_tk = True
         if isinstance(path, tuple):
