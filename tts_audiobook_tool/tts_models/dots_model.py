@@ -92,7 +92,7 @@ class DotsModel(DotsBaseModel):
             project, TtsModelType.require_by_id("dots_local"), voice_selection_index
         )
         voice_path = (
-            ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else None
+            ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name) if voice_file_name else None
         )
         seed = -1 if force_random_seed else project.get_model_setting('dots_local', 'seed')
         if seed == -1:

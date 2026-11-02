@@ -66,7 +66,7 @@ chat stays centered.
 Ids name the processing, like `RoomReverb`'s. With anything but `MONO` and reverb on for any voice, the
 whole export is stereo,
 including dry voices' segments (centered): the reverb processor outputs `(n, 2)`, the noise bed adds the same bed to both channels
-(so room tone stays centered), and the ffmpeg stream is opened with `-ac 2`. With reverb off the
+(so room tone stays centered), and the output writer is opened with 2 channels. With reverb off the
 spread setting does nothing. Stereo output is requested by active stereo reverb or by an
 off-center voice (see below), decided once per run for the whole project (not the selected range). Loudness leveling aims each mono segment 3 dB lower
 in stereo output, since BS.1770 sums the channels, so the target is met as before; chapters (M4B) and app metadata were checked on
@@ -133,7 +133,7 @@ Per held segment in concat (`ConcatUtil.concatenate_sound_segments`, `flush_pend
       -> pause or break effect appended (pause modulation rules)
       -> direct voice pan + parallel room reverb (narration only)
       -> room tone noise bed
-      -> mix safety limiter -> ffmpeg stream -> metadata
+      -> mix safety limiter -> output writer (FLAC/AAC, see docs-dev/audio-io.md) -> metadata
 
 - **Narration only:** `apply(sound, send_end=narration_end, room_reverb=...)` feeds only the
   segment into its voice's room; the appended pause or break effect passes through dry, with every
@@ -203,8 +203,8 @@ small sizes); pyroomacoustics (useful for designing IRs offline, too heavy at ru
   and `medium` (RT60 0.8 s, 15 ms pre-delay, denser reflections, louder tail, 250 Hz-6 kHz). IRs
   are cached per design and sample rate.
 - `RoomReverbProcessor(sr, design, drr_db)`: one per export or realtime run; adds the `send_end`
-  and `is_last` handling and a [-1, 1] clip safety net (the ffmpeg stream casts to int16 without
-  clipping).
+  and `is_last` handling and a [-1, 1] clip safety net (the export writers clip as well; other
+  consumers may not).
 
 ## Design notes (from listening tests)
 

@@ -26,9 +26,6 @@ PROJECT_TEXT_FILE_NAME = "project_text.json"
 PROJECT_TEXT_SEGMENTS_FILE_NAME = PROJECT_TEXT_FILE_NAME
 PROJECT_TEXT_RAW_FILE_NAME = "project_text_raw.txt"
 PROJECT_TEXT_EPUB_FILE_NAME = "project_text.epub"
-PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
-
-FFMPEG_COMMAND = "ffmpeg"
 
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
 VALIDATION_UNSUPPORTED_LANGUAGES = ["zh", "ja", "ko"]
@@ -89,37 +86,8 @@ CHAT_SYSTEM_PROMPTS: list[tuple[str, str, list[str]]] = [
 # Value used for normalization after any sound transform post-processing steps (eg, after high-shelf EQ)
 NORMALIZATION_HEADROOM_DB = 1.0
 
-# App's typical ffmpeg options wrt console output, etc
-FFMPEG_TYPICAL_OPTIONS = [
-    "-y",  # Overwrite output file if it exists
-    "-hide_banner", "-loglevel", "warning",
-    "-stats"
-]
-
-FFMPEG_ARGUMENTS_OUTPUT_FLAC = [
-    "-c:a", "flac",
-    "-sample_fmt",  "s16",
-    "-frame_size", "4096",
-    "-compression_level", "6"
-]
 AAC_BITRATES = ["64k", "96k", "128k"]
 AAC_BITRATE_DEFAULT = "96k"
-
-FFMPEG_ARGUMENTS_OUTPUT_AAC_TEMPLATE = [
-    "-c:a", "aac",
-    "-b:a", "%1",
-    "-movflags", "+faststart", # moves metadata to the front, for streaming, which we want
-    '-vn',                    # No video (important when input is mp3 for some reason)
-    # Do not use "-sample_fmt s16" here
-]
-
-def make_ffmpeg_arguments_output_aac(bitrate: str=AAC_BITRATE_DEFAULT) -> list[str]:
-    if bitrate not in AAC_BITRATES:
-        bitrate = AAC_BITRATE_DEFAULT
-    return [item.replace("%1", bitrate) for item in FFMPEG_ARGUMENTS_OUTPUT_AAC_TEMPLATE]
-
-# Backwards-compatible default AAC args
-FFMPEG_ARGUMENTS_OUTPUT_AAC = make_ffmpeg_arguments_output_aac()
 
 APP_META_FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
 APP_META_MP4_MEAN = "tts-audiobook-tool"

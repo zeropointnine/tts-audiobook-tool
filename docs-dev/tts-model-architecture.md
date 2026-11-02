@@ -1,6 +1,6 @@
 # TTS Model Architecture
 
-Last updated: 2026-08-20
+Last updated: 2026-11-02
 
 ## Overview
 
@@ -56,7 +56,17 @@ The app dependencies section is essentially identical across all requirements fi
 
 The corresponding virtual environments (e.g. `venv-chatterbox`, `venv-fish-s1`, `venv-glm`) live at the project root and are selected externally when launching the app — the app itself has no venv-switching logic. One venv → one local model. `venv-client` is the shared remote-client venv for SGL-Omni and audio.cpp, and `venv-base` is a dev-only venv with just the app dependencies.
 
-When implementing a new local model, create `requirements-<newmodel>.txt` first and validate it in isolation before wiring anything into the app. Copy the app dependencies block from `requirements-base.txt` (or an existing model file) and adjust `torch`/`torchaudio` versions only if the model library requires it.
+When implementing a new local model, create `requirements-<newmodel>.txt` first and validate it in isolation before wiring anything into the app. Copy the app dependencies block from `requirements-base.txt` (or an existing model file) and adjust `torch`/`torchaudio` versions only if the model library requires it. The app block pins PyAV (`av==18.1.0`) and carries `--only-binary=av,soundfile`; keep both.
+
+### Model-side FFmpeg boundary
+
+No local model needs a system FFmpeg install (executable or shared libraries). The app's own audio I/O is covered in [audio I/O](<audio-io.md>). On the model side:
+
+- **Canonical references.** Adapters get voice paths only from `ProjectVoiceUtil.resolve_model_voice_file_path()`, which always yields a PCM WAV/FLAC. Upstream loaders that read a path then work without FFmpeg: librosa, and torchaudio 2.6/2.8 `load()`, both fall back to soundfile.
+- **Hard requirements are avoided, not patched.** Upstream paths that need FFmpeg no matter what the input is must not be reached. These include TorchCodec decoders, any torchaudio 2.9 file call, and audioread/pydub on formats soundfile can't read. Pass waveforms or tensors through a public API instead (MOSS: app-decoded waveform → `encode_audios_from_wav`, never a path), or pass the canonical file.
+- **Opportunistic use is tolerated.** Some packages load system FFmpeg when it happens to be present (e.g. torchaudio 2.8 probes for it at import, and librosa imports audioread). That is fine, as long as no supported flow depends on it.
+- **Exceptions are declared.** A model that cannot reasonably avoid system FFmpeg sets `requires_ffmpeg_libs = true` (see the spec table below). None does at present.
+- **Validating a new model.** Run `python3 -m testx.no_system_ffmpeg_run --venv <venv> -- -m testx.no_ffmpeg_model_clone` (Linux). It hides system FFmpeg, imports M4A/MP3/legacy references through the app, generates with each, and checks the loaded libraries.
 
 
 ---
@@ -85,10 +95,10 @@ Key fields of `TtsModelSpec` most relevant to integration:
 | `default_output_sample_rate` | Native/default output sample rate; used directly by static-rate models and as the fallback for dynamically configured models |
 | `requires_voice` | Whether generation is blocked without a voice clone |
 | `can_stream` | Whether the model supports streaming chunk callbacks |
-| `requires_ffmpeg_libs` | Whether the model requires FFmpeg shared libraries, not just the executable (usually because of TorchCodec) |
+| `requires_ffmpeg_libs` | Whether the model requires system FFmpeg shared libraries (usually because of TorchCodec). A declared per-model exception: the app itself needs no system FFmpeg (see [audio I/O](<audio-io.md>)), and startup checks for the libraries only for models that set this. Such a model must also set `ui.ffmpeg_libs_reason` and `ui.readme_install_section`, which the startup message shows |
 | `un_all_caps` | Force lowercase on all-caps prompts; set for models that perform poorly on them |
 | `requirements_file_name` | The `requirements-<model>.txt` filename for this model |
-| `ui` | Dict of UI strings/values: `proper_name`, `short_name`, `voice_path_console`, `voice_path_requestor`, `project_links`; optional positive `voice_sample_max_duration_s` is a warning-only recommendation, matching the upper duration in voice-path guidance |
+| `ui` | Dict of UI strings/values: `proper_name`, `short_name`, `voice_path_console`, `voice_path_requestor`, `project_links`; optional positive `voice_sample_max_duration_s` is a warning-only recommendation, matching the upper duration in voice-path guidance; local models may set `ffmpeg_libs_reason` and `readme_install_section` (required with `requires_ffmpeg_libs`) |
 | `output_filters` | Case-sensitive worker console substrings filtered out of output history (generation, realtime playback, and chat initialization). Blank/whitespace-only lines directly following a filtered line are dropped with it, so multi-line warnings leave no residue |
 | `substitutions` | List of `(before, after)` string pairs applied to prompts before inference |
 | `can_instructions` | Whether the model accepts per-voice instructions (`Voice.instructions`, keyed by model id). Defaults to `False`; local `[models.spec].can_instructions` sets the static default (currently `breeze_tts_2_local` and `omnivoice_local`). Ask `Tts.get_model_support(project).can_instructions(project, instance=None)`, not the static spec: local Qwen3 answers from its checkpoint type (CustomVoice/VoiceDesign only), and audio.cpp and SGL-Omni use their dedicated `voice_instructions` declaration (`[models.audio_cpp]` / `[models.sgl_omni.behavior]`) plus runtime behavior (CosyVoice3 Instruct mode only, on either backend). Whether they still apply to a voice that has a sample is the separate `uses_instructions_with_sample(project)` (False only for SGL-Omni AuK/AuK-Flash, which use them as the voice description of sample-less voices). Instructions are not ordinary model settings; OmniVoice's accepted text is tag-based, not arbitrary prose |
@@ -96,7 +106,7 @@ Key fields of `TtsModelSpec` most relevant to integration:
 
 Primary voice/transcript pairs are stored once in top-level `Project.voice_references`, shared by every model in that project. Catalog/registry voice and transcript bindings (`REGISTRY.voice_binding()`, `.transcript_binding()`) remain compatibility/capability metadata, not separate clone-list owners; model-specific support and transcript requirements still govern consumption. Parameters and batch size retain catalog-declared per-model storage, and `TtsModelType.can_batch()` derives from the orchestration binding. See [Project Spec v5](<project-spec-v5.md>) for storage and v1/v2/v3 migration.
 
-The effective output sample rate is exposed via `TtsBaseModel.get_output_sample_rate(project, instance)`. Its default implementation returns `INFO.default_output_sample_rate`; models whose rate depends on project configuration can override it (currently GLM, for its selectable samplerate). It is used for playback/export paths; it deliberately does not affect voice clone audio — every model resamples reference audio internally, so imported voice clones are simply resampled to the app-native 48 kHz (`SoundPipeline.apply_voice_clone_post_processing()`), peak-normalized, and saved under the project's `voice/` subdir as `<stem>.flac` (no model tag; `ProjectVoiceUtil.resolve_voice_file_path()` prefers the subdir and falls back to the legacy project-root location for older projects).
+The effective output sample rate is exposed via `TtsBaseModel.get_output_sample_rate(project, instance)`. Its default implementation returns `INFO.default_output_sample_rate`; models whose rate depends on project configuration can override it (currently GLM, for its selectable samplerate). It is used for playback/export paths; it deliberately does not affect voice clone audio — every model resamples reference audio internally, so imported voice clones are simply resampled to the app-native 48 kHz (`SoundPipeline.apply_voice_clone_post_processing()`), peak-normalized, and saved under the project's `voice/` subdir as `<stem>.flac` (no model tag; `ProjectVoiceUtil.resolve_voice_file_path()` prefers the subdir and falls back to the legacy project-root location for older projects). Local model adapters resolve sample paths with `ProjectVoiceUtil.resolve_model_voice_file_path()` instead, which hands them a canonical PCM WAV/FLAC (see [audio I/O](<audio-io.md>)).
 
 ### Model selection
 

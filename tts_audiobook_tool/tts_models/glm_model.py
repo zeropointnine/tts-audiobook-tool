@@ -161,7 +161,7 @@ class GlmModel(GlmBaseModel):
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
             project, TtsModelType.require_by_id("glm_local"), voice_selection_index
         )
-        voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
+        voice_path = ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name) if voice_file_name else ""
         if not voice_path:
             return "Voice clone path is required"
         seed = -1 if force_random_seed else project.get_model_setting('glm_local', 'seed')

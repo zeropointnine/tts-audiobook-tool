@@ -1,6 +1,5 @@
 import logging
 import os
-import shutil
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,7 +16,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 def pytest_addoption(parser):
     parser.addoption(
         "--no-ffmpeg-exe", action="store_true", default=False,
-        help="Apply the no-FFmpeg guard to every test and skip tests marked requires_ffmpeg_exe.",
+        help="Apply the no-FFmpeg guard to every test.",
     )
 
 
@@ -25,11 +24,6 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "no_ffmpeg_exe: fail the test if it launches an ffmpeg/ffprobe executable (see no_ffmpeg_guard).",
-    )
-    config.addinivalue_line(
-        "markers",
-        "requires_ffmpeg_exe(reason): production code under test still launches the FFmpeg executable "
-        "(pending the pip-only migration); skipped when ffmpeg/ffprobe are missing or with --no-ffmpeg-exe.",
     )
 
 
@@ -44,20 +38,8 @@ def no_ffmpeg_exe():
 
 @pytest.fixture(autouse=True)
 def apply_ffmpeg_exe_markers(request):
-    """Applies the `no_ffmpeg_exe` / `requires_ffmpeg_exe` markers and `--no-ffmpeg-exe`."""
-    node = request.node
-    requires = node.get_closest_marker("requires_ffmpeg_exe")
-    guarded = node.get_closest_marker("no_ffmpeg_exe")
-    if requires is not None:
-        if guarded is not None:
-            pytest.fail("A test cannot be marked both no_ffmpeg_exe and requires_ffmpeg_exe")
-        reason = requires.kwargs.get("reason") or (requires.args[0] if requires.args else "")
-        if request.config.getoption("--no-ffmpeg-exe"):
-            pytest.skip(f"requires_ffmpeg_exe (--no-ffmpeg-exe given): {reason}")
-        missing = [name for name in ("ffmpeg", "ffprobe") if shutil.which(name) is None]
-        if missing:
-            pytest.skip(f"requires_ffmpeg_exe ({', '.join(missing)} not on PATH): {reason}")
-    elif guarded is not None or request.config.getoption("--no-ffmpeg-exe"):
+    """Applies the `no_ffmpeg_exe` marker and `--no-ffmpeg-exe`."""
+    if request.node.get_closest_marker("no_ffmpeg_exe") is not None or request.config.getoption("--no-ffmpeg-exe"):
         request.getfixturevalue("no_ffmpeg_exe")
     yield
 

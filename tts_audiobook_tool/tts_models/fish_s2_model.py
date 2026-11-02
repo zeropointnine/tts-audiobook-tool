@@ -284,7 +284,7 @@ class FishS2Model(FishS2BaseModel):
             project, TtsModelType.require_by_id("fish_s2_local"), voice_selection_index
         )
         if voice_file_name:
-            voice_info = (ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name), voice_transcript)
+            voice_info = (ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name), voice_transcript)
 
             # Rolling continuation history is voice-specific
             if self._voice_info != voice_info:

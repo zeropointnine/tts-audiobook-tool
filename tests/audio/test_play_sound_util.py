@@ -42,7 +42,7 @@ def test_play_sound_async_returns_current_id_until_playback_finishes() -> None:
             return self
 
     sound = Sound(np.zeros(10, dtype=np.float32), 48000)
-    with patch("tts_audiobook_tool.sound.play_sound_util.sd.OutputStream", CompletingOutputStream):
+    with patch("sounddevice.OutputStream", CompletingOutputStream):
         sound_id = PlaySoundUtil.play_sound_async(sound)
         assert sound_id
         assert PlaySoundUtil.current_sound_id() == sound_id

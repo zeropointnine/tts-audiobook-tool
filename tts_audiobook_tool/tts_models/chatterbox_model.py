@@ -151,7 +151,7 @@ class ChatterboxModel(ChatterboxBaseModel):
 
         result = self.generate(
             text=prompts[0],
-            voice_path=ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else "",
+            voice_path=ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name) if voice_file_name else "",
             temperature=temperature,
             top_p=top_p,
             exaggeration=exaggeration,

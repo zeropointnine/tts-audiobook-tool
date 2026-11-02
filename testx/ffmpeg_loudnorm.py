@@ -1,20 +1,52 @@
+"""
+Developer-only: whole-file, two-pass FFmpeg `loudnorm`, run through the system
+`ffmpeg` executable (which must be on PATH).
+
+Formerly `tts_audiobook_tool/sound/loudness_normalization_util.py`. It left the
+app when export moved to per-segment loudness leveling (see
+sound/loudness_leveling.py), and was moved out of the production package when
+the app stopped requiring an FFmpeg executable. Kept for dev scripts that
+level-match whole renders (eg testx/room_reverb_ab.py).
+"""
+
 import json
 import os
 import subprocess
+from pathlib import Path
 
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.app_types import NormalizationSpecs
-from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
-from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants import AAC_BITRATE_DEFAULT, AAC_SUFFIXES, APP_SAMPLE_RATE, COL_DIM
+from tts_audiobook_tool.util import make_error_string, printt
+
+# FFmpeg output arguments the app's export used before PyAV
+FFMPEG_ARGUMENTS_OUTPUT_FLAC = ["-c:a", "flac", "-sample_fmt", "s16", "-frame_size", "4096", "-compression_level", "6"]
+
+
+def ffmpeg_arguments_output_aac(bitrate: str) -> list[str]:
+    return ["-c:a", "aac", "-b:a", bitrate, "-movflags", "+faststart", "-vn"]
+
+
+def run_ffmpeg_to_file(partial_command: list[str], dest_file_path: str) -> str:
+    """
+    Runs `ffmpeg <partial_command> <temp file>`, then replaces `dest_file_path`
+    with the temp file (so the source may be the destination).
+    Returns error string on fail, else empty string.
+    """
+    temp_path = str(Path(dest_file_path).with_name("_loudnorm_temp" + Path(dest_file_path).suffix))
+    try:
+        subprocess.run(["ffmpeg", *partial_command, temp_path], check=True, text=True, encoding="utf-8")
+        os.replace(temp_path, dest_file_path)
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        return make_error_string(e)
+    return ""
+
 
 class LoudnessNormalizationUtil:
     """
     Two-Pass Loudness Normalization (to EBU R128 / ITU-R BS.1770 specifications)
-
-    Whole-file ffmpeg loudnorm. No longer part of the export flow, which levels
-    loudness per segment instead (see sound/loudness_leveling.py); kept for
-    dev scripts that level-match whole renders (eg testx/room_reverb_ab.py).
 
     I = integrated loudness - average loudness over whole clip; measured in LUFS
     LRA = loudness range - dynamic range; lower values = less dynamic range / more compression
@@ -212,11 +244,11 @@ class LoudnessNormalizationUtil:
         if output_suffix == ".flac":
             partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)
         elif output_suffix in AAC_SUFFIXES:
-            partial_command.extend(make_ffmpeg_arguments_output_aac(aac_bitrate))
+            partial_command.extend(ffmpeg_arguments_output_aac(aac_bitrate))
         else:
             return "Unsupported output type"
 
-        err = FfmpegUtil.make_file(partial_command, output_file_path, use_temp_file=True)
+        err = run_ffmpeg_to_file(partial_command, output_file_path)
         if err:
             return err
 

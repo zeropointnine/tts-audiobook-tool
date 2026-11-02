@@ -29,6 +29,8 @@ _SERVER_SPEC_KEYS = {"file_tag", "default_output_sample_rate", "un_all_caps", "r
 _UI_KEYS = {"proper_name", "short_name", "voice_path_console", "voice_path_requestor", "project_links", "settings_note",
             "voice_sample_max_duration_s", "instructions_message", "instructions_label",
             "instructions_voice_variation_note", "preset_label"}
+# Local models declaring `requires_ffmpeg_libs` must also give these (see `Start.exit_on_missing_ffmpeg_libs`)
+_FFMPEG_LIBS_UI_KEYS = ("ffmpeg_libs_reason", "readme_install_section")
 
 
 def _fail(where: str, reason: str) -> NoReturn:
@@ -541,7 +543,8 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
     requirements = _field(meta, "requirements_file_name", f"{where}.spec", str)
     if not requirements:
         _fail(f"{where}.spec.requirements_file_name", "must not be empty")
-    ui = _object(meta.get("ui"), f"{where}.spec.ui", _UI_KEYS | ({"opt_in_url"} if not is_server else set()))
+    ui = _object(meta.get("ui"), f"{where}.spec.ui",
+                 _UI_KEYS | ({"opt_in_url", *_FFMPEG_LIBS_UI_KEYS} if not is_server else set()))
     for key in ("proper_name", "short_name", "voice_path_console", "voice_path_requestor"):
         _field(ui, key, f"{where}.spec.ui", str)
     links = _field(ui, "project_links", f"{where}.spec.ui", list)
@@ -617,6 +620,12 @@ def parse_spec(entry: dict[str, Any]) -> TtsModelSpec:
         voice_required = _field(meta, "requires_voice", f"{where}.spec", bool)
         streaming = _field(meta, "can_stream", f"{where}.spec", bool)
         requires_ffmpeg = _field(meta, "requires_ffmpeg_libs", f"{where}.spec", bool)
+        for key in _FFMPEG_LIBS_UI_KEYS:
+            if requires_ffmpeg and key not in ui:
+                _fail(f"{where}.spec.ui.{key}", "required when requires_ffmpeg_libs is true")
+            if key in ui:
+                if not _field(ui, key, f"{where}.spec.ui", str).strip():
+                    _fail(f"{where}.spec.ui.{key}", "must not be empty")
         filters = _field(meta, "output_filters", f"{where}.spec", list)
         if not all(isinstance(s, str) for s in filters):
             _fail(f"{where}.spec.output_filters", "expected strings")

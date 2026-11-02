@@ -65,8 +65,8 @@ from tts_audiobook_tool.constants import APP_SAMPLE_RATE
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
-from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.sound.noise_bed import NoiseBed
+from testx.ffmpeg_loudnorm import LoudnessNormalizationUtil
 from tts_audiobook_tool.sound.room_reverb import (
     ROOM_DESIGNS, RoomIrParams, StreamingReverb, finish_ir, make_room_ir, make_stereo_irs,
 )

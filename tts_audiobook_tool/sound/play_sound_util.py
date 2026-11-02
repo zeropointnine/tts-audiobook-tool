@@ -2,7 +2,6 @@ import threading
 import uuid
 
 import numpy as np
-import sounddevice as sd
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import APP_SAMPLE_RATE
@@ -38,6 +37,12 @@ class PlaySoundUtil:
         Eats errors silently.
         Returns an id representing this playback.
         """
+        # Imported on first playback, not with this module: importing sounddevice
+        # initializes PortAudio, which enumerates the system's audio devices (on
+        # Linux loading ALSA plugins, some of which link system FFmpeg). Modules
+        # that only decode audio for previews should not trigger that.
+        import sounddevice as sd
+
         with PlaySoundUtil._playback_operation_lock:
             PlaySoundUtil.stop_sound_async()
             sound_id = uuid.uuid4().hex

@@ -1,38 +1,42 @@
+"""
+System FFmpeg shared-library discovery, for local models that declare
+`requires_ffmpeg_libs` (see `Start.exit_on_missing_ffmpeg_libs`).
+
+The app itself needs no system FFmpeg: its audio I/O uses PyAV's and
+soundfile's bundled libraries (see sound/audio_writers.py, audio_decoder.py).
+
+No model declares the exception at present. Windows DLL-directory registration
+(`os.add_dll_directory()` for an FFmpeg bin folder on PATH, which Python 3.8+
+extension modules such as TorchCodec need) was removed with the last
+declaring model; a future Windows exception has to add it back.
+"""
+
+from __future__ import annotations
+
 from pathlib import Path
 import ctypes
 import ctypes.util
 import os
-import subprocess
+import re
 import sys
-from tts_audiobook_tool import text_util
-from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.l import L
-from tts_audiobook_tool.util import *
+from typing import TYPE_CHECKING
+
+from tts_audiobook_tool.constants import APP_URL
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.tts_models.model_spec import TtsModelSpec
 
 class FfmpegUtil:
-
-    @staticmethod
-    def is_ffmpeg_available() -> bool:
-        """ Checks if 'ffmpeg' executable is installed and accessible in the system PATH """
-        try:
-            subprocess.run(
-                [FFMPEG_COMMAND, "-version"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True,
-            )
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return False
 
     @staticmethod
     def are_ffmpeg_libraries_available() -> bool:
         """
         Checks if FFmpeg shared libraries are loadable by the current Python process.
 
-        This is separate from `is_ffmpeg_available()` because Python packages such as
-        TorchCodec need FFmpeg's shared libraries (`.dll`, `.so`, `.dylib`) at import/runtime,
-        not the `ffmpeg` command-line executable.
+        Only for local models that declare `requires_ffmpeg_libs`: packages such as
+        TorchCodec need system FFmpeg shared libraries (`.dll`, `.so`, `.dylib`) at
+        import/runtime. The app's own audio I/O never uses them (it uses PyAV's
+        bundled FFmpeg).
         """
         library_names = [
             "avcodec",
@@ -107,45 +111,6 @@ class FfmpegUtil:
             return False
 
     @staticmethod
-    def attempt_add_ffmpeg_dll_windows() -> bool:
-        """
-        On Windows, attempts to register an FFmpeg DLL directory with the current Python process.
-
-        Newer Python versions do not reliably use PATH for DLL dependencies loaded by packages
-        such as TorchCodec. This looks for an FFmpeg bin directory already present in PATH, calls
-        `os.add_dll_directory()` for it, then verifies that the FFmpeg libraries are loadable.
-
-        Returns True if FFmpeg libraries are loadable after the attempt, otherwise False.
-        """
-        if sys.platform != "win32":
-            return False
-
-        if FfmpegUtil.are_ffmpeg_libraries_available():
-            return True
-
-        for path_dir in os.environ.get("PATH", "").split(os.pathsep):
-            path = Path(path_dir) if path_dir else None
-            if not path or not path.is_dir():
-                continue
-
-            if not any(child_path.name.startswith("avcodec-") for child_path in FfmpegUtil._iter_file_paths(path)):
-                continue
-
-            try:
-                os.add_dll_directory(str(path))
-            except OSError:
-                continue
-
-            # Some libraries still consult PATH directly. Keep it in sync with the DLL directory list.
-            if str(path) not in os.environ.get("PATH", "").split(os.pathsep):
-                os.environ["PATH"] = str(path) + os.pathsep + os.environ.get("PATH", "")
-
-            if FfmpegUtil.are_ffmpeg_libraries_available():
-                return True
-
-        return False
-
-    @staticmethod
     def _find_files_on_path(file_name_prefix: str) -> list[Path]:
         file_paths = []
         for path_dir in os.environ.get("PATH", "").split(os.pathsep):
@@ -163,88 +128,45 @@ class FfmpegUtil:
             return []
 
     @staticmethod
-    def make_file(
-            partial_command: list[str],
-            dest_file_path: str,
-            use_temp_file: bool,
-    ) -> str:
+    def make_missing_libs_message(spec: TtsModelSpec, platform: str | None = None) -> str:
         """
-        `partial_command` is expected to be an ffmpeg command _sans_ "ffmpeg" and sans dest path
-        (ie, the full command string list w/o the first item and last item).
-
-        When `use_temp_file`, outputs a temp file in same directory as `dest_file_path`,
-        and on success, renames temp file to `dest_file_path`.
-
-        Returns error string on fail, else empty string
+        Startup message for a model declaring `requires_ffmpeg_libs` whose
+        libraries were not found: names the model, says why it needs them
+        (catalog `ui.ffmpeg_libs_reason`), gives the step for this OS and
+        points to the model's README install section
+        (`ui.readme_install_section`), which has the steps for every OS.
         """
-
-        if use_temp_file:
-            dest_file_suffix = Path(dest_file_path).suffix
-            temp_file_name = text_util.make_random_hex_string() + dest_file_suffix
-            working_dest_file_path = str( Path(dest_file_path).parent / temp_file_name )
-        else:
-            working_dest_file_path = dest_file_path
-
-        # TODO: check for redundant first and last element (especially last element)
-        full_command = partial_command[:]
-        full_command.insert(0, FFMPEG_COMMAND)
-        full_command.append(working_dest_file_path)
-
-        if False:
-            printt(" ".join(full_command))
-            printt()
-
-        try:
-            completed_process = subprocess.run(
-                full_command,
-                check=True,  # Raise CalledProcessError if ffmpeg returns non-zero exit code
-                text=True,
-                encoding='utf-8'
+        platform = platform or sys.platform
+        name = spec.ui.get("proper_name") or spec.id
+        reason = spec.ui.get("ffmpeg_libs_reason", "")
+        section = spec.ui.get("readme_install_section", "")
+        if platform == "win32":
+            step = (
+                "Download a \"full-shared\" FFmpeg build and add its bin folder "
+                "(the one containing avcodec-*.dll) to PATH."
             )
-            if completed_process.returncode != 0:
-                if use_temp_file:
-                    delete_silently(working_dest_file_path)
-                return f"Ffmpeg error, returncode - {completed_process.returncode}"
+        elif platform == "darwin":
+            step = "Run `brew install ffmpeg`, or point DYLD_LIBRARY_PATH at a shared build's lib folder."
+        else:
+            step = (
+                "Install FFmpeg through your package manager (e.g. `sudo apt install ffmpeg`), "
+                "or point LD_LIBRARY_PATH at a shared build's lib folder."
+            )
+        lines = [f"{name} needs FFmpeg shared libraries, which were not found.", ""]
+        if reason:
+            lines.append(f"Reason: {reason}.")
+        lines.append(f"The rest of the app does not need FFmpeg; only {name} does.")
+        lines += ["", step]
+        if section:
+            lines += [
+                "",
+                f"See the README section \"{section}\":",
+                f"{APP_URL}#{github_heading_anchor(section)}",
+            ]
+        return "\n".join(lines)
 
-        except subprocess.CalledProcessError as e:
-            if use_temp_file:
-                delete_silently(working_dest_file_path)
-            return f"Ffmpeg error, returncode - {e.returncode} - {e.stderr}"
 
-        except Exception as e:
-            if use_temp_file:
-                delete_silently(working_dest_file_path)
-            return f"Subprocess error: {e}"
-
-        # Success at this point
-
-        if use_temp_file:
-            # Rename file
-            try:
-                if os.path.exists(dest_file_path):
-                    # Note, deleting pre-existing file
-                    # Note also that this allows the dest path to be the same as the (implicit) src file,
-                    # so long as use_temp_file is True.
-                    L.w(f"file already exists, will replace: {dest_file_path}")
-                    os.unlink(dest_file_path)
-                os.rename(working_dest_file_path, dest_file_path)
-            except Exception as e:
-                # Don't delete temp file in this case
-                return f"Couldn't rename temp file: {e}"
-            delete_silently(working_dest_file_path)
-            return ""
-
-        return ""
-
-    SHARED_LIBS_MISSING_MESSAGE = \
-"""FFmpeg shared libraries were not found
-
-Please install a full FFmpeg build that includes shared libraries, then make sure those libraries are
-discoverable by your system:
-- Windows: add the FFmpeg bin directory containing the DLL files to PATH
-- Linux: install FFmpeg libraries through your package manager, or set LD_LIBRARY_PATH
-- macOS: install FFmpeg with Homebrew or MacPorts, or set DYLD_LIBRARY_PATH
-
-Download/install info:
-https://ffmpeg.org/download.html
-"""
+def github_heading_anchor(heading: str) -> str:
+    """GitHub's anchor for a Markdown heading: lowercase, punctuation dropped, spaces to hyphens."""
+    text = re.sub(r"[^\w\- ]", "", heading.strip().lower())
+    return text.replace(" ", "-")

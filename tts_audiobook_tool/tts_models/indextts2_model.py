@@ -72,12 +72,12 @@ class IndexTts2Model(IndexTts2BaseModel):
 
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("indextts2_local"), voice_selection_index)
         if voice_file_name:
-            voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
+            voice_path = ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name)
         else:
             voice_path = ""
 
         if project.get_model_setting('indextts2_local', 'emo_voice'):
-            emo_voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, project.get_model_setting('indextts2_local', 'emo_voice'))
+            emo_voice_path = ProjectVoiceUtil.resolve_model_voice_file_path(project, project.get_model_setting('indextts2_local', 'emo_voice'))
         else:
             emo_voice_path = ""
 

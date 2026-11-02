@@ -12,6 +12,7 @@ from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from voice_cache_test_support import write_voice_file
 
 
 class FakeQwenWrapper:
@@ -120,7 +121,7 @@ def test_qwen_build_gen_kwargs_resolves_defaults_and_mirrors_overrides():
 
 def test_qwen_base_prints_resolved_params_without_voice_info(tmp_path, monkeypatch):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"voice")
+    write_voice_file(voice_path, b"voice")
     captured = {}
 
     def capture_params(cls, values, keys_blacklist=None):
@@ -146,8 +147,8 @@ def test_qwen_base_prints_resolved_params_without_voice_info(tmp_path, monkeypat
 def test_qwen_reuses_cpu_voice_prompts_for_a_b_a(tmp_path):
     voice_a = tmp_path / "a.wav"
     voice_b = tmp_path / "b.wav"
-    voice_a.write_bytes(b"a")
-    voice_b.write_bytes(b"b")
+    write_voice_file(voice_a, b"a")
+    write_voice_file(voice_b, b"b")
     model = make_model()
 
     assert not isinstance(generate(model, str(voice_a), "words a"), str)
@@ -179,14 +180,14 @@ def test_qwen_reuses_cpu_voice_prompts_for_a_b_a(tmp_path):
 
 def test_qwen_rebuilds_changed_voice_and_clears_cache(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"first")
+    write_voice_file(voice_path, b"first")
     model = make_model()
 
     assert not isinstance(generate(model, str(voice_path), "first transcript"), str)
     assert not isinstance(generate(model, str(voice_path), "second transcript"), str)
     assert len(model._voice_clone_cache) == 1
 
-    voice_path.write_bytes(b"different file contents")
+    write_voice_file(voice_path, b"different file contents")
     assert not isinstance(generate(model, str(voice_path), "second transcript"), str)
 
     assert len(model._model.create_calls) == 3
@@ -330,7 +331,7 @@ def test_qwen_base_project_generation_still_routes_selected_clone_not_instructio
     project.set_model_setting("qwen3tts_local", "model_type", "base")
     project.set_model_setting("qwen3tts_local", "seed", 7)
     for voice in voices:
-        (tmp_path / voice.file_name).write_bytes(b"voice")
+        write_voice_file(tmp_path / voice.file_name, b"voice")
     model = make_model()
     model._model.model = SimpleNamespace(tts_model_type="base")
     original_get = Project.get_model_setting

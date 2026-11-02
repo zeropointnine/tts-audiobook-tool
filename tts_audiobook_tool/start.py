@@ -103,8 +103,6 @@ class Start:
         # pre-empt the more informative wrong-torch-flavor message
         self.exit_on_wrong_torch_flavor_windows()
         self.exit_on_cuda_unavailable_for_cuda_only_model()
-        if not self.is_server:
-            self.exit_on_missing_ffmpeg_exe()
         self.exit_on_missing_ffmpeg_libs()
         self.exit_on_incompatible_chatterbox_package()
         self.exit_on_missing_new_packages()
@@ -234,23 +232,19 @@ class Start:
         model_type = Tts.get_local_model_type()
         return model_type.value.ui.get("proper_name") or model_type.value.id
 
-    def exit_on_missing_ffmpeg_exe(self) -> None:
-        from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
-        if not FfmpegUtil.is_ffmpeg_available():
-            printt(f"{COL_ERROR}The command 'ffmpeg' must exist on the system path.")
-            printt(f"{COL_ERROR}Please install it first:")
-            printt("https://ffmpeg.org/download.html")
-            exit(1)
-
     def exit_on_missing_ffmpeg_libs(self) -> None:
-        if Tts.get_local_model_type().value.requires_ffmpeg_libs:
-            from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
-            if not FfmpegUtil.are_ffmpeg_libraries_available():
-                FfmpegUtil.attempt_add_ffmpeg_dll_windows()
-
-            if not FfmpegUtil.are_ffmpeg_libraries_available():
-                printt(COL_ERROR + FfmpegUtil.SHARED_LIBS_MISSING_MESSAGE)
-                exit(1)
+        """
+        Only for local models that declare `requires_ffmpeg_libs` (the per-model
+        exception to the app's pip-only audio stack). The app's own audio I/O uses
+        PyAV's bundled FFmpeg and needs no system FFmpeg.
+        """
+        spec = Tts.get_local_model_type().value
+        if not spec.requires_ffmpeg_libs:
+            return
+        from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
+        if not FfmpegUtil.are_ffmpeg_libraries_available():
+            printt(COL_ERROR + FfmpegUtil.make_missing_libs_message(spec))
+            exit(1)
 
     def exit_on_incompatible_chatterbox_package(self) -> None:
         if (
@@ -289,7 +283,7 @@ class Start:
         new_packages = [
             "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer",
             "pydantic", "requests", "text_to_num", "ebooklib", "bs4", "httpx", "textual",
-            "prompt_toolkit", "LavaSR", "wakepy"
+            "prompt_toolkit", "LavaSR", "wakepy", "av"
         ]
 
         # apple silicon vs not

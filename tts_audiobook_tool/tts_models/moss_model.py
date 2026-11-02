@@ -338,7 +338,7 @@ class MossModel(MossBaseModel):
 
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.require_by_id("moss_local"), voice_selection_index)
         if voice_file_name:
-            voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
+            voice_path = ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name)
         else:
             voice_path = ""
 

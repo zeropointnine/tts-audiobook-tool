@@ -298,7 +298,7 @@ class RoomReverbProcessor:
         wet = self.process_wet(sound, send_end, is_last)
         dry = data.astype(np.float64)
         out = dry + wet if wet.ndim == 1 else dry[:, None] + wet
-        # Safety net: ffmpeg streaming casts to int16 without clipping
+        # Safety net: keep samples in [-1, 1] for every consumer (the export writers also clip)
         if np.max(np.abs(out)) > 1.0:
             out = np.clip(out, -1.0, 1.0)
         return Sound(out.astype(data.dtype), sound.sr)

@@ -123,7 +123,7 @@ class NoiseBed:
 
         bed = (self._noise.next(n) * gain).astype(data.dtype)
         out = data + (bed if data.ndim == 1 else bed[:, None])
-        # Safety net: ffmpeg streaming casts to int16 without clipping
+        # Safety net: keep samples in [-1, 1] for every consumer (the export writers also clip)
         if np.max(np.abs(out)) > 1.0:
             out = np.clip(out, -1.0, 1.0)
         return Sound(out, sound.sr)

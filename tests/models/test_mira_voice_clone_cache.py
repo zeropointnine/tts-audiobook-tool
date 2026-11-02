@@ -8,7 +8,7 @@ import torch
 
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.mira_model import MiraModel
-from voice_cache_test_support import cache_key_prefix
+from voice_cache_test_support import cache_key_prefix, write_voice_file
 
 
 class FakeMiraTTS:
@@ -53,8 +53,8 @@ def generate(model: MiraModel, tmp_path, voice_name: str = "voice.wav"):
 def test_mira_reuses_context_tokens_for_a_b_a(tmp_path):
     voice_a = tmp_path / "a.wav"
     voice_b = tmp_path / "b.wav"
-    voice_a.write_bytes(b"alpha alpha alpha")
-    voice_b.write_bytes(b"beta beta beta beta")
+    write_voice_file(voice_a, b"alpha alpha alpha")
+    write_voice_file(voice_b, b"beta beta beta beta")
     model = make_model()
 
     assert isinstance(generate(model, tmp_path, "a.wav"), list)
@@ -74,11 +74,11 @@ def test_mira_reuses_context_tokens_for_a_b_a(tmp_path):
 
 def test_mira_rebuilds_changed_voice_and_clears_cache(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"first")
+    write_voice_file(voice_path, b"first")
     model = make_model()
 
     assert isinstance(generate(model, tmp_path), list)
-    voice_path.write_bytes(b"different file contents")
+    write_voice_file(voice_path, b"different file contents")
     assert isinstance(generate(model, tmp_path), list)
 
     assert len(model.mira_tts.encode_calls) == 2
@@ -92,7 +92,7 @@ def test_mira_rebuilds_changed_voice_and_clears_cache(tmp_path):
 
 def test_mira_error_string_on_encode_failure(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"x")
+    write_voice_file(voice_path, b"x")
     model = make_model()
 
     def boom(path):
@@ -109,7 +109,7 @@ def test_mira_error_string_on_encode_failure(tmp_path):
 
 def test_mira_no_voice_clears_state(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"some bytes here")
+    write_voice_file(voice_path, b"some bytes here")
     model = make_model()
 
     assert isinstance(generate(model, tmp_path), list)
@@ -125,7 +125,7 @@ def test_mira_no_voice_clears_state(tmp_path):
 
 def test_mira_clear_voice_clone_api(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"some bytes here")
+    write_voice_file(voice_path, b"some bytes here")
     model = make_model()
 
     assert isinstance(generate(model, tmp_path), list)

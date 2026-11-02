@@ -98,7 +98,7 @@ class BreezeModel(BreezeBaseModel):
             # Upstream requires the reference transcript with the reference audio
             if not transcript:
                 return "Voice clone sample transcript is required"
-            voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
+            voice_path = ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name)
         else:
             transcript = ""
         # Instructions belong to the selected voice, keyed by model id

@@ -15,7 +15,6 @@ json_repair
 pandas
 pydantic>=2.9.2,<3
 vector_quantize_pytorch
-pydub
 ruff==0.12.2
 omegaconf
 click

@@ -29,6 +29,7 @@ A few important boundaries:
 
 - **Voice policy vs audio vs playback:** channel/pan assignment is in **voices**; signal processing is in **audio**. Add relevant cases from the [playback tests](<../tests/ui/test_real_time_playback_app.py>) when streaming application, device fallback or saved playback changes—not for every DSP helper edit.
 - **Worker vs screen:** shared event/session behavior starts in **workers**. Add the affected host in **ui** or **conversation** when dispatch, cancellation or terminal-result handling changes. A local widget change does not require every host.
+- **Audio file I/O:** writers, decoder and conversion tests are in **audio** and run under the no-FFmpeg guard (`pytest.mark.no_ffmpeg_exe`; `--no-ffmpeg-exe` applies it to every test). For changes to that stack, its callers, or audio dependencies, also run the end-to-end [no-FFmpeg smoke script](<../testx/no_ffmpeg_smoke.py>) (`./venv-base/bin/python -m testx.no_ffmpeg_smoke`); see [audio I/O](<audio-io.md>).
 - **Persistence:** schemas and atomic writes start in **project**, model-setting ownership in **models**. Add the affected import/editor/generation flow only if the stored-data contract reaches it.
 
 ## Commands and environments

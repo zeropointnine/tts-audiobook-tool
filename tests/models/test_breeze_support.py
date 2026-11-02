@@ -16,6 +16,7 @@ from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.breeze_base_model import BreezeBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
+from voice_cache_test_support import write_voice_file
 
 MODEL_ID = "breeze_tts_2_local"
 
@@ -24,7 +25,7 @@ def make_project(tmp_path, voice_references=None) -> Project:
     # The reference-code cache stats the voice file
     for reference in voice_references or []:
         if reference.get("file_name"):
-            (tmp_path / reference["file_name"]).write_bytes(b"x")
+            write_voice_file(tmp_path / reference["file_name"], b"x")
     project = Project.model_validate({
         "dir_path": str(tmp_path),
         "tts_model_type": MODEL_ID,
@@ -311,7 +312,7 @@ def test_breeze_generation_applies_sampling_settings(fake_model, tmp_path):
 def test_breeze_reference_codes_are_cached(fake_model, tmp_path):
     from breeze_tts.infer import templates
     model, lib = fake_model
-    (tmp_path / "voice.flac").write_bytes(b"x")
+    write_voice_file(tmp_path / "voice.flac", b"x")
     project = make_project(tmp_path, [{"file_name": "voice.flac", "transcript": "Hi."}])
     original = templates._encode_prompt_audio
 

@@ -187,7 +187,7 @@ class FishS1Model(FishS1BaseModel):
             project, TtsModelType.require_by_id("fish_s1_local"), voice_selection_index
         )
         if voice_file_name:
-            voice_info = (ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name), voice_transcript)
+            voice_info = (ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name), voice_transcript)
             try:
                 self._voice_clone = self._get_or_create_voice_clone(
                     source_path=voice_info[0],

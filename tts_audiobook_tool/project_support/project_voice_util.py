@@ -132,6 +132,27 @@ class ProjectVoiceUtil:
         return path_norm.join_project_relative(project.dir_path, canonical_name)
 
     @staticmethod
+    def resolve_model_voice_file_path(project: Project, file_name: str) -> str:
+        """
+        The voice sample path to hand a local model library: as
+        `resolve_voice_file_path`, made canonical (a PCM WAV/FLAC that
+        libsndfile reads, see sound/canonical_reference.py) so the library's
+        own loader never needs system FFmpeg. App-imported samples are already
+        canonical and are returned unchanged; others (eg a legacy MP3) are
+        decoded once to a cached FLAC.
+
+        A missing file is returned as resolved, for the model's own
+        missing-file handling. Raises `VoiceReferenceError` when an existing
+        file can't be decoded.
+        """
+        from tts_audiobook_tool.sound.canonical_reference import canonical_reference_path
+
+        path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
+        if not os.path.isfile(path):
+            return path
+        return canonical_reference_path(path)
+
+    @staticmethod
     def get_voice_values(project: Project, tts_model_type: TtsModelType) -> list[str]:
         """Return the shared clone list for a model that supports voice samples.
 

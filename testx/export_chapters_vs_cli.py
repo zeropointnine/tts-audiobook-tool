@@ -40,7 +40,7 @@ import numpy as np
 
 from testx.pyav_m4b_chapters import Checker, parse_mp4, read_back
 from tts_audiobook_tool.constants import (
-    APP_META_MP4_MEAN, APP_META_MP4_TAG, APP_NAME, make_ffmpeg_arguments_output_aac,
+    APP_META_MP4_MEAN, APP_META_MP4_TAG, APP_NAME,
 )
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sound.audio_writers import AacWriter, Chapter
@@ -77,6 +77,10 @@ def make_chapters() -> list[Chapter]:
     return chapters
 
 
+# The output arguments the app's FFmpeg CLI export used (removed from the app)
+LEGACY_AAC_ARGUMENTS = ["-c:a", "aac", "-b:a", BITRATE, "-movflags", "+faststart", "-vn"]
+
+
 def write_new(path: Path, audio: np.ndarray) -> None:
     with AacWriter(str(path), SAMPLE_RATE, 2, bitrate=BITRATE,
                    metadata={"title": TITLE, "artist": APP_NAME}) as writer:
@@ -90,7 +94,7 @@ def write_legacy(path: Path, audio: np.ndarray, work: Path) -> None:
     pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-f", "s16le", "-ar", str(SAMPLE_RATE), "-ac", "2", "-i", "-",
-         *make_ffmpeg_arguments_output_aac(BITRATE), str(concat)],
+         *LEGACY_AAC_ARGUMENTS, str(concat)],
         input=pcm.tobytes(), check=True,
     )
     meta = f";FFMETADATA1\ntitle={TITLE}\nartist={APP_NAME}\n\n"

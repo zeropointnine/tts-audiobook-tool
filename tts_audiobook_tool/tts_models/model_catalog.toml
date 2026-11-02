@@ -915,7 +915,9 @@ file_tag = "moss"
 default_output_sample_rate = 24000
 requires_voice = false
 can_stream = false
-requires_ffmpeg_libs = true
+# No exception: the adapter hands the processor decoded waveforms and audio
+# codes, never paths, so its torchaudio 2.9/TorchCodec path loader is unused.
+requires_ffmpeg_libs = false
 un_all_caps = false
 requirements_file_name = "requirements-moss.txt"
 output_filters = []

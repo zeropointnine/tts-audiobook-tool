@@ -75,7 +75,7 @@ same length:
 
 - Fades in over the first `EDGE_FADE_S` (50 ms) of the output, however it is chunked.
 - With `is_last`, fades out over the last 50 ms of that call.
-- Clips to [-1, 1] as a safety net (the ffmpeg stream casts to int16 without clipping).
+- Clips to [-1, 1] as a safety net (the export writers clip as well; other consumers may not).
 
 **Concat** (`ConcatUtil.concatenate_sound_segments`, param `room_tone_db`): each held segment
 gets its pause or break effect appended, then one `apply` call; the final segment is `is_last`.

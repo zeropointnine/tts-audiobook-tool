@@ -105,7 +105,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         voice_file_name, ref_text = ProjectVoiceUtil.current_voice_reference_pair(
             project, model_type, voice_selection_index
         )
-        voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
+        voice_path = ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name) if voice_file_name else ""
         # Instructions belong to the selected voice, keyed by model id.
         voice = ProjectVoiceUtil.current_voice(project, model_type, voice_selection_index)
         instruct = voice.instructions.get(model_type.id, "") if voice is not None else ""

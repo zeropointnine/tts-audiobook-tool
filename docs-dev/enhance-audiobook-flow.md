@@ -9,6 +9,7 @@ Relevant code:
 - `tts_audiobook_tool/enhance/enhance_artifacts.py` — artifacts, state snapshot, caching
 - `tts_audiobook_tool/enhance/enhance_menu.py` — menu presentation
 - `tts_audiobook_tool/enhance/enhance_flow.py` — user-triggered operations
+- `tts_audiobook_tool/enhance/enhance_alignment.py` — transcription windows and alignment
 - Tests: `tests/enhance/test_enhance_artifacts.py`, `tests/enhance/test_enhance_menu.py`, `tests/enhance/test_enhance_flow.py`
 
 ## Overview
@@ -57,6 +58,23 @@ All artifacts are siblings of the selected audio file, named by its stem:
 The book is a JSON file (`BOOK_FORMAT`); the transcription and timed-phrase
 caches are pickles written via atomic replace. The output suffix depends on the
 book's `text_source_kind`: `plain_text` → `.abr.m4a`, `epub` → `.abr.m4b`.
+
+## Audio I/O
+
+All decoding and encoding uses the app's pip-only audio stack (PyAV and
+soundfile; see [audio I/O](<audio-io.md>)), never an FFmpeg executable:
+
+- **Transcribe** streams the source through `AudioDecoder` into 16 kHz mono
+  float32 windows of 30 s with 5 s overlap
+  (`enhance_alignment._stream_audio_with_overlap`); the STT worker receives
+  arrays only. The decoder uses the stream `best("audio")` picks — the default
+  track when the file has several.
+- **Review previews** decode at most one minute from the same track with
+  `SoundFileUtil.load_range`, which seeks instead of decoding from the start.
+- **Create** copies M4A/M4B sources and adds the ABR tag; other formats are
+  re-encoded to AAC (`SoundFileUtil.transcode_to_aac_at` → `transcode_to_aac`),
+  keeping container tags and chapters. Every decoder is closed before the
+  staged file replaces the destination.
 
 ## Menu presentation rules
 

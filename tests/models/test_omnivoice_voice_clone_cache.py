@@ -13,7 +13,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
-from voice_cache_test_support import cache_key_prefix
+from voice_cache_test_support import cache_key_prefix, write_voice_file
 
 
 class FakeOmniVoice:
@@ -92,8 +92,8 @@ def generate_clone(model: OmniVoiceModel, voice_path: str, ref_text: str = ""):
 def test_omnivoice_reuses_voice_clone_prompt_for_a_b_a(tmp_path):
     voice_a = tmp_path / "a.wav"
     voice_b = tmp_path / "b.wav"
-    voice_a.write_bytes(b"a")
-    voice_b.write_bytes(b"b")
+    write_voice_file(voice_a, b"a")
+    write_voice_file(voice_b, b"b")
     model = make_model()
 
     assert isinstance(generate_clone(model, str(voice_a), "words a"), list)
@@ -124,14 +124,14 @@ def test_omnivoice_reuses_voice_clone_prompt_for_a_b_a(tmp_path):
 
 def test_omnivoice_rebuilds_on_transcript_and_file_change(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"first")
+    write_voice_file(voice_path, b"first")
     model = make_model()
 
     assert isinstance(generate_clone(model, str(voice_path), "first transcript"), list)
     assert isinstance(generate_clone(model, str(voice_path), "second transcript"), list)
     assert len(model._voice_clone_cache) == 1
 
-    voice_path.write_bytes(b"different file contents")
+    write_voice_file(voice_path, b"different file contents")
     assert isinstance(generate_clone(model, str(voice_path), "second transcript"), list)
 
     assert len(model._model.create_calls) == 3
@@ -140,7 +140,7 @@ def test_omnivoice_rebuilds_on_transcript_and_file_change(tmp_path):
 
 def test_omnivoice_error_string_on_prompt_failure(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"x")
+    write_voice_file(voice_path, b"x")
     model = make_model()
 
     def boom(ref_audio, ref_text):
@@ -183,7 +183,7 @@ def test_omnivoice_non_clone_modes_do_not_touch_cache(tmp_path):
 def test_omnivoice_project_language_reaches_generate(tmp_path, monkeypatch, mode, language):
     model = make_model()
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"voice")
+    write_voice_file(voice_path, b"voice")
     settings = {"cfg": -1, "speed": -1, "num_step": -1, "seed": 1}
     project = SimpleNamespace(
         language_code=language,
@@ -209,7 +209,7 @@ def test_omnivoice_project_language_reaches_generate(tmp_path, monkeypatch, mode
 
 def test_omnivoice_kill_clears_everything(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"x")
+    write_voice_file(voice_path, b"x")
     model = make_model()
 
     assert isinstance(generate_clone(model, str(voice_path)), list)

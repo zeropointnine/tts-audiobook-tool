@@ -100,7 +100,14 @@ The project also includes an optional stand-alone REST service that runs the app
 
 ### Step 1
 
-First, [ffmpeg](https://ffmpeg.org/download.html) must be in your system path.
+Check that your platform is supported:
+
+| OS | Architecture | Notes |
+| --- | --- | --- |
+| Windows | x86_64 | |
+| Linux | x86_64, aarch64 (glibc 2.28 or later) | Audio playback needs the system PortAudio library (e.g. `sudo apt install libportaudio2`) |
+| macOS | Apple Silicon, macOS 14 (Sonoma) or later | |
+
 
 ### Step 2
 
@@ -885,6 +892,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 
 # Update highlights
+
+**2026-11-02**
+
+- **FFmpeg is no longer required** as a system dependency after a broad refactor.
 
 **2026-10-31**
 

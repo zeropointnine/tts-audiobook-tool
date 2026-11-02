@@ -135,5 +135,5 @@ class VoiceSpatialProcessor:
         for room in self._rooms.values():
             room_send_end = narration_end if room is target else 0
             dry += self._to_output_shape(room.process_wet(sound, room_send_end, is_last))
-        # Preserve headroom through BOTH paths; ffmpeg's integer cast cannot clip.
+        # Preserve headroom through BOTH paths (the export writers also clip).
         return Sound(np.clip(dry, -1.0, 1.0).astype(data.dtype), sound.sr)

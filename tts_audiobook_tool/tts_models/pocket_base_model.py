@@ -118,7 +118,7 @@ class PocketBaseModel(TtsBaseModel):
             return ""
 
         assert isinstance(instance, PocketBaseModel)
-        voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
+        voice_path = ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name)
         cached = cls.gated_error_message_cache.get(voice_path, None)
         if cached is not None:
             return cached

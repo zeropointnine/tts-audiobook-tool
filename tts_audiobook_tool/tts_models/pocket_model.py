@@ -131,7 +131,7 @@ class PocketModel(PocketBaseModel):
         voice_path = voice.preset_for(model_type.id) if voice else ""
         if not voice_path:
             voice_file_name = ProjectVoiceUtil.current_voice_value(project, model_type, voice_selection_index)
-            voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
+            voice_path = ProjectVoiceUtil.resolve_model_voice_file_path(project, voice_file_name) if voice_file_name else ""
 
         temperature = PocketModel.LOCAL.resolve_float(project, "temperature")
 

@@ -187,7 +187,9 @@ class ProjectUtil:
         subdirs.sort(key=lambda x: os.path.getmtime(x), reverse=True)
                 
         # Iterate through subdirectories
-        DEBUG_TAGS = ["[concat]", "[norm]", "[chaptermeta]"] 
+        # "[norm]" and "[chaptermeta]" are no longer written, but may remain in
+        # older projects' export directories
+        DEBUG_TAGS = ["[concat]", "[norm]", "[chaptermeta]"]
         results = []
         for subdir in subdirs:
             try:

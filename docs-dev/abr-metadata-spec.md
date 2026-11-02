@@ -577,7 +577,7 @@ follow the stricter interpretation above.
 ## Compatibility notes
 
 - FLAC and MP4-family ABR files carry the same JSON payload, only the container-level tag location differs.
-- The dev-only whole-file loudness normalization (`LoudnessNormalizationUtil`), when it converts
+- The dev-only whole-file loudness normalization (`LoudnessNormalizationUtil` in `testx/ffmpeg_loudnorm.py`), when it converts
   a FLAC input containing valid ABR metadata to an AAC-family output, reloads that payload from
   the FLAC and writes it to the MP4 custom tag. FLAC-to-FLAC normalization relies on FFmpeg
   preserving the FLAC metadata. Exports no longer use it (loudness is leveled per segment).

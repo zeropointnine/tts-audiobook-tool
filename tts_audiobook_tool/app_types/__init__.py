@@ -104,7 +104,7 @@ class NormalizationSpecs(NamedTuple):
     # Integrated loudness target, LUFS
     i: float
     # Loudness range, LU. Not used by leveling; only by the dev-only whole-file
-    # loudnorm in LoudnessNormalizationUtil
+    # loudnorm in testx/ffmpeg_loudnorm.py
     lra: float
     # Peak ceiling, dBTP
     tp: float
