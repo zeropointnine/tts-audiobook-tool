@@ -68,16 +68,6 @@ def test_guard_blocks_launches_before_they_start(launch) -> None:
     assert len(guard.violations) == 1
 
 
-def test_guard_blocks_ffmpeg_python() -> None:
-    ffmpeg = pytest.importorskip("ffmpeg")
-    with NoFfmpegGuard() as guard:
-        with pytest.raises(FfmpegExecutableLaunched):
-            ffmpeg.input("in.wav").output("out.flac").run(quiet=True)
-        with pytest.raises(FfmpegExecutableLaunched):
-            ffmpeg.probe("in.wav")
-    assert len(guard.violations) == 2
-
-
 def test_guard_blocks_pydub_decoding(tmp_path: Path) -> None:
     # pydub decodes everything but WAV by shelling out to ffmpeg/avconv.
     pydub = pytest.importorskip("pydub")

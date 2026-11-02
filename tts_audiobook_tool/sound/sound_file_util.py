@@ -1,12 +1,13 @@
 import math
 import os
-import subprocess
 
 import librosa
 import numpy as np
 import soundfile
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.sound.audio_convert import describe_error, transcode_to_aac
+from tts_audiobook_tool.sound.audio_decoder import AudioDecodeError, read_audio
 from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
@@ -17,29 +18,23 @@ class SoundFileUtil:
 
     @staticmethod
     def load_range(path: str, start: float, end: float) -> Sound | str:
-        """Seek and decode at most one minute of an audiobook for playback."""
+        """
+        Decodes at most one minute of an audiobook from `start` seconds, for
+        playback: mono, APP_SAMPLE_RATE, default audio track. Seeks rather
+        than decoding from the beginning.
+        """
         if not all(math.isfinite(value) for value in (start, end)) or start < 0 or end <= start:
             return "No playable audio interval is available"
         duration = min(end - start, SoundFileUtil.MAX_PREVIEW_SECONDS)
         try:
-            result = subprocess.run(
-                [
-                    FFMPEG_COMMAND, "-hide_banner", "-loglevel", "error", "-nostdin",
-                    "-ss", str(start), "-i", path, "-t", str(duration),
-                    "-vn", "-sn", "-dn", "-ac", "1", "-ar", str(APP_SAMPLE_RATE),
-                    "-f", "f32le", "-acodec", "pcm_f32le", "pipe:1",
-                ],
-                capture_output=True,
-                check=True,
-            )
-        except subprocess.CalledProcessError as exception:
-            detail = exception.stderr.decode("utf-8", errors="replace").strip()
-            return detail or f"Audio decoding failed (exit code {exception.returncode})"
-        except OSError as exception:
-            return make_error_string(exception)
-        if not result.stdout:
+            data, sr = read_audio(path, APP_SAMPLE_RATE, 1, start, duration)
+        except AudioDecodeError as e:
+            return str(e)
+        except Exception as e:
+            return make_error_string(e)
+        if not len(data):
             return "No audio was found in the selected interval"
-        return Sound(np.frombuffer(result.stdout, dtype=np.float32), APP_SAMPLE_RATE)
+        return Sound(data, sr)
 
     @staticmethod
     def load(path: str, target_sr: int=0) -> Sound | str:
@@ -47,9 +42,7 @@ class SoundFileUtil:
         Returns data as normalized np32 floats, mono
         """
         try:
-            # First, load without resampling
-            data, sr = librosa.load(path, sr=None, mono=True)
-            sr = int(sr)
+            data, sr = SoundFileUtil.read_mono(path)
         except Exception as e:
             return make_error_string(e)
 
@@ -58,6 +51,23 @@ class SoundFileUtil:
             return Sound(data, target_sr)
         else:
             return Sound(data, sr)
+
+    @staticmethod
+    def read_mono(path: str) -> tuple[np.ndarray, int]:
+        """
+        Whole file as mono float32 (channel mean) at its own sample rate.
+
+        Formats libsndfile reads (WAV, FLAC, OGG, MP3, ...) go through soundfile,
+        which gives the same samples librosa.load did; anything else (eg AAC/M4A)
+        through the PyAV decoder. Never an external decoder.
+        """
+        try:
+            data, sr = soundfile.read(path, dtype="float32", always_2d=True)
+        except soundfile.LibsndfileError:
+            data, sr = read_audio(path, sample_rate=None, channels=1)
+            return data, sr
+        mono = data[:, 0] if data.shape[1] == 1 else data.mean(axis=1, dtype=np.float32)
+        return np.ascontiguousarray(mono), int(sr)
 
     @staticmethod
     def save_flac(sound: Sound, flac_path: str) -> str:
@@ -145,18 +155,16 @@ class SoundFileUtil:
             dest_file_path: str,
             bitrate: str=AAC_BITRATE_DEFAULT,
     ) -> str:
-        """Transcode FFmpeg's default audio track, matching enhance transcription."""
-        partial_command = FFMPEG_TYPICAL_OPTIONS[:]
-        partial_command.extend(["-i", source_file_path])
-        # Let FFmpeg choose the same default audio track as the STT decoder;
-        # exclude all other stream types without pinning the first audio track.
-        partial_command.extend(make_ffmpeg_arguments_output_aac(bitrate))
-        partial_command.extend(["-sn", "-dn"])
-        return FfmpegUtil.make_file(
-            partial_command,
-            dest_file_path,
-            use_temp_file=True,
-        )
+        """
+        Re-encodes the default audio track (the one enhance transcription uses)
+        to AAC at `dest_file_path`, keeping container tags and chapters.
+        Returns error string on fail.
+        """
+        try:
+            transcode_to_aac(source_file_path, dest_file_path, bitrate)
+        except Exception as e:
+            return describe_error(e)
+        return ""
 
     @staticmethod
     def transcode_to_aac(source_file_path: str, suffix: str=".m4b") -> tuple[str, str]:

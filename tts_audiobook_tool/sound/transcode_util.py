@@ -1,6 +1,7 @@
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_support.interrupts import Interrupts
+from tts_audiobook_tool.sound.audio_convert import describe_error, transcode_to_aac
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
@@ -23,7 +24,7 @@ class TranscodeUtil:
             if not path.lower().endswith(".flac"):
                 ask.ask_enter_to_continue("Must have \".flac\" file suffix.")
                 return
-            m4a_path = Path(path).with_stem(".m4a")
+            m4a_path = Path(path).with_suffix(".m4a")
             if m4a_path.exists():
                 ask.ask_enter_to_continue("M4A file already exists with that file stem.")
                 return
@@ -87,10 +88,10 @@ class TranscodeUtil:
     def transcode_abr_flac_to_aac(src_path: str, kbps: int=96) -> tuple[str, str]:
         """
         1) Reads the app metadata from flac file
-        2) Converts flac to to MP4 using ffmpeg
+        2) Encodes the audio to AAC/M4A (PyAV, no FFmpeg executable)
         3) Adds the app metadata using mutagen
 
-        Returns tuple of output file path and error message, mutually exclusive
+        Control-C cancels. Returns tuple of output file path and error message, mutually exclusive
         """
 
         m4a_path = Path(src_path).with_suffix(".m4a")
@@ -102,15 +103,16 @@ class TranscodeUtil:
         if not meta_string:
             return "", "FLAC file has no tts-audiobook-tool metadata"
 
-        partial_command = FFMPEG_TYPICAL_OPTIONS[:]
-        partial_command.extend([
-            "-i", src_path,
-            "-c:a", "aac",
-            "-b:a", f"{kbps}k"
-        ])
-        err = FfmpegUtil.make_file(partial_command, dest_file_path=m4a_path, use_temp_file=True)
-        if err:
-            return "", err
+        Interrupts().set("concatenating")
+        try:
+            transcode_to_aac(
+                src_path, m4a_path, bitrate=f"{kbps}k",
+                cancel_check=lambda: Interrupts().did_interrupt,
+            )
+        except Exception as e:
+            return "", describe_error(e)
+        finally:
+            Interrupts().clear()
 
         err = AudioMetaUtil.set_mp4_metadata_tag(m4a_path, APP_META_MP4_MEAN, APP_META_MP4_TAG, meta_string)
         if err:

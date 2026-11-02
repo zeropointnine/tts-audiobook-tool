@@ -189,12 +189,7 @@ def test_encoder_write_failure_is_reported_not_swallowed(out_dir: Path) -> None:
 def test_make_file_end_to_end_m4b(out_dir: Path) -> None:
     # The whole export flow with little stubbed: real segment rendering, the
     # AAC writer with chapters, then the ABR tag on the final file. Only the
-    # final file remains.
-    #
-    # Segment files are read with soundfile here because SoundFileUtil.load
-    # still goes through librosa, whose first load per process probes
-    # `ffmpeg -version` via audioread. Phase 3 of the pip-only plan replaces
-    # that loader; drop the stub then.
+    # final file remains. Segment files go through the real SoundFileUtil.load.
     from types import SimpleNamespace
     from typing import cast
     from unittest.mock import patch
@@ -203,7 +198,6 @@ def test_make_file_end_to_end_m4b(out_dir: Path) -> None:
     from tts_audiobook_tool.app_types.app_metadata import AppMetadata
     from tts_audiobook_tool.concat_util import ConcatUtil
     from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
-    from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
     from tts_audiobook_tool.state import State
     from no_ffmpeg_guard import no_ffmpeg_exe
 
@@ -224,7 +218,6 @@ def test_make_file_end_to_end_m4b(out_dir: Path) -> None:
     with no_ffmpeg_exe(), \
             patch.object(ProjectTextIOUtil, "load_raw_text", return_value="\n".join(TITLES)), \
             patch.object(ConcatUtil, "make_phrases_and_paths", return_value=pairs), \
-            patch.object(SoundFileUtil, "load", side_effect=lambda path, target_sr=0: Sound(*soundfile.read(path, dtype="float32"))), \
             patch("tts_audiobook_tool.concat_util.DEV", False):
         final_path, error = ConcatUtil.make_file(cast(State, state), 0, len(TITLES) - 1, [], stem, use_upsampler=False)
 

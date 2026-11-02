@@ -2,7 +2,8 @@ import os
 
 import natsort
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
+from tts_audiobook_tool.app_support.interrupts import Interrupts
+from tts_audiobook_tool.sound.audio_convert import convert_audio_files, describe_error
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
@@ -63,8 +64,8 @@ class SoundConcatTranscodeUtil:
         printt()
 
         # Output file is saved in same dir
-        file_name = "concatenated" + ".flac" if is_flac else ".m4a"
-        
+        file_name = "concatenated" + (".flac" if is_flac else ".m4a")
+
         err = SoundConcatTranscodeUtil.concatenate_audio_files(
             audio_files, src_dir, file_name, is_flac
         )
@@ -86,6 +87,12 @@ class SoundConcatTranscodeUtil:
             audio_files: list[str], dest_dir: str, dest_filename: str, is_flac: bool
     ) -> str:
         """
+        Decodes the files in order (relative paths are relative to `dest_dir`) and
+        writes them back to back to `dest_dir/dest_filename`, as FLAC or AAC.
+        Inputs may mix formats, sample rates and channel counts: the output uses
+        the highest input sample rate, and stereo if any input isn't mono.
+        Control-C cancels (partial output is removed).
+
         Returns error string on fail, else empty string
         """
 
@@ -94,34 +101,26 @@ class SoundConcatTranscodeUtil:
 
         os.makedirs(dest_dir, exist_ok=True)
         dest_file_path = os.path.join(dest_dir, dest_filename)
+        suffix = Path(dest_file_path).suffix.lower()
+        if (suffix != ".flac") if is_flac else (suffix not in AAC_SUFFIXES):
+            return f"Unsupported output file name for {'FLAC' if is_flac else 'AAC'}: {dest_filename}"
 
-        # Create a temporary text file with file list for ffmpeg.
-        # This is the safest method, handling special characters in paths.
-        temp_text_file_path = os.path.join(dest_dir, "temp_filelist.txt")
+        source_paths = [os.path.join(dest_dir, path) for path in audio_files]
+
+        def on_source(index: int, path: str) -> None:
+            printt(f"[{index + 1}/{len(source_paths)}] {Path(path).name}")
+
+        Interrupts().set("concatenating")
         try:
-            with open(temp_text_file_path, 'w', encoding='utf-8') as f:
-                for filepath in audio_files:
-                    # The 'file' directive requires proper quoting for special chars
-                    s = filepath.replace("'", "'\\''")
-                    f.write(f"file '{s}'\n")
+            convert_audio_files(
+                source_paths,
+                dest_file_path,
+                cancel_check=lambda: Interrupts().did_interrupt,
+                on_source=on_source,
+            )
         except Exception as e:
-            delete_silently(temp_text_file_path)
-            return make_error_string(e)
-
-        # Make ffmpeg command
-        partial_command = FFMPEG_TYPICAL_OPTIONS[:]
-
-        partial_command.extend([
-            '-f', 'concat',             # Use the concat demuxer
-            '-safe', '0',               # Allow unsafe filenames (needed for this method)
-            '-i', temp_text_file_path,  # Input file list
-        ])
-
-        rest = FFMPEG_ARGUMENTS_OUTPUT_FLAC[:] if is_flac else make_ffmpeg_arguments_output_aac()
-        partial_command.extend(rest)
-
-        err = FfmpegUtil.make_file(partial_command, dest_file_path, False)
-
-        delete_silently(temp_text_file_path)
-
-        return err
+            return describe_error(e)
+        finally:
+            Interrupts().clear()
+            printt()
+        return ""

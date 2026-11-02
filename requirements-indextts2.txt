@@ -26,7 +26,6 @@ av==18.1.0
 chardet==5.2.0
 beautifulsoup4==4.12.3
 EbookLib==0.18
-ffmpeg-python==0.2.0
 httpx==0.28.1
 hf_xet
 librosa

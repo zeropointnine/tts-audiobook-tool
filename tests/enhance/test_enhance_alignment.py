@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from audio_fixture_support import write_sine_wav
+from audio_fixture_support import assert_no_handles, write_sine_wav
 from tts_audiobook_tool.app_types import ConcreteWord, SttVariant
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.enhance import enhance_alignment
@@ -254,45 +254,134 @@ def test_cancellation_while_reading_next_chunk_discards_partial_transcript(monke
     assert Interrupts()._mode == ""
 
 
-def _write_long_audio(path: Path) -> None:
-    write_sine_wav(path, frequency=440, sample_rate=16000, duration_s=180)
+def _write_ramp_wav(path: Path, duration_s: float, sample_rate: int = 16000) -> np.ndarray:
+    """Mono 16 kHz WAV whose sample values encode their own position; returns the samples as decoded."""
+    import soundfile as sf
+
+    count = round(duration_s * sample_rate)
+    values = ((np.arange(count) % 20000) / 20000 - 0.5).astype(np.float32)
+    sf.write(str(path), values, sample_rate, subtype="FLOAT")
+    return values
 
 
-@pytest.mark.requires_ffmpeg_exe(reason="the enhancement chunk stream still decodes through FFmpeg (Phase 3)")
-def test_abandoning_chunk_stream_stops_ffmpeg_promptly(tmp_path: Path) -> None:
-    """Stopping mid-stream must not leave the caller waiting on ffmpeg.
+@pytest.mark.no_ffmpeg_exe
+def test_chunk_stream_windows_overlap_and_keep_their_offsets(tmp_path: Path) -> None:
+    # Window i must start exactly i * (chunk - overlap) seconds into the file,
+    # since transcribed word times are offset by that amount; the last window
+    # holds the remainder and the bare overlap tail is not repeated.
+    source = tmp_path / "Hörbuch.wav"
+    values = _write_ramp_wav(source, 62.0)
 
-    A cancelled transcription stops consuming chunks while ffmpeg is still
-    producing them, so ffmpeg ends up blocked writing into a pipe nobody
-    drains and never returns to handle its own termination signal.  The
-    generator's teardown has to break that deadlock, otherwise the enhance
-    flow hangs after a single control-c.
-    """
+    windows = list(enhance_alignment._stream_audio_with_overlap(str(source), chunk_duration=30, overlap_duration=5))
+
+    stride = 25 * 16000
+    assert [len(window) for window in windows] == [30 * 16000, 30 * 16000, 12 * 16000]
+    for index, window in enumerate(windows):
+        assert window.dtype == np.float32
+        np.testing.assert_array_equal(window, values[index * stride:index * stride + len(window)])
+    assert_no_handles(source)
+
+
+@pytest.mark.no_ffmpeg_exe
+def test_chunk_stream_ending_on_a_window_boundary_adds_no_overlap_only_window(tmp_path: Path) -> None:
     source = tmp_path / "book.wav"
-    _write_long_audio(source)
+    _write_ramp_wav(source, 55.0)
+    windows = list(enhance_alignment._stream_audio_with_overlap(str(source)))
+    assert [len(window) for window in windows] == [30 * 16000, 30 * 16000]
+
+
+@pytest.mark.no_ffmpeg_exe
+def test_chunk_stream_resamples_and_downmixes_compressed_input(tmp_path: Path) -> None:
+    from audio_fixture_support import dominant_frequency, sine, write_encoded
+
+    source = tmp_path / "book.mp3"
+    tone = sine(500, 44100, 40.0)
+    write_encoded(source, np.stack([tone, tone], axis=1), 44100, codec="libmp3lame")
+    windows = list(enhance_alignment._stream_audio_with_overlap(str(source)))
+    assert [len(window) for window in windows] == [30 * 16000, 15 * 16000]
+    assert windows[0].ndim == 1
+    assert dominant_frequency(windows[0], 16000) == pytest.approx(500, abs=1)
+
+
+@pytest.mark.no_ffmpeg_exe
+def test_abandoning_chunk_stream_releases_the_source_promptly(tmp_path: Path) -> None:
+    """A cancelled transcription stops consuming chunks mid-file; closing the
+    generator must release the decoder (and its file handle) right away."""
+    source = tmp_path / "book.wav"
+    write_sine_wav(source, frequency=440, sample_rate=16000, duration_s=180)
 
     stream = enhance_alignment._stream_audio_with_overlap(
         str(source), chunk_duration=30, overlap_duration=5
     )
     next(stream)
     next(stream)
-    assert stream.gi_frame is not None
-    process = stream.gi_frame.f_locals["process"]
-
     started_at = time.monotonic()
     stream.close()
 
     assert time.monotonic() - started_at < 2.0
-    assert process.poll() is not None
+    assert_no_handles(source)
+    source.unlink()
 
 
-@pytest.mark.requires_ffmpeg_exe(reason="the enhancement chunk stream still decodes through FFmpeg (Phase 3)")
+@pytest.mark.no_ffmpeg_exe
 def test_chunk_stream_cancel_check_stops_before_producing_a_chunk(tmp_path: Path) -> None:
     source = tmp_path / "book.wav"
-    _write_long_audio(source)
+    write_sine_wav(source, frequency=440, sample_rate=16000, duration_s=180)
 
     stream = enhance_alignment._stream_audio_with_overlap(
         str(source), cancel_check=lambda: True
     )
 
     assert next(stream, None) is None
+    assert_no_handles(source)
+
+
+@pytest.mark.no_ffmpeg_exe
+def test_chunk_stream_cancelled_midway_yields_no_partial_window(tmp_path: Path) -> None:
+    source = tmp_path / "book.wav"
+    write_sine_wav(source, frequency=440, sample_rate=16000, duration_s=80)
+    cancelled = False
+    windows = []
+    for window in enhance_alignment._stream_audio_with_overlap(str(source), cancel_check=lambda: cancelled):
+        windows.append(window)
+        cancelled = True
+    # Only the complete first window; the partly read second one is dropped
+    assert [len(window) for window in windows] == [30 * 16000]
+
+
+@pytest.mark.no_ffmpeg_exe
+def test_transcription_passes_waveform_arrays_to_the_worker(monkeypatch, tmp_path: Path) -> None:
+    # STT input stays array-only: a path would let mlx-whisper shell out to ffmpeg
+    source = tmp_path / "book.wav"
+    write_sine_wav(source, frequency=440, sample_rate=16000, duration_s=40)
+    monkeypatch.setattr(enhance_alignment.AudioMetaUtil, "get_audio_duration", lambda _path: None)
+    received = []
+
+    def transcribe(_prefs, audio, **_kwargs):
+        received.append(audio)
+        return SimpleNamespace(segments=[]), ""
+
+    monkeypatch.setattr(enhance_alignment.ModelWorker, "transcribe_audio_blocking", transcribe)
+    assert enhance_alignment._transcribe_stream_with_overlap(str(source), object(), "en") == [[], []]  # type: ignore[arg-type]
+    assert len(received) == 3  # warm-up + two windows
+    assert all(isinstance(audio, np.ndarray) and audio.dtype == np.float32 for audio in received)
+
+
+def test_padded_progress_time_right_aligns_minutes_and_seconds() -> None:
+    # Single-digit minutes/seconds each add one leading space, so every
+    # readout under an hour is six characters wide and the columns line up.
+    assert enhance_alignment._padded_progress_time(33 * 60 + 15) == "33m15s"
+    assert enhance_alignment._padded_progress_time(33 * 60 + 5) == " 33m5s"
+    assert enhance_alignment._padded_progress_time(3 * 60 + 15) == " 3m15s"
+    assert enhance_alignment._padded_progress_time(3 * 60 + 5) == "  3m5s"
+    assert enhance_alignment._padded_progress_time(9 * 3600 + 5 * 60 + 5) == "  9h5m5s"
+    assert enhance_alignment._padded_progress_time(9 * 3600 + 19 * 60 + 15) == "9h19m15s"
+
+
+def test_transcription_eta_waits_for_samples_and_rounds_to_five_seconds() -> None:
+    # No estimate until 10 chunks have completed.
+    assert enhance_alignment._transcription_eta(9, 20.0, 225.0, 1000.0) is None
+    # 250s of audio took 20s; 750s remain -> 60s.
+    assert enhance_alignment._transcription_eta(10, 20.0, 250.0, 1000.0) == 60
+    # 750 * 21/250 = 63s -> rounds to 65s.
+    assert enhance_alignment._transcription_eta(10, 21.0, 250.0, 1000.0) == 65

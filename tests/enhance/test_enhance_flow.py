@@ -364,30 +364,53 @@ def metadata() -> AppMetadata:
     )
 
 
-def test_explicit_transcode_helper_uses_default_audio_and_requested_bitrate(monkeypatch) -> None:
-    captured = {}
+@pytest.mark.no_ffmpeg_exe
+@pytest.mark.parametrize("source_name", ["Hörbuch.mp3", "book.flac"])
+def test_staged_output_reencodes_real_audio_and_replaces_existing_output(
+    tmp_path: Path, source_name: str
+) -> None:
+    # End to end without mocks: decode, AAC writer, Mutagen ABR tag, staged
+    # replacement over an existing output. Every handle on the source,
+    # staging, and destination files must be closed by then (Windows).
+    from audio_fixture_support import assert_no_handles, sine, write_encoded
+    import soundfile as sf
 
-    def make_file(command, destination, use_temp_file):
-        captured.update(command=command, destination=destination, use_temp_file=use_temp_file)
-        return ""
+    folder = tmp_path / "Bücher"
+    folder.mkdir()
+    source = folder / source_name
+    if source.suffix == ".mp3":
+        write_encoded(source, sine(440, 44100, 3.0), 44100, codec="libmp3lame")
+    else:
+        sf.write(str(source), sine(440, 48000, 3.0), 48000, subtype="PCM_16")
+    artifacts = EnhanceArtifacts.from_audio_path(source)
+    destination = artifacts.flat_output_path
+    destination.write_bytes(b"old output")
+    state = make_state(source)
+    state.prefs.aac_bitrate = "64k"
 
-    monkeypatch.setattr(
-        "tts_audiobook_tool.sound.sound_file_util.FfmpegUtil.make_file",
-        make_file,
-    )
-    error = enhance_flow.SoundFileUtil.transcode_to_aac_at(
-        "source.mp4",
-        "staging.m4b",
-        "128k",
-    )
+    assert enhance_flow._write_staged_output(state, artifacts, destination, metadata()) == ""
 
-    assert error == ""
-    assert captured["destination"] == "staging.m4b"
-    assert captured["use_temp_file"] is True
-    command = captured["command"]
-    assert "-map" not in command  # FFmpeg picks the same default track as STT.
-    assert command[command.index("-b:a") + 1] == "128k"
-    assert all(option in command for option in ("-vn", "-sn", "-dn"))
+    readback = AppMetadata.load_from_file(str(destination))
+    assert readback is not None
+    from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
+    assert AudioMetaUtil.get_audio_duration(str(destination)) == pytest.approx(3.0, abs=0.05)
+    assert sorted(path.name for path in folder.iterdir()) == sorted([source.name, destination.name])
+    assert_no_handles(source, destination, *folder.iterdir())
+
+
+@pytest.mark.no_ffmpeg_exe
+def test_staged_output_decode_failure_preserves_existing_output(tmp_path: Path) -> None:
+    source = tmp_path / "book.mp3"
+    source.write_bytes(b"not an mp3" * 100)
+    artifacts = EnhanceArtifacts.from_audio_path(source)
+    destination = artifacts.flat_output_path
+    destination.write_bytes(b"known-good")
+
+    error = enhance_flow._write_staged_output(make_state(source), artifacts, destination, metadata())
+
+    assert error
+    assert destination.read_bytes() == b"known-good"
+    assert sorted(path.name for path in tmp_path.iterdir()) == sorted([source.name, destination.name])
 
 
 def test_staged_output_copies_m4a_without_reencoding(tmp_path: Path, monkeypatch) -> None:

@@ -10,16 +10,15 @@ This module supports the "enhance existing audiobook" flow by:
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Generator, List, NamedTuple
+from typing import Callable, Generator, List, NamedTuple
 import logging
-import subprocess
 import time
-import ffmpeg
 import numpy as np
 import difflib
 from tts_audiobook_tool.app_types import ConcreteWord, SttVariant, Word
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
+from tts_audiobook_tool.sound.audio_decoder import AudioDecoder
 from tts_audiobook_tool.model_worker import ModelWorker, STT_TRANSCRIPTION_TIMEOUT_ERROR
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.app_types.phrase import Phrase
@@ -301,9 +300,9 @@ def _transcribe_stream_with_overlap(
     time_offset = 0.0
 
     duration_str = ""
-    value = AudioMetaUtil.get_audio_duration(path)
-    if value:
-        duration_str = duration_string(value)
+    total_seconds = AudioMetaUtil.get_audio_duration(path) or 0.0
+    if total_seconds:
+        duration_str = duration_string(total_seconds)
 
     log = logging.getLogger("tts-audiobook-tool")
     log.info(
@@ -312,6 +311,7 @@ def _transcribe_stream_with_overlap(
     )
     previous_iteration_started_at: float | None = None
     previous_iteration_finished_at: float | None = None
+    first_chunk_started_at: float | None = None
     did_interrupt = False
     Interrupts().set("transcribing")
     try:
@@ -370,9 +370,19 @@ def _transcribe_stream_with_overlap(
                 did_interrupt = True
                 break
 
-            s = f"{Ansi.LINE_HOME}{duration_string(time_offset)}"
+            if first_chunk_started_at is None:
+                first_chunk_started_at = iteration_started_at
+            s = f"{Ansi.LINE_HOME}{_padded_progress_time(time_offset)}"
             if duration_str:
                 s += f" / {duration_str}"
+                eta = _transcription_eta(
+                    completed_chunks=i,
+                    elapsed_seconds=iteration_started_at - first_chunk_started_at,
+                    audio_done_seconds=time_offset,
+                    audio_total_seconds=total_seconds,
+                )
+                if eta is not None:
+                    s += f" {COL_DIM}(eta: {duration_string(eta)}){COL_DEFAULT}"
             s += f"{Ansi.ERASE_REST_OF_LINE}"
             print(s, end="", flush=True)
 
@@ -454,33 +464,38 @@ def _transcribe_stream_with_overlap(
     return list_of_lists
 
 
-# ffmpeg is drained one bounded piece at a time so a cancellation is noticed
-# while a chunk is still being read, and teardown is bounded so an ffmpeg that
-# refuses to stop cannot hang the caller forever.
-_PIPE_READ_BYTES = 64 * 1024
-_FFMPEG_STOP_TIMEOUT_SECONDS = 5.0
+ETA_MIN_SAMPLES = 10
+ETA_ROUNDING_SECONDS = 5
 
 
-def _stop_ffmpeg(process: Any, drained: bool) -> None:
-    """Reap the ffmpeg child without deadlocking on its output pipe.
-
-    ffmpeg's muxer thread blocks writing into the pipe the moment the parent
-    stops draining it, and a blocked write never returns to run ffmpeg's
-    signal handler.  Terminating first therefore leaves the child alive with
-    ``wait()`` hanging on it indefinitely.  Closing our read end turns that
-    blocked write into an error ffmpeg can act on, after which it exits.
+def _padded_progress_time(seconds: float) -> str:
     """
-    try:
-        process.stdout.close()
-    except OSError:
-        pass
-    if not drained and process.poll() is None:
-        process.terminate()
-    try:
-        process.wait(timeout=_FFMPEG_STOP_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
+    Left-pads duration_string() output with spaces to the width it would have
+    if minutes and seconds were both two digits, so successive progress
+    readouts stay right-aligned (eg, "  3m5s", " 33m5s", "33m15s").
+    """
+    s = duration_string(seconds)
+    hours = int(round(seconds) // 3600)
+    width = (len(f"{hours}h") if hours else 0) + len("00m00s")
+    return s.rjust(width)
+
+
+def _transcription_eta(
+    completed_chunks: int,
+    elapsed_seconds: float,
+    audio_done_seconds: float,
+    audio_total_seconds: float,
+) -> int | None:
+    """
+    Estimates the remaining wall-clock time from the average processing rate
+    so far, rounded to the nearest ETA_ROUNDING_SECONDS.
+    Returns None until ETA_MIN_SAMPLES chunks have completed.
+    """
+    if completed_chunks < ETA_MIN_SAMPLES or audio_done_seconds <= 0:
+        return None
+    remaining_audio = max(0.0, audio_total_seconds - audio_done_seconds)
+    eta = elapsed_seconds / audio_done_seconds * remaining_audio
+    return int(round(eta / ETA_ROUNDING_SECONDS)) * ETA_ROUNDING_SECONDS
 
 
 def _stream_audio_with_overlap(
@@ -490,64 +505,44 @@ def _stream_audio_with_overlap(
     sample_rate: int = 16000,
     cancel_check: Callable[[], bool] | None = None,
 ) -> Generator[np.ndarray, None, None]:
-    bytes_per_sample = 2
-    chunk_stride = chunk_duration - overlap_duration
+    """
+    Yields mono float32 windows of `chunk_duration` seconds, each starting
+    `chunk_duration - overlap_duration` seconds after the previous one, so
+    window i starts at exactly i * stride seconds. The last window holds
+    whatever is left (shorter); a tail that is only the previous window's
+    overlap is not repeated.
 
-    bytes_per_chunk = int(sample_rate * bytes_per_sample * chunk_duration)
-    bytes_per_stride = int(sample_rate * bytes_per_sample * chunk_stride)
+    Decoding is streamed (never the whole file) and stops quietly when
+    `cancel_check` returns True. The source file is closed when the generator
+    finishes or is closed.
+    """
+    chunk_samples = int(sample_rate * chunk_duration)
+    overlap_samples = int(sample_rate * overlap_duration) if overlap_duration > 0 else 0
 
-    process = (
-        ffmpeg.input(file_path)
-        .output(
-            "pipe:",
-            loglevel="warning",
-            format="s16le",
-            ac=1,
-            ar=sample_rate,
-        )
-        .run_async(pipe_stdout=True)
-    )
+    carried = np.zeros(0, dtype=np.float32)  # overlap from the previous window
+    pending: list[np.ndarray] = []  # new samples not yet in a window
+    pending_count = 0
 
-    buffer = b""
-    completed = False
-    try:
-        while True:
-            bytes_to_read = bytes_per_chunk - len(buffer)
-            raw_bytes_new = b""
-            cancelled = False
-            while len(raw_bytes_new) < bytes_to_read:
-                if cancel_check is not None and cancel_check():
-                    cancelled = True
-                    break
-                piece = process.stdout.read(
-                    min(bytes_to_read - len(raw_bytes_new), _PIPE_READ_BYTES)
-                )
-                if not piece:
-                    break
-                raw_bytes_new += piece
+    def take_window(needed: int) -> np.ndarray:
+        nonlocal pending, pending_count, carried
+        joined = np.concatenate(pending) if len(pending) != 1 else pending[0]
+        window = np.concatenate([carried, joined[:needed]])
+        rest = joined[needed:]
+        pending = [rest] if len(rest) else []
+        pending_count = len(rest)
+        carried = window[len(window) - overlap_samples:] if overlap_samples else carried[:0]
+        return window
 
-            if cancelled:
-                # Leave `completed` unset so the teardown below terminates
-                # ffmpeg instead of waiting for an EOF that will not come.
-                break
-
-            if not raw_bytes_new:
-                completed = True
-                break
-
-            raw_bytes = buffer + raw_bytes_new
-
-            audio = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-
-            yield audio
-
-            if overlap_duration > 0:
-                rewind_bytes = int(sample_rate * bytes_per_sample * overlap_duration)
-                buffer = raw_bytes[-rewind_bytes:]
-            else:
-                buffer = b""
-    finally:
-        _stop_ffmpeg(process, drained=completed)
+    with AudioDecoder(file_path, sample_rate=sample_rate, channels=1) as decoder:
+        for block in decoder.chunks(cancel_check=cancel_check):
+            pending.append(block)
+            pending_count += len(block)
+            while pending_count >= chunk_samples - len(carried):
+                yield take_window(chunk_samples - len(carried))
+        if cancel_check is not None and cancel_check():
+            return
+        if pending_count:
+            yield take_window(pending_count)
 
 
 def _stitch_transcripts(

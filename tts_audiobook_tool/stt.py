@@ -30,6 +30,18 @@ class WhisperBackend(Protocol):
         ...
 
 
+def require_waveform(audio: Any) -> None:
+    """
+    STT input must be an in-memory waveform. Both backends would accept a file
+    path and decode it themselves, mlx-whisper by launching the `ffmpeg`
+    executable, which the app must never depend on.
+    """
+    if not isinstance(audio, np.ndarray):
+        raise TypeError(
+            f"STT input must be a waveform array (numpy.ndarray), not {type(audio).__name__}"
+        )
+
+
 class MlxWhisperAdapter:
     """
     Small adapter that exposes a faster-whisper-like surface over mlx-whisper.
@@ -56,6 +68,7 @@ class MlxWhisperAdapter:
         language: str | None = None,
         **kwargs: Any,
     ) -> Any:
+        require_waveform(audio)
         result = self._mlx_whisper.transcribe(
             audio,
             path_or_hf_repo=self._model,
@@ -115,6 +128,7 @@ class FasterWhisperAdapter:
         language: str | None = None,
         **kwargs: Any,
     ) -> Any:
+        require_waveform(audio)
         return self._model.transcribe(
             audio,
             word_timestamps=word_timestamps,
