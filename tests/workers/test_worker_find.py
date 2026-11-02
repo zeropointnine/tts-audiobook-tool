@@ -203,6 +203,27 @@ def test_find_match_indices_and_wrap(monkeypatch) -> None:
     run(exercise())
 
 
+def test_find_normalizes_typography_without_changing_log(monkeypatch) -> None:
+    # Worker Find normalizes both ASCII and typographic queries, not log text.
+    monkeypatch.setattr(worker_app_module, "EVENT_POLL_SECONDS", 3600.0)
+
+    async def exercise() -> None:
+        app = StubWorkerApp()
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            log = app._worker_log()
+            lines = ['«Don’t—stop…»\u202fCafé', '"DON\'T-STOP..." CAFE\u0301']
+            _seed(log, lines)
+            await pilot.pause()
+
+            assert app.find_match_indices('"don\'t-stop..." café') == [0, 1]
+            assert app.find_match_indices(lines[0]) == [0, 1]
+            assert app.find_match_indices("cafe") == []
+            assert log.line_texts() == [*lines, ""]
+
+    run(exercise())
+
+
 def test_worker_log_line_accessors_and_highlight() -> None:
     """WorkerLog exposes line text/geometry helpers and reverse-videos the
     highlighted find line."""

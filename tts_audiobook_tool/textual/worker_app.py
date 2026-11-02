@@ -24,6 +24,7 @@ from textual.binding import Binding, BindingType
 from textual.containers import Horizontal
 from textual.widgets import Input, Rule, Static
 
+from tts_audiobook_tool.textual.find_text import normalize_find_text
 from tts_audiobook_tool.textual.textual_shared import TEXTUAL_SCROLLBAR_CSS
 from tts_audiobook_tool.textual.worker_content import WorkerLog, WorkerLogContentArea
 from tts_audiobook_tool.textual.worker_session import (
@@ -287,14 +288,14 @@ class WorkerTextualApp(WorkerSessionMixin[ResultT], App[ResultT]):
         return log.line_index_at_scroll_y(int(log.scroll_offset.y))
 
     def find_match_indices(self, query: str) -> list[int]:
-        """Return logical line indices containing a case-insensitive query."""
+        """Return logical lines containing a case/typography-insensitive query."""
         if not query:
             return []
-        folded_query = query.casefold()
+        folded_query = normalize_find_text(query)
         return [
             index
             for index, text in enumerate(self._worker_log().line_texts())
-            if folded_query in text.casefold()
+            if folded_query in normalize_find_text(text)
         ]
 
     def find_relative_match(

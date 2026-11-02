@@ -241,6 +241,23 @@ def test_base_retains_project_and_maps_options_to_phrase_groups() -> None:
     assert app.find_match_indices("hidden") == []
 
 
+def test_find_normalizes_typography_without_changing_content() -> None:
+    # Both ASCII and typographic queries match, retaining visible-row mapping.
+    source = '«Don’t—stop…»\u00a0Café'
+    project = StubProject([
+        StubPhraseGroup(source),
+        StubPhraseGroup('"DON\'T-STOP..." CAFE\u0301'),
+        StubPhraseGroup(source),
+    ])
+    app = StubContentApp(project, phrase_indices=[1, 0])
+
+    assert app.find_match_indices('"don\'t-stop..." café') == [0, 1]
+    assert app.find_match_indices(source) == [0, 1]
+    assert app.find_match_indices("cafe") == []
+    assert app.find_match_indices("") == []
+    assert project.phrase_groups[0].presentable_text == source
+
+
 def test_base_formats_and_searches_displayed_line_numbers() -> None:
     app, _ = make_app()
 

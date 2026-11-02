@@ -22,6 +22,7 @@ from tts_audiobook_tool.textual.editor_view_anchor import (
     EditorViewAnchors,
     resolve_anchor_line,
 )
+from tts_audiobook_tool.textual.find_text import normalize_find_text
 from tts_audiobook_tool.textual.manual_selection_dialog import ManualSelectionDialog
 from tts_audiobook_tool.textual.save_changes_dialog import (
     ExitDecision,
@@ -846,19 +847,19 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         return next((index for index in indices if index in match_index_set), None)
 
     def find_match_indices(self, query: str) -> list[int]:
-        """Return visible rows containing a case-insensitive literal query.
+        """Return visible rows containing a case/typography-insensitive query.
 
-        A row matches when the query is a substring of any of the row's
-        ``find_text_strings`` entries (content and metadata fields).
+        A row matches when the normalized query is a substring of any of the
+        row's normalized ``find_text_strings`` (content and metadata fields).
         """
         if not query:
             return []
-        folded_query = query.casefold()
+        folded_query = normalize_find_text(query)
         return [
             index
             for index, item_index in enumerate(self.phrase_indices)
             if any(
-                folded_query in text.casefold()
+                folded_query in normalize_find_text(text)
                 for text in self.find_text_strings(item_index)
             )
         ]
