@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import os
 from types import SimpleNamespace
 from typing import cast
@@ -18,6 +19,8 @@ from tts_audiobook_tool.menus.speaker_assign.assign_menu import (
 from tts_audiobook_tool.speaker_assign.assign_plan import AssignPlan
 from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
 from tts_audiobook_tool.speaker_assign.attribution_runner import RunOutcome
+from tts_audiobook_tool.speaker_assign.llm_request_util import LlmRequestProgress, LlmRequestResult, LlmRequestUtil
+from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.speaker_assign.roster import Roster, RosterCharacter, RosterFile
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.speaker_assign.utterance_util import UtteranceUtil
@@ -98,3 +101,107 @@ def test_clear_deletes_saved_assignments_and_drops_the_item(monkeypatch, tmp_pat
     assert os.path.exists(voices_path)
     assert feedback == ["Dialog assignments cleared"]
     assert [item.label for item in items_maker(state)] == ["Start"]
+
+
+@pytest.mark.parametrize("reasoning_tokens, expected", [
+    (400, "3K input tokens, 1K output tokens (1K reasoning)"),
+    (None, "3K input tokens, 1K output tokens (40 reasoning / 60 total chars)"),
+])
+def test_run_usage_totals_accumulate_reasoning(reasoning_tokens, expected):
+    # Each request contributes once, even if it failed or was discarded.
+    totals = assign_menu.RunUsageTotals()
+    for cancelled in (False, True):
+        totals.add(LlmRequestResult(
+            reply="a" * 10, reasoning="r" * 20, elapsed=1,
+            input_tokens=1_500, output_tokens=500, reasoning_tokens=reasoning_tokens,
+            cancelled=cancelled,
+        ), answer_chars=5, reasoning_chars=5)
+    assert totals.format() == expected
+
+
+def test_run_usage_totals_mark_partial_metadata_and_count_observed_output():
+    # A stopped stream may not return its partial reply; observed characters still count.
+    totals = assign_menu.RunUsageTotals()
+    totals.add(LlmRequestResult(reply="a" * 10, reasoning="", elapsed=1,
+                                input_tokens=1_000, output_tokens=100))
+    totals.add(LlmRequestResult(reply="", reasoning="", elapsed=1, cancelled=True),
+               answer_chars=5, reasoning_chars=20)
+    assert totals.format() == (
+        "1K input tokens (partial; 1 request without usage), "
+        "0K output tokens (partial; 1 request without usage) "
+        "(20 reasoning / 35 total chars)"
+    )
+
+
+@pytest.mark.parametrize("input_tokens, output_tokens, expected", [
+    (None, None, "input tokens unavailable, 10 output chars (tokens unavailable)"),
+    (0, 0, "0K input tokens, 0K output tokens"),
+    (1_234, 50, "1K input tokens, 0K output tokens"),
+])
+def test_run_usage_totals_non_reasoning_and_missing_usage(input_tokens, output_tokens, expected):
+    # Missing counts aren't confused with reported zero or estimated from characters.
+    totals = assign_menu.RunUsageTotals()
+    totals.add(LlmRequestResult(reply="a" * 10, reasoning="", elapsed=1,
+                                input_tokens=input_tokens, output_tokens=output_tokens))
+    assert totals.format() == expected
+
+
+@pytest.mark.parametrize("outcome", list(RunOutcome))
+@pytest.mark.parametrize("has_failures", [False, True])
+def test_run_summary_prints_usage_and_starts_after_blank_line(monkeypatch, tmp_path, capsys, outcome, has_failures):
+    # Exercise the UI send wrapper: retries/follow-ups count, and every exit prints totals.
+    book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
+    saved = AttributionsFile()
+    data = AssignData(RosterFile(Roster(())), saved, AssignPlan.make(book, saved))
+    state = cast(State, SimpleNamespace(prefs=None, project=SimpleNamespace(
+        book=book, dir_path=str(tmp_path),
+    )))
+    monkeypatch.setattr(assign_menu, "load_assign_data", lambda _: data)
+    monkeypatch.setattr(assign_menu.RosterUtil, "is_stale", lambda *_: False)
+    monkeypatch.setattr(assign_menu, "print_llm_info", lambda _: None)
+    monkeypatch.setattr(assign_menu, "play_outcome_sound", lambda *_: None)
+    monkeypatch.setattr(assign_menu, "prevent_system_sleep", nullcontext)
+    monkeypatch.setattr(assign_menu.ask, "ask_enter_to_continue", lambda *_: None)
+    monkeypatch.setattr(assign_menu, "Interrupts", lambda: SimpleNamespace(
+        set=lambda _: None, clear=lambda: None, press_count=0,
+    ))
+    calls = []
+
+    def send_cancellable(llm, message, **kwargs):
+        calls.append(message)
+        kwargs["on_poll"](LlmRequestProgress(answer_chars=10, reasoning_chars=0, elapsed=1))
+        return LlmRequestResult(reply="a" * 10, reasoning="", elapsed=1,
+                                input_tokens=1_000, output_tokens=100)
+
+    class Runner:
+        def __init__(self, **kwargs):
+            self.send = kwargs["send"]
+
+        def run(self):
+            self.send(None, "first")
+            self.send(None, "follow-up or retry")
+            # Simulate an unterminated terminal line immediately before run returns.
+            print("last chunk", end="")
+            return SimpleNamespace(outcome=outcome, saved_count=1, failures=["failed"] if has_failures else [],
+                                   abandoned=False, error="test error", attributions=saved)
+
+    monkeypatch.setattr(LlmRequestUtil, "send_cancellable", send_cancellable)
+    monkeypatch.setattr(assign_menu, "AttributionRunner", Runner)
+
+    assign_menu.run_assign(state)
+
+    output = strip_ansi_codes(capsys.readouterr().out)
+    label = {RunOutcome.FINISHED: "Done", RunOutcome.FAILED: "Failed"}.get(outcome, "Stopped")
+    assert f"last chunk\n\n{label}:" in output
+    assert "Totals: 2K input tokens, 0K output tokens\n" in output
+    assert "select Continue" not in output
+    assert calls == ["first", "follow-up or retry"]
+
+
+@pytest.mark.parametrize("count, expected", [
+    (0, "0K"), (499, "0K"), (500, "1K"), (1_499, "1K"),
+    (1_500, "2K"), (12_345, "12K"), (12_500, "13K"), (999_500, "1,000K"),
+])
+def test_token_counts_round_to_nearest_whole_k(count, expected):
+    # Halfway values round up rather than using Python's nearest-even rounding.
+    assert assign_menu.format_token_count(count) == expected

@@ -1,3 +1,4 @@
+import json
 import threading
 from unittest.mock import MagicMock
 
@@ -555,3 +556,212 @@ def test_non_streaming_records_finish_reason(monkeypatch) -> None:
     )
     llm.send("hello")
     assert llm.last_finish_reason == "stop" and not llm.hit_output_limit
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("reasoning_tokens", [None, 0, 7])
+def test_openai_records_provider_usage(monkeypatch, streaming, reasoning_tokens) -> None:
+    # The final streaming usage event has no choices and follows finish_reason.
+    llm = make_openai_llm()
+    usage = {"prompt_tokens": 42, "completion_tokens": 12}
+    if reasoning_tokens is not None:
+        usage["completion_tokens_details"] = {"reasoning_tokens": reasoning_tokens}
+    response = make_response(
+        json_data={"choices": [{"message": {"content": "Hi"}}], "usage": usage},
+        lines=sse(
+            '{"choices": [{"delta": {"content": "Hi"}, "finish_reason": "stop"}], "usage": null}',
+            json.dumps({"choices": [], "usage": usage}),
+            done=True,
+        ) if streaming else None,
+    )
+    post = MagicMock(return_value=response)
+    monkeypatch.setattr("tts_audiobook_tool.conversation.llm_session.requests.post", post)
+
+    assert llm.send("hello", on_chunk=(lambda _: None) if streaming else None) == "Hi"
+    assert llm.last_input_tokens == 42
+    assert llm.last_output_tokens == 12
+    assert llm.last_reasoning_tokens == reasoning_tokens
+    payload = post.call_args.kwargs["json"]
+    if streaming:
+        assert payload["stream_options"] == {"include_usage": True}
+    else:
+        assert "stream_options" not in payload
+
+
+@pytest.mark.parametrize("options", [
+    {"include_usage": False, "custom": "kept"},
+    {"custom": "kept"},
+    None,
+])
+def test_openai_stream_usage_respects_extra_params(monkeypatch, options) -> None:
+    # Opt-outs and other provider options survive without mutating configuration.
+    extra_params = {"stream_options": options}
+    llm = make_openai_llm(extra_params=extra_params)
+    post = MagicMock(return_value=make_response(lines=sse(done=True)))
+    monkeypatch.setattr("tts_audiobook_tool.conversation.llm_session.requests.post", post)
+
+    llm.send("hello", on_chunk=lambda _: None)
+
+    expected = {"include_usage": True, **options} if isinstance(options, dict) else options
+    assert post.call_args.kwargs["json"]["stream_options"] == expected
+    assert extra_params == {"stream_options": options}
+    assert llm.last_input_tokens is None
+    assert llm.last_output_tokens is None
+    assert llm.last_reasoning_tokens is None
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("reasoning_usage, expected_reasoning", [
+    ({}, None),
+    ({"reasoning_tokens": 0}, 0),
+    ({"output_tokens_details": {"reasoning_tokens": 7}}, 7),
+])
+def test_anthropic_records_provider_usage(
+    monkeypatch, streaming, reasoning_usage, expected_reasoning,
+) -> None:
+    # Anthropic streaming output counts are cumulative; do not sum snapshots.
+    llm = make_anthropic_llm()
+    usage = {"input_tokens": 42, "output_tokens": 12, **reasoning_usage}
+    response = make_response(
+        json_data={"content": [{"type": "text", "text": "Hi"}], "usage": usage},
+        lines=sse(
+            '{"type": "message_start", "message": {"usage": {"input_tokens": 40, "output_tokens": 1}}}',
+            '{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hi"}}',
+            json.dumps({"type": "message_delta", "usage": usage}),
+            '{"type": "message_delta", "usage": {"output_tokens": 12}}',
+            '{"type": "message_stop"}',
+        ) if streaming else None,
+    )
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: response,
+    )
+
+    assert llm.send("hello", on_chunk=(lambda _: None) if streaming else None) == "Hi"
+    assert llm.last_input_tokens == 42
+    assert llm.last_output_tokens == 12
+    assert llm.last_reasoning_tokens == expected_reasoning
+
+
+@pytest.mark.parametrize("mode", ["missing", "error", "interrupted"])
+def test_token_usage_resets_per_send(monkeypatch, mode) -> None:
+    # Metadata from an earlier reply must not leak into a new or skipped send.
+    llm = make_openai_llm()
+    assert llm.last_input_tokens is None
+    assert llm.last_output_tokens is None
+    assert llm.last_reasoning_tokens is None
+    post = MagicMock(return_value=make_response(json_data={
+        "choices": [{"message": {"content": "Hi"}}],
+        "usage": {"prompt_tokens": 42, "completion_tokens": 12, "completion_tokens_details": {"reasoning_tokens": 7}},
+    }))
+    monkeypatch.setattr("tts_audiobook_tool.conversation.llm_session.requests.post", post)
+    llm.send("first")
+    assert (llm.last_input_tokens, llm.last_output_tokens, llm.last_reasoning_tokens) == (42, 12, 7)
+    if mode == "error":
+        post.side_effect = RuntimeError("request failed")
+        with pytest.raises(RuntimeError):
+            llm.send("second")
+    elif mode == "interrupted":
+        interrupt = threading.Event()
+        interrupt.set()
+        assert llm.send("second", interrupt_event=interrupt) == ""
+        assert post.call_count == 1
+    else:
+        post.return_value = make_response(json_data={"choices": [{"message": {"content": "Hi"}}]})
+        llm.send("second")
+    assert llm.last_input_tokens is None
+    assert llm.last_output_tokens is None
+    assert llm.last_reasoning_tokens is None
+
+
+@pytest.mark.parametrize("usage", [
+    None,
+    {"total_tokens": 42},
+    {"prompt_tokens": "42", "completion_tokens": "12", "completion_tokens_details": None},
+    {"prompt_tokens": True, "completion_tokens": True, "completion_tokens_details": {"reasoning_tokens": -1}},
+    {"prompt_tokens": -1},
+    {"prompt_tokens": 1.5},
+])
+def test_invalid_or_missing_token_counts_remain_unknown(monkeypatch, usage) -> None:
+    # Never substitute total tokens, coerce values, or estimate from text.
+    llm = make_openai_llm()
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(json_data={
+            "choices": [{"message": {"content": "Hi"}}], "usage": usage,
+        }),
+    )
+
+    llm.send("hello")
+
+    assert llm.last_input_tokens is None
+    assert llm.last_output_tokens is None
+    assert llm.last_reasoning_tokens is None
+
+
+@pytest.mark.parametrize("input_key, output_key", [
+    ("prompt_tokens", "completion_tokens"),
+    ("input_tokens", "output_tokens"),
+])
+def test_input_usage_snapshots_replace_counts_and_preserve_missing_or_invalid_fields(
+    input_key, output_key,
+) -> None:
+    # Usage snapshots are cumulative, not deltas; zero is real usage.
+    llm = make_openai_llm()
+    llm._record_usage({input_key: 40}, output_key, input_key)
+    llm._record_usage({input_key: 42}, output_key, input_key)
+    assert llm.last_input_tokens == 42
+    for value in [None, True, -1, "12", 1.5]:
+        llm._record_usage({input_key: value}, output_key, input_key)
+        assert llm.last_input_tokens == 42
+    llm._record_usage({output_key: 12}, output_key, input_key)
+    assert llm.last_input_tokens == 42
+    llm._record_usage({input_key: 0}, output_key, input_key)
+    assert llm.last_input_tokens == 0
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_anthropic_input_usage_includes_cached_prompt_tokens(monkeypatch, streaming) -> None:
+    # Cached reads/creation are separate cumulative components, not extra deltas.
+    llm = make_anthropic_llm()
+    usage = {"input_tokens": 2, "cache_creation_input_tokens": 10, "cache_read_input_tokens": 30}
+    response = make_response(
+        json_data={"content": [{"type": "text", "text": "Hi"}], "usage": usage},
+        lines=sse(
+            json.dumps({"type": "message_start", "message": {"usage": usage}}),
+            '{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hi"}}',
+            '{"type": "message_delta", "usage": {"output_tokens": 12}}',
+            '{"type": "message_delta", "usage": {"cache_read_input_tokens": 40}}',
+            '{"type": "message_delta", "usage": {"cache_creation_input_tokens": true, "cache_read_input_tokens": -1}}',
+        ) if streaming else None,
+    )
+    post = MagicMock(return_value=response)
+    monkeypatch.setattr("tts_audiobook_tool.conversation.llm_session.requests.post", post)
+
+    assert llm.send("hello", on_chunk=(lambda _: None) if streaming else None) == "Hi"
+    assert llm.last_input_tokens == (52 if streaming else 42)
+
+    # Cached components from the previous request cannot leak into a new one.
+    post.return_value = make_response(json_data={
+        "content": [{"type": "text", "text": "Hi"}], "usage": {"input_tokens": 3},
+    })
+    llm.send("again")
+    assert llm.last_input_tokens == 3
+
+
+def test_anthropic_input_usage_survives_partial_stream_cancellation(monkeypatch) -> None:
+    # Anthropic reports input at message_start, before the final output total.
+    llm = make_anthropic_llm()
+    lines = sse(
+        '{"type": "message_start", "message": {"usage": {"input_tokens": 42}}}',
+        '{"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hi"}}',
+        '{"type": "message_delta", "usage": {"output_tokens": 12}}',
+    )
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(lines=lines),
+    )
+
+    assert llm.send("hello", on_chunk=lambda _: llm.cancel_active_request()) == "Hi"
+    assert llm.last_input_tokens == 42
+    assert llm.last_output_tokens is None

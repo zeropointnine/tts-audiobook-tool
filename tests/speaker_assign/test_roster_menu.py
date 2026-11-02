@@ -6,7 +6,7 @@ import pytest
 
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types.phrase import Reason
-from tts_audiobook_tool.constants import COL_DIM, COL_ERROR
+from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM, COL_ERROR
 from tts_audiobook_tool.menus.speaker_assign import speaker_assign_menu
 from tts_audiobook_tool.menus.speaker_assign import roster_menu as roster_menu_module
 from tts_audiobook_tool.menus.speaker_assign.roster_menu import create_roster, roster_menu
@@ -141,6 +141,8 @@ def test_create_roster_outcome_sound(monkeypatch, tmp_path, outcome, expected):
     state = cast(State, SimpleNamespace(
         prefs=None, project=SimpleNamespace(book=book, dir_path=str(tmp_path)),
     ))
+    printed: list[str] = []
+    monkeypatch.setattr(roster_menu_module, "printt", lambda s="": printed.append(s))
     played: list[str] = []
     monkeypatch.setattr(app_support, "play_done_sound", lambda: played.append("done"))
     monkeypatch.setattr(app_support, "play_fatal_gen_sound", lambda: played.append("error"))
@@ -158,7 +160,7 @@ def test_create_roster_outcome_sound(monkeypatch, tmp_path, outcome, expected):
         reply=reply, reasoning="", elapsed=1.0,
         cancelled=outcome == "cancelled",
         error=RuntimeError("boom") if outcome == "error" else None,
-        finish_reason="stop",
+        finish_reason="stop", output_tokens=12_345,
     )
     monkeypatch.setattr(LlmRequestUtil, "send_cancellable", lambda *_, **__: result)
 
@@ -167,6 +169,29 @@ def test_create_roster_outcome_sound(monkeypatch, tmp_path, outcome, expected):
     assert played == expected
     # Only a saved roster reports success (which exits the step's menu)
     assert saved == (outcome == "success")
+    summary = f"{COL_DEFAULT}Done: {COL_DIM}12K output tokens, elapsed: 1s"
+    assert (summary in printed) == (outcome in ("success", "bad_reply"))
+
+
+@pytest.mark.parametrize("reasoning, output_tokens, reasoning_tokens, expected", [
+    ("r" * 1_234, 12_345, 9_135, "12K output tokens (9K reasoning)"),
+    ("r" * 1_234, 12_345, None,
+     "12K output tokens (1,234 reasoning / 2,000 total chars)"),
+    ("", 12_345, None, "12K output tokens"),
+    ("", 12_345, 9_135, "12K output tokens (9K reasoning)"),
+    ("", 12_345, 0, "12K output tokens"),
+    ("r" * 1_234, 12_345, 0, "12K output tokens (0K reasoning)"),
+    ("", 0, None, "0K output tokens"),
+    ("", None, None, "766 total chars"),
+    ("r" * 1_234, None, None, "2,000 total chars (1,234 reasoning)"),
+])
+def test_format_output_usage(reasoning, output_tokens, reasoning_tokens, expected):
+    # Reported usage wins; character fallback never guesses tokens, including hidden reasoning.
+    result = LlmRequestResult(
+        reply="a" * 766, reasoning=reasoning, elapsed=94,
+        output_tokens=output_tokens, reasoning_tokens=reasoning_tokens,
+    )
+    assert roster_menu_module.format_output_usage(result) == expected
 
 
 @pytest.mark.parametrize("confirmed", [False, True])

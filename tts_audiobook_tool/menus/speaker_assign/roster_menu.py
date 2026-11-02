@@ -19,7 +19,7 @@ from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
     save_temp_text,
 )
 from tts_audiobook_tool.speaker_assign.attribution_reply_util import AttributionReplyUtil
-from tts_audiobook_tool.speaker_assign.llm_request_util import CancelEvent, LlmRequestUtil
+from tts_audiobook_tool.speaker_assign.llm_request_util import CancelEvent, LlmRequestResult, LlmRequestUtil
 from tts_audiobook_tool.speaker_assign.roster import RosterFile
 from tts_audiobook_tool.speaker_assign.roster_util import ROSTER_SYSTEM_PROMPT, RosterUtil
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
@@ -147,6 +147,21 @@ class RosterDependents:
 
 # ---
 
+def format_output_usage(result: LlmRequestResult) -> str:
+    """Prefer reported tokens; use character counts only for missing metadata."""
+    total_chars = len(result.reply) + len(result.reasoning)
+    output = (f"{format_token_count(result.output_tokens)} output tokens" if result.output_tokens is not None
+              else f"{total_chars:,} total chars")
+    # Reasoning can be hidden by the provider, so its token count also establishes presence.
+    if result.reasoning_tokens is not None and (result.reasoning or result.reasoning_tokens > 0):
+        return f"{output} ({format_token_count(result.reasoning_tokens)} reasoning)"
+    if result.reasoning:
+        if result.output_tokens is None:
+            return f"{output} ({len(result.reasoning):,} reasoning)"
+        return f"{output} ({len(result.reasoning):,} reasoning / {total_chars:,} total chars)"
+    return output
+
+
 def create_roster(state: State) -> bool:
     """
     The full-book roster request: sends the book to the LLM (control-c
@@ -223,10 +238,8 @@ def create_roster(state: State) -> bool:
         fail(LlmRequestUtil.describe_error(result.error, prefs))
         return False
 
-    # A zero reasoning count isn't evidence of no reasoning (see LlmSession), so omit it
-    reasoning_part = f"{len(result.reasoning):,} reasoning chars, " if result.reasoning else ""
-    printt(f"{COL_DEFAULT}Done: {COL_DIM}{len(result.reply):,} answer chars, "
-           f"{reasoning_part}elapsed: {duration_string(result.elapsed)}")
+    printt(f"{COL_DEFAULT}Done: {COL_DIM}{format_output_usage(result)}, "
+           f"elapsed: {duration_string(result.elapsed)}")
     if result.reasoning:
         path = save_temp_text(REASONING_FILE_NAME, result.reasoning)
         if path:

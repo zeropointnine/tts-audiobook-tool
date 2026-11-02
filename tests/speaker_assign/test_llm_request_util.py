@@ -62,6 +62,55 @@ def test_send_returns_reply_and_reasoning() -> None:
     result, events = send(FakeLlm(reasoning=["hm", "m"]), {"n": 0})
     assert (result.reply, result.reasoning, result.cancelled, result.error) == ("{}", "hmm", False, None)
     assert events == []
+    assert result.input_tokens is None
+
+
+def test_result_carries_reported_token_usage() -> None:
+    # Provider usage reaches the UI unchanged, including a reported zero.
+    llm = FakeLlm()
+    llm.last_input_tokens = 42
+    llm.last_output_tokens = 12_345
+    llm.last_reasoning_tokens = 0
+    result, _ = send(llm, {"n": 0})
+    assert result.input_tokens == 42
+    assert result.output_tokens == 12_345
+    assert result.reasoning_tokens == 0
+
+
+def test_result_preserves_input_usage_when_cancelled_worker_has_not_finished(monkeypatch) -> None:
+    # Known input survives cancellation; incomplete output is not a final total.
+    monkeypatch.setattr("tts_audiobook_tool.speaker_assign.llm_request_util.CANCEL_GRACE_SECONDS", 0)
+    released = threading.Event()
+    finished = threading.Event()
+
+    class BlockedLlm(FakeLlm):
+        def send(self, _message, on_chunk, on_reasoning):
+            self.last_input_tokens = 42
+            self.last_output_tokens = 1
+            on_reasoning("thinking")
+            try:
+                assert released.wait(3)
+                return ""
+            finally:
+                finished.set()
+
+    llm = BlockedLlm()
+    presses = {"n": 0}
+
+    def on_poll(progress):
+        if progress.reasoning_chars:
+            presses["n"] = 1
+
+    try:
+        result, events = send(llm, presses, on_poll=on_poll)
+        assert events == [CancelEvent.CANCELLING]
+        assert result.cancelled and not result.abandoned
+        assert result.input_tokens == 42
+        assert result.output_tokens is None
+        assert not finished.is_set()
+    finally:
+        released.set()
+        assert finished.wait(1)
 
 
 def test_request_errors_are_returned_not_raised() -> None:

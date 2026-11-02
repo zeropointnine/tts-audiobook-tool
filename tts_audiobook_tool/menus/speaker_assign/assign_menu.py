@@ -13,6 +13,7 @@ from tts_audiobook_tool.menus.speaker_assign.characters_view import print_charac
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
     StatusLine,
     check_llm_configured,
+    format_token_count,
     print_llm_info,
 )
 from tts_audiobook_tool.speaker_assign.assign_plan import AssignPlan, PlannedChunk
@@ -212,9 +213,15 @@ def run_assign(state: State, start_over: bool = False) -> bool:
 
     status = StatusLine()
     stop = StopWatcher(status)
+    totals = RunUsageTotals()
 
     def send(llm: LlmSession, message: str) -> LlmRequestResult:
+        answer_chars = reasoning_chars = 0
+
         def on_poll(progress: LlmRequestProgress) -> None:
+            nonlocal answer_chars, reasoning_chars
+            answer_chars = max(answer_chars, progress.answer_chars)
+            reasoning_chars = max(reasoning_chars, progress.reasoning_chars)
             stop.presses()
             status.update_progress(progress)
 
@@ -230,6 +237,8 @@ def run_assign(state: State, start_over: bool = False) -> bool:
             on_cancel_event=on_cancel_event,
             defer_until_streaming=False,
         )
+        # Count every attempt, including retries, follow-ups and discarded partial replies.
+        totals.add(result, answer_chars=answer_chars, reasoning_chars=reasoning_chars)
         # Per-chunk results are printed instead
         status.clear()
         return result
@@ -254,31 +263,31 @@ def run_assign(state: State, start_over: bool = False) -> bool:
         Interrupts().clear()
     status.end()
 
-    printt()
+    # Finish any unterminated console line, then leave a blank before the summary.
+    printt("\n")
     elapsed = f"elapsed: {duration_string(time.monotonic() - started)}"
     # Starting over replaces the saved results only once a chunk is saved;
     # until then the previous results stand and there's nothing to continue
     kept_previous = start_over and result.saved_count == 0
-    retry_hint = "" if kept_previous else " (select Continue to retry)"
-    resume_hint = "" if kept_previous else "select Continue to resume, "
     match result.outcome:
         case RunOutcome.FINISHED:
             if result.failures:
                 count = len(result.failures)
                 printt(f"{COL_DEFAULT}Done: {COL_ERROR}{count} {make_noun('chunk', 'chunks', count)} failed"
-                       f"{COL_DIM}{retry_hint}, {elapsed}")
+                       f"{COL_DIM}, {elapsed}")
             else:
                 printt(f"{COL_DEFAULT}Done: {COL_DIM}all chunks complete, {elapsed}")
         case RunOutcome.STOPPED:
-            printt(f"{COL_DEFAULT}Stopped: {COL_DIM}{resume_hint}{elapsed}")
+            printt(f"{COL_DEFAULT}Stopped: {COL_DIM}{elapsed}")
         case RunOutcome.CANCELLED:
-            printt(f"{COL_DEFAULT}Stopped: {COL_DIM}the current chunk was not saved, {resume_hint}{elapsed}")
+            printt(f"{COL_DEFAULT}Stopped: {COL_DIM}the current chunk was not saved, {elapsed}")
             if result.abandoned:
                 printt(f"{COL_DIM}Its request was abandoned before the response started; "
                        f"the LLM provider may still process it.")
         case RunOutcome.FAILED:
             printt(f"{COL_DEFAULT}Failed: {COL_DIM}{elapsed}")
             printt(f"{COL_ERROR}{result.error}")
+    printt(f"{COL_DEFAULT}Totals: {COL_DIM}{totals.format()}")
     if kept_previous:
         printt(f"{COL_DIM}No chunks were saved, so the previous dialog assignments were kept.")
     printt()
@@ -303,6 +312,62 @@ def play_outcome_sound(outcome: RunOutcome, has_failures: bool) -> None:
     """
     if is_complete_run(outcome, has_failures):
         app_support.play_done_sound()
+
+
+@dataclass
+class RunUsageTotals:
+    """Usage for this invocation only, including unsuccessful requests."""
+    requests: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    reasoning_tokens: int = 0
+    missing_input: int = 0
+    missing_output: int = 0
+    answer_chars: int = 0
+    reasoning_chars: int = 0
+    missing_reasoning: bool = False
+    has_reasoning: bool = False
+
+    def add(self, result: LlmRequestResult, *, answer_chars: int = 0, reasoning_chars: int = 0) -> None:
+        self.requests += 1
+        if result.input_tokens is None:
+            self.missing_input += 1
+        else:
+            self.input_tokens += result.input_tokens
+        if result.output_tokens is None:
+            self.missing_output += 1
+        else:
+            self.output_tokens += result.output_tokens
+        self.answer_chars += max(answer_chars, len(result.reply))
+        received_reasoning = max(reasoning_chars, len(result.reasoning))
+        self.reasoning_chars += received_reasoning
+        self.has_reasoning |= bool(received_reasoning or result.reasoning_tokens)
+        self.missing_reasoning |= bool(received_reasoning and result.reasoning_tokens is None)
+        self.reasoning_tokens += result.reasoning_tokens or 0
+
+    def format(self) -> str:
+        def tokens(count: int, missing: int, label: str) -> str:
+            if missing and missing == self.requests:
+                return f"{label} tokens unavailable"
+            text = f"{format_token_count(count)} {label} tokens"
+            if missing:
+                text += f" (partial; {missing} {make_noun('request', 'requests', missing)} without usage)"
+            return text
+
+        input_part = tokens(self.input_tokens, self.missing_input, "input")
+        total_chars = self.answer_chars + self.reasoning_chars
+        if self.missing_output and self.missing_output == self.requests:
+            output_part = f"{total_chars:,} output chars (tokens unavailable)"
+        else:
+            output_part = tokens(self.output_tokens, self.missing_output, "output")
+        if self.has_reasoning:
+            if self.missing_reasoning:
+                output_part += f" ({self.reasoning_chars:,} reasoning / {total_chars:,} total chars)"
+            else:
+                output_part += f" ({format_token_count(self.reasoning_tokens)} reasoning)"
+        elif self.missing_output and self.missing_output < self.requests:
+            output_part += f" ({total_chars:,} total chars)"
+        return f"{input_part}, {output_part}"
 
 
 class StopWatcher:

@@ -83,7 +83,5 @@ CHARS_PER_TOKEN = 4
 
 
 def format_token_count(tokens: int) -> str:
-    """eg "151k" (or the exact number below 10,000)"""
-    if tokens < 10_000:
-        return f"{tokens:,}"
-    return f"{round(tokens / 1000):,}k"
+    """Whole thousands, rounded to nearest K (halfway values round up)."""
+    return f"{(tokens + 500) // 1000:,}K"

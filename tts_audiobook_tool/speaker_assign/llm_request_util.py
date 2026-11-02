@@ -68,7 +68,9 @@ class LlmRequestResult:
     request was given up before its response started, so the provider may
     still process it. `error` is the exception raised by the request, if any
     (not set when cancelled). `finish_reason` is why the provider ended the
-    reply, if reported (see LlmSession.last_finish_reason).
+    reply, if reported (see LlmSession.last_finish_reason). Token counts are
+    provider-reported usage, or None when unavailable; output_tokens includes reasoning,
+    and input_tokens includes Anthropic cache creation/read tokens.
     """
     reply: str
     reasoning: str
@@ -77,6 +79,9 @@ class LlmRequestResult:
     abandoned: bool = False
     error: Exception | None = None
     finish_reason: str | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    input_tokens: int | None = None
 
     @property
     def hit_output_limit(self) -> bool:
@@ -168,6 +173,8 @@ class LlmRequestUtil:
             try:
                 outcome["reply"] = llm.send(message, on_chunk=on_chunk, on_reasoning=on_reasoning)
                 outcome["finish_reason"] = getattr(llm, "last_finish_reason", None)
+                outcome["output_tokens"] = getattr(llm, "last_output_tokens", None)
+                outcome["reasoning_tokens"] = getattr(llm, "last_reasoning_tokens", None)
             except Exception as e:
                 outcome["error"] = e
 
@@ -226,6 +233,11 @@ class LlmRequestUtil:
             abandoned=abandoned,
             error=None if cancelled else error,
             finish_reason=outcome.get("finish_reason"),
+            output_tokens=outcome.get("output_tokens"),
+            reasoning_tokens=outcome.get("reasoning_tokens"),
+            # Input usage may arrive before cancellation, even if the request
+            # thread has not finished; do not treat partial output as a total.
+            input_tokens=getattr(llm, "last_input_tokens", None),
         )
 
     @staticmethod

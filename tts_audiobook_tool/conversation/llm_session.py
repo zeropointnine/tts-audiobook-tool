@@ -82,6 +82,12 @@ class LlmSession:
         # Why the provider ended the last reply, as reported ("stop", "length",
         # "end_turn", "max_tokens", ...); None if not reported. See hit_output_limit.
         self.last_finish_reason: str | None = None
+        # Provider-reported totals, not text estimates; output includes reasoning.
+        # A missing reasoning breakdown remains unknown rather than assumed zero.
+        self.last_input_tokens: int | None = None
+        self._anthropic_input_usage: dict[str, int] = {}
+        self.last_output_tokens: int | None = None
+        self.last_reasoning_tokens: int | None = None
         self.resolved_api_type = (
             api_type if api_type is not None else self.detect_api_type()
         )
@@ -152,11 +158,15 @@ class LlmSession:
         On HTTP or timeout errors, raises requests.HTTPError or requests.exceptions.Timeout.
         The user message is removed from history if the call fails.
         """
+        self.last_finish_reason = None
+        self.last_input_tokens = None
+        self._anthropic_input_usage = {}
+        self.last_output_tokens = None
+        self.last_reasoning_tokens = None
         if interrupt_event is not None and interrupt_event.is_set():
             L.i("[llm] send skipped: interrupt already set")
             return ""
         self._cancel_requested.clear()
-        self.last_finish_reason = None
         with self.history_lock:
             self.history.append({"role": "user", "content": message})
             history_snapshot = list(self.history)
@@ -277,6 +287,36 @@ class LlmSession:
 
         return payload
 
+    def _record_usage(self, usage: object, output_key: str, input_key: str) -> None:
+        """Record reported cumulative counts, preserving absent fields in updates."""
+        if not isinstance(usage, dict):
+            return
+        if input_key == "input_tokens":
+            # Anthropic excludes cached prompt tokens from input_tokens. Keep
+            # cumulative components across sparse updates, then include both
+            # cache creation and cache reads in the processed-input total.
+            for key in (input_key, "cache_creation_input_tokens", "cache_read_input_tokens"):
+                count = usage.get(key)
+                if type(count) is int and count >= 0:
+                    self._anthropic_input_usage[key] = count
+            if input_key in self._anthropic_input_usage:
+                self.last_input_tokens = sum(self._anthropic_input_usage.values())
+        else:
+            input_tokens = usage.get(input_key)
+            if type(input_tokens) is int and input_tokens >= 0:
+                self.last_input_tokens = input_tokens
+        output_tokens = usage.get(output_key)
+        if type(output_tokens) is int and output_tokens >= 0:
+            self.last_output_tokens = output_tokens
+        details = usage.get(f"{output_key}_details")
+        reasoning_tokens = (
+            details.get("reasoning_tokens") if isinstance(details, dict) else None
+        )
+        if reasoning_tokens is None:
+            reasoning_tokens = usage.get("reasoning_tokens")
+        if type(reasoning_tokens) is int and reasoning_tokens >= 0:
+            self.last_reasoning_tokens = reasoning_tokens
+
     def call_openai(
         self,
         payload: dict,
@@ -292,7 +332,11 @@ class LlmSession:
         if on_chunk is not None:
             import time
 
+            # Preserve explicit provider options, including an include_usage opt-out.
+            stream_options = payload.get("stream_options", {})
             payload = {**payload, "stream": True}
+            if isinstance(stream_options, dict):
+                payload["stream_options"] = {"include_usage": True, **stream_options}
             t0 = time.monotonic()
             response = requests.post(
                 self.api_endpoint_url,
@@ -334,6 +378,7 @@ class LlmSession:
                             f"[llm] openai: unparseable stream line: {data_str[:120]!r}"
                         )
                         continue
+                    self._record_usage(chunk_data.get("usage"), "completion_tokens", "prompt_tokens")
                     choices = chunk_data.get("choices") or []
                     if not choices:
                         # Usage chunks (e.g. stream_options.include_usage)
@@ -400,6 +445,7 @@ class LlmSession:
             response.raise_for_status()
             data = response.json()
             self.vlog("RESPONSE (openai)", data)
+            self._record_usage(data.get("usage"), "completion_tokens", "prompt_tokens")
             self.last_finish_reason = data["choices"][0].get("finish_reason")
             return data["choices"][0]["message"]["content"]
 
@@ -448,6 +494,12 @@ class LlmSession:
                     if not line_str.startswith("data: "):
                         continue
                     event_data = json.loads(line_str[6:])
+                    if event_data.get("type") == "message_start":
+                        self._record_usage(
+                            (event_data.get("message") or {}).get("usage"),
+                            "output_tokens", "input_tokens",
+                        )
+                    self._record_usage(event_data.get("usage"), "output_tokens", "input_tokens")
                     if event_data.get("type") == "message_delta":
                         stop_reason = (event_data.get("delta") or {}).get("stop_reason")
                         if stop_reason:
@@ -503,6 +555,7 @@ class LlmSession:
             response.raise_for_status()
             data = response.json()
             self.vlog("RESPONSE (anthropic)", data)
+            self._record_usage(data.get("usage"), "output_tokens", "input_tokens")
             self.last_finish_reason = data.get("stop_reason")
             return self.extract_anthropic_text(data["content"])
 
