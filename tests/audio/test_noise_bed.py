@@ -8,6 +8,9 @@ from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.sound.noise_bed import ContinuousNoise, NoiseBed
 from concat_test_support import concatenate_streamed
 
+# Export code paths: must never launch an FFmpeg executable
+pytestmark = pytest.mark.no_ffmpeg_exe
+
 SR = 48_000
 LEVEL = -65.0
 

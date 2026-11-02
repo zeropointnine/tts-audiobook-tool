@@ -10,7 +10,10 @@ git+https://github.com/ysharma3501/LavaSR.git@33ac040892519c1bb4aed7eb32e79af51c
 torch==2.8.0
 torchaudio==2.8.0
 
+# PyAV and soundfile must come from wheels that bundle FFmpeg / libsndfile.
+--only-binary=av,soundfile
 audiotsm==0.1.2
+av==18.1.0
 chardet==5.2.0
 beautifulsoup4==4.12.3
 EbookLib==0.18

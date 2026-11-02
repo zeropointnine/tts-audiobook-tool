@@ -3,6 +3,7 @@ from typing import cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 
 from tts_audiobook_tool.app_types import ExportType, NormalizationType, Sound
 from tts_audiobook_tool.concat_util import ConcatRenderResult, ConcatUtil
@@ -17,6 +18,9 @@ from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
+
+# Export code paths: must never launch an FFmpeg executable
+pytestmark = pytest.mark.no_ffmpeg_exe
 
 
 def test_model_manager_lazily_loads_and_clears_lava_sr() -> None:

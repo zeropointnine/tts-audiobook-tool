@@ -20,6 +20,9 @@ from tts_audiobook_tool.sound.room_reverb import (
 )
 from concat_test_support import concatenate_streamed
 
+# Export code paths: must never launch an FFmpeg executable
+pytestmark = pytest.mark.no_ffmpeg_exe
+
 SR = 48_000
 
 
@@ -120,14 +123,14 @@ EFFECT_S = 0.2
 
 def run_concat(
         phrases: list[Phrase], sounds: list[np.ndarray], room_reverb: RoomReverb, effect_level: float = EFFECT_LEVEL,
-        room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO, init_stream: MagicMock | None = None,
+        room_reverb_stereo: RoomReverbStereo = RoomReverbStereo.MONO, open_writer: MagicMock | None = None,
         voice_pans: list[float] | None = None, stereo_required: bool = False,
         paths: list[str] | None = None, voice_reverbs: list[RoomReverb] | None = None,
 ) -> list[np.ndarray]:
     """Concat with real PAUSE_S pauses and a constant EFFECT_S break "effect"; returns the streamed arrays."""
     return concatenate_streamed(
         phrases, sounds, SR, pause_s=PAUSE_S, effect_s=EFFECT_S, effect_level=effect_level, paths=paths,
-        init_stream=init_stream, room_reverb=room_reverb, room_reverb_stereo=room_reverb_stereo,
+        open_writer=open_writer, room_reverb=room_reverb, room_reverb_stereo=room_reverb_stereo,
         voice_pans=voice_pans, voice_reverbs=voice_reverbs, stereo_required=stereo_required,
     )
 
@@ -221,7 +224,7 @@ class TestConcatPerVoiceRooms:
     def test_any_voice_with_reverb_makes_the_output_stereo(self) -> None:
         sounds = [noise(0.5, i) for i in range(2)]
         init = MagicMock()
-        streamed = run_concat(self.PHRASES, sounds, RoomReverb.OFF, init_stream=init,
+        streamed = run_concat(self.PHRASES, sounds, RoomReverb.OFF, open_writer=init,
                               room_reverb_stereo=RoomReverbStereo.LATE_W100,
                               voice_reverbs=[RoomReverb.OFF, RoomReverb.SMALL_DRR22])
         assert init.call_args.kwargs["channels"] == 2
@@ -243,7 +246,7 @@ class TestConcatVoicePositioning:
         sounds = [noise(0.3, i) for i in range(2)]
         init = MagicMock()
         streamed = run_concat(phrases, sounds, RoomReverb.OFF,
-                              voice_pans=[0.25, 0.0], init_stream=init)
+                              voice_pans=[0.25, 0.0], open_writer=init)
         assert init.call_args.kwargs["channels"] == 2
         gains = center_unity_pan_gains(0.25)
         np.testing.assert_allclose(streamed[0][:len(sounds[0])],
@@ -256,7 +259,7 @@ class TestConcatVoicePositioning:
         init = MagicMock()
         dry = noise(0.3)
         streamed = run_concat([Phrase("One.", Reason.SENTENCE)], [dry], RoomReverb.OFF,
-                              voice_pans=[0.0], stereo_required=True, init_stream=init)
+                              voice_pans=[0.0], stereo_required=True, open_writer=init)
         assert init.call_args.kwargs["channels"] == 2
         np.testing.assert_array_equal(streamed[0][:len(dry)], np.stack([dry, dry], axis=1))
 
@@ -351,14 +354,14 @@ class TestStereo:
 
         init = MagicMock()
         streamed = run_concat(phrases, sounds, RoomReverb.SMALL_DRR22,
-                              room_reverb_stereo=RoomReverbStereo.LATE_W100, init_stream=init)
+                              room_reverb_stereo=RoomReverbStereo.LATE_W100, open_writer=init)
         assert init.call_args.kwargs["channels"] == 2
         assert all(x.ndim == 2 and x.shape[1] == 2 for x in streamed)
 
         # The stereo setting does nothing while reverb is off
         init = MagicMock()
         streamed = run_concat(phrases, sounds, RoomReverb.OFF,
-                              room_reverb_stereo=RoomReverbStereo.ALL_W100, init_stream=init)
+                              room_reverb_stereo=RoomReverbStereo.ALL_W100, open_writer=init)
         assert init.call_args.kwargs["channels"] == 1
         assert all(x.ndim == 1 for x in streamed)
 

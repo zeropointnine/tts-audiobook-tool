@@ -116,6 +116,8 @@ Create a Python virtual environment using the instructions below.
 - Local inference: Follow the section for each model you want to use.
 - SGL-Omni or audio.cpp: Follow “Virtual environment for remote TTS servers.”
 
+The requirements files tell pip `--only-binary=av,soundfile`: PyAV and soundfile are installed only from their prebuilt wheels, which bundle FFmpeg and libsndfile, and pip fails with a clear error rather than compiling them from source on an unsupported platform. If you install or upgrade these packages by hand, pass the same option, e.g. `pip install --only-binary=av,soundfile av==18.1.0 soundfile==0.13.1`.
+
 Then return here.
 
 ### Step 4 (Windows only)

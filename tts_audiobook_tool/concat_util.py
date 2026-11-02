@@ -3,12 +3,9 @@ from datetime import datetime
 import json
 import math
 import os
-import subprocess
 import time
 from pathlib import Path
-
-import numpy as np
-from numpy import ndarray
+from typing import Callable, Sequence
 
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_hint_util
@@ -24,7 +21,8 @@ from tts_audiobook_tool.project_support.project_serialization_util import Projec
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.sound.loudness_leveling import LevelingStats, LoudnessLeveling
-from tts_audiobook_tool.sound import m4b_chapter_util
+from tts_audiobook_tool.sound import audio_writers, m4b_chapter_util
+from tts_audiobook_tool.sound.audio_writers import AudioWriteError, AudioWriter, Chapter
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.reason_pauses import ReasonPauses
@@ -313,18 +311,13 @@ class ConcatUtil:
         suffix = ".m4b" if is_aac else ".flac"
         concat_path = stem_path + " [concat]" + suffix
 
-        if is_aac and m4b_chapter_util.has_multiple_chapters(state.project, index_start, index_end):
-            chapter_meta_path = stem_path + " [chaptermeta]" + suffix
-        else:
-            chapter_meta_path = ""
         final_path = stem_path + ".abr" + suffix
-        last_path = ""
 
         def delete_intermediate_files(keep_final: bool=False) -> None:
             # TODO: add delete-as-you-go logic instead
             if state.prefs.save_debug_files:
                 return
-            paths = [ concat_path, chapter_meta_path]
+            paths = [concat_path]
             if not keep_final:
                 paths.append(final_path)
             for path in paths:
@@ -353,6 +346,23 @@ class ConcatUtil:
             spatial_policy.volume_db_for_voice_index(group.voice_index)
             for group in state.project.phrase_groups
         ]
+
+        # M4B chapters (and container title/artist) are written by the AAC
+        # writer in the same pass as the audio, from the final durations
+        make_chapters: Callable[[list[float]], Sequence[Chapter]] | None = None
+        container_metadata: dict[str, str] | None = None
+        if is_aac and m4b_chapter_util.has_multiple_chapters(state.project, index_start, index_end):
+            project = state.project
+
+            def chapters_for(durations: list[float]) -> Sequence[Chapter]:
+                # durations is aligned with every phrase group; chapters are
+                # relative to the start of this output range
+                return m4b_chapter_util.make_chapters(
+                    project, durations[index_start:index_end + 1], index_start, index_end,
+                )
+
+            make_chapters = chapters_for
+            container_metadata = {"title": Path(stem_path).name, "artist": APP_NAME}
 
         # [1] Concatenated audio file
 
@@ -384,6 +394,8 @@ class ConcatUtil:
                 voice_volume_dbs=voice_volume_dbs,
                 stereo_required=spatial_policy.requested_channels == 2,
                 loudness=state.project.normalization_type.value,
+                make_chapters=make_chapters,
+                container_metadata=container_metadata,
             )
         finally:
             # LavaSR lives in the model worker. Always explicitly unload it at
@@ -403,31 +415,8 @@ class ConcatUtil:
         else:
             durations = result.durations
             gap_trim_maps = result.gap_trim_maps
-            last_path = concat_path
 
-        # [2] Chapter (M4B) metadata
-        #     Must be done before custom metadata
-        #     Also, can't be easily combined into other save operation
-        #     Both due to ffmpeg limitations
-
-        if chapter_meta_path:
-            chapter_metadata = m4b_chapter_util.make_metadata(
-                state.project,
-                durations,
-                file_title=Path(stem_path).name,
-                index_start=index_start,
-                index_end=index_end,
-            )
-            err = m4b_chapter_util.make_copy_with_metadata(
-                source_path=last_path, dest_path=chapter_meta_path, metadata=chapter_metadata
-            )
-            if err:
-                delete_intermediate_files()
-                return "", f"Error making file with chapter metadata: {err}"
-            else:
-                last_path = chapter_meta_path
-
-        # [3] App metadata (final file)
+        # [2] App metadata (final file)
 
         phrases = [item[0] for item in phrases_and_paths]
         base_timed_phrases = TimedPhrase.make_list_using(phrases, durations)
@@ -467,9 +456,9 @@ class ConcatUtil:
             if err:
                 L.w(f"Couldn't save ABR metadata debug JSON: {err}")
         if is_aac:
-            err = AppMetadata.save_to_mp4(app_meta, last_path, final_path)
+            err = AppMetadata.save_to_mp4(app_meta, concat_path, final_path)
         else:
-            err = AppMetadata.save_to_flac(app_meta, last_path, final_path)
+            err = AppMetadata.save_to_flac(app_meta, concat_path, final_path)
         if err:
             delete_intermediate_files()
             return "", err
@@ -545,9 +534,12 @@ class ConcatUtil:
         voice_volume_dbs: list[float] | None = None,
         stereo_required: bool = False,
         loudness: NormalizationSpecs | None = None,
+        make_chapters: Callable[[list[float]], Sequence[Chapter]] | None = None,
+        container_metadata: dict[str, str] | None = None,
     ) -> ConcatRenderResult | str:
         """
-        Concatenates a list of files to a destination file using ffmpeg streaming process.
+        Concatenates a list of files to a destination file (FLAC or AAC/M4B by
+        suffix), streaming each rendered segment to an output writer.
         Adds silence or sound effect between adjacent segments based on phrase "reason".
 
         :param section_start_indices:
@@ -604,6 +596,12 @@ class ConcatUtil:
             are shifted to keep their level relative to the speech; a final
             safety limiter runs on the mixed output (see LoudnessLeveling).
             None leaves levels untouched.
+        :param make_chapters:
+            AAC only. Called with the final rendered durations (aligned with
+            phrases_and_paths) once all audio is written; the chapters it
+            returns are written into the container in the same pass.
+        :param container_metadata:
+            AAC only. Container-level tags (eg title/artist).
 
         Returns a ConcatRenderResult: the duration of each added segment (for app
         metadata) plus the gap-cut maps needed to remap STT word timings.
@@ -645,9 +643,6 @@ class ConcatUtil:
             room_tone_db += level_offset_db
         leveling_stats = LevelingStats()
 
-        to_aac_not_flac = dest_path.lower().endswith(tuple(AAC_SUFFIXES))
-        process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac, aac_bitrate, channels=channels)
-
         Interrupts().set("concat")
 
         # Render-time break effect rules. The tracker is fed one entry per
@@ -673,7 +668,7 @@ class ConcatUtil:
         def flush_pending(next_sound: Sound | None) -> None:
             """
             Appends the (possibly compensated) trailing pause to the held
-            segment and streams it to ffmpeg. `next_sound` is the following
+            segment and streams it to the output writer. `next_sound` is the following
             segment's rendered sound (without pause), or None for the final
             segment (no compensation applied).
             """
@@ -744,115 +739,137 @@ class ConcatUtil:
 
             durations[idx] = sound.duration
             duration_sum += sound.duration
-            ConcatUtil.add_audio_to_ffmpeg_stream(process, sound.data)
+            writer.write(sound.data)
 
             if print_progress:
                 s = f"{time_stamp(duration_sum, with_tenth=False)} {Path(path).stem[:80]} ... "
                 print("\x1b[1G" + s, end="\033[K", flush=True)
 
-        for i, (phrase, path) in enumerate(phrases_and_paths):
-
-            if not path:
-                # durations[i] already 0.0
-                continue
-            if Interrupts().did_interrupt:
-                Interrupts().clear()
-                ConcatUtil.close_ffmpeg_stream(process)
-                delete_silently(dest_path) # TODO delete parent dir silently if empty
-                return "Interrupted by user"
-
-            render_path = path
-            temporary_upscaled_path = ""
-            if use_upsampler:
-                temporary_upscaled_path = f"{dest_path}.lava-{i}.flac"
-                upsample_error = ModelWorker.upsample_file_blocking(
-                    path,
-                    temporary_upscaled_path,
-                )
-                if upsample_error:
-                    ConcatUtil.close_ffmpeg_stream(process)
-                    delete_silently(temporary_upscaled_path)
-                    return upsample_error
-                render_path = temporary_upscaled_path
-
-            try:
-                result = SoundPipeline.make_concat_rendered_sound_segment(
-                    phrase, render_path, high_shelf,
-                    reason_pauses=reason_pauses,
-                    use_upsampler=False,
-                    add_pause=False,
-                )
-            finally:
-                if temporary_upscaled_path:
-                    delete_silently(temporary_upscaled_path)
-            if isinstance(result, str): # error
-                ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user
-                return result
-
-            curr_sound = result
-
-            # Short sentence-boundary silences are extended first, then over-long
-            # gaps are cut (the extension target is capped at the max above, so
-            # the two don't undo each other). Sidecar timings are against the
-            # saved audio, hence the map below accounts for both steps.
-            curr_sound, insertions = ConcatUtil.extend_sentence_gaps_for_segment(
-                curr_sound, path, min_sentence_silence
+        try:
+            writer = ConcatUtil.open_output_writer(
+                dest_path, aac_bitrate=aac_bitrate, channels=channels, metadata=container_metadata,
             )
+        except AudioWriteError as e:
+            Interrupts().clear()
+            return f"Error creating audio file: {e}"
 
-            # Over-long internal silence gaps are cut here rather than at
-            # generation time, so re-concatenating saved audio with a different
-            # threshold re-cuts it without regenerating. Word timings were
-            # recorded against the un-cut audio, hence the map.
-            curr_sound, gap_trims = SoundPipeline.limit_silence_gaps_with_trims(
-                curr_sound,
-                enabled=limit_silence_gaps,
-                max_gap_duration=limit_silence_gaps_duration,
-            )
-            if gap_trims or insertions:
-                gap_trim_maps[i] = GapTrimMap(result.duration, gap_trims, insertions)
+        try:
+            for i, (phrase, path) in enumerate(phrases_and_paths):
 
-            # Loudness leveling: after all per-segment shaping (high shelf
-            # included, which affects K-weighted loudness), before the pause
-            # and panning. Pseudo-silence detection below is relative to the
-            # segment's peak, so it's unaffected by the gain. The voice's
-            # volume lowers the leveled segment; the narration feeds its room
-            # at that level, so the voice's dry/wet balance is unchanged.
-            if loudness is not None:
-                leveled = LoudnessLeveling.level(
-                    curr_sound, loudness, pan=voice_pans[i], channels=channels, volume_db=voice_volume_dbs[i],
+                if not path:
+                    # durations[i] already 0.0
+                    continue
+                if Interrupts().did_interrupt:
+                    Interrupts().clear()
+                    writer.abort()
+                    return "Interrupted by user"
+
+                render_path = path
+                temporary_upscaled_path = ""
+                if use_upsampler:
+                    temporary_upscaled_path = f"{dest_path}.lava-{i}.flac"
+                    upsample_error = ModelWorker.upsample_file_blocking(
+                        path,
+                        temporary_upscaled_path,
+                    )
+                    if upsample_error:
+                        writer.abort()
+                        delete_silently(temporary_upscaled_path)
+                        return upsample_error
+                    render_path = temporary_upscaled_path
+
+                try:
+                    result = SoundPipeline.make_concat_rendered_sound_segment(
+                        phrase, render_path, high_shelf,
+                        reason_pauses=reason_pauses,
+                        use_upsampler=False,
+                        add_pause=False,
+                    )
+                finally:
+                    if temporary_upscaled_path:
+                        delete_silently(temporary_upscaled_path)
+                if isinstance(result, str): # error
+                    writer.abort()
+                    return result
+
+                curr_sound = result
+
+                # Short sentence-boundary silences are extended first, then over-long
+                # gaps are cut (the extension target is capped at the max above, so
+                # the two don't undo each other). Sidecar timings are against the
+                # saved audio, hence the map below accounts for both steps.
+                curr_sound, insertions = ConcatUtil.extend_sentence_gaps_for_segment(
+                    curr_sound, path, min_sentence_silence
                 )
-                leveling_stats.add(leveled)
-                curr_sound = leveled.sound
 
-            if Interrupts().did_interrupt:
-                Interrupts().clear()
-                ConcatUtil.close_ffmpeg_stream(process)
-                delete_silently(dest_path) # TODO delete parent dir silently if empty
-                return "Interrupted by user"
+                # Over-long internal silence gaps are cut here rather than at
+                # generation time, so re-concatenating saved audio with a different
+                # threshold re-cuts it without regenerating. Word timings were
+                # recorded against the un-cut audio, hence the map.
+                curr_sound, gap_trims = SoundPipeline.limit_silence_gaps_with_trims(
+                    curr_sound,
+                    enabled=limit_silence_gaps,
+                    max_gap_duration=limit_silence_gaps_duration,
+                )
+                if gap_trims or insertions:
+                    gap_trim_maps[i] = GapTrimMap(result.duration, gap_trims, insertions)
 
-            # Flush the previously-held segment using the current segment as the
-            # "next" segment for pseudo-silence compensation.
+                # Loudness leveling: after all per-segment shaping (high shelf
+                # included, which affects K-weighted loudness), before the pause
+                # and panning. Pseudo-silence detection below is relative to the
+                # segment's peak, so it's unaffected by the gain. The voice's
+                # volume lowers the leveled segment; the narration feeds its room
+                # at that level, so the voice's dry/wet balance is unchanged.
+                if loudness is not None:
+                    leveled = LoudnessLeveling.level(
+                        curr_sound, loudness, pan=voice_pans[i], channels=channels, volume_db=voice_volume_dbs[i],
+                    )
+                    leveling_stats.add(leveled)
+                    curr_sound = leveled.sound
+
+                if Interrupts().did_interrupt:
+                    Interrupts().clear()
+                    writer.abort()
+                    return "Interrupted by user"
+
+                # Flush the previously-held segment using the current segment as the
+                # "next" segment for pseudo-silence compensation.
+                if pending is not None:
+                    flush_pending(curr_sound)
+
+                pending = (curr_sound, phrase, i, path)
+
+            # Flush the final held segment. No following segment exists, so no
+            # pseudo-silence compensation is applied (hardcoded pause is used).
+            # Break effects are suppressed because they should only separate audio
+            # segments, never trail the output file.
             if pending is not None:
-                flush_pending(curr_sound)
+                flush_pending(None)
 
-            pending = (curr_sound, phrase, i, path)
-
-        # Flush the final held segment. No following segment exists, so no
-        # pseudo-silence compensation is applied (hardcoded pause is used).
-        # Break effects are suppressed because they should only separate audio
-        # segments, never trail the output file.
-        if pending is not None:
-            flush_pending(None)
-
-        if print_progress:
+            if print_progress:
+                printt()
             printt()
-        printt()
 
-        if print_progress:
-            ConcatUtil.print_render_metrics(gap_trim_maps, leveling_stats if loudness is not None else None, loudness)
+            if print_progress:
+                ConcatUtil.print_render_metrics(gap_trim_maps, leveling_stats if loudness is not None else None, loudness)
 
-        Interrupts().clear()
-        ConcatUtil.close_ffmpeg_stream(process)
+            Interrupts().clear()
+
+            # Chapters need the final rendered durations, so they're set last,
+            # just before the container is finalized
+            if make_chapters is not None:
+                chapters = make_chapters(durations)
+                if chapters:
+                    writer.set_chapters(chapters)
+            writer.close()
+        except AudioWriteError as e:
+            # The writer has already removed its partial output
+            Interrupts().clear()
+            return f"Error writing audio file: {e}"
+        except BaseException:
+            writer.abort()
+            raise
+
         return ConcatRenderResult(durations=durations, gap_trim_maps=gap_trim_maps)
 
     @staticmethod
@@ -926,63 +943,20 @@ class ConcatUtil:
         )
 
     @staticmethod
-    def init_ffmpeg_stream(
+    def open_output_writer(
             dest_path: str,
-            is_aac_not_flac: bool,
-            aac_bitrate: str=AAC_BITRATE_DEFAULT,
-            channels: int = 1,
-    ) -> subprocess.Popen:
+            channels: int,
+            aac_bitrate: str = AAC_BITRATE_DEFAULT,
+            metadata: dict[str, str] | None = None,
+            sample_rate: int = APP_SAMPLE_RATE,
+    ) -> AudioWriter:
         """
-        Initializes and returns an ffmpeg process for streaming FLAC encoding.
-        Stereo input is interleaved (n, 2) data, see add_audio_to_ffmpeg_stream.
+        Opens the streaming writer for dest_path (AAC for AAC_SUFFIXES, else FLAC).
+        Stereo input is interleaved (n, 2) data.
         """
-        args = [
-            "ffmpeg",
-            "-y"  # Overwrite output file if it exists
-        ]
-        # Input stream related
-        args.extend([
-            "-f", "s16le",
-            "-ar", f"{APP_SAMPLE_RATE}",
-            "-ac", str(channels),
-            "-i", "-"
-        ])
-
-        # Output stream related
-        if is_aac_not_flac:
-            args.extend(make_ffmpeg_arguments_output_aac(aac_bitrate))
-        else:
-            args.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)
-        args.append(dest_path)
-
-        return subprocess.Popen(
-            args, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        return audio_writers.open_writer(
+            dest_path, sample_rate, channels, aac_bitrate=aac_bitrate, metadata=metadata,
         )
-
-    @staticmethod
-    def add_audio_to_ffmpeg_stream(process: subprocess.Popen, audio_data: ndarray):
-        """
-        Writes a chunk of audio data to the ffmpeg process's stdin.
-        Converts float audio data to 16-bit PCM format. Stereo is (n, 2), which
-        `tobytes` writes interleaved, as s16le expects.
-        """
-        # Float audio in [-1.0, 1.0] to 16-bit PCM. Out-of-range floats don't
-        # saturate when cast to int16 (they wrap around, ie loud crackles), so
-        # clip first as a safety net.
-        pcm_data = (np.clip(audio_data, -1.0, 1.0) * 32767).astype(np.int16) # type: ignore
-
-        try:
-            process.stdin.write(pcm_data.tobytes()) # type: ignore
-        except BrokenPipeError:
-            pass
-
-    @staticmethod
-    def close_ffmpeg_stream(process: subprocess.Popen):
-        """
-        Closes the stdin of the ffmpeg process and waits for it to terminate.
-        """
-        process.stdin.close()  # type: ignore
-        process.wait()
 
     @staticmethod
     def auto_concat_after_generation(state: State) -> None:

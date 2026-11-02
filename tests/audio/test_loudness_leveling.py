@@ -6,9 +6,13 @@ import pytest
 from tts_audiobook_tool.app_types import NormalizationType, Sound
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.concat_util import ConcatUtil
+from tts_audiobook_tool.sound.audio_writers import AacWriter, FlacWriter
 from tts_audiobook_tool.sound.loudness_leveling import LoudnessLeveling
 from tts_audiobook_tool.sound.voice_spatial import center_unity_pan_gains
 from tests.concat_test_support import concatenate, concatenate_streamed
+
+# Export code paths: must never launch an FFmpeg executable
+pytestmark = pytest.mark.no_ffmpeg_exe
 
 SR = 48_000
 ACX = NormalizationType.DEFAULT.value
@@ -192,9 +196,13 @@ class TestConcatWiring:
         assert appended[0]["effect_level_offset_db"] == pytest.approx(offset)
 
 
-def test_ffmpeg_stream_clips_instead_of_wrapping() -> None:
+def test_flac_quantization_clips_instead_of_wrapping() -> None:
     # Out-of-range floats must saturate; a bare int16 cast would wrap around
-    process = MagicMock()
-    ConcatUtil.add_audio_to_ffmpeg_stream(process, np.array([1.5, -1.5, 0.5], dtype=np.float32))
-    written = np.frombuffer(process.stdin.write.call_args.args[0], dtype=np.int16)
+    written = FlacWriter.quantize(np.array([1.5, -1.5, 0.5], dtype=np.float32))
     np.testing.assert_array_equal(written, [32767, -32767, 16383])
+
+
+def test_aac_input_is_clipped_float() -> None:
+    # AAC gets float input (no int16 step), still limited to full scale
+    planar = AacWriter.to_planar(np.array([[1.5, -0.25], [-1.5, 0.5]], dtype=np.float32))
+    np.testing.assert_array_equal(planar, [[1.0, -1.0], [-0.25, 0.5]])

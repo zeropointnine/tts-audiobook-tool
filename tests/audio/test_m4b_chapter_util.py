@@ -1,16 +1,22 @@
 import unittest
 
+import pytest
+
 from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound import m4b_chapter_util
+from tts_audiobook_tool.sound.audio_writers import Chapter
+
+# Export code paths: must never launch an FFmpeg executable
+pytestmark = pytest.mark.no_ffmpeg_exe
 
 
 class TestM4bChapterUtil(unittest.TestCase):
     def make_phrase_group(self, text: str) -> PhraseGroup:
         return PhraseGroup([Phrase(text, Reason.SENTENCE)])
 
-    def test_make_metadata_uses_book_section_starts_and_titles(self):
+    def test_make_chapters_uses_book_section_starts_and_titles(self):
         project = Project.model_validate({
             "book": Book(sections=[
                 BookSection(title="Part One", phrase_groups=[
@@ -27,18 +33,18 @@ class TestM4bChapterUtil(unittest.TestCase):
             ]),
         })
 
-        metadata = m4b_chapter_util.make_metadata(
+        chapters = m4b_chapter_util.make_chapters(
             project=project,
             durations=[1.0, 2.0, 3.0, 4.0, 5.0],
-            file_title="Test Book",
         )
 
-        self.assertEqual(metadata.count("[CHAPTER]"), 3)
-        self.assertIn("START=0\nEND=3000\ntitle=Part One", metadata)
-        self.assertIn("START=3000\nEND=6000\ntitle=Part Two", metadata)
-        self.assertIn("START=6000\nEND=15000\ntitle=Part Three", metadata)
+        self.assertEqual(chapters, [
+            Chapter(0.0, 3.0, "Part One"),
+            Chapter(3.0, 6.0, "Part Two"),
+            Chapter(6.0, 15.0, "Part Three"),
+        ])
 
-    def test_make_metadata_ignores_markers_and_chapter_mode(self):
+    def test_make_chapters_ignores_markers_and_chapter_mode(self):
         project = Project.model_validate({
             "book": Book(sections=[
                 BookSection(title="Book A", phrase_groups=[
@@ -54,21 +60,18 @@ class TestM4bChapterUtil(unittest.TestCase):
             "chapter_mode": SectionMarkerMode.FILES.id,
         })
 
-        metadata = m4b_chapter_util.make_metadata(
+        chapters = m4b_chapter_util.make_chapters(
             project=project,
             durations=[1.0, 1.0, 1.0, 1.0],
-            file_title="Test Book",
         )
 
-        self.assertEqual(metadata.count("[CHAPTER]"), 2)
-        self.assertIn("START=0\nEND=2000\ntitle=Book A", metadata)
-        self.assertIn("START=2000\nEND=4000\ntitle=Book B", metadata)
-        self.assertNotIn("START=1000", metadata)
-        self.assertNotIn("START=3000", metadata)
-        self.assertNotIn("title=A2.", metadata)
-        self.assertNotIn("title=B2.", metadata)
+        # Book sections win over the FILES-mode markers at 1 and 3
+        self.assertEqual(chapters, [
+            Chapter(0.0, 2.0, "Book A"),
+            Chapter(2.0, 4.0, "Book B"),
+        ])
 
-    def test_make_metadata_uses_markers_for_single_section_books(self):
+    def test_make_chapters_uses_markers_for_single_section_books(self):
         project = Project.model_validate({
             "book": Book(sections=[
                 BookSection(title="Only Section", phrase_groups=[
@@ -84,17 +87,17 @@ class TestM4bChapterUtil(unittest.TestCase):
 
         self.assertTrue(m4b_chapter_util.has_multiple_chapters(project, 0, 3))
 
-        metadata = m4b_chapter_util.make_metadata(
+        chapters = m4b_chapter_util.make_chapters(
             project=project,
             durations=[1.0, 2.0, 3.0, 4.0],
-            file_title="Test Book",
         )
 
-        self.assertEqual(metadata.count("[CHAPTER]"), 2)
-        self.assertIn("START=0\nEND=3000\ntitle=Chapter One", metadata)
-        self.assertIn("START=3000\nEND=10000\ntitle=Chapter Two", metadata)
+        self.assertEqual(chapters, [
+            Chapter(0.0, 3.0, "Chapter One"),
+            Chapter(3.0, 10.0, "Chapter Two"),
+        ])
 
-    def test_make_metadata_uses_only_overlapping_marker_chapters_for_output_range(self):
+    def test_make_chapters_uses_only_overlapping_marker_chapters_for_output_range(self):
         project = Project.model_validate({
             "book": Book(sections=[
                 BookSection(title="Only Section", phrase_groups=[
@@ -109,17 +112,17 @@ class TestM4bChapterUtil(unittest.TestCase):
             "chapter_mode": SectionMarkerMode.BOOKMARKS.id,
         })
 
-        metadata = m4b_chapter_util.make_metadata(
+        chapters = m4b_chapter_util.make_chapters(
             project=project,
             durations=[10.0, 20.0, 30.0],
-            file_title="Ranged",
             index_start=2,
             index_end=4,
         )
 
-        self.assertEqual(metadata.count("[CHAPTER]"), 2)
-        self.assertIn("START=0\nEND=30000\ntitle=Three", metadata)
-        self.assertIn("START=30000\nEND=60000\ntitle=Five", metadata)
+        self.assertEqual(chapters, [
+            Chapter(0.0, 30.0, "Three"),
+            Chapter(30.0, 60.0, "Five"),
+        ])
 
     def test_single_book_section_does_not_create_m4b_chapters(self):
         project = Project.model_validate({
@@ -133,13 +136,12 @@ class TestM4bChapterUtil(unittest.TestCase):
 
         self.assertFalse(m4b_chapter_util.has_multiple_chapters(project, 0, 1))
 
-        metadata = m4b_chapter_util.make_metadata(
+        chapters = m4b_chapter_util.make_chapters(
             project=project,
             durations=[1.0, 2.0],
-            file_title="Test Book",
         )
 
-        self.assertNotIn("[CHAPTER]", metadata)
+        self.assertEqual(chapters, [])
 
 
 if __name__ == "__main__":

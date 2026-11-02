@@ -90,10 +90,11 @@ same amount as typical speech), so their level relative to the speech is unchang
 
 **Mix limiter.** Room reverb adds its wet signal on top of the leveled, limited narration, and pushed peaks up to
 +1.5 dB past the ceiling (only on the reverb voice). A final safety limiter (`limit_mix`) runs on each mixed chunk
-(segment + pause/effect, after reverb and room tone, before ffmpeg) at the preset ceiling. It's usually a no-op.
+(segment + pause/effect, after reverb and room tone, before the output writer) at the preset ceiling. It's usually a no-op.
 
-**int16 safety.** `ConcatUtil.add_audio_to_ffmpeg_stream` now clips before the int16 cast. Out-of-range floats
-don't saturate in that cast; they wrap around, which would come out as loud crackles.
+**int16 safety.** The FLAC writer (`FlacWriter.quantize` in `sound/audio_writers.py`) clips before the int16 cast.
+Out-of-range floats don't saturate in that cast; they wrap around, which would come out as loud crackles. The AAC
+writer feeds float to the encoder, clipped to ±1.0.
 
 ### Limiter
 

@@ -7,6 +7,8 @@ from typing import cast
 from unittest.mock import patch
 from types import SimpleNamespace
 
+import pytest
+
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSection
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
@@ -16,7 +18,8 @@ from tts_audiobook_tool.concat_util import (
     make_app_metadata_sections,
     save_abr_metadata_debug_json,
 )
-from tts_audiobook_tool.constants import ABR_VERSION
+from tts_audiobook_tool.constants import ABR_VERSION, APP_NAME
+from tts_audiobook_tool.sound.audio_writers import Chapter
 from tts_audiobook_tool.project import Project
 from project_settings_test_support import get_setting, set_setting
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -375,7 +378,11 @@ class TestAppMetadata(unittest.TestCase):
             AppMetadataSection(title="Chapter 1", start_index=0, end_index=5),
         ])
 
-    def test_concat_make_file_writes_chapter_metadata_before_abr_metadata_for_marker_chapters(self):
+    @pytest.mark.no_ffmpeg_exe
+    def test_concat_make_file_writes_chapters_in_the_concat_pass_then_abr_metadata(self):
+        # Chapters are no longer a separate remux: the concat pass gets a
+        # chapter callback plus title/artist, and ABR metadata is added to the
+        # concat output directly.
         with tempfile.TemporaryDirectory() as temp_dir:
             project = Project.model_validate({
                 "dir_path": temp_dir,
@@ -408,10 +415,8 @@ class TestAppMetadata(unittest.TestCase):
 
             with patch("tts_audiobook_tool.concat_util.ProjectTextIOUtil.load_raw_text", return_value="raw"), \
                  patch.object(ConcatUtil, "make_phrases_and_paths", return_value=phrases_and_paths), \
-                 patch.object(ConcatUtil, "concatenate_sound_segments", return_value=ConcatRenderResult(durations=[1.0, 2.0, 3.0, 4.0])), \
+                 patch.object(ConcatUtil, "concatenate_sound_segments", return_value=ConcatRenderResult(durations=[1.0, 2.0, 3.0, 4.0])) as concat_mock, \
                  patch("tts_audiobook_tool.concat_util.make_app_metadata_sections", return_value=sections), \
-                 patch("tts_audiobook_tool.concat_util.m4b_chapter_util.make_metadata", return_value="meta") as make_metadata_mock, \
-                 patch("tts_audiobook_tool.concat_util.m4b_chapter_util.make_copy_with_metadata", return_value="") as make_copy_mock, \
                  patch("tts_audiobook_tool.concat_util.AppMetadata.save_to_mp4", return_value="") as save_to_mp4_mock, \
                  patch("tts_audiobook_tool.concat_util.delete_silently"):
                 result_path, err = ConcatUtil.make_file(
@@ -424,17 +429,49 @@ class TestAppMetadata(unittest.TestCase):
 
             self.assertEqual(err, "")
             self.assertEqual(result_path, stem_path + ".abr.m4b")
-            make_metadata_mock.assert_called_once()
-            make_copy_mock.assert_called_once_with(
-                source_path=stem_path + " [concat].m4b",
-                dest_path=stem_path + " [chaptermeta].m4b",
-                metadata="meta",
-            )
+            self.assertEqual(concat_mock.call_args.args[0], stem_path + " [concat].m4b")
+            kwargs = concat_mock.call_args.kwargs
+            self.assertEqual(kwargs["container_metadata"], {"title": "book", "artist": APP_NAME})
+            self.assertEqual(kwargs["make_chapters"]([1.0, 2.0, 3.0, 4.0]), [
+                Chapter(0.0, 3.0, "Chapter One"),
+                Chapter(3.0, 10.0, "Chapter Two"),
+            ])
             save_to_mp4_mock.assert_called_once()
             self.assertEqual(save_to_mp4_mock.call_args.args[0].version, ABR_VERSION)
             self.assertEqual(save_to_mp4_mock.call_args.args[0].type, "generated")
-            self.assertEqual(save_to_mp4_mock.call_args.args[1], stem_path + " [chaptermeta].m4b")
+            self.assertEqual(save_to_mp4_mock.call_args.args[1], stem_path + " [concat].m4b")
             self.assertEqual(save_to_mp4_mock.call_args.args[2], stem_path + ".abr.m4b")
+
+    @pytest.mark.no_ffmpeg_exe
+    def test_concat_make_file_chapters_use_only_the_output_ranges_durations(self):
+        # Rendered durations cover every phrase group (0.0 outside the range);
+        # chapter times must start at the output file's first group
+        project = Project.model_validate({
+            "book": Book(sections=[
+                BookSection(title="Before", phrase_groups=[self.make_phrase_group("Zero.")]),
+                BookSection(title="Part A", phrase_groups=[self.make_phrase_group("One.")]),
+                BookSection(title="Part B", phrase_groups=[
+                    self.make_phrase_group("Two."), self.make_phrase_group("Three."),
+                ]),
+            ]),
+        })
+        project.export_type = ExportType.AAC
+        state = SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="96k", save_debug_files=False))
+
+        with patch("tts_audiobook_tool.concat_util.ProjectTextIOUtil.load_raw_text", return_value="raw"), \
+             patch.object(ConcatUtil, "make_phrases_and_paths", return_value=[]), \
+             patch.object(ConcatUtil, "concatenate_sound_segments", return_value="stop") as concat_mock, \
+             patch("tts_audiobook_tool.concat_util.delete_silently"):
+            _, err = ConcatUtil.make_file(
+                state=cast(State, state), index_start=1, index_end=3, bookmark_indices=[], stem_path="/tmp/x",
+            )
+
+        self.assertEqual(err, "stop")
+        make_chapters = concat_mock.call_args.kwargs["make_chapters"]
+        self.assertEqual(make_chapters([0.0, 10.0, 20.0, 30.0]), [
+            Chapter(0.0, 10.0, "Part A"),
+            Chapter(10.0, 60.0, "Part B"),
+        ])
 
 
 if __name__ == "__main__":

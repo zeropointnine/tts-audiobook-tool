@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import logging
-import shutil
-import subprocess
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,9 +9,9 @@ import numpy as np
 import pytest
 
 from tts_audiobook_tool.app_support.interrupts import Interrupts
+from audio_fixture_support import write_sine_wav
 from tts_audiobook_tool.app_types import ConcreteWord, SttVariant
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
-from tts_audiobook_tool.constants import FFMPEG_COMMAND
 from tts_audiobook_tool.enhance import enhance_alignment
 
 
@@ -257,18 +255,10 @@ def test_cancellation_while_reading_next_chunk_discards_partial_transcript(monke
 
 
 def _write_long_audio(path: Path) -> None:
-    subprocess.run(
-        [
-            FFMPEG_COMMAND, "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=16000:duration=180",
-            "-c:a", "pcm_s16le",
-            str(path),
-        ],
-        check=True,
-        capture_output=True,
-    )
+    write_sine_wav(path, frequency=440, sample_rate=16000, duration_s=180)
 
 
+@pytest.mark.requires_ffmpeg_exe(reason="the enhancement chunk stream still decodes through FFmpeg (Phase 3)")
 def test_abandoning_chunk_stream_stops_ffmpeg_promptly(tmp_path: Path) -> None:
     """Stopping mid-stream must not leave the caller waiting on ffmpeg.
 
@@ -278,8 +268,6 @@ def test_abandoning_chunk_stream_stops_ffmpeg_promptly(tmp_path: Path) -> None:
     generator's teardown has to break that deadlock, otherwise the enhance
     flow hangs after a single control-c.
     """
-    if shutil.which(FFMPEG_COMMAND) is None:
-        pytest.skip("FFmpeg is unavailable")
     source = tmp_path / "book.wav"
     _write_long_audio(source)
 
@@ -298,9 +286,8 @@ def test_abandoning_chunk_stream_stops_ffmpeg_promptly(tmp_path: Path) -> None:
     assert process.poll() is not None
 
 
+@pytest.mark.requires_ffmpeg_exe(reason="the enhancement chunk stream still decodes through FFmpeg (Phase 3)")
 def test_chunk_stream_cancel_check_stops_before_producing_a_chunk(tmp_path: Path) -> None:
-    if shutil.which(FFMPEG_COMMAND) is None:
-        pytest.skip("FFmpeg is unavailable")
     source = tmp_path / "book.wav"
     _write_long_audio(source)
 

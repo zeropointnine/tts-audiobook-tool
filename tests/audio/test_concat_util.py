@@ -20,6 +20,9 @@ from tts_audiobook_tool.sound.silence_util import GapTrimMap, SilenceGapTrim
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from concat_test_support import concatenate
 
+# Export code paths: must never launch an FFmpeg executable
+pytestmark = pytest.mark.no_ffmpeg_exe
+
 
 def make_fake_project(num_groups: int, missing_indices: frozenset[int] = frozenset()) -> MagicMock:
     project = MagicMock()
