@@ -88,7 +88,13 @@ def test_clear_deletes_saved_assignments_and_drops_the_item(monkeypatch, tmp_pat
     monkeypatch.setattr(MenuUtil, "print_heading", lambda *_, **__: None)
     monkeypatch.setattr(MenuUtil, "make_breadcrumb_text", lambda *_: "")
     captured = []
-    monkeypatch.setattr(MenuUtil, "menu", lambda *_, items, **__: captured.append(items))
+    def capture_menu(*_, items, heading, breadcrumb, **__):
+        assert heading == "Dialog attribution"
+        assert breadcrumb == "Dialog attribution"
+        captured.append(items)
+
+    monkeypatch.setattr(MenuUtil, "menu", capture_menu)
+    assert assign_menu.make_step_label(state).startswith("Step 2: Dialog attribution")
 
     assign_menu.assign_menu(state)
     items_maker = captured[0]
@@ -104,8 +110,8 @@ def test_clear_deletes_saved_assignments_and_drops_the_item(monkeypatch, tmp_pat
 
 
 @pytest.mark.parametrize("reasoning_tokens, expected", [
-    (400, "3K input tokens, 1K output tokens (1K reasoning)"),
-    (None, "3K input tokens, 1K output tokens (40 reasoning / 60 total chars)"),
+    (400, "3.0K input tokens, 1.0K output tokens (0.8K reasoning)"),
+    (None, "3.0K input tokens, 1.0K output tokens (~0.0K reasoning)"),
 ])
 def test_run_usage_totals_accumulate_reasoning(reasoning_tokens, expected):
     # Each request contributes once, even if it failed or was discarded.
@@ -127,28 +133,38 @@ def test_run_usage_totals_mark_partial_metadata_and_count_observed_output():
     totals.add(LlmRequestResult(reply="", reasoning="", elapsed=1, cancelled=True),
                answer_chars=5, reasoning_chars=20)
     assert totals.format() == (
-        "1K input tokens (partial; 1 request without usage), "
-        "0K output tokens (partial; 1 request without usage) "
-        "(20 reasoning / 35 total chars)"
+        "1.0K input tokens (partial; 1 request without usage), "
+        "~0.1K output tokens "
+        "(~0.0K reasoning)"
     )
 
 
 @pytest.mark.parametrize("input_tokens, output_tokens, expected", [
-    (None, None, "input tokens unavailable, 10 output chars (tokens unavailable)"),
-    (0, 0, "0K input tokens, 0K output tokens"),
-    (1_234, 50, "1K input tokens, 0K output tokens"),
+    (None, None, "input tokens unavailable, ~0.0K output tokens"),
+    (0, 0, "0.0K input tokens, 0.0K output tokens"),
+    (1_234, 50, "1.2K input tokens, 0.1K output tokens"),
 ])
 def test_run_usage_totals_non_reasoning_and_missing_usage(input_tokens, output_tokens, expected):
-    # Missing counts aren't confused with reported zero or estimated from characters.
+    # Missing output is estimated; reported zero remains authoritative.
     totals = assign_menu.RunUsageTotals()
     totals.add(LlmRequestResult(reply="a" * 10, reasoning="", elapsed=1,
                                 input_tokens=input_tokens, output_tokens=output_tokens))
     assert totals.format() == expected
 
 
+def test_large_totals_round_all_usage_components_to_whole_k():
+    # Input, output and reasoning follow the same non-realtime rounding rule.
+    totals = assign_menu.RunUsageTotals()
+    totals.add(LlmRequestResult(reply="", reasoning="", elapsed=1,
+                                input_tokens=33_000, output_tokens=20_564, reasoning_tokens=17_303))
+    assert totals.format() == "33K input tokens, 21K output tokens (17K reasoning)"
+
+
+@pytest.mark.parametrize("request_kind", ["reported", "estimated", "cancelled", "error"])
 @pytest.mark.parametrize("outcome", list(RunOutcome))
 @pytest.mark.parametrize("has_failures", [False, True])
-def test_run_summary_prints_usage_and_starts_after_blank_line(monkeypatch, tmp_path, capsys, outcome, has_failures):
+def test_run_summary_prints_usage_and_starts_after_blank_line(
+        monkeypatch, tmp_path, capsys, outcome, has_failures, request_kind):
     # Exercise the UI send wrapper: retries/follow-ups count, and every exit prints totals.
     book = make_book([('"Hello."', Reason.PHRASE_QUOTE_END, DIALOG)])
     saved = AttributionsFile()
@@ -169,17 +185,25 @@ def test_run_summary_prints_usage_and_starts_after_blank_line(monkeypatch, tmp_p
 
     def send_cancellable(llm, message, **kwargs):
         calls.append(message)
-        kwargs["on_poll"](LlmRequestProgress(answer_chars=10, reasoning_chars=0, elapsed=1))
-        return LlmRequestResult(reply="a" * 10, reasoning="", elapsed=1,
-                                input_tokens=1_000, output_tokens=100)
+        kwargs["on_poll"](LlmRequestProgress(answer_chars=400, reasoning_chars=40_000, elapsed=1))
+        return LlmRequestResult(
+            reply="a" * 400, reasoning="r" * 40_000, elapsed=85,
+            input_tokens=33_000 if request_kind != "estimated" else None,
+            output_tokens=20_564 if request_kind != "estimated" else None,
+            reasoning_tokens=17_303 if request_kind != "estimated" else None,
+            cancelled=request_kind == "cancelled",
+            error=RuntimeError("failed") if request_kind == "error" else None,
+        )
 
     class Runner:
         def __init__(self, **kwargs):
             self.send = kwargs["send"]
+            self.listener = kwargs["listener"]
 
         def run(self):
             self.send(None, "first")
             self.send(None, "follow-up or retry")
+            self.listener.chunk_saved(None, None, 85)
             # Simulate an unterminated terminal line immediately before run returns.
             print("last chunk", end="")
             return SimpleNamespace(outcome=outcome, saved_count=1, failures=["failed"] if has_failures else [],
@@ -193,15 +217,27 @@ def test_run_summary_prints_usage_and_starts_after_blank_line(monkeypatch, tmp_p
     output = strip_ansi_codes(capsys.readouterr().out)
     label = {RunOutcome.FINISHED: "Done", RunOutcome.FAILED: "Failed"}.get(outcome, "Stopped")
     assert f"last chunk\n\n{label}:" in output
-    assert "Totals: 2K input tokens, 0K output tokens\n" in output
+    if request_kind == "estimated":
+        assert "Totals: input tokens unavailable, ~20K output tokens (~20K reasoning)\n" in output
+        done = "Done: input tokens unavailable, ~10K output tokens (~10.0K reasoning), 1m25s\n"
+    else:
+        assert "Totals: 66K input tokens, 41K output tokens (35K reasoning)\n" in output
+        done = "Done: 33K input tokens, 21K output tokens (17K reasoning), 1m25s\n"
+    if request_kind in ("reported", "estimated"):
+        assert output.count(done) == 2
+        # Each request summary replaces (rather than follows) its live progress line.
+        assert output.count("\r" + done) == 2
+    else:
+        assert done not in output
+    assert "Done: 1m25s" not in output
     assert "select Continue" not in output
     assert calls == ["first", "follow-up or retry"]
 
 
 @pytest.mark.parametrize("count, expected", [
-    (0, "0K"), (499, "0K"), (500, "1K"), (1_499, "1K"),
-    (1_500, "2K"), (12_345, "12K"), (12_500, "13K"), (999_500, "1,000K"),
+    (0, "0.0K"), (499, "0.5K"), (500, "0.5K"), (1_499, "1.5K"),
+    (1_500, "1.5K"), (10_000, "10.0K"), (10_001, "10K"), (12_345, "12K"), (12_500, "13K"), (999_500, "1,000K"),
 ])
-def test_token_counts_round_to_nearest_whole_k(count, expected):
+def test_summary_token_counts_use_whole_k_only_over_10k(count, expected):
     # Halfway values round up rather than using Python's nearest-even rounding.
     assert assign_menu.format_token_count(count) == expected

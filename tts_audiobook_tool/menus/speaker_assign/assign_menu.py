@@ -1,5 +1,5 @@
 """Step 2: whole-book speaker attribution (see plans/llm-speaker-attribution.md)."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import time
 
 from tts_audiobook_tool import app_support, ask
@@ -11,13 +11,14 @@ from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.speaker_assign.characters_view import print_characters_info
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
+    OutputUsage,
     StatusLine,
     check_llm_configured,
     format_token_count,
     print_llm_info,
 )
 from tts_audiobook_tool.speaker_assign.assign_plan import AssignPlan, PlannedChunk
-from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile, RangeAttribution
+from tts_audiobook_tool.speaker_assign.attribution import AttributionsFile
 from tts_audiobook_tool.speaker_assign.attribution_runner import (
     AttributionRunListener,
     AttributionRunner,
@@ -71,7 +72,7 @@ def load_assign_data(state: State) -> AssignData | str:
 
 def make_step_label(state: State) -> str:
     """The parent menu's label for step 2, with its progress."""
-    label = "Step 2: Run dialog attribution"
+    label = "Step 2: Dialog attribution"
     if not SpeakerAssignFileUtil.has_roster(state.project.dir_path):
         return label + f" {COL_DIM}(requires step 1)"
     data = load_assign_data(state)
@@ -87,7 +88,7 @@ def make_step_label(state: State) -> str:
 def assign_menu(state: State) -> None:
 
     if not SpeakerAssignFileUtil.has_roster(state.project.dir_path):
-        print_feedback("Requires step 1 (generate character roster)", is_error=True)
+        print_feedback("Requires step 1 (character roster)", is_error=True)
         return
     data = load_assign_data(state)
     if isinstance(data, str):
@@ -159,10 +160,10 @@ def assign_menu(state: State) -> None:
 
     MenuUtil.menu(
         state,
-        heading="Run dialog attribution",
+        heading="Dialog attribution",
         items=items_maker,
         subheading=lambda _: subheading,
-        breadcrumb="Run dialog attribution",
+        breadcrumb="Dialog attribution",
     )
 
 
@@ -239,8 +240,11 @@ def run_assign(state: State, start_over: bool = False) -> bool:
         )
         # Count every attempt, including retries, follow-ups and discarded partial replies.
         totals.add(result, answer_chars=answer_chars, reasoning_chars=reasoning_chars)
-        # Per-chunk results are printed instead
         status.clear()
+        if not result.cancelled and result.error is None:
+            request_usage = RunUsageTotals()
+            request_usage.add(result, answer_chars=answer_chars, reasoning_chars=reasoning_chars)
+            printt(f"{COL_DEFAULT}Done: {COL_DIM}{request_usage.format()}, {duration_string(result.elapsed)}")
         return result
 
     runner = AttributionRunner(
@@ -319,14 +323,8 @@ class RunUsageTotals:
     """Usage for this invocation only, including unsuccessful requests."""
     requests: int = 0
     input_tokens: int = 0
-    output_tokens: int = 0
-    reasoning_tokens: int = 0
     missing_input: int = 0
-    missing_output: int = 0
-    answer_chars: int = 0
-    reasoning_chars: int = 0
-    missing_reasoning: bool = False
-    has_reasoning: bool = False
+    output_usage: OutputUsage = field(default_factory=OutputUsage)
 
     def add(self, result: LlmRequestResult, *, answer_chars: int = 0, reasoning_chars: int = 0) -> None:
         self.requests += 1
@@ -334,16 +332,7 @@ class RunUsageTotals:
             self.missing_input += 1
         else:
             self.input_tokens += result.input_tokens
-        if result.output_tokens is None:
-            self.missing_output += 1
-        else:
-            self.output_tokens += result.output_tokens
-        self.answer_chars += max(answer_chars, len(result.reply))
-        received_reasoning = max(reasoning_chars, len(result.reasoning))
-        self.reasoning_chars += received_reasoning
-        self.has_reasoning |= bool(received_reasoning or result.reasoning_tokens)
-        self.missing_reasoning |= bool(received_reasoning and result.reasoning_tokens is None)
-        self.reasoning_tokens += result.reasoning_tokens or 0
+        self.output_usage.add(result, answer_chars=answer_chars, reasoning_chars=reasoning_chars)
 
     def format(self) -> str:
         def tokens(count: int, missing: int, label: str) -> str:
@@ -355,19 +344,7 @@ class RunUsageTotals:
             return text
 
         input_part = tokens(self.input_tokens, self.missing_input, "input")
-        total_chars = self.answer_chars + self.reasoning_chars
-        if self.missing_output and self.missing_output == self.requests:
-            output_part = f"{total_chars:,} output chars (tokens unavailable)"
-        else:
-            output_part = tokens(self.output_tokens, self.missing_output, "output")
-        if self.has_reasoning:
-            if self.missing_reasoning:
-                output_part += f" ({self.reasoning_chars:,} reasoning / {total_chars:,} total chars)"
-            else:
-                output_part += f" ({format_token_count(self.reasoning_tokens)} reasoning)"
-        elif self.missing_output and self.missing_output < self.requests:
-            output_part += f" ({total_chars:,} total chars)"
-        return f"{input_part}, {output_part}"
+        return f"{input_part}, {self.output_usage.format()}"
 
 
 class StopWatcher:
@@ -406,9 +383,6 @@ class PrintingListener(AttributionRunListener):
         self.status.end()
         printt(f"  {COL_ERROR}Attempt {attempt} failed:{COL_DEFAULT} {error}")
         printt(f"  {COL_DIM}Retrying in {delay:.0f}s")
-
-    def chunk_saved(self, chunk: PlannedChunk, attribution: RangeAttribution, elapsed: float) -> None:
-        printt(f"{COL_DEFAULT}Done: {COL_DIM}{duration_string(elapsed)}")
 
     def chunk_failed(self, chunk: PlannedChunk, error: str) -> None:
         self.status.end()

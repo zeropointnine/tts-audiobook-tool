@@ -12,6 +12,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.speaker_assign.characters_view import print_characters_info
 from tts_audiobook_tool.menus.speaker_assign.speaker_assign_menu_shared import (
     CHARS_PER_TOKEN,
+    OutputUsage,
     StatusLine,
     check_llm_configured,
     format_token_count,
@@ -51,10 +52,10 @@ def roster_menu(state: State) -> None:
 
     MenuUtil.menu(
         state,
-        heading="Generate character roster",
+        heading="Character roster",
         items=items_maker,
         subheading=subheading,
-        breadcrumb="Generate character roster",
+        breadcrumb="Character roster",
     )
 
 
@@ -148,18 +149,10 @@ class RosterDependents:
 # ---
 
 def format_output_usage(result: LlmRequestResult) -> str:
-    """Prefer reported tokens; use character counts only for missing metadata."""
-    total_chars = len(result.reply) + len(result.reasoning)
-    output = (f"{format_token_count(result.output_tokens)} output tokens" if result.output_tokens is not None
-              else f"{total_chars:,} total chars")
-    # Reasoning can be hidden by the provider, so its token count also establishes presence.
-    if result.reasoning_tokens is not None and (result.reasoning or result.reasoning_tokens > 0):
-        return f"{output} ({format_token_count(result.reasoning_tokens)} reasoning)"
-    if result.reasoning:
-        if result.output_tokens is None:
-            return f"{output} ({len(result.reasoning):,} reasoning)"
-        return f"{output} ({len(result.reasoning):,} reasoning / {total_chars:,} total chars)"
-    return output
+    """Prefer reported tokens; clearly mark estimates for missing metadata."""
+    usage = OutputUsage()
+    usage.add(result)
+    return usage.format()
 
 
 def create_roster(state: State) -> bool:

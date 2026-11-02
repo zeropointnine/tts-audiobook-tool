@@ -40,6 +40,9 @@ def test_roster_menu_labels_mark_only_known_stale_data(monkeypatch, status):
     captured = []
 
     def capture_menu(state, *, items, **kwargs):
+        expected_heading = "Auto-identify characters" if not captured else "Character roster"
+        assert kwargs["heading"] == expected_heading
+        assert kwargs["breadcrumb"] == expected_heading
         captured.append([
             item.label(state) if callable(item.label) else item.label
             for item in (items(state) if callable(items) else items)
@@ -51,8 +54,8 @@ def test_roster_menu_labels_mark_only_known_stale_data(monkeypatch, status):
 
     marker = f"{COL_ERROR}*" if status == "stale" else ""
     expected_step = (
-        "Step 1: Generate character roster" if status == "missing" else
-        f"Step 1: Generate character roster {COL_DIM}(completed{marker}{COL_DIM})"
+        "Step 1: Character roster" if status == "missing" else
+        f"Step 1: Character roster {COL_DIM}(completed{marker}{COL_DIM})"
     )
     assert captured[0][0] == expected_step
     assert len(captured[0]) == (3 if status == "missing" else 4)
@@ -87,7 +90,7 @@ def test_step_one_checks_dialog_segmentation_on_selection(monkeypatch, dialog_se
     assert "Requires text imported with dialog segmentation enabled." not in menu["subheading"]
     assert not warnings
     step_one = menu["items"](state)[0]
-    expected_label = "Step 1: Generate character roster"
+    expected_label = "Step 1: Character roster"
     if not dialog_segmentation:
         expected_label += f" {COL_DIM}(requires dialog segmentation)"
     assert step_one.label(state) == expected_label
@@ -174,19 +177,22 @@ def test_create_roster_outcome_sound(monkeypatch, tmp_path, outcome, expected):
 
 
 @pytest.mark.parametrize("reasoning, output_tokens, reasoning_tokens, expected", [
-    ("r" * 1_234, 12_345, 9_135, "12K output tokens (9K reasoning)"),
+    ("r" * 1_234, 12_345, 9_135, "12K output tokens (9.1K reasoning)"),
     ("r" * 1_234, 12_345, None,
-     "12K output tokens (1,234 reasoning / 2,000 total chars)"),
+     "12K output tokens (~0.3K reasoning)"),
     ("", 12_345, None, "12K output tokens"),
-    ("", 12_345, 9_135, "12K output tokens (9K reasoning)"),
+    ("", 12_345, 9_135, "12K output tokens (9.1K reasoning)"),
     ("", 12_345, 0, "12K output tokens"),
-    ("r" * 1_234, 12_345, 0, "12K output tokens (0K reasoning)"),
-    ("", 0, None, "0K output tokens"),
-    ("", None, None, "766 total chars"),
-    ("r" * 1_234, None, None, "2,000 total chars (1,234 reasoning)"),
+    ("r" * 1_234, 12_345, 0, "12K output tokens (0.0K reasoning)"),
+    ("", 0, None, "0.0K output tokens"),
+    ("", None, None, "~0.2K output tokens"),
+    ("r" * 1_234, None, None, "~0.5K output tokens (~0.3K reasoning)"),
+    ("", None, 9_135, "~9.3K output tokens (9.1K reasoning)"),
+    ("r" * 1_234, None, 9_135, "~9.3K output tokens (9.1K reasoning)"),
+    ("", None, 0, "~0.2K output tokens"),
 ])
 def test_format_output_usage(reasoning, output_tokens, reasoning_tokens, expected):
-    # Reported usage wins; character fallback never guesses tokens, including hidden reasoning.
+    # Reported usage wins; missing counts use explicit estimates from visible text.
     result = LlmRequestResult(
         reply="a" * 766, reasoning=reasoning, elapsed=94,
         output_tokens=output_tokens, reasoning_tokens=reasoning_tokens,

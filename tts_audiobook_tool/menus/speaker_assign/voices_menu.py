@@ -36,7 +36,7 @@ def voices_menu(state: State) -> None:
 
     project_dir = state.project.dir_path
     if not SpeakerAssignFileUtil.has_roster(project_dir):
-        print_feedback("Requires step 1 (generate character roster)", is_error=True)
+        print_feedback("Requires step 1 (character roster)", is_error=True)
         return
     if len(state.project.voice_references) < 2:
         print_feedback("Requires 2+ voices")
