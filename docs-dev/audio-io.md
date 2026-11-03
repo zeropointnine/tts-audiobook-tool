@@ -10,6 +10,8 @@ No system FFmpeg is needed: no `ffmpeg`/`ffprobe` executable and no FFmpeg share
 
 Every requirements file pins `av` and carries `--only-binary=av,soundfile`, so pip fails clearly rather than building either package from source on an unsupported platform.
 
+Design rationale, supported platforms, the per-model audit, rejected alternatives, and validation status are in [pip-only audio dependencies](<pip-only-audio-dependencies.md>).
+
 ## Modules
 
 | Module | Role |

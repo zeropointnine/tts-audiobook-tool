@@ -60,7 +60,7 @@ When implementing a new local model, create `requirements-<newmodel>.txt` first 
 
 ### Model-side FFmpeg boundary
 
-No local model needs a system FFmpeg install (executable or shared libraries). The app's own audio I/O is covered in [audio I/O](<audio-io.md>). On the model side:
+No local model needs a system FFmpeg install (executable or shared libraries). The app's own audio I/O is covered in [audio I/O](<audio-io.md>); the per-model audit and design rationale are in [pip-only audio dependencies](<pip-only-audio-dependencies.md#model-side-architecture>). On the model side:
 
 - **Canonical references.** Adapters get voice paths only from `ProjectVoiceUtil.resolve_model_voice_file_path()`, which always yields a PCM WAV/FLAC. Upstream loaders that read a path then work without FFmpeg: librosa, and torchaudio 2.6/2.8 `load()`, both fall back to soundfile.
 - **Hard requirements are avoided, not patched.** Upstream paths that need FFmpeg no matter what the input is must not be reached. These include TorchCodec decoders, any torchaudio 2.9 file call, and audioread/pydub on formats soundfile can't read. Pass waveforms or tensors through a public API instead (MOSS: app-decoded waveform → `encode_audios_from_wav`, never a path), or pass the canonical file.
