@@ -1798,3 +1798,89 @@ def test_blocking_wait_routes_output_and_flush_to_handler(monkeypatch) -> None:
         ConsoleFlush("chat-op", "stdout"),
     ]
 
+
+
+class _InterruptingQueue:
+    def get(self, timeout=None):
+        raise InterruptedError(4, "Interrupted system call")
+
+
+def test_control_c_during_event_wait_is_not_worker_death(monkeypatch) -> None:
+    # On Windows a control-c during the event queue's wait raises EINTR. That
+    # says nothing about the worker, which must stay RUNNING (no WorkerExited).
+    process = SimpleNamespace(is_alive=lambda: True)
+    monkeypatch.setattr(ModelWorker, "_status", WorkerStatus.RUNNING)
+    monkeypatch.setattr(ModelWorker, "_process", process)
+    monkeypatch.setattr(ModelWorker, "_event_queue", _InterruptingQueue())
+
+    assert ModelWorker.get_event(timeout=0.01) is None
+    assert ModelWorker.status() is WorkerStatus.RUNNING
+    assert list(ModelWorker._pending_events) == []
+    # Restore the real state before the autouse fixture's shutdown()
+    monkeypatch.undo()
+
+
+def test_model_state_query_stops_an_unresponsive_worker(monkeypatch) -> None:
+    # A wedged worker (here: suspended) must not leave the menu waiting forever.
+    # The query gives up, stops the worker, and the next start gets a fresh one.
+    import psutil
+
+    monkeypatch.setattr(model_worker_module, "MODEL_STATE_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr(model_worker_module, "WORKER_SHUTDOWN_TIMEOUT_SECONDS", 1.0)
+    assert ModelWorker.start() == ""
+    frozen = ModelWorker._process
+    assert frozen is not None
+    frozen_pid = frozen.pid
+    psutil.Process(frozen_pid).suspend()
+
+    started = time.monotonic()
+    snapshot, error = ModelWorker.get_model_state_blocking()
+
+    assert time.monotonic() - started < 10
+    assert snapshot is None
+    assert model_worker_module.MODEL_WORKER_UNRESPONSIVE_ERROR in error
+    assert ModelWorker.status() is WorkerStatus.ABSENT
+    assert not psutil.pid_exists(frozen_pid)
+    assert ModelWorker.start() == ""
+    assert ModelWorker._process is not None and ModelWorker._process.pid != frozen_pid
+
+
+class _UnkillableProcess:
+    """A worker frozen mid-exit on Windows: terminate/kill are refused."""
+
+    pid = 2**31 - 1  # no such process, so psutil finds no descendants
+
+    def __init__(self) -> None:
+        self.join_timeouts: list[float | None] = []
+
+    def is_alive(self) -> bool:
+        return True
+
+    def terminate(self) -> None:
+        raise PermissionError(13, "Access is denied")
+
+    def kill(self) -> None:
+        raise PermissionError(13, "Access is denied")
+
+    def join(self, timeout=None) -> None:
+        self.join_timeouts.append(timeout)
+
+
+def test_shutdown_abandons_a_worker_that_cannot_be_stopped(monkeypatch) -> None:
+    # Quitting must not hang: no exception from the refused terminate, no
+    # unbounded join, and the process is dropped from multiprocessing's
+    # exit-time join of non-daemon children.
+    import multiprocessing.process as mp_process
+
+    process = _UnkillableProcess()
+    monkeypatch.setattr(model_worker_module, "WORKER_SHUTDOWN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(mp_process, "_children", {process})
+    monkeypatch.setattr(ModelWorker, "_process", process)
+    monkeypatch.setattr(ModelWorker, "_status", WorkerStatus.RUNNING)
+
+    ModelWorker.shutdown()
+
+    assert process.join_timeouts and None not in process.join_timeouts
+    assert process not in mp_process._children
+    assert ModelWorker._process is None
+    assert ModelWorker.status() is WorkerStatus.ABSENT

@@ -66,6 +66,11 @@ from tts_audiobook_tool.model_worker_protocol import (
 
 WORKER_START_TIMEOUT_SECONDS = 20.0
 WORKER_SHUTDOWN_TIMEOUT_SECONDS = 5.0
+# An idle worker answers a model-state query in milliseconds. No answer by
+# this deadline means it is wedged (eg frozen mid-abort), so it is stopped
+# rather than leaving the menu waiting forever.
+MODEL_STATE_TIMEOUT_SECONDS = 15.0
+MODEL_WORKER_UNRESPONSIVE_ERROR = "Model worker stopped responding and was stopped"
 STT_TRANSCRIPTION_TIMEOUT_ERROR = "STT transcription timed out"
 MODEL_CATALOG_MISMATCH_ERROR = (
     "TTS model catalog (model_catalog.toml) differs between the application and "
@@ -1624,6 +1629,11 @@ class ModelWorker:
                 if cls._note_worker_death(queue_failed=False):
                     return cls._take_pending_event()
             return None
+        except InterruptedError:
+            # Windows: control-c during the queue's wait raises EINTR (after
+            # running the SIGINT handler, so Interrupts still sees the press).
+            # Nothing was read and the worker is fine; this is not a death.
+            return None
         except (EOFError, OSError, ValueError):
             with cls._lock:
                 cls._note_worker_death(queue_failed=True)
@@ -1907,7 +1917,10 @@ class ModelWorker:
                 cls._active_operation_id = None
                 return None, "Model worker is unavailable"
             cls._command_queue.put(GetModelStateCommand(operation_id))
-        result = cls._wait_for_blocking_result(operation_id, ModelStateReported)
+        result = cls._wait_for_blocking_result(
+            operation_id, ModelStateReported,
+            unresponsive_after_seconds=MODEL_STATE_TIMEOUT_SECONDS,
+        )
         if isinstance(result, ModelStateReported):
             return result.state, ""
         if isinstance(result, str):
@@ -2000,6 +2013,7 @@ class ModelWorker:
         *,
         cancel_check: Callable[[], bool] | None = None,
         timeout_seconds: float | None = None,
+        unresponsive_after_seconds: float | None = None,
     ) -> (
         ModelsCleared
         | ChatSessionReset
@@ -2079,6 +2093,20 @@ class ModelWorker:
                         operation_id,
                     )
                     return STT_TRANSCRIPTION_TIMEOUT_ERROR
+                if (
+                    unresponsive_after_seconds is not None
+                    and time.monotonic() - wait_started_at >= unresponsive_after_seconds
+                ):
+                    logging.getLogger("tts-audiobook-tool").warning(
+                        "[worker] no response to operation=%s (%s) after %.1fs; "
+                        "stopping the unresponsive worker",
+                        operation_id, success_type.__name__,
+                        time.monotonic() - wait_started_at,
+                    )
+                    cls._stop_unresponsive_worker()
+                    # Events from the stopped worker must not resurface
+                    deferred.clear()
+                    return cls._with_log_hint(MODEL_WORKER_UNRESPONSIVE_ERROR)
                 event = cls.get_event(timeout=0.1)
                 if event is None:
                     continue
@@ -2118,6 +2146,22 @@ class ModelWorker:
         with cls._lock:
             cls._discard_process_state()
         return cls.start()
+
+    @classmethod
+    def _stop_unresponsive_worker(cls) -> None:
+        """Hard-stops a worker that no longer answers, without restarting it.
+
+        A shutdown command would go unanswered, so it isn't sent. The next
+        command that needs a worker starts a fresh one.
+        """
+        with cls._lock:
+            process = cls._process
+            if cls._cancellation_event is not None:
+                cls._cancellation_event.set()
+        if process is not None:
+            cls._force_stop_process(process)
+        with cls._lock:
+            cls._discard_process_state()
 
     @classmethod
     def shutdown(cls) -> None:
@@ -2270,12 +2314,26 @@ class ModelWorker:
         # exiting.  That unregisters any multiprocessing semaphores a model
         # library created in the worker; escalating straight to kill() would
         # skip those finalizers and leave them for resource_tracker.
+        #
+        # Windows refuses to terminate a process that is already exiting (eg
+        # frozen mid-abort): TerminateProcess fails with access denied and
+        # multiprocessing raises PermissionError. Nothing more can be done to
+        # such a process, so neither call may raise and neither wait is
+        # unbounded.
         if process.is_alive():
-            process.terminate()
+            try:
+                process.terminate()
+            except OSError:
+                pass
             process.join(WORKER_SHUTDOWN_TIMEOUT_SECONDS)
         if process.is_alive() and hasattr(process, "kill"):
-            process.kill()
-            process.join()
+            try:
+                process.kill()
+            except OSError:
+                pass
+            process.join(WORKER_SHUTDOWN_TIMEOUT_SECONDS)
+        if process.is_alive():
+            ModelWorker._abandon_process(process)
 
         if descendants:
             try:
@@ -2300,10 +2358,35 @@ class ModelWorker:
             except (ImportError, psutil.Error):  # pyright: ignore[reportPossiblyUnboundVariable]
                 pass
 
+    @staticmethod
+    def _abandon_process(process: Any) -> None:
+        """Stops tracking a worker that survived terminate and kill.
+
+        multiprocessing joins every non-daemon child at interpreter exit with
+        no timeout, so an unkillable worker would hang the app on quit.
+        """
+        logging.getLogger("tts-audiobook-tool").warning(
+            "[worker] process %s could not be stopped; abandoning it", getattr(process, "pid", "?"),
+        )
+        import multiprocessing.process as mp_process
+
+        children = getattr(mp_process, "_children", None)
+        if isinstance(children, set):
+            children.discard(process)
+
     @classmethod
     def _discard_process_state(cls) -> None:
         process = cls._process
         ipc_queues = (cls._command_queue, cls._event_queue)
+        if process is not None and process.is_alive():
+            # The queue feeders may be blocked writing to a pipe the abandoned
+            # worker no longer reads: don't wait for them now or at exit
+            for ipc_queue in ipc_queues:
+                if ipc_queue is not None:
+                    try:
+                        ipc_queue.cancel_join_thread()
+                    except Exception:
+                        pass
 
         # Queue.close() only tells its feeder thread to stop after flushing its
         # buffer.  Waiting for that thread is what releases the queue's locks
