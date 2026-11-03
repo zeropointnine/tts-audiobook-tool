@@ -860,13 +860,21 @@ def _model_worker_main(
         event_queue.put(WorkerCommandFailed("", f"Worker startup failed: {exception}"))
         return
 
+    from tts_audiobook_tool.system_support.loaded_ffmpeg_libs import FfmpegLibMonitor
+
+    ffmpeg_monitor = FfmpegLibMonitor()
+    diagnostic_context = "model worker startup"
     last_transcription_started_at: float | None = None
     while True:
+        # Log-only: inspect startup and each completed command, including lazy
+        # model/decoder imports, before going idle. Never scan per audio chunk.
+        ffmpeg_monitor.check(diagnostic_context)
         try:
             command: ModelWorkerCommand = command_queue.get()
         except (EOFError, OSError):
             return
 
+        diagnostic_context = f"model worker after {type(command).__name__}"
         tracker.set(command.operation_id)
         if isinstance(command, ShutdownCommand):
             try:

@@ -219,8 +219,6 @@ class Smoke:
         return [f"open handle(s) left: {held}"] if held else []
 
     def library_problems(self) -> list[str]:
-        if sys.platform == "darwin":
-            return []
         from tts_audiobook_tool.system_support.loaded_ffmpeg_libs import ffmpeg_lib_report
 
         report = ffmpeg_lib_report()
@@ -515,18 +513,15 @@ def main() -> int:
         else:
             shutil.rmtree(work, ignore_errors=True)
 
-    if sys.platform == "darwin":
-        print("SKIP  loaded FFmpeg libraries (psutil memory_maps() is unavailable on macOS)")
-    else:
-        from tts_audiobook_tool.system_support.loaded_ffmpeg_libs import ffmpeg_lib_report
+    from tts_audiobook_tool.system_support.loaded_ffmpeg_libs import ffmpeg_lib_report
 
-        report = ffmpeg_lib_report()
-        print(report.describe())
-        if report.libs and report.only_bundled:
-            print("PASS  FFmpeg libraries only from PyAV's bundle")
-        else:
-            print("FAIL  FFmpeg libraries only from PyAV's bundle")
-            failures += 1
+    report = ffmpeg_lib_report()
+    print(report.describe())
+    if report.libs and report.only_bundled:
+        print("PASS  FFmpeg libraries only from PyAV's bundle")
+    else:
+        print("FAIL  FFmpeg libraries only from PyAV's bundle")
+        failures += 1
 
     if args.skip_startup:
         print("SKIP  app startup checks")

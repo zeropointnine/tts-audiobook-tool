@@ -166,6 +166,13 @@ The worker's output has to reach the parent's UI without ever touching the paren
 
 If capture itself breaks (event queue closed, pipe broken), the worker makes one best-effort attempt per stream to ship `[worker console capture lost: <stream>]` so a transcript shows where output stopped.
 
+The worker also takes passive FFmpeg-library snapshots at startup and between
+commands, before blocking on the command queue. `FFMPEG_MULTIPLE_BUILDS` in its
+persistent log names possible coexisting builds; it is not a proven clash and
+never rejects an operation. These warnings are file-only, not console/IPC events;
+see [audio I/O](<audio-io.md#passive-coexistence-warning>) for detection limits and
+the standalone server's equivalent checks.
+
 When the worker dies without a reset being attempted, sessions finalize as `FAILED` and name the worker's own log file (`<temp dir>/tts-audiobook-tool-worker.log`, from `init_logging(f"{APP_NAME}-worker")`; `make_worker_log_file_path()` computes the same path in the main process). `WORKER_RESET` is reserved for an intentional termination whose replacement startup was attempted.
 
 ## Presentation shell

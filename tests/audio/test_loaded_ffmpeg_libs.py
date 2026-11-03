@@ -7,8 +7,12 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+
+import tts_audiobook_tool.system_support.loaded_ffmpeg_libs as ffmpeg_libs
 
 from tts_audiobook_tool.system_support.loaded_ffmpeg_libs import (
     FfmpegLibReport,
@@ -98,12 +102,6 @@ def _report_in_fresh_process(imports: str) -> dict:
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
-requires_memory_maps = pytest.mark.skipif(
-    sys.platform == "darwin", reason="psutil memory_maps() is unavailable on macOS"
-)
-
-
-@requires_memory_maps
 def test_importing_pyav_loads_only_its_bundled_ffmpeg() -> None:
     if not pyav_bundled_lib_dirs():
         pytest.skip("PyAV is not installed from a wheel with bundled FFmpeg")
@@ -114,10 +112,9 @@ def test_importing_pyav_loads_only_its_bundled_ffmpeg() -> None:
     assert all(os.path.isfile(path) for path in report["paths"])
 
 
-@requires_memory_maps
 def test_system_ffmpeg_loaded_next_to_pyav_is_reported() -> None:
-    # torchaudio 2.8's import-time backend probing loads system FFmpeg when
-    # present: the mixed-build situation Milestone B must eliminate.
+    # torchaudio 2.8's import-time probing can load system FFmpeg next to PyAV.
+    # Coexistence is tolerated; the diagnostic must still identify it.
     pytest.importorskip("torchaudio")
     if not pyav_bundled_lib_dirs():
         pytest.skip("PyAV is not installed from a wheel with bundled FFmpeg")
@@ -125,3 +122,55 @@ def test_system_ffmpeg_loaded_next_to_pyav_is_reported() -> None:
     if report["only_bundled"]:
         pytest.skip("torchaudio did not load a system FFmpeg here")
     assert not report["single_build"], report["describe"]
+
+
+def test_darwin_image_enumeration_uses_process_symbols_and_handles_null_names(monkeypatch) -> None:
+    # Exercise ctypes wiring without requiring a Mac or loading another dylib.
+    paths = [b"/venv/av/.dylibs/libavcodec.62.dylib", None, os.fsencode("/tmp/café/libavutil.60.dylib")]
+    process = SimpleNamespace(
+        _dyld_image_count=Mock(return_value=len(paths)),
+        _dyld_get_image_name=Mock(side_effect=lambda index: paths[index]),
+    )
+    load = Mock(return_value=process)
+    monkeypatch.setattr(ffmpeg_libs.ctypes, "CDLL", load)
+
+    assert ffmpeg_libs._darwin_loaded_image_paths() == [os.fsdecode(paths[0]), os.fsdecode(paths[2])]
+    load.assert_called_once_with(None)
+    assert process._dyld_image_count.argtypes == []
+    assert process._dyld_image_count.restype is ffmpeg_libs.ctypes.c_uint32
+    assert process._dyld_get_image_name.argtypes == [ffmpeg_libs.ctypes.c_uint32]
+    assert process._dyld_get_image_name.restype is ffmpeg_libs.ctypes.c_char_p
+
+
+@pytest.mark.parametrize("explicit_pid", [False, True])
+def test_darwin_current_process_uses_dyld_instead_of_psutil(monkeypatch, explicit_pid) -> None:
+    # The explicit current PID must work too, but psutil has no macOS memory_maps.
+    monkeypatch.setattr(ffmpeg_libs.sys, "platform", "darwin")
+    monkeypatch.setattr(ffmpeg_libs, "_darwin_loaded_image_paths", lambda: [
+        "/venv/av/.dylibs/libavcodec.62.dylib", "/usr/lib/libSystem.B.dylib",
+    ])
+    process = Mock(side_effect=AssertionError("must not call psutil on macOS"))
+    monkeypatch.setattr(ffmpeg_libs.psutil, "Process", process)
+
+    libs = ffmpeg_libs.loaded_ffmpeg_libs(os.getpid() if explicit_pid else None)
+
+    assert [(lib.family, lib.path) for lib in libs] == [("avcodec", "/venv/av/.dylibs/libavcodec.62.dylib")]
+    process.assert_not_called()
+
+
+def test_darwin_other_pid_is_explicitly_unsupported(monkeypatch) -> None:
+    # Never silently report self when the caller requests a different process.
+    monkeypatch.setattr(ffmpeg_libs.sys, "platform", "darwin")
+    with pytest.raises(NotImplementedError, match="only the current process"):
+        ffmpeg_libs.loaded_ffmpeg_libs(os.getpid() + 1)
+
+
+def test_runtime_monitor_does_not_import_ffmpeg_consumers() -> None:
+    # The check must not create the very condition it is trying to detect.
+    report = _report_in_fresh_process(
+        "from tts_audiobook_tool.system_support.loaded_ffmpeg_libs import FfmpegLibMonitor\n"
+        "import sys\n"
+        "FfmpegLibMonitor().check('fresh process')\n"
+        "assert not {'av', 'torchaudio', 'torio', 'torchcodec'} & sys.modules.keys()"
+    )
+    assert report["paths"] == [], report["describe"]

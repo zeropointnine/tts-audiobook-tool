@@ -5,19 +5,24 @@ Used to check that FFmpeg comes only from PyAV's bundled-library directory
 (pip-managed) and that a process does not mix FFmpeg builds — e.g. PyAV's
 bundled copy plus system `libav*` pulled in by torchaudio or TorchCodec.
 
-Built on `psutil.Process().memory_maps()`, which is available on Linux and
-Windows but not macOS.
+Uses psutil memory maps on Linux/Windows and dyld images on macOS (current
+process only). Runtime monitoring is diagnostic, not proof of a conflict, and
+never blocks an operation or imports an FFmpeg consumer to inspect it.
 """
 
 from __future__ import annotations
 
+import ctypes
 import importlib.util
 import os
 import re
 import sys
+import threading
 from dataclasses import dataclass, field
 
 import psutil
+
+from tts_audiobook_tool.l import L
 
 FFMPEG_LIB_FAMILIES = (
     "avcodec", "avformat", "avutil", "avfilter", "avdevice", "avresample",
@@ -27,7 +32,7 @@ FFMPEG_LIB_FAMILIES = (
 _FAMILIES = "|".join(FFMPEG_LIB_FAMILIES)
 
 # Linux: system `libavcodec.so.61.19.101`; auditwheel `libavcodec-5e6b81c2.so.62.28.102`.
-# macOS (for completeness; memory_maps is unavailable there): `libavcodec.62.dylib`.
+# macOS: `libavcodec.62.dylib`.
 _UNIX_LIB = re.compile(rf"^lib({_FAMILIES})(?:-[0-9a-f]+)?\.(?:so(?:\.|$)|(?:\d+\.)*dylib$)")
 # Windows: `avcodec-62.dll`; delvewheel-mangled `avcodec-62-<hash>.dll`.
 _WINDOWS_LIB = re.compile(rf"^({_FAMILIES})-\d+(?:-[0-9a-f]+)?\.dll$", re.IGNORECASE)
@@ -117,8 +122,25 @@ def libs_from_paths(paths) -> list[LoadedFfmpegLib]:
     return [LoadedFfmpegLib(family, path) for family, path in sorted(found)]
 
 
+def _darwin_loaded_image_paths() -> list[str]:
+    """Snapshot the current process's dyld images without loading another library."""
+    process = ctypes.CDLL(None)
+    image_count = process._dyld_image_count
+    image_count.argtypes = []
+    image_count.restype = ctypes.c_uint32
+    image_name = process._dyld_get_image_name
+    image_name.argtypes = [ctypes.c_uint32]
+    image_name.restype = ctypes.c_char_p
+    # Images can change during enumeration; dyld returns NULL for missing indices.
+    return [os.fsdecode(name) for index in range(image_count()) if (name := image_name(index))]
+
+
 def loaded_ffmpeg_libs(pid: int | None = None) -> list[LoadedFfmpegLib]:
-    """FFmpeg libraries mapped into process `pid` (default: this process)."""
+    """Mapped FFmpeg libraries; macOS supports only the current process."""
+    if sys.platform == "darwin":
+        if pid is not None and pid != os.getpid():
+            raise NotImplementedError("macOS FFmpeg image enumeration supports only the current process")
+        return libs_from_paths(_darwin_loaded_image_paths())
     process = psutil.Process(pid)
     if not hasattr(process, "memory_maps"):
         raise NotImplementedError(f"psutil memory_maps() is unavailable on {sys.platform}")
@@ -127,6 +149,53 @@ def loaded_ffmpeg_libs(pid: int | None = None) -> list[LoadedFfmpegLib]:
 
 def ffmpeg_lib_report(pid: int | None = None) -> FfmpegLibReport:
     return FfmpegLibReport(loaded_ffmpeg_libs(pid), pyav_bundled_lib_dirs())
+
+
+class FfmpegLibMonitor:
+    """Best-effort log-only checks at coarse operation boundaries.
+
+    Multiple locations/duplicate families suggest multiple builds, not an actual
+    symbol or class collision. Each distinct suspicious snapshot is logged once;
+    a clean check does not stop later checks from detecting lazy native imports.
+    """
+
+    def __init__(self) -> None:
+        self._reported: set[tuple[tuple[str, str], ...]] = set()
+        self._failure_logged = False
+        self._lock = threading.Lock()
+
+    def check(self, context: str) -> None:
+        try:
+            report = ffmpeg_lib_report()
+            if report.single_build:
+                return
+            snapshot = tuple(sorted({(lib.family, _norm(lib.path)) for lib in report.libs}))
+            with self._lock:
+                if snapshot in self._reported:
+                    return
+                imported = ", ".join(
+                    name for name in ("av", "torchaudio", "torio", "torchcodec", "cv2", "sounddevice")
+                    if name in sys.modules
+                ) or "(none)"
+                L.w(
+                    f"FFMPEG_MULTIPLE_BUILDS pid={os.getpid()} context={context!r}: "
+                    "FFmpeg libraries loaded from multiple locations or more than once per family. "
+                    "This may be benign; it does not establish a clash and no operation is blocked. "
+                    f"Imported modules (not attribution): {imported}\n{report.describe()}"
+                )
+                self._reported.add(snapshot)
+        except Exception as exc:
+            # Enumeration and even logging must never change an operation's result.
+            try:
+                with self._lock:
+                    if not self._failure_logged:
+                        L.d(
+                            f"FFMPEG_LIBRARY_CHECK_UNAVAILABLE pid={os.getpid()} context={context!r}: "
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                        self._failure_logged = True
+            except Exception:
+                pass
 
 
 def _norm(path: str) -> str:

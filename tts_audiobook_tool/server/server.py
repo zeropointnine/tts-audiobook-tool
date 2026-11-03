@@ -21,6 +21,7 @@ from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
+from tts_audiobook_tool.system_support.loaded_ffmpeg_libs import FfmpegLibMonitor
 from tts_audiobook_tool.util import *
 
 _HERE = pathlib.Path(__file__).parent
@@ -146,6 +147,7 @@ class Server:
         self._local_audio_enabled = True
         self._tts_streaming_enabled = Tts.get_info(self._project).can_stream
         self._tts_ready = threading.Event()
+        self._ffmpeg_monitor = FfmpegLibMonitor()
 
         self._worker_thread = threading.Thread(target=self._worker, daemon=True)
         self._worker_thread.start()
@@ -265,6 +267,7 @@ class Server:
                 if error:
                     raise RuntimeError(error)
             except Exception as e:
+                self._ffmpeg_monitor.check("server model initialization failed")
                 print_feedback(f"\n{COL_ERROR}Model initialization failed:\n\n{make_error_string(e)}")
                 # Fatal init failures can leave native ML runtimes in a bad state; normal Python
                 # shutdown may run C++ destructors and abort. Hard-exit so the process reliably
@@ -280,6 +283,7 @@ class Server:
             for warning in warnings:
                 logger.warning(warning)
 
+            self._ffmpeg_monitor.check("server model initialization")
             self._is_initializing = False
             self._tts_ready.set()
             printt(f"{COL_DIM_ITALICS}Ready")
@@ -582,6 +586,7 @@ class Server:
                     self.generate_non_streaming_output(prompt_text, phrase_group, generation_id)
 
             finally:
+                self._ffmpeg_monitor.check("server after synthesis")
                 self._prompt_currently_inferencing = ""
                 self._queue.task_done()
 

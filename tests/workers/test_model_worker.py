@@ -1355,6 +1355,59 @@ def test_worker_realtime_playback_forwards_live_pause_predicate(
     assert calls == ["start", "kill"]
 
 
+@pytest.mark.parametrize("operation_fails", [False, True])
+def test_worker_logs_late_mixed_ffmpeg_without_changing_command_result(monkeypatch, caplog, operation_fails) -> None:
+    # Native imports can happen after startup, including in a failing command.
+    import tts_audiobook_tool.app_support as app_support
+    import tts_audiobook_tool.model_runtime as model_runtime
+    import tts_audiobook_tool.system_support.loaded_ffmpeg_libs as ffmpeg_libs
+    from tts_audiobook_tool.model_manager import ModelManager
+    from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
+
+    loaded = []
+    snapshots = []
+
+    def report():
+        snapshots.append(list(loaded))
+        return ffmpeg_libs.FfmpegLibReport(list(loaded), ["/venv/av.libs"])
+
+    def probe():
+        loaded.extend(ffmpeg_libs.libs_from_paths([
+            "/venv/av.libs/libavcodec-123abc.so.62", "/usr/lib/libavcodec.so.60",
+        ]))
+        if operation_fails:
+            raise ValueError("original failure")
+        return True
+
+    monkeypatch.setattr(model_runtime, "mark_model_worker", lambda: None)
+    monkeypatch.setattr(model_worker_module.signal, "signal", lambda *args: None)
+    monkeypatch.setattr(model_worker_module._WorkerOutputCapture, "install", lambda self: None)
+    monkeypatch.setattr(app_support, "init_logging", lambda *args: None)
+    monkeypatch.setattr(Tts, "init_local_model_type", staticmethod(lambda: None))
+    monkeypatch.setattr(ModelManager, "clear_all_models", staticmethod(lambda: None))
+    monkeypatch.setattr(LavaSrUtil, "has_lava_sr", staticmethod(probe))
+    monkeypatch.setattr(ffmpeg_libs, "ffmpeg_lib_report", report)
+    commands = queue.Queue()
+    commands.put(model_worker_module.ProbeLavaSrCommand("probe"))
+    commands.put(model_worker_module.ShutdownCommand("shutdown"))
+    events = queue.Queue()
+
+    model_worker_module._model_worker_main(commands, events, threading.Event(), threading.Event())
+
+    emitted = []
+    while not events.empty():
+        emitted.append(events.get_nowait())
+    if operation_fails:
+        assert any(isinstance(event, model_worker_module.WorkerCommandFailed) and event.message == "ValueError: original failure"
+                   for event in emitted)
+    else:
+        assert model_worker_module.LavaSrProbed("probe", True) in emitted
+    assert model_worker_module.WorkerStopped("shutdown") in emitted
+    assert [len(snapshot) for snapshot in snapshots] == [0, 2]
+    assert sum("FFMPEG_MULTIPLE_BUILDS" in record.getMessage() for record in caplog.records) == 1
+    assert "model worker after ProbeLavaSrCommand" in caplog.text
+
+
 @pytest.mark.parametrize("kind", ["generation", "preview", "realtime", "chat", "inspection"])
 def test_command_producers_snapshot_live_project_selection(kind, tmp_path, monkeypatch) -> None:
     """All command paths use unsaved selection, not global prefs or disk state."""

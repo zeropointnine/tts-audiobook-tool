@@ -39,11 +39,36 @@ Model libraries load voice samples with their own loaders. Without system FFmpeg
 
 **The per-model exception.** A model may need system FFmpeg *shared libraries* only when avoiding it would be unreasonable. No model currently declares one: MOSS (torchaudio 2.9, whose file I/O always needs TorchCodec) avoids it by handing its processor app-decoded waveforms and audio codes, never paths. A declaring model sets `requires_ffmpeg_libs = true` in the [model catalog](<../tts_audiobook_tool/tts_models/model_catalog.toml>), plus `ui.ffmpeg_libs_reason` and `ui.readme_install_section` (both required by the catalog parser). At startup, `Start.exit_on_missing_ffmpeg_libs` looks for the libraries only for such a model ([ffmpeg_util](<../tts_audiobook_tool/sound/ffmpeg_util.py>)); if they are missing it exits with a message naming the model and the reason, the step for the current OS, and a link to the README section. Other models and the app itself are unaffected. The Windows DLL-directory registration (`os.add_dll_directory()`) was removed when MOSS dropped the exception, so a future Windows exception has to add it back. Third-party packages loading system FFmpeg opportunistically (e.g. torchaudio at import) is tolerated as long as no supported flow depends on it.
 
+## Passive coexistence warning
+
+The model worker checks its own loaded FFmpeg libraries at startup and between
+commands (before waiting for the next command). The standalone REST server checks
+after model initialization and after synthesis, including Python failures. This
+catches lazy decoder imports without import hooks, polling threads, or checks in
+audio callbacks. These are snapshots: a native crash/hang before a check, a library
+loaded and unloaded between checks, or a separate helper process can be missed.
+
+Search the persistent application logs for **`FFMPEG_MULTIPLE_BUILDS`**:
+`<tempdir>/tts-audiobook-tool-worker.log` for the interactive worker, or
+`<tempdir>/tts-audiobook-tool.log` for the standalone server. It is a WARNING with
+the PID, operation context, loaded paths, PyAV bundle directories and already
+imported consumer-module names (not proof of which module loaded a library).
+Multiple directories or duplicate library families suggest multiple builds;
+**this may be benign and is not evidence of a collision**. A system-only single
+build does not trigger it. Each distinct suspicious path/family snapshot is
+logged once per monitor/process; new library paths produce another warning.
+
+This is file logging only, not a UI/session-log alert. It does not block imports,
+change backends, unload libraries, or require any model to use a particular
+loader. The check does not import PyAV/TorchAudio/TorchCodec. Inspection/logging
+failures cannot fail an operation; `FFMPEG_LIBRARY_CHECK_UNAVAILABLE` is logged
+at DEBUG once per monitor if inspection fails, and later checks still retry.
+
 ## Verification
 
 - [no_ffmpeg_guard](<../tests/no_ffmpeg_guard.py>): blocks and records any FFmpeg executable launch. Mark tests with `pytest.mark.no_ffmpeg_exe`, or run the whole suite with `--no-ffmpeg-exe`.
 - [Static audit test](<../tests/audio/test_no_ffmpeg_static_audit.py>): scans the production package (except `tts_models/`) for executable names, audioread/pydub/ffmpeg-python/torchaudio/TorchCodec imports, and `librosa.load`.
-- [loaded_ffmpeg_libs](<../tts_audiobook_tool/system_support/loaded_ffmpeg_libs.py>): reports which FFmpeg libraries a process has loaded and whether they all come from PyAV's bundle (Linux and Windows; not macOS).
+- [loaded_ffmpeg_libs](<../tts_audiobook_tool/system_support/loaded_ffmpeg_libs.py>): reports loaded FFmpeg libraries, their origins, and possible multiple builds. Uses psutil on Linux/Windows and dyld on macOS (current process only); also owns the passive runtime warning above.
 - [no_ffmpeg_smoke](<../testx/no_ffmpeg_smoke.py>): portable end-to-end smoke test of export, enhancement, preview, Tools, and startup, in plain and non-ASCII folders, with handle, guard, and loaded-library checks after each step. `--ffmpeg-on-path DIR` reruns it with an FFmpeg shared build on `PATH` to prove it is not used.
 
   ```bash
