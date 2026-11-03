@@ -21,7 +21,8 @@ from testx.pyav_m4b_chapters import parse_mp4
 from tts_audiobook_tool.constants import APP_META_MP4_MEAN, APP_META_MP4_TAG
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sound.audio_writers import (
-    AacWriter, AudioWriteError, Chapter, FlacWriter, aac_bit_rate, open_writer, staging_path_for,
+    AacWriter, AudioWriteError, Chapter, FlacWriter, _DiscardableFile, aac_bit_rate, open_writer,
+    staging_path_for,
 )
 
 pytestmark = pytest.mark.no_ffmpeg_exe
@@ -229,6 +230,35 @@ class TestLifecycle:
         assert_no_handles(path, staging_path_for(str(path)))
         with pytest.raises(RuntimeError):
             writer.write(tone(10, 300))
+
+    def test_aac_abort_prints_nothing(self, out_dir: Path, capfd) -> None:
+        # Cancelling an M4B export must stay silent. PyAV 16/17 (vibevoice's
+        # range) writes the trailer even after abort; against a closed file each
+        # write raises inside PyAV, which prints "PyAV library exception being
+        # dropped" tracebacks. The discarded file absorbs that I/O instead.
+        path = out_dir / "quiet.m4b"
+        writer = open_writer(str(path), SR, 2)
+        for _ in range(20):
+            writer.write(np.zeros((SR, 2), dtype=np.float32))
+        writer.set_chapters([Chapter(0, 1, "One")])
+        writer.abort()
+
+        captured = capfd.readouterr()
+        assert "exception being dropped" not in captured.err + captured.out
+        assert not os.path.exists(staging_path_for(str(path)))
+
+    def test_discarded_file_absorbs_late_io(self, tmp_path: Path) -> None:
+        # What older PyAV does to the file after abort: none of it may raise
+        file = _DiscardableFile(str(tmp_path / "x.m4b.partial"))
+        file.write(b"header")
+        file.discard()
+        assert file.closed
+        assert file.write(b"trailer") == 7
+        assert file.seek(0) == 0
+        assert file.seek(4, os.SEEK_CUR) == 4
+        assert file.tell() == 4
+        assert file.read(10) == b""
+        file.flush()
 
     @pytest.mark.parametrize("name", ["replace.flac", "replace.m4b"])
     def test_close_replaces_existing_destination(self, out_dir: Path, name: str) -> None:

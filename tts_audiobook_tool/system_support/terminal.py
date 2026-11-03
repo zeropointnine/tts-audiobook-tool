@@ -3,6 +3,47 @@ import shutil
 import sys
 from typing import Any
 
+# Clears the screen and the scrollback, cursor home (as `cls` and `clear` do)
+CLEAR_SCREEN_SEQUENCE = "\033[2J\033[3J\033[H"
+
+
+def clear_screen() -> None:
+    """
+    Clears the terminal with an escape sequence.
+
+    Not `os.system("cls")`: that launches cmd.exe on every menu draw, and after
+    a control-c it sometimes never returned (blank screen, keys ignored, until
+    another control-c killed it). Needs VT processing on Windows, see
+    `enable_windows_vt_processing()`.
+    """
+    print(CLEAR_SCREEN_SEQUENCE, end="", flush=True)
+
+
+def enable_windows_vt_processing() -> None:
+    """
+    Turns on escape-sequence handling for the Windows console's output.
+
+    Windows Terminal has it on already. The classic console (conhost) has it
+    off by default; the app's colors used to work there only because running
+    `cls` through cmd.exe turns it on as a side effect. No-op elsewhere, and
+    when output isn't a console.
+    """
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        enable_virtual_terminal_processing = 0x0004
+        for std_handle in (-11, -12):  # STD_OUTPUT_HANDLE, STD_ERROR_HANDLE
+            handle = kernel32.GetStdHandle(std_handle)
+            mode = wintypes.DWORD()
+            if handle and kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                kernel32.SetConsoleMode(handle, mode.value | enable_virtual_terminal_processing)
+    except Exception:
+        pass
+
 
 def can_use_full_screen_terminal(
     *,

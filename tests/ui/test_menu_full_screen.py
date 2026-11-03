@@ -14,6 +14,7 @@ from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.system_support.terminal import CLEAR_SCREEN_SEQUENCE
 
 
 def make_state() -> State:
@@ -24,7 +25,7 @@ def test_menu_heading_clears_screen_and_prints_status(monkeypatch) -> None:
     state = make_state()
     clears: list[str] = []
     statuses: list[State] = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", clears.append)
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.clear_screen", lambda: clears.append("clear"))
     monkeypatch.setattr(MenuStatus, "print_block", statuses.append)
 
     MenuUtil.print_heading(state, "Heading")
@@ -33,10 +34,23 @@ def test_menu_heading_clears_screen_and_prints_status(monkeypatch) -> None:
     assert statuses == [state]
 
 
+def test_heading_clears_with_escape_sequence_not_a_subprocess(monkeypatch, capsys) -> None:
+    # On Windows, `os.system("cls")` (a cmd.exe child per menu draw) sometimes
+    # never returned after a control-c, leaving a blank, unresponsive screen
+    import os
+
+    monkeypatch.setattr(os, "system", lambda _command: pytest.fail("must not launch a shell to clear"))
+    monkeypatch.setattr(MenuStatus, "print_block", lambda _state: None)
+
+    MenuUtil.print_heading(make_state(), "Heading")
+
+    assert capsys.readouterr().out.startswith(CLEAR_SCREEN_SEQUENCE)
+
+
 def test_non_menu_heading_clears_without_status(monkeypatch) -> None:
     state = make_state()
     clears: list[str] = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", clears.append)
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.clear_screen", lambda: clears.append("clear"))
     monkeypatch.setattr(
         MenuStatus,
         "print_block",
@@ -51,7 +65,7 @@ def test_non_menu_heading_clears_without_status(monkeypatch) -> None:
 def test_menu_calls_on_shown_after_render(monkeypatch) -> None:
     state = make_state()
     shown: list[bool] = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", lambda _: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.clear_screen", lambda: None)
     monkeypatch.setattr(MenuStatus, "print_block", lambda _: None)
     monkeypatch.setattr(MenuStatus, "prepare_tts", lambda _: None)
     monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.ask.ask_hotkey", lambda: "q")
@@ -70,7 +84,7 @@ def test_menu_calls_on_shown_after_render(monkeypatch) -> None:
 def test_menu_initial_hotkey_activates_item_once_before_first_render(monkeypatch) -> None:
     state = make_state()
     events: list[str] = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", lambda _: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.clear_screen", lambda: None)
     monkeypatch.setattr(MenuStatus, "print_block", lambda _: None)
     monkeypatch.setattr(MenuStatus, "prepare_tts", lambda _: None)
     monkeypatch.setattr(MenuUtil, "print_heading",
@@ -95,7 +109,7 @@ def test_menu_initial_hotkey_activates_item_once_before_first_render(monkeypatch
 def test_blank_line_before_item_is_rendered_without_changing_superlabel_spacing(monkeypatch) -> None:
     state = make_state()
     output: list[str] = []
-    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", lambda _: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.clear_screen", lambda: None)
     monkeypatch.setattr(MenuStatus, "print_block", lambda _: None)
     monkeypatch.setattr(MenuStatus, "prepare_tts", lambda _: None)
     monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.ask.ask_hotkey", lambda: "q")
@@ -128,8 +142,8 @@ def test_blank_line_before_item_is_rendered_without_changing_superlabel_spacing(
 def test_dont_clear_suppresses_clear_and_status(monkeypatch) -> None:
     state = make_state()
     monkeypatch.setattr(
-        "tts_audiobook_tool.menus.menu_util.os.system",
-        lambda _command: pytest.fail("screen should not be cleared"),
+        "tts_audiobook_tool.menus.menu_util.clear_screen",
+        lambda: pytest.fail("screen should not be cleared"),
     )
     monkeypatch.setattr(
         MenuStatus,
@@ -160,7 +174,7 @@ def test_deferred_tts_hint_follows_menu_and_on_shown_without_pausing(
     monkeypatch.setattr(Tts, "bind_project", lambda _: None)
     monkeypatch.setattr(Tts, "get_active_type", lambda: model)
     monkeypatch.setattr(MenuUtil, "is_first_submenu", True)
-    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", lambda _: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.clear_screen", lambda: None)
     monkeypatch.setattr(MenuStatus, "print_block", MenuStatus.prepare_tts)
     monkeypatch.setattr("tts_audiobook_tool.ask.ask_enter_to_continue",
                         lambda *_: pytest.fail("FYI must not request acknowledgment"))
@@ -204,7 +218,7 @@ def test_local_fyi_skips_submenu_and_shows_once_at_first_main_menu(monkeypatch, 
     monkeypatch.setattr(Tts, "bind_project", lambda _: None)
     monkeypatch.setattr(Tts, "get_active_type", lambda: TtsModelType.require_by_id("chatterbox_local"))
     monkeypatch.setattr(MenuUtil, "is_first_submenu", False)
-    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", lambda _: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.clear_screen", lambda: None)
     monkeypatch.setattr(MenuStatus, "print_block", MenuStatus.prepare_tts)
     monkeypatch.setattr("tts_audiobook_tool.ask.ask_enter_to_continue",
                         lambda *_: pytest.fail("Local startup FYI must not pause"))
@@ -254,7 +268,7 @@ def test_heading_only_screen_leaves_tts_notice_for_next_full_menu(monkeypatch):
     state = cast(State, SimpleNamespace(
         prefs=Prefs(), project=Project(tts_model_type=model.id), pending_tts_model_change=pending,
     ))
-    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", lambda _: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.clear_screen", lambda: None)
     monkeypatch.setattr(MenuStatus, "print_block", lambda _: None)
 
     MenuUtil.print_screen_heading(state, "Prompt screen")

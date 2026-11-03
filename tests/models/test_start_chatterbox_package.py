@@ -70,6 +70,7 @@ def test_startup_blocks_when_prompt_toolkit_is_missing(monkeypatch):
     printed = []
 
     monkeypatch.setattr(start, "get_new_packages", lambda: ["prompt_toolkit"])
+    monkeypatch.setattr(start, "get_minimum_package_versions", lambda: {})
     monkeypatch.setattr("importlib.util.find_spec", lambda package: None)
     monkeypatch.setattr(
         start_module.Tts,
@@ -79,7 +80,7 @@ def test_startup_blocks_when_prompt_toolkit_is_missing(monkeypatch):
     monkeypatch.setattr(start_module.hints, "print_hint", printed.append)
 
     with pytest.raises(SystemExit) as exc:
-        start.exit_on_missing_new_packages()
+        start.exit_on_missing_or_outdated_packages()
 
     assert exc.value.code == 1
     assert len(printed) == 1

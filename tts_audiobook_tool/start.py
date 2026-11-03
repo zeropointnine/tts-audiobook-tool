@@ -95,6 +95,9 @@ class Start:
     def start(self) -> None:
         """ App entrypoint """
 
+        from tts_audiobook_tool.system_support.terminal import enable_windows_vt_processing
+        enable_windows_vt_processing()
+
         print()
         if not self.is_server:
             self.exit_on_unsupported_terminal()
@@ -105,7 +108,7 @@ class Start:
         self.exit_on_cuda_unavailable_for_cuda_only_model()
         self.exit_on_missing_ffmpeg_libs()
         self.exit_on_incompatible_chatterbox_package()
-        self.exit_on_missing_new_packages()
+        self.exit_on_missing_or_outdated_packages()
 
         if self.is_server:
             from tts_audiobook_tool.app_support import app_hint_util
@@ -254,26 +257,48 @@ class Start:
             hints.print_hint(HINT_CHATTERBOX_PACKAGE_UPDATE)
             exit(1)
 
-    def exit_on_missing_new_packages(self) -> None:
-
-        new_packages = self.get_new_packages()
-
+    def exit_on_missing_or_outdated_packages(self) -> None:
+        """
+        Blocks when a required package is missing, or is installed but older
+        than the app needs (eg `av`, which older venvs already have through
+        faster-whisper, at whatever version was current when they were made).
+        """
         from importlib import util
 
-        missing_packages = [package for package in new_packages if not util.find_spec(package)]
-        if not missing_packages:
+        problems: list[str] = []
+        for package in self.get_new_packages():
+            if not util.find_spec(package):
+                problems.append(f"{package} (not installed)")
+        for package, minimum in self.get_minimum_package_versions().items():
+            installed = installed_version_below(package, minimum)
+            if installed:
+                problems.append(f"{package} (installed: {installed}, required: {minimum} or newer)")
+        if not problems:
             return
 
+        package_lines = "\n".join(f"- {COL_ERROR}{problem}{COL_DEFAULT}" for problem in problems)
         hint = Hint(
             "none",
             "The app's dependencies have changed",
-            f"The following packages were not found: {COL_ERROR}{', '.join(missing_packages)}{COL_DEFAULT}\n"
+            "The following packages are missing or below the required version:\n"
+            f"{package_lines}\n"
             "You may have updated the app from the repository without updating its dependencies.\n"
             "Update your virtual environment by re-running:\n"
             f"`{Ansi.BOLD}pip install -r {Tts.get_requirements_file_name()}{Ansi.RESET}`."
         )
         hints.print_hint(hint)
         exit(1)
+
+    def get_minimum_package_versions(self) -> dict[str, str]:
+        """
+        Minimum versions of installed packages, keyed by distribution name.
+        Only for packages an existing venv may already have at an older version.
+        """
+        return {
+            # Pinned to 18.1.0 (16.1.x for vibevoice, capped by aiortc). 16.0 added
+            # OutputContainer.set_chapters(), which M4B export needs.
+            "av": "16.1",
+        }
 
     def get_new_packages(self) -> list[str]:
         """
@@ -333,6 +358,36 @@ def main() -> None:
     Start().start()
 
 # ---
+
+def installed_version_below(distribution: str, minimum: str) -> str:
+    """
+    The installed version of `distribution` when it is below `minimum`, else "".
+    Also "" when it isn't installed (the missing-package check covers that) or
+    its version can't be read or parsed: only a known-old version blocks.
+    Compares release numbers only, so a pre-release counts as its release.
+    """
+    from importlib import metadata
+
+    try:
+        installed = metadata.version(distribution)
+    except Exception:
+        return ""
+    installed_release = _release_numbers(installed)
+    minimum_release = _release_numbers(minimum)
+    if not installed_release or not minimum_release:
+        return ""
+    width = max(len(installed_release), len(minimum_release))
+    pad = lambda release: release + (0,) * (width - len(release))
+    return installed if pad(installed_release) < pad(minimum_release) else ""
+
+
+def _release_numbers(version: str) -> tuple[int, ...]:
+    """Leading numeric release segment ("16.1.0rc1" -> (16, 1, 0)); () if none."""
+    import re
+
+    match = re.match(r"\d+(?:\.\d+)*", version.strip())
+    return tuple(int(part) for part in match.group(0).split(".")) if match else ()
+
 
 def resolve_project_override(
     override_path: str,

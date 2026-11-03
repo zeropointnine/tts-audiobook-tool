@@ -5,10 +5,12 @@ from unittest.mock import patch
 
 import numpy as np
 from rich.console import Console
+from rich.text import Text
 from textual.widgets import Input, OptionList, Static
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
+from tts_audiobook_tool.constants import COL_ACCENT
 from tts_audiobook_tool.enhance.unmatched_lines_app import UnmatchedLinesApp
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
@@ -40,7 +42,11 @@ def test_range_rows_format_text_and_colors() -> None:
     )
     assert app.format_line(2).plain == "00:00:30-00:00:30 Line 6\n  Line: Trailing"
     console = Console()
-    assert row.get_style_at_offset(console, 0).color.name == "#ffaa44"
+    # COL_ACCENT is truecolor only when COLORTERM says so (else the 256-color
+    # approximation, eg in cmd.exe), so compare against what it renders to here
+    accent = Text.from_ansi(f"{COL_ACCENT}x").get_style_at_offset(console, 0).color
+    assert accent is not None
+    assert row.get_style_at_offset(console, 0).color == accent
     assert row.get_style_at_offset(console, 18).color.name == "default"
     assert row.get_style_at_offset(console, row.plain.index("First line:")).color.name == "#888888"
     assert app.find_match_indices("First in run") == [1]

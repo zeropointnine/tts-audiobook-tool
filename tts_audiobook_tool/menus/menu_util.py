@@ -11,6 +11,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.system_support.terminal import clear_screen
 from tts_audiobook_tool.util import *
 from typing import TypeVar, Callable, Any
 
@@ -332,7 +333,7 @@ class MenuUtil:
         """
 
         if not dont_clear:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             if state and not non_menu:
                 MenuStatus.print_block(state)
                 printt()

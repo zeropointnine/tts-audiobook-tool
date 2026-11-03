@@ -15,7 +15,6 @@ from tts_audiobook_tool.state import State
 def test_concat_menu_places_reason_pauses_in_pause_timing_rules_submenu() -> None:
     # "Pause modulation rules" (a submenu holding the pause-related settings)
     # follows File type in Options; Post-processing starts with Loudness
-    # normalization
     project = Project.model_validate({})
     prefs = SimpleNamespace(aac_bitrate="128k")
     state = cast(State, SimpleNamespace(project=project, prefs=prefs))
@@ -38,7 +37,7 @@ def test_concat_menu_places_reason_pauses_in_pause_timing_rules_submenu() -> Non
     post_processing_index = superlabels.index("Post-processing")
 
     assert labels[options_index + 1] == "Pause modulation rules"
-    assert labels[post_processing_index].startswith("Loudness normalization")
+    assert labels[post_processing_index].startswith("Loudness")
 
     with patch("tts_audiobook_tool.menus.concat_menu.MenuUtil.menu") as menu:
         ConcatMenu.prosody_modulation_menu(state)

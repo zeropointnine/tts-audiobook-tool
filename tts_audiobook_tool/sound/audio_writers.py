@@ -255,7 +255,7 @@ class AacWriter(AudioWriter):
         # would otherwise leak the handle (and lock the file on Windows).
         # Opened for reading too, for the fast-start rewrite at close.
         try:
-            self._file = open(self.staging_path, "w+b")
+            self._file = _DiscardableFile(self.staging_path)
         except Exception as e:
             self._fail_on_open(e)
         try:
@@ -319,10 +319,11 @@ class AacWriter(AudioWriter):
             self._file.close()
 
     def _release(self) -> None:
-        # Closing the file first makes PyAV skip the trailer (and the
-        # fast-start rewrite of everything written so far)
+        # Discarding the file first makes PyAV (18+) skip the trailer and the
+        # fast-start rewrite of everything written so far; older PyAV still
+        # writes them, into the discarded file
         try:
-            self._file.close()
+            self._file.discard()
         finally:
             self._container.close()
 
@@ -331,6 +332,63 @@ class AacWriter(AudioWriter):
             self._file.close()
         except Exception:
             pass
+
+
+class _DiscardableFile:
+    """
+    The binary file an AacWriter hands to PyAV. `discard()` closes the real
+    file and turns later I/O into no-ops.
+
+    On abort, PyAV 18+ sees `closed` and skips the trailer. PyAV 16/17 (the
+    vibevoice venv's range) writes it anyway; against a plain closed file,
+    every write/seek raises inside PyAV's I/O callbacks, which prints "PyAV
+    library exception being dropped" tracebacks to the console.
+    """
+
+    def __init__(self, path: str) -> None:
+        self._file = open(path, "w+b")
+        self._discarded = False
+        self._position = 0
+
+    @property
+    def name(self) -> str:
+        # PyAV's URL for the container; the fast-start rewrite reopens it
+        return str(self._file.name)
+
+    @property
+    def closed(self) -> bool:
+        return self._file.closed
+
+    def read(self, size: int = -1) -> bytes:
+        return b"" if self._discarded else self._file.read(size)
+
+    def write(self, data) -> int:
+        if self._discarded:
+            size = len(memoryview(data))
+            self._position += size
+            return size
+        return self._file.write(data)
+
+    def seek(self, offset: int, whence: int = os.SEEK_SET) -> int:
+        if not self._discarded:
+            return self._file.seek(offset, whence)
+        # Nothing is stored, so the end is position 0
+        self._position = max(0, offset + (self._position if whence == os.SEEK_CUR else 0))
+        return self._position
+
+    def tell(self) -> int:
+        return self._position if self._discarded else self._file.tell()
+
+    def flush(self) -> None:
+        if not self._discarded:
+            self._file.flush()
+
+    def close(self) -> None:
+        self._file.close()
+
+    def discard(self) -> None:
+        self._discarded = True
+        self._file.close()
 
 
 def open_writer(
