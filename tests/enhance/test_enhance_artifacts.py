@@ -234,7 +234,8 @@ def test_state_uses_valid_output_metadata_as_review_fallback(tmp_path: Path, mon
     assert state.misalignment_count == 1
 
 
-def test_state_counts_embedded_output_not_newer_timed_cache(tmp_path: Path, monkeypatch) -> None:
+def test_state_keeps_alignment_and_output_counts_separate(tmp_path: Path, monkeypatch) -> None:
+    # Review prefers the cache, while output status still describes the output.
     audio = tmp_path / "book.mp3"
     audio.write_bytes(b"audio")
     artifacts = EnhanceArtifacts.from_audio_path(audio)
@@ -253,9 +254,28 @@ def test_state_counts_embedded_output_not_newer_timed_cache(tmp_path: Path, monk
     state = make_enhance_state(str(audio))
 
     assert state.timed_phrases_valid
+    assert state.can_review_alignment
+    assert state.alignment_phrase_count == 3
+    assert state.alignment_misalignment_count == 3
     assert state.output_valid
     assert state.output_phrase_count == 2
     assert state.misalignment_count == 1
+
+
+def test_state_can_review_alignment_before_output_exists(tmp_path: Path) -> None:
+    # Review needs the saved timings and original audio, not a generated container.
+    audio = tmp_path / "book.mp3"
+    audio.write_bytes(b"audio")
+    artifacts = EnhanceArtifacts.from_audio_path(audio)
+    assert save_book(artifacts, make_book()) == ""
+    assert save_timed_phrases(artifacts, [TimedPhrase("A", 0, 0), TimedPhrase("B", 1, 2)]) == ""
+
+    state = make_enhance_state(str(audio))
+
+    assert state.can_review_alignment
+    assert state.alignment_phrase_count == 2
+    assert state.alignment_misalignment_count == 1
+    assert not state.output_valid
 
 
 def test_empty_selection_has_no_derived_artifacts() -> None:

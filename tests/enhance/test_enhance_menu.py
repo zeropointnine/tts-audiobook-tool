@@ -49,6 +49,8 @@ def snapshot(tmp_path: Path, *, source_kind: str | None = None, audio=True, tran
         output_error="",
         output_phrase_count=count,
         misalignment_count=count,
+        alignment_phrase_count=count if alignment else 0,
+        alignment_misalignment_count=count if alignment else 0,
     )
 
 
@@ -133,6 +135,32 @@ def test_hotkeys_are_auto_assigned_and_optional_spacing(tmp_path: Path) -> None:
     assert [item.blank_line_before for item in completed] == [False, False, True, False, True, True, False]
     labels = stripped_labels(completed)
     assert labels[5] == "Review unmatched lines (1 of 1 lines)"
+
+
+def test_review_available_after_alignment_without_output(tmp_path: Path) -> None:
+    # Declining the immediate review prompt must leave a menu route back to it.
+    current = snapshot(tmp_path, source_kind="plain_text", alignment=True, count=2)
+    items = build_items(SimpleNamespace(), current)
+
+    assert stripped_labels(items)[5] == "Review unmatched lines (2 of 2 lines)"
+    assert items[5].superlabel == "Options"
+    assert items[5].blank_line_before
+    assert not current.output_valid
+
+
+def test_review_label_prefers_alignment_counts_over_old_output(tmp_path: Path) -> None:
+    # The label must count the same phrases that review will display.
+    current = snapshot(tmp_path, alignment=True, output=True, count=1)
+    current = replace(current, alignment_phrase_count=3, alignment_misalignment_count=2)
+    assert stripped_labels(build_items(SimpleNamespace(), current))[5] == "Review unmatched lines (2 of 3 lines)"
+
+
+def test_unusable_alignment_does_not_offer_review(tmp_path: Path) -> None:
+    # Empty caches and missing source audio cannot supply a review preview.
+    empty = snapshot(tmp_path, alignment=True)
+    missing_audio = snapshot(tmp_path, alignment=True, audio=False, count=2)
+    for current in (empty, missing_audio):
+        assert not any(label.startswith("Review") for label in stripped_labels(build_items(SimpleNamespace(), current)))
 
 
 def test_review_label_uses_output_total_not_current_book_lines(tmp_path: Path) -> None:

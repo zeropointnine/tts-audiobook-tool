@@ -19,6 +19,13 @@ from tts_audiobook_tool.textual.content_textual_app import ContentTextualApp, Ed
 from tts_audiobook_tool.textual.textual_shared import STYLE_DIM
 from tts_audiobook_tool.util import time_stamp
 
+# Spans shorter than this are shown as a single approximate point
+NO_SPAN_SECONDS = 0.5
+# A range starting this close to the end of the file is labeled "end of audio"
+AUDIO_END_SLACK_SECONDS = 3.0
+# Seconds of surrounding audio played on each side of a range with no span
+CONTEXT_SECONDS = 3.0
+
 
 class PreviewLoaded(Message):
     """Result of a bounded audiobook decode on a background thread."""
@@ -55,6 +62,8 @@ class UnmatchedLinesApp(ContentTextualApp[EditorClosed]):
         self.ranges = TimedPhrase.get_discontinuities(timed_phrases)
         self.playing_sound_id = ""
         self.playing_range_index: int | None = None
+        self.playing_is_context = False
+        self.pending_is_context = False
         self.pending_range_index: int | None = None
         self.preview_request_id = 0
         self.preview_closed = False
@@ -81,9 +90,46 @@ class UnmatchedLinesApp(ContentTextualApp[EditorClosed]):
         )
         return start_time, end_time
 
-    def time_range(self, start: int, end: int) -> str:
+    def is_no_span(self, start_time: float, end_time: float) -> bool:
+        return end_time - start_time < NO_SPAN_SECONDS
+
+    def is_at_audio_end(self, start_time: float) -> bool:
+        return (
+            self.audio_duration is not None
+            and start_time >= self.audio_duration - AUDIO_END_SLACK_SECONDS
+        )
+
+    def time_parts(self, start: int, end: int) -> tuple[str, str]:
+        """
+        Timestamp text plus an optional dim note.
+
+        A degenerate span (the aligned neighbors touch) or one pinned to the end
+        of the file is shown as a single approximate point, since a range like
+        "00:10:52-00:10:52" reads as a display bug.
+        """
         start_time, end_time = self.range_times(start, end)
-        return f"{time_stamp(start_time, with_tenth=False)}-{time_stamp(end_time, with_tenth=False)}"
+        if self.is_at_audio_end(start_time):
+            return f"≈{time_stamp(start_time, with_tenth=False)}", "(end of audio)"
+        if self.is_no_span(start_time, end_time):
+            return f"≈{time_stamp(start_time, with_tenth=False)}", "(no audio span)"
+        return (
+            f"{time_stamp(start_time, with_tenth=False)}-{time_stamp(end_time, with_tenth=False)}",
+            "",
+        )
+
+    def play_times(self, start: int, end: int) -> tuple[float, float, bool]:
+        """
+        Interval to preview, and whether it is surrounding context rather than
+        the range itself (used when the range has no usable span of its own).
+        """
+        start_time, end_time = self.range_times(start, end)
+        if not self.is_no_span(start_time, end_time):
+            return start_time, end_time, False
+        context_start = max(0.0, start_time - CONTEXT_SECONDS)
+        context_end = end_time + CONTEXT_SECONDS
+        if self.audio_duration is not None:
+            context_end = min(context_end, self.audio_duration)
+        return context_start, context_end, True
 
     def on_mount(self) -> None:
         super().on_mount()
@@ -97,7 +143,8 @@ class UnmatchedLinesApp(ContentTextualApp[EditorClosed]):
 
     def update_selection_status(self) -> None:
         if self.playing_range_index is not None:
-            self.set_selected_status(right=f"Playing range {self.playing_range_index + 1}")
+            what = "audio around range" if self.playing_is_context else "range"
+            self.set_selected_status(right=f"Playing {what} {self.playing_range_index + 1}")
         elif self.pending_range_index is not None:
             self.set_selected_status(right=f"Loading range {self.pending_range_index + 1} audio")
         else:
@@ -139,11 +186,12 @@ class UnmatchedLinesApp(ContentTextualApp[EditorClosed]):
         request_id = self.preview_request_id
         self.pending_range_index = None
         self.stop_tracked_playback()
-        start, end = self.range_times(*self.ranges[range_index])
+        start, end, is_context = self.play_times(*self.ranges[range_index])
         if end <= start:
             self.show_status_toast(right="No playable audio interval for this range")
             return
         self.pending_range_index = range_index
+        self.pending_is_context = is_context
         self.update_selection_status()
         self.run_worker(
             lambda: self._load_preview(request_id, range_index, start, end),
@@ -167,9 +215,10 @@ class UnmatchedLinesApp(ContentTextualApp[EditorClosed]):
             return
         self.playing_sound_id = PlaySoundUtil.play_sound_async(event.result)
         self.playing_range_index = event.range_index
+        self.playing_is_context = self.pending_is_context
         self.update_selection_status()
 
-    def row_fields(self, item_index: int) -> tuple[str, str, list[str]]:
+    def row_fields(self, item_index: int) -> tuple[tuple[str, str], str, list[str]]:
         start, end = self.ranges[item_index]
         count = end - start + 1
         label = (
@@ -186,15 +235,18 @@ class UnmatchedLinesApp(ContentTextualApp[EditorClosed]):
                 f"Last line: {self.timed_phrases[end].text.strip()}",
             ]
         )
-        return self.time_range(start, end), label, previews
+        stamp, note = self.time_parts(start, end)
+        return (stamp, note), label, previews
 
     def format_line(self, index: int) -> Text:
-        timestamp, label, previews = self.row_fields(self.phrase_indices[index])
+        (stamp, note), label, previews = self.row_fields(self.phrase_indices[index])
         row = Text.from_ansi(
-            f"{COL_ACCENT}{timestamp}{COL_DEFAULT} ",
+            f"{COL_ACCENT}{stamp}{COL_DEFAULT} ",
             no_wrap=True,
             overflow="ellipsis",
         )
+        if note:
+            row.append(f"{note} ", style=STYLE_DIM)
         row.append(label, style="default")
         for preview in previews:
             row.append(f"\n  {preview}", style=STYLE_DIM)
@@ -203,8 +255,8 @@ class UnmatchedLinesApp(ContentTextualApp[EditorClosed]):
         return row
 
     def find_text_strings(self, item_index: int) -> Sequence[str]:
-        timestamp, label, previews = self.row_fields(item_index)
-        return [timestamp, label, *(preview.strip() for preview in previews)]
+        (stamp, note), label, previews = self.row_fields(item_index)
+        return [f"{stamp} {note}".strip(), label, *(preview.strip() for preview in previews)]
 
     def content_line_index(self, item_index: int) -> None:
         """Ranges are not actionable lines in the unrelated current project."""

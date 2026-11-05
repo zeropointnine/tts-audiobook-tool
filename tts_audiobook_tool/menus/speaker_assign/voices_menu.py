@@ -334,7 +334,7 @@ def make_character_subheading(character: RosterCharacter) -> str:
 def make_character_label(
         state: State, character_id: str, count: int, voice_index: int | None, width: int = 0,
 ) -> str:
-    """Eg "BOB (50) -> Voice 1 bob"; just "BOB (50)" when no voice is chosen.
+    """Eg "BOB (50) -> Voice 1 (bob)"; just "BOB (50)" when no voice is chosen.
     "BOB (50)" is padded to `width` so the arrows line up in a column (see
     make_character_label_width)."""
     head = make_character_label_head(character_id, count)
@@ -346,7 +346,10 @@ def make_character_label(
     if voice_index >= len(voice_references):
         # Eg the voice was removed after it was chosen
         return label + f" {COL_ERROR}Voice {voice_index + 1} (missing)"
-    title = VoiceMenuShared.make_voice_title(voice_references[voice_index], voice_index)
+    voice = voice_references[voice_index]
+    title = VoiceMenuShared.make_voice_title(None, voice_index)
+    if voice.name:
+        title += f" ({voice.name})"
     return label + f" {COL_ACCENT}{title}"
 
 

@@ -52,8 +52,8 @@ All artifacts are siblings of the selected audio file, named by its stem:
 | Audio selection | *(user's file)* | Enter audio | Transcribe, Create |
 | Book | `<stem>.abr.json` | Enter text | Align, Create |
 | Transcription | `<stem>.transcription.bin` | Transcribe | Align |
-| Timed phrases | `<stem>.timed_phrases.bin` | Align | Create |
-| Output | `<stem>.abr.m4a` or `.abr.m4b` | Create | Review |
+| Timed phrases | `<stem>.timed_phrases.bin` | Align | Create, Review |
+| Output | `<stem>.abr.m4a` or `.abr.m4b` | Create | Review (fallback) |
 
 The book is a JSON file (`BOOK_FORMAT`); the transcription and timed-phrase
 caches are pickles written via atomic replace. The output suffix depends on the
@@ -101,9 +101,10 @@ Status annotations:
 
 Optional items (under an "Options" superlabel, only when relevant):
 
-- **Review unmatched lines** — appears only when the output is valid; its
-  counts describe the phrases embedded in the *output file*, not the current
-  book, because the output may predate the latest alignment.
+- **Review unmatched lines** — appears as soon as a valid, non-empty alignment
+  and the original audio are available, even before Create. Its counts describe
+  the saved alignment, and previews use the original audio. If that review source
+  is unavailable, a valid output is used instead, with counts from its metadata.
 - **Clear** — appears when an audio path is selected.
 
 Other behaviors:
@@ -196,12 +197,15 @@ structureless output file would be a silently worse deliverable: no chapters
 for the reader UI, no real title, and the `.m4a`/`.m4b` choice would be a
 guess.
 
-### Review counts describe the output file, not current work state
+### Review prefers current alignment, with output as a fallback
 
-"Review unmatched lines (N of M lines)" reads its counts from the metadata
-embedded in the output file. After re-aligning but before re-creating, those
-numbers describe the *old* output. This is intentional: review plays the
-finished output, so its numbers must describe exactly that.
+"Review unmatched lines (N of M lines)" uses the saved alignment and original
+source audio whenever available. Both the post-alignment prompt and the menu
+open the same review, so accepting the prompt works without Create and declining
+it leaves review accessible later. Re-aligning also switches review to the new
+alignment rather than an older output. With no usable alignment/source pair,
+review falls back to the finished output and its embedded metadata. The menu
+counts always describe the phrases that review will display.
 
 ### The state cache is presentation-only
 

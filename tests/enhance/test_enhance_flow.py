@@ -16,7 +16,7 @@ from tts_audiobook_tool.app_types import (
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
-from tts_audiobook_tool.enhance import enhance_flow
+from tts_audiobook_tool.enhance import enhance_flow, enhance_menu
 from tts_audiobook_tool.textual.content_textual_app import ContentAppCompleted, ContentAppUnavailable, EditorClosed
 from tts_audiobook_tool.enhance.enhance_artifacts import (
     EnhanceArtifacts,
@@ -551,28 +551,45 @@ def test_manual_alignment_declines_output_and_saves_timed_phrases(tmp_path: Path
     assert not artifacts.flat_output_path.exists()
 
 
-def test_alignment_without_create_still_prompts_orphan_review_after_save(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("review_now", [False, True])
+def test_alignment_without_create_still_prompts_orphan_review_after_save(tmp_path: Path, monkeypatch, review_now: bool) -> None:
     state, artifacts = prepare(tmp_path)
     assert save_transcription(artifacts, [ConcreteWord(0, 0.5, "hello", 1)]) == ""
     prompts: list[str] = []
-    reviewed: list[bool] = []
+    reviewed = []
     timed = [TimedPhrase("Hello.", 0.0, 0.5), TimedPhrase("orphan", 0.0, 0.0)]
     def confirm(message: str) -> bool:
         prompts.append(message)
-        return message.startswith("Review")  # decline create, accept review
+        return message.startswith("Review") and review_now  # always decline Create
 
     monkeypatch.setattr(enhance_flow, "_validate_audio", lambda _path: "")
     monkeypatch.setattr(enhance_flow.ask, "ask_confirm", confirm)
     monkeypatch.setattr(enhance_flow.enhance_text, "align_book", lambda *_args: (timed, False))
     monkeypatch.setattr(enhance_flow, "_write_staged_output", lambda *_args: pytest.fail("must not write"))
-    monkeypatch.setattr(enhance_flow, "review_discontinuities", lambda _state: reviewed.append(True))
+    # Exercise the real review operation: accepting the prompt must work before Create.
+    monkeypatch.setattr(enhance_flow.AudioMetaUtil, "get_audio_duration", lambda _path: 65.0)
+    monkeypatch.setattr(enhance_flow, "run_content_textual_app", lambda app: reviewed.append(app) or ContentAppCompleted(EditorClosed()))
+    monkeypatch.setattr(enhance_flow.ask, "ask_error", lambda message: pytest.fail(message))
     silence_ui(monkeypatch)
 
     enhance_flow.align_source_text(state)
 
     assert prompts == ['Create the ".abr.m4a" file when alignment is finished? ', "Review orphaned lines now? "]
     assert artifacts.timed_phrases_path.exists()
-    assert reviewed == [True]
+    assert not artifacts.flat_output_path.exists()
+    # Declining immediate review must still offer it on the next menu render.
+    snapshot = enhance_flow.make_enhance_state(state.prefs.enhance_audio_path)
+    items = enhance_menu.build_items(state, snapshot)
+    assert "Review unmatched lines" in items[5].label
+    assert "(1 of 2 lines)" in items[5].label
+    if not review_now:
+        assert not reviewed
+        items[5].handler(state, items[5])
+    assert len(reviewed) == 1
+    assert reviewed[0].audio_path == artifacts.audio_path
+    assert [(p.text, p.time_start, p.time_end) for p in reviewed[0].timed_phrases] == [
+        (p.text, p.time_start, p.time_end) for p in timed
+    ]
 
 
 def test_manual_alignment_yes_creates_epub_output(tmp_path: Path, monkeypatch) -> None:
@@ -740,7 +757,8 @@ def test_align_failure_and_save_failure_preserve_existing_cache(tmp_path: Path, 
     assert artifacts.flat_output_path.read_bytes() == b"old output"
 
 
-def test_review_uses_embedded_phrases_even_with_newer_timed_cache(tmp_path: Path, monkeypatch) -> None:
+def test_review_prefers_current_alignment_over_older_output(tmp_path: Path, monkeypatch) -> None:
+    # Re-aligning must review the same phrases counted by the post-align prompt.
     state, artifacts = prepare(tmp_path, "plain_text")
     artifacts.flat_output_path.write_bytes(b"final")
     cached = [TimedPhrase("New text", 0, 0), TimedPhrase("Extra line", 0, 0)]
@@ -749,7 +767,7 @@ def test_review_uses_embedded_phrases_even_with_newer_timed_cache(tmp_path: Path
     monkeypatch.setattr(AppMetadata, "load_from_file", staticmethod(lambda _path: embedded))
     monkeypatch.setattr(
         enhance_flow.AudioMetaUtil, "get_audio_duration",
-        lambda path: 123.0 if path == str(artifacts.flat_output_path) else pytest.fail("wrong audio path"),
+        lambda path: 123.0 if path == str(artifacts.audio_path) else pytest.fail("wrong audio path"),
     )
     reviewed = []
     monkeypatch.setattr(enhance_flow, "run_content_textual_app", lambda app: reviewed.append(app) or ContentAppCompleted(EditorClosed()))
@@ -759,13 +777,21 @@ def test_review_uses_embedded_phrases_even_with_newer_timed_cache(tmp_path: Path
 
     assert len(reviewed) == 1
     assert reviewed[0].project is state.project
-    assert reviewed[0].audio_path == artifacts.flat_output_path
+    assert reviewed[0].audio_path == artifacts.audio_path
     assert reviewed[0].audio_duration == 123.0
-    assert reviewed[0].timed_phrases == embedded.timed_phrases
+    assert [(p.text, p.time_start, p.time_end) for p in reviewed[0].timed_phrases] == [
+        (p.text, p.time_start, p.time_end) for p in cached
+    ]
 
 
-def test_review_falls_back_to_embedded_output_metadata(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("cache_kind", ["missing", "corrupt", "empty"])
+def test_review_falls_back_to_embedded_output_metadata(tmp_path: Path, monkeypatch, cache_kind: str) -> None:
+    # A finished output remains reviewable when the intermediate cache is unusable.
     state, artifacts = prepare(tmp_path, "plain_text")
+    if cache_kind == "corrupt":
+        artifacts.timed_phrases_path.write_bytes(b"not a pickle")
+    elif cache_kind == "empty":
+        assert save_timed_phrases(artifacts, []) == ""
     artifacts.flat_output_path.write_bytes(b"final")
     embedded = metadata()
     monkeypatch.setattr(AppMetadata, "load_from_file", staticmethod(lambda _path: embedded))

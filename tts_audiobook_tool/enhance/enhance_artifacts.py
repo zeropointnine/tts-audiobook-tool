@@ -88,6 +88,12 @@ class EnhanceState:
     output_error: str
     output_phrase_count: int
     misalignment_count: int
+    alignment_phrase_count: int = 0
+    alignment_misalignment_count: int = 0
+
+    @property
+    def can_review_alignment(self) -> bool:
+        return self.audio_exists and self.timed_phrases_valid and self.alignment_phrase_count > 0
 
 
 def save_book(artifacts: EnhanceArtifacts, book: Book) -> str:
@@ -326,8 +332,8 @@ def make_enhance_state(enhance_audio_path: str) -> EnhanceState:
             output_phrases, output_error = load_output_timed_phrases(expected_output_path)
             output_valid = output_phrases is not None
 
-    # Review plays the finished output, which may predate the latest alignment.
-    # Its count and total must describe the phrases embedded in that output.
+    # Keep alignment and output counts separate: review prefers the current
+    # alignment, but can still use the finished output without the cache.
     return EnhanceState(
         artifacts=artifacts,
         has_audio_path=True,
@@ -346,6 +352,8 @@ def make_enhance_state(enhance_audio_path: str) -> EnhanceState:
         output_error=output_error,
         output_phrase_count=len(output_phrases or []),
         misalignment_count=count_misalignments(output_phrases or []),
+        alignment_phrase_count=len(timed_phrases or []),
+        alignment_misalignment_count=count_misalignments(timed_phrases or []),
     )
 
 

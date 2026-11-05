@@ -101,9 +101,13 @@ def build_items(state: State, snapshot: EnhanceState) -> list[MenuItem]:
     ]
 
     optional_items: list[MenuItem] = []
-    if snapshot.output_valid:
-        count = snapshot.misalignment_count
-        total = snapshot.output_phrase_count
+    if snapshot.can_review_alignment or snapshot.output_valid:
+        if snapshot.can_review_alignment:
+            count = snapshot.alignment_misalignment_count
+            total = snapshot.alignment_phrase_count
+        else:
+            count = snapshot.misalignment_count
+            total = snapshot.output_phrase_count
         optional_items.append(
             MenuItem(
                 f"Review unmatched lines {COL_DIM}({count} of {total} lines){COL_DEFAULT}",

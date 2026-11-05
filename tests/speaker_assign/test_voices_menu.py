@@ -46,7 +46,7 @@ def test_character_label_shows_count_and_chosen_voice() -> None:
     # voice index past the project's voices is flagged as missing.
     state = make_state("", "bob")
     assert strip_ansi_codes(make_character_label(state, "ALICE", 1234, None)) == "ALICE (1,234)"
-    assert strip_ansi_codes(make_character_label(state, "BOB", 50, 1)) == "BOB (50) -> Voice 2 bob"
+    assert strip_ansi_codes(make_character_label(state, "BOB", 50, 1)) == "BOB (50) -> Voice 2 (bob)"
     assert strip_ansi_codes(make_character_label(state, "CAROL", 2, 0)) == "CAROL (2) -> Voice 1"
     assert strip_ansi_codes(make_character_label(state, "DAVE", 0, 5)) == "DAVE (0) -> Voice 6 (missing)"
 
@@ -61,9 +61,9 @@ def test_character_labels_line_up_their_arrows() -> None:
     assert width == len("SUNDAY_AHZMUNDIN (473)")
     labels = [strip_ansi_codes(make_character_label(state, c.id, counts[c.id], 1, width)) for c in roster]
     assert labels == [
-        "SUNDAY_AHZMUNDIN (473) -> Voice 2 bob",
-        "CHIMP (232)            -> Voice 2 bob",
-        "ALICE (0)              -> Voice 2 bob",
+        "SUNDAY_AHZMUNDIN (473) -> Voice 2 (bob)",
+        "CHIMP (232)            -> Voice 2 (bob)",
+        "ALICE (0)              -> Voice 2 (bob)",
     ]
     assert strip_ansi_codes(make_character_label(state, "CHIMP", 232, None, width)) == "CHIMP (232)"
 
@@ -123,7 +123,7 @@ def test_menu_saves_preselections_and_allows_clearing_before_apply(monkeypatch) 
         items = kwargs["items"](state)
         labels = [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
         bob = next(item for item in items if item.data and item.data.id == "BOB")
-        assert any(label.startswith("BOB (") and label.endswith("-> Voice 3 bob") for label in labels)
+        assert any(label.startswith("BOB (") and label.endswith("-> Voice 3 (bob)") for label in labels)
         assert "will be pre-selected automatically" in strip_ansi_codes(kwargs["subheading"])
         bob.handler(state, bob)
         items[-1].handler(state, items[-1])

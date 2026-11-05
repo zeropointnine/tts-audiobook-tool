@@ -471,21 +471,31 @@ def create_output(state: State, overwrite: bool = False) -> None:
 
 def review_discontinuities(state: State) -> None:
     snapshot = make_enhance_state(state.prefs.enhance_audio_path)
-    if snapshot.artifacts is None or snapshot.expected_output_path is None:
-        ask.ask_error("Create an enhanced audiobook before reviewing discontinuities.")
-        return
-    if not snapshot.output_valid:
-        ask.ask_error(snapshot.output_error or "The enhanced audiobook metadata is unreadable.")
+    if snapshot.artifacts is None:
+        ask.ask_error("Align source text before reviewing unmatched lines.")
         return
 
-    timed_phrases, error = load_output_timed_phrases(snapshot.expected_output_path)
+    if snapshot.can_review_alignment:
+        # Use the same saved alignment that triggered the post-align prompt,
+        # even when an older enhanced output exists.
+        timed_phrases, error = load_timed_phrases(snapshot.artifacts)
+        audio_path = snapshot.artifacts.audio_path
+    elif snapshot.output_valid and snapshot.expected_output_path is not None:
+        timed_phrases, error = load_output_timed_phrases(snapshot.expected_output_path)
+        audio_path = snapshot.expected_output_path
+    else:
+        ask.ask_error(
+            snapshot.output_error or snapshot.timed_phrases_error
+            or "Align source text before reviewing unmatched lines."
+        )
+        return
+
     if timed_phrases is None:
         ask.ask_error(error)
         return
-    output_path = snapshot.expected_output_path
-    audio_duration = AudioMetaUtil.get_audio_duration(str(output_path))
+    audio_duration = AudioMetaUtil.get_audio_duration(str(audio_path))
     result = run_content_textual_app(
-        UnmatchedLinesApp(state.project, timed_phrases, output_path, audio_duration)
+        UnmatchedLinesApp(state.project, timed_phrases, audio_path, audio_duration)
     )
     if not isinstance(result, ContentAppCompleted):
         ask.ask_error(result.message)

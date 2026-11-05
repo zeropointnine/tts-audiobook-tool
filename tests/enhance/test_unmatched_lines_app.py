@@ -40,7 +40,7 @@ def test_range_rows_format_text_and_colors() -> None:
         "  First line: First in run\n"
         "  Last line: " + "x" * 55
     )
-    assert app.format_line(2).plain == "00:00:30-00:00:30 Line 6\n  Line: Trailing"
+    assert app.format_line(2).plain == "≈00:00:30 (no audio span) Line 6\n  Line: Trailing"
     console = Console()
     # COL_ACCENT is truecolor only when COLORTERM says so (else the 256-color
     # approximation, eg in cmd.exe), so compare against what it renders to here
@@ -58,7 +58,7 @@ def test_range_rows_format_text_and_colors() -> None:
 
 def test_all_unmatched_and_no_unmatched_rows() -> None:
     all_unmatched = make_app([TimedPhrase("One", 0, 0), TimedPhrase("Two", 0, 0)])
-    assert all_unmatched.format_line(0).plain.startswith("00:00:00-00:00:00 Lines 1 to 2 (2 lines)")
+    assert all_unmatched.format_line(0).plain.startswith("≈00:00:00 (no audio span) Lines 1 to 2 (2 lines)")
     empty = make_app([TimedPhrase("Aligned", 0, 5)])
     assert empty.phrase_indices == []
     assert empty.empty_state_text == "No unmatched text lines"
@@ -82,6 +82,59 @@ def test_trailing_unmatched_range_ends_at_audio_duration() -> None:
     assert all_unmatched.format_line(0).plain.startswith("00:00:00-00:01:35")
 
 
+def test_degenerate_spans_show_single_approximate_time() -> None:
+    # When the aligned neighbors touch (eg a short phrase was mis-anchored past
+    # the unmatched run), a "X-X" range would look like a display bug.
+    # Spans starting near the file end are labeled as such instead.
+    app = make_app([
+        TimedPhrase("Matched", 650, 652.58),
+        TimedPhrase("Touching", 0, 0),
+        TimedPhrase("Matched", 652.58, 657),
+        TimedPhrase("Real gap", 0, 0),
+        TimedPhrase("Matched", 660, 3622.34),
+        TimedPhrase("Past audio", 0, 0),
+        TimedPhrase("Matched", 3622.34, 3622.72),
+        TimedPhrase("Trailing", 0, 0),
+    ], audio_duration=3624)
+    assert app.format_line(0).plain.startswith("≈00:10:52 (no audio span) Line 2")
+    assert app.format_line(1).plain.startswith("00:10:57-00:11:00 Line 4")
+    assert app.format_line(2).plain.startswith("≈01:00:22 (end of audio) Line 6")
+    assert app.format_line(3).plain.startswith("≈01:00:22 (end of audio) Line 8")
+    console = Console()
+    row = app.format_line(0)
+    assert row.get_style_at_offset(console, row.plain.index("(no")).color.name == "#888888"
+    assert app.find_match_indices("end of audio") == [2, 3]
+
+
+def test_p_plays_surrounding_context_for_range_without_span() -> None:
+    app = make_app([
+        TimedPhrase("Matched", 1, 2),
+        TimedPhrase("Touching", 0, 0),
+        TimedPhrase("Matched", 2, 3),
+        TimedPhrase("Trailing", 0, 0),
+    ], audio_duration=4)
+    sound = Sound(np.zeros(10, dtype=np.float32), 48000)
+    with (
+        patch.object(SoundFileUtil, "load_range", return_value=sound) as load,
+        patch.object(PlaySoundUtil, "play_sound_async", return_value="preview-id") as play,
+        patch.object(PlaySoundUtil, "current_sound_id", return_value="preview-id"),
+        patch.object(PlaySoundUtil, "stop_sound_async"),
+    ):
+        async def exercise() -> None:
+            async with app.run_test() as pilot:
+                await pilot.press("p")
+                for _ in range(10):
+                    await pilot.pause()
+                    if play.called:
+                        break
+                # Context is clamped to the file start and end
+                load.assert_called_once_with("book.abr.m4b", 0.0, 4)
+                status = app.query_one("#status-right", Static).render().plain
+                assert status == "Playing audio around range 1"
+
+        run(exercise())
+
+
 def test_previews_ellipsize_at_list_boundary_and_reflow_on_resize() -> None:
     app = make_app([
         TimedPhrase("S" * 90, 0, 0),
@@ -100,7 +153,7 @@ def test_previews_ellipsize_at_list_boundary_and_reflow_on_resize() -> None:
                 await pilot.pause()
                 width = options.scrollable_content_region.width
                 assert options.render_line(0).text.startswith("00:00:00-00:00:01 Line 1")
-                assert options.render_line(2).text.startswith("00:00:02-00:00:02 Lines 3 to 5")
+                assert options.render_line(2).text.startswith("≈00:00:02 (no audio span) Line")
                 for line_number, prefix, letter in (
                     (1, "  Line: ", "S"),
                     (3, "  First line: ", "A"),
@@ -222,8 +275,9 @@ def test_p_plays_trailing_range_through_audio_end() -> None:
         run(exercise())
 
 
-def test_p_ignores_find_empty_and_zero_length_ranges() -> None:
-    app = make_app([TimedPhrase("Unmatched", 0, 0)])
+def test_p_ignores_find_empty_and_unplayable_ranges() -> None:
+    # Stale timings past the file end leave not even a context window to play
+    app = make_app([TimedPhrase("Matched", 10, 20), TimedPhrase("Trailing", 0, 0)], audio_duration=5)
     with patch.object(SoundFileUtil, "load_range") as load:
         async def exercise() -> None:
             async with app.run_test() as pilot:
