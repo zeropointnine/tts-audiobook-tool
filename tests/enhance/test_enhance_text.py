@@ -5,9 +5,11 @@ from unittest.mock import patch
 
 import pytest
 
+from tts_audiobook_tool import constants_config
 from tts_audiobook_tool.app_types import (
     Book,
     BookSection,
+    BookSegmentationSettings,
     ConcreteWord,
     SegmentationStrategy,
 )
@@ -132,7 +134,12 @@ def test_flatten_book_maps_sections_in_phrase_not_group_coordinates() -> None:
     ]
 
 
-def test_section_alignment_carries_cursor_and_global_line_offset() -> None:
+@pytest.mark.parametrize("anchored", [True, False])
+def test_section_alignment_carries_cursor_and_global_line_offset(monkeypatch, anchored) -> None:
+    # Both algorithms time phrases across EPUB sections identically here:
+    # the greedy one carries its cursor over the section boundary, the
+    # anchored one ignores sections.
+    monkeypatch.setattr(constants_config, "ENHANCE_ANCHORED_ALIGNMENT", anchored)
     book = Book(
         sections=[
             BookSection([PhraseGroup([phrase("Alpha")])], "One"),
@@ -153,18 +160,55 @@ def test_section_alignment_carries_cursor_and_global_line_offset() -> None:
     assert [(item.time_start, item.time_end) for item in timed] == [(0.0, 1.0), (1.0, 1.5)]
 
 
-def test_alignment_clears_interrupt_mode_when_alignment_raises() -> None:
+@pytest.mark.parametrize(
+    ("anchored", "target"),
+    [
+        (True, "tts_audiobook_tool.enhance.enhance_text.enhance_anchored_alignment.align_phrases_detailed"),
+        (False, "tts_audiobook_tool.enhance.enhance_text.enhance_alignment.align_phrases_with_state"),
+    ],
+)
+def test_alignment_clears_interrupt_mode_when_alignment_raises(monkeypatch, anchored, target) -> None:
+    monkeypatch.setattr(constants_config, "ENHANCE_ANCHORED_ALIGNMENT", anchored)
     book = Book(
         sections=[BookSection([PhraseGroup([phrase("Alpha")])])],
         text_source_kind="plain_text",
         audio_source_kind="pre_existing",
     )
-    with patch(
-        "tts_audiobook_tool.enhance.enhance_text.enhance_alignment.align_phrases_with_state",
-        side_effect=RuntimeError("alignment failed"),
-    ), pytest.raises(RuntimeError, match="alignment failed"):
+    with patch(target, side_effect=RuntimeError("alignment failed")), pytest.raises(
+        RuntimeError, match="alignment failed"
+    ):
         align_book(book, [])
     assert Interrupts()._mode == ""
+
+
+@pytest.mark.parametrize("anchored", [True, False])
+def test_alignment_flag_selects_algorithm(monkeypatch, anchored) -> None:
+    # ENHANCE_ANCHORED_ALIGNMENT switches between the two implementations,
+    # both kept for A/B testing; the project language reaches the anchored one.
+    monkeypatch.setattr(constants_config, "ENHANCE_ANCHORED_ALIGNMENT", anchored)
+    calls: list[str] = []
+
+    def fake_anchored(phrases, words, language_code):
+        calls.append(f"anchored:{language_code}")
+        return SimpleNamespace(timed_phrases=[], did_interrupt=False, unmatched_count=0)
+
+    def fake_greedy(phrases, words, state, **_kwargs):
+        calls.append("greedy")
+        return [], state, False
+
+    monkeypatch.setattr("tts_audiobook_tool.enhance.enhance_anchored_alignment.align_phrases_detailed", fake_anchored)
+    monkeypatch.setattr("tts_audiobook_tool.enhance.enhance_alignment.align_phrases_with_state", fake_greedy)
+    book = Book(
+        sections=[BookSection([PhraseGroup([phrase("Alpha")])])],
+        text_source_kind="plain_text",
+        audio_source_kind="pre_existing",
+        segmentation_settings=BookSegmentationSettings(language_code="es"),
+    )
+
+    with patch("tts_audiobook_tool.enhance.enhance_text.printt"), patch("builtins.print"):
+        align_book(book, [ConcreteWord(0.0, 0.5, "alpha", 1.0)])
+
+    assert calls == (["anchored:es"] if anchored else ["greedy"])
 
 
 def test_import_source_book_rejects_unsupported_suffix(tmp_path) -> None:

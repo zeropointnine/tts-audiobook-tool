@@ -9,8 +9,11 @@ Relevant code:
 - `tts_audiobook_tool/enhance/enhance_artifacts.py` — artifacts, state snapshot, caching
 - `tts_audiobook_tool/enhance/enhance_menu.py` — menu presentation
 - `tts_audiobook_tool/enhance/enhance_flow.py` — user-triggered operations
-- `tts_audiobook_tool/enhance/enhance_alignment.py` — transcription windows and alignment
-- Tests: `tests/enhance/test_enhance_artifacts.py`, `tests/enhance/test_enhance_menu.py`, `tests/enhance/test_enhance_flow.py`
+- `tts_audiobook_tool/enhance/enhance_alignment.py` — transcription windows, stitching, and the original greedy alignment
+- `tts_audiobook_tool/enhance/enhance_anchored_alignment.py` — anchored global alignment (default)
+- `tts_audiobook_tool/enhance/enhance_text.py` — book import/flattening; `align_book` selects the alignment algorithm
+- Tests: `tests/enhance/test_enhance_artifacts.py`, `tests/enhance/test_enhance_menu.py`, `tests/enhance/test_enhance_flow.py`, `tests/enhance/test_enhance_alignment.py`, `tests/enhance/test_enhance_anchored_alignment.py`
+- A/B scripts: `testx/enhance_alignment_compare.py`, `testx/enhance_stitch_compare.py`
 
 ## Overview
 
@@ -67,7 +70,8 @@ soundfile; see [audio I/O](<audio-io.md>)), never an FFmpeg executable:
 - **Transcribe** streams the source through `AudioDecoder` into 16 kHz mono
   float32 windows of 30 s with 5 s overlap
   (`enhance_alignment._stream_audio_with_overlap`); the STT worker receives
-  arrays only. The decoder uses the stream `best("audio")` picks — the default
+  arrays only. The windows' words are stitched into one stream (see
+  [Transcript stitching](#transcript-stitching)). The decoder uses the stream `best("audio")` picks — the default
   track when the file has several.
 - **Review previews** decode at most one minute from the same track with
   `SoundFileUtil.load_range`, which seeks instead of decoding from the start.
@@ -75,6 +79,165 @@ soundfile; see [audio I/O](<audio-io.md>)), never an FFmpeg executable:
   re-encoded to AAC (`SoundFileUtil.transcode_to_aac_at` → `transcode_to_aac`),
   keeping container tags and chapters. Every decoder is closed before the
   staged file replaces the destination.
+
+## Forced alignment
+
+Alignment turns the flattened book phrases plus the transcript words into one
+`TimedPhrase` per phrase (`enhance_text.align_book`). It is text-to-text:
+Whisper's word timestamps supply the times, and the audio is not re-read.
+
+### Feature flags
+
+Both stages exist in an original and a new version, switchable in
+`constants_config.py` for A/B testing:
+
+| Flag | `True` (default) | `False` |
+| --- | --- | --- |
+| `ENHANCE_ANCHORED_ALIGNMENT` | anchored global alignment | original greedy alignment |
+| `ENHANCE_OVERLAP_STITCHING` | overlap stitching | original timestamp-threshold stitching |
+
+Stitching runs at transcription time and the transcription cache stores
+stitched words, so `ENHANCE_OVERLAP_STITCHING` only affects transcriptions made
+after it changes. The alignment flag takes effect on the next Align.
+
+`testx/enhance_alignment_compare.py` runs both aligners on an audiobook's work
+files; `testx/enhance_stitch_compare.py` transcribes a slice of an audiobook,
+keeping the raw windows (saveable for reuse), and compares both stitchers.
+
+### Output contract
+
+Common to both aligners:
+
+- The list is parallel to the flattened phrases.
+- `(0.0, 0.0)` marks an unmatched line ("orphan"). The menu, review, and
+  `count_misalignments` count only these.
+- A span starts at the start of the phrase's first transcript word and ends where
+  the next transcript word starts, so consecutive phrases tile the audio. The
+  final phrase ends at its last word's end.
+- Timed spans are ordered and do not overlap. A zero-length span (start equals
+  end, non-zero) is not playable in the player, which skips it; it is not
+  counted as unmatched.
+
+### Transcript stitching
+
+Transcription windows are 30 s long, each sharing 5 s with the previous
+(`TRANSCRIBE_CHUNK_SECONDS`, `TRANSCRIBE_OVERLAP_SECONDS`). Each window's words
+get absolute times; stitching joins the windows into one word stream.
+
+- **Original** (`_stitch_transcripts`): drops the earlier window's last word,
+  then appends the later window's words that start after the earlier window's
+  second-to-last word. The two windows time the same word slightly differently,
+  so this often duplicates a word ("the the sound"). It also keeps the earlier
+  window's least reliable last seconds. About 260–280 seam duplicates per
+  9-hour book, and occasional repeated phrases from text Whisper invents at
+  window edges.
+- **Overlap** (`_stitch_transcripts_by_overlap`): places each seam near the
+  middle of the shared 5 s. It cuts at a word both windows transcribed (same
+  text, start times within 1 s) closest to the middle, preferring one inside a
+  run of shared words, and continues with the later window's copy. Without a
+  shared word it cuts by time at the middle, and drops a later-window word that
+  straddles the last kept word. When only one window has words in the shared
+  span, that window's words are kept whole.
+
+On two 10-minute slices of a real audiobook, overlap stitching cut seam
+duplicates from 3 and 12 to 0 and 3 (the remaining 3 are in the text, eg
+"when, when did you"). Leftover transcript tokens fell from 39 to 26 and from
+12 to 1, with no loss of matched book text. Re-transcribing a whole 9-hour book
+cut adjacent duplicate words from 476 to 255, and those at seams from 276 to
+61, close to the rate expected by chance.
+
+### Anchored alignment (default)
+
+`enhance_anchored_alignment.align_phrases_detailed` aligns the whole book
+against the whole transcript in one pass. Section boundaries play no part.
+
+1. **Tokenize** both sides (`tokenize`). Text is casefolded and apostrophes are
+   dropped ("don't" → `dont`). Hyphenated stutter prefixes collapse ("Wh-wh-what"
+   → `what`); whole-word repeats such as "ha-ha" are kept. Other punctuation
+   separates tokens. Runs of three or more of one letter collapse ("Ahhhh" →
+   `ah`). Digits and English ordinals are spelled out *per token* with
+   `num2words` in the book's language ("150" → `one hundred and fifty`), so each
+   transcript token still maps to the Whisper word, and time, it came from.
+2. **Anchor recursively.** In a window, word n-grams (sizes 3, 2, then 1) that
+   occur exactly once on each side are candidates. The longest chain increasing on
+   both sides is kept (LIS), and each gap between anchors is aligned the same way.
+   Text present on only one side becomes a gap, eg narration missing from the
+   EPUB, or EPUB pages that aren't narrated. A chain is used only if it covers at
+   least `MIN_ANCHOR_DENSITY` (10%) of the window's shorter side. A sparser chain
+   is coincidence between unrelated text, and the window is left unaligned.
+3. **Align small windows** (at most `DP_MAX_CELLS` source × transcript tokens)
+   with a word-level edit distance. Exact match costs 0. A fuzzy match costs 0.3:
+   character similarity ≥ 0.75, or for English the same Double Metaphone code,
+   with both tokens at least 3 letters. Two tokens may align with one when they
+   join to it, exactly or fuzzily ("high school" ↔ "highschool", "Arc Ridill" ↔
+   "Arcredil"), but not fuzzily when one part already matches alone.
+   Substitution, insertion, and deletion cost 1. Ties, and a later pass for
+   n-gram anchors, give a source word the *later* of two adjacent identical
+   transcript copies, so a duplicated word never starts a phrase.
+4. **Time phrases.** Each phrase gets one status:
+   - **timed**: at least a third of its tokens matched exactly or fuzzily. A phrase
+     of one or two tokens that only aligned by substitution is also timed,
+     provided its nearest non-interjection neighbours are timed by the first
+     rule (eg "Craeme," heard as "Kramer").
+   - **attached**: interjection-only or non-verbal phrases that didn't truly
+     match (see the judgement call below).
+   - **unmatched**: everything else, `(0.0, 0.0)`.
+
+   A phrase that starts with an unaligned stutter prefix emitted as its own
+   Whisper word ("M-" before "Monica") starts at that prefix.
+
+**Complexity.** Tokenizing and n-gram counting are linear per window, the
+anchor chain is O(A log A), and the edit-distance pass only sees the small
+leftover gaps. On a 12.3k-line, 75k-word book the passes touched about 14k–25k
+cells in total, against 5.6 billion for a full DP; the largest gap was 3.4k
+cells, against `DP_MAX_CELLS` = 20k. Runtime is about 0.7 s per 9-hour book.
+
+Unrelated text never reaches the DP. For a matching book and transcript, the
+top-level anchor chain covers about 95% of the tokens. For a mismatched pair
+(eg the wrong volume's EPUB), every chain covers under 1%, and the density
+check rejects it. Before that check, such a pair spent 147 s filling 11.9M
+cells of junk; now it ends in about 0.2 s with every line unmatched. Text that
+covers more or less than the audio still aligns normally, eg an omnibus EPUB
+for one volume's audio, or audio of two volumes for one volume's text.
+
+As a safety net, total DP work per run is capped at `DP_CELL_BUDGET_PER_TOKEN`
+(10) cells per token of both sides, at least `DP_CELL_BUDGET_MIN`; real books
+use about 0.2. Gaps beyond the budget are left unaligned, with a logged warning.
+
+### Greedy alignment (original)
+
+`enhance_alignment.align_phrases_with_state` goes phrase by phrase. For each
+start position within `max_skip_words` (45, growing after misses up to 250) past
+a cursor, and each length from 0.75× to 1.25×+2 the phrase's word count, it
+scores the joined transcript text against the phrase with character-level
+`difflib`. It takes the best score ≥ 0.7 and commits the cursor there. Per phrase
+the cost is roughly S·n³ for window S and phrase length n, and it re-normalizes
+every candidate word each time: about 4 minutes per 9-hour book.
+
+A placement is never revisited, which causes its failure modes:
+
+- A short or misheard line ("Hwah?!") latches onto a similar later line,
+  skipping and orphaning the real ones.
+- Audio-only narration longer than 250 words (eg a 560-word "characters so far"
+  segment) can't be skipped, so everything after it is orphaned.
+- A wrong placement that scores ≥ 0.7 isn't reported at all.
+
+### Measured on two full audiobooks
+
+| | Book A | Book B |
+| --- | --- | --- |
+| Lines / transcript words | 12,304 / 75,018 | 12,280 / 75,756 |
+| Greedy: runtime, unmatched | ~240 s, 732 | ~220 s, 499 |
+| Anchored: runtime, unmatched | ~0.7 s, 38 | ~0.8 s, 44 |
+| Anchored: attached interjections | 104 | 99 |
+
+Most remaining unmatched lines are one-word false starts that Whisper
+transcribes once ("I— I think" → "I think"); the rest are genuinely missing
+from the audio or are unnarrated EPUB pages. Where both aligners time a line,
+about 98% start within 0.3 s of each other. Spot checks of lines placed 2 s or
+more apart found the greedy placement wrong: derailments onto a similar later
+line, or interjections pinned to an arbitrary word. Smaller differences are
+mostly boundary words around stitching seams.
 
 ## Menu presentation rules
 
@@ -215,6 +378,37 @@ against a stat signature (mtime_ns + size) of every source file; all writers
 use atomic replace, which always bumps mtime, so a mutation cannot slip
 through. Flows call the uncached variant after mutating files, so the cache
 only ever affects labels — never business decisions.
+
+### Interjections are attached to their neighbors, not reported
+
+Whisper usually leaves out "um", "Ahhh", "Heh-heh", and similar sounds, so
+interjection-only lines would otherwise fill the review with noise. The
+anchored aligner attaches a run of such lines (`is_interjection_only`: common
+interjections, repeated syllables, elongated words like "Nooooo!") instead of
+marking it unmatched. Lines with no words at all are treated the same way. The
+run is placed in the pause between the previous line's last word and the next
+line, split evenly, and the previous line's span then ends at its last word. If
+the pause is shorter than 0.1 s, the run gets a zero-length span at the boundary.
+
+Sharing the neighbour's span instead would break the player's assumption that
+playable spans are ordered and non-overlapping. An interjection is timed normally
+when Whisper did transcribe it. A run that also contains an ordinary unmatched
+line stays unmatched as a whole, so the interjection is reviewed alongside it.
+The greedy aligner has no such handling.
+
+### Low-confidence lines are timed and not flagged
+
+A line timed by the anchored aligner may have matched only a third of its
+words, or, if very short, only by substitution between timed neighbours. Such
+lines get their times without any marker or review entry. Their
+`PhraseAlignment` counts are available to diagnostics only.
+
+### False starts stay unmatched
+
+When the text repeats a word that the narrator says once, or that Whisper
+writes once ("I— I think"), the full line gets the word and the one-word
+fragment stays unmatched. Most remaining unmatched lines are of this kind. They
+are not attached like interjections, so they still appear in the review.
 
 ### Stale audio selection is silently dropped
 

@@ -16,13 +16,14 @@ from tts_audiobook_tool.app_types.app_metadata import AppMetadataSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.constants import COL_DEFAULT
+from tts_audiobook_tool import constants_config
+from tts_audiobook_tool.constants import COL_DEFAULT, COL_DIM_ITALICS
 from tts_audiobook_tool.constants_config import (
     ENHANCE_DIALOG_SEGMENTATION,
     ENHANCE_MAX_WORDS_PER_SEGMENT,
     ENHANCE_SEGMENTATION_STRATEGY,
 )
-from tts_audiobook_tool.enhance import enhance_alignment
+from tts_audiobook_tool.enhance import enhance_alignment, enhance_anchored_alignment
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.text_ops.epub_extractor import EpubImportResult
@@ -147,10 +148,48 @@ def align_book(
     book: Book,
     words: list[Word],
 ) -> tuple[list[TimedPhrase], bool]:
+    """
+    Times every flattened phrase of `book` against the transcript. Returns the
+    timed phrases (parallel to the flattened phrases) and whether interrupted.
+    The algorithm is chosen by `ENHANCE_ANCHORED_ALIGNMENT`.
+    """
     flattened = flatten_book(book)
     if not flattened.phrases:
         return [], False
+    if constants_config.ENHANCE_ANCHORED_ALIGNMENT:
+        return _align_book_anchored(book, flattened, words)
+    return _align_book_greedy(flattened, words)
 
+
+def _align_book_anchored(
+    book: Book,
+    flattened: FlattenedEnhanceBook,
+    words: list[Word],
+) -> tuple[list[TimedPhrase], bool]:
+    # One global pass; section boundaries play no part in the alignment
+    Interrupts().set("thinking")
+    try:
+        result = enhance_anchored_alignment.align_phrases_detailed(
+            flattened.phrases, words, book.segmentation_settings.language_code
+        )
+        if result.did_interrupt:
+            return [], True
+        count = len(flattened.phrases)
+        printt(
+            f"{COL_DIM_ITALICS}Aligned {count}/{count} "
+            f"(orphans: {result.unmatched_count}){COL_DEFAULT}"
+        )
+        printt()
+        return result.timed_phrases, False
+    finally:
+        Interrupts().clear()
+
+
+def _align_book_greedy(
+    flattened: FlattenedEnhanceBook,
+    words: list[Word],
+) -> tuple[list[TimedPhrase], bool]:
+    # Aligns section by section, carrying the transcript cursor across sections
     alignment_state = enhance_alignment.AlignmentState()
     timed_phrases: list[TimedPhrase] = []
     Interrupts().set("thinking")

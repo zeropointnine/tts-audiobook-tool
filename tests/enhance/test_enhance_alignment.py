@@ -64,6 +64,71 @@ def test_overlapping_transcript_chunks_are_stitched_without_duplicate_tail() -> 
     assert [item.word for item in result] == ["a", "b", "c", "d"]
 
 
+def timed(start: float, value: str, duration: float = 0.4) -> ConcreteWord:
+    return ConcreteWord(start, start + duration, value, 1.0)
+
+
+def test_overlap_stitch_keeps_one_copy_when_windows_time_a_word_differently() -> None:
+    # Window 1 starts at 25 s and shares 25-30 s with window 0. Both windows
+    # transcribe "c d e" there with slightly different times; the seam is cut
+    # at the shared word nearest the middle (27.5 s), dropping window 0's
+    # cut-off last word. The old stitcher duplicates "e".
+    chunks = [
+        [timed(20.0, "a"), timed(24.0, "b"), timed(26.0, "c"), timed(27.4, "d"), timed(28.6, "e"), timed(29.8, "x")],
+        [timed(26.05, "c"), timed(27.5, "d"), timed(28.7, "e"), timed(29.9, "f"), timed(31.0, "g")],
+    ]
+
+    result = enhance_alignment._stitch_transcripts_by_overlap(chunks, stride=25, overlap=5)
+
+    assert [item.word for item in result] == ["a", "b", "c", "d", "e", "f", "g"]
+    assert result[3].start == 27.5  # the later window's copy of the seam word
+    assert [item.word for item in enhance_alignment._stitch_transcripts(chunks)].count("e") == 2
+
+
+def test_overlap_stitch_cuts_by_time_when_windows_share_no_word() -> None:
+    # The windows disagree throughout the overlap, so the seam is cut at
+    # 27.5 s; the later window's copy of the word straddling the cut is
+    # dropped even though its text differs.
+    chunks = [
+        [timed(20.0, "a"), timed(26.0, "p"), timed(27.3, "lon", 0.6), timed(28.5, "q")],
+        [timed(26.2, "r"), timed(27.55, "long"), timed(28.7, "s"), timed(31.0, "t")],
+    ]
+
+    result = enhance_alignment._stitch_transcripts_by_overlap(chunks, stride=25, overlap=5)
+
+    assert [item.word for item in result] == ["a", "p", "lon", "s", "t"]
+
+
+def test_overlap_stitch_keeps_later_window_whole_when_earlier_is_silent_in_overlap() -> None:
+    # Window 0 has nothing in 25-30 s and window 1 is empty, so no word in the
+    # later windows' overlaps may be dropped by a middle cut.
+    chunks = [
+        [timed(10.0, "a"), timed(20.0, "b")],
+        [timed(26.0, "c"), timed(29.0, "d")],
+        [],
+        [timed(76.0, "e")],
+    ]
+
+    result = enhance_alignment._stitch_transcripts_by_overlap(chunks, stride=25, overlap=5)
+
+    assert [item.word for item in result] == ["a", "b", "c", "d", "e"]
+
+
+@pytest.mark.parametrize(("overlap_stitching", "expected"), [(True, ["a", "b", "c"]), (False, ["a", "b", "b", "c"])])
+def test_stitching_flag_selects_stitcher(monkeypatch, overlap_stitching, expected) -> None:
+    chunks = [
+        [timed(20.0, "a"), timed(27.0, "b"), timed(29.7, "x")],
+        [timed(25.2, "q"), timed(27.2, "b"), timed(31.0, "c")],
+    ]
+    monkeypatch.setattr(enhance_alignment, "_transcribe_stream_with_overlap", lambda *_args: chunks)
+    monkeypatch.setattr(enhance_alignment.constants_config, "ENHANCE_OVERLAP_STITCHING", overlap_stitching)
+
+    words = enhance_alignment.transcribe_to_words("book.mp3", object(), "en")  # type: ignore[arg-type]
+
+    assert words is not None
+    assert [item.word for item in words] == expected
+
+
 @pytest.mark.parametrize(("language_code", "expected_language"), [("es", "es"), ("", None)])
 @pytest.mark.parametrize(
     ("preferred_variant", "expected_id"),

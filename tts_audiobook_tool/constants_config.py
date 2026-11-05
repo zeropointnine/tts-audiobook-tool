@@ -61,6 +61,16 @@ ENHANCE_SEGMENTATION_STRATEGY = SegmentationStrategy.SENTENCE_PLUS
 ENHANCE_MAX_WORDS_PER_SEGMENT = 60
 ENHANCE_DIALOG_SEGMENTATION = False
 
+# Enhance-flow feature flags; both versions are kept, switchable here, for A/B
+# testing. See docs-dev/enhance-audiobook-flow.md ("Forced alignment").
+# True: global anchored alignment (enhance_anchored_alignment).
+# False: original greedy per-phrase cursor alignment.
+ENHANCE_ANCHORED_ALIGNMENT = True
+# True: join overlapping transcription windows at a word both share near the
+# middle of their overlap. False: original timestamp-threshold join.
+# Applies when transcribing; the transcription cache stores stitched words.
+ENHANCE_OVERLAP_STITCHING = True
+
 PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION = 1.0
 SILENCE_GAP_DURATION_MIN = 0.0
 SILENCE_GAP_DURATION_MAX = 2.0

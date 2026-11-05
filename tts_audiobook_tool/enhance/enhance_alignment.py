@@ -15,6 +15,7 @@ import logging
 import time
 import numpy as np
 import difflib
+from tts_audiobook_tool import constants_config
 from tts_audiobook_tool.app_types import ConcreteWord, SttVariant, Word
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
@@ -281,15 +282,28 @@ def transcribe_to_words(path: str, prefs: Prefs, language_code: str) -> list[Wor
     list_of_lists = _transcribe_stream_with_overlap(path, prefs, language_code)
     if list_of_lists is None:
         return None
-    words_list = _stitch_transcripts(list_of_lists)
-    return words_list
+    if constants_config.ENHANCE_OVERLAP_STITCHING:
+        return _stitch_transcripts_by_overlap(
+            list_of_lists,
+            stride=TRANSCRIBE_CHUNK_SECONDS - TRANSCRIBE_OVERLAP_SECONDS,
+            overlap=TRANSCRIBE_OVERLAP_SECONDS,
+        )
+    return _stitch_transcripts(list_of_lists)
+
+
+# Transcription windows: each window is TRANSCRIBE_CHUNK_SECONDS long and
+# shares TRANSCRIBE_OVERLAP_SECONDS with the previous one
+TRANSCRIBE_CHUNK_SECONDS = 30
+TRANSCRIBE_OVERLAP_SECONDS = 5
 
 
 def _transcribe_stream_with_overlap(
     path: str, prefs: Prefs, language_code: str
 ) -> list[list[Word]] | None:
-    CHUNK_DURATION = 30
-    OVERLAP_DURATION = 5
+    """
+    Returns one word list per window, with times relative to the whole file
+    (window i starts at i * (chunk - overlap) seconds); None if interrupted.
+    """
 
     stt_variant = getattr(prefs, "stt_variant", None) or SttVariant.LARGE_V3
     language = language_code or None
@@ -307,7 +321,7 @@ def _transcribe_stream_with_overlap(
     log = logging.getLogger("tts-audiobook-tool")
     log.info(
         "[stt] starting chunked transcription: %s (model=%s, chunk=%ss, overlap=%ss)",
-        path, stt_variant.id, CHUNK_DURATION, OVERLAP_DURATION,
+        path, stt_variant.id, TRANSCRIBE_CHUNK_SECONDS, TRANSCRIBE_OVERLAP_SECONDS,
     )
     previous_iteration_started_at: float | None = None
     previous_iteration_finished_at: float | None = None
@@ -346,8 +360,8 @@ def _transcribe_stream_with_overlap(
         for i, chunk in enumerate(
             _stream_audio_with_overlap(
                 file_path=path,
-                chunk_duration=CHUNK_DURATION,
-                overlap_duration=OVERLAP_DURATION,
+                chunk_duration=TRANSCRIBE_CHUNK_SECONDS,
+                overlap_duration=TRANSCRIBE_OVERLAP_SECONDS,
                 cancel_check=lambda: Interrupts().did_interrupt,
             )
         ):
@@ -446,7 +460,7 @@ def _transcribe_stream_with_overlap(
                 i, previous_iteration_finished_at - iteration_started_at, len(updated_words),
             )
 
-            time_offset += CHUNK_DURATION - OVERLAP_DURATION
+            time_offset += TRANSCRIBE_CHUNK_SECONDS - TRANSCRIBE_OVERLAP_SECONDS
 
         # The chunk stream stops on its own when a cancellation is noticed
         # while it is reading the next chunk, which ends this loop without the
@@ -549,6 +563,11 @@ def _stitch_transcripts(
     chunks: List[List[Word]],
     time_similarity_threshold: float = 0.01
     ) -> List[Word]:
+    """
+    Original stitcher, kept for ENHANCE_OVERLAP_STITCHING = False: drops the
+    earlier window's last word and appends the later window's words starting
+    after the earlier window's second-to-last word.
+    """
     final_words: List[Word] = []
 
     if not chunks:
@@ -597,6 +616,99 @@ def _stitch_transcripts(
             final_words.extend(lst)
 
     return final_words
+
+
+# Two windows' timestamps for the same word may differ by up to this much
+STITCH_MAX_SHIFT_SECONDS = 1.0
+# A later-window word starting this close before the end of the last kept
+# earlier-window word is taken to be the same word
+STITCH_STRADDLE_TOLERANCE_SECONDS = 0.05
+
+
+def _stitch_transcripts_by_overlap(
+    chunks: List[List[Word]],
+    stride: float,
+    overlap: float,
+) -> List[Word]:
+    """
+    Joins per-window word lists (absolute times) into one word stream. Window
+    i starts at i * stride and shares `overlap` seconds with window i - 1.
+
+    Each seam is placed near the middle of the shared span, away from both
+    windows' unreliable edges (a word cut off at the end of the earlier window,
+    missing context at the start of the later one): at a word both windows
+    transcribed (same text, nearly the same time) closest to the middle,
+    preferring one inside a run of shared words. Failing that, the seam is cut
+    by time at the middle, dropping the later window's copy of a word that
+    straddles it. (Replaces `_stitch_transcripts`, whose timestamp threshold
+    duplicates a word whenever the two windows time it differently.)
+    """
+    result: List[Word] = []
+    for index, chunk in enumerate(chunks):
+        if not chunk:
+            continue
+        if not result:
+            result.extend(chunk)
+            continue
+        overlap_start = index * stride
+        overlap_end = overlap_start + overlap
+        middle = overlap_start + overlap / 2
+
+        tail_from = len(result)
+        while tail_from > 0 and result[tail_from - 1].start >= overlap_start - STITCH_MAX_SHIFT_SECONDS:
+            tail_from -= 1
+        head_to = 0
+        while head_to < len(chunk) and chunk[head_to].start <= overlap_end + STITCH_MAX_SHIFT_SECONDS:
+            head_to += 1
+
+        seam = _find_shared_word(result[tail_from:], chunk[:head_to], middle)
+        if seam is not None:
+            tail_index, head_index = seam
+            del result[tail_from + tail_index:]
+            result.extend(chunk[head_index:])
+            continue
+
+        # No shared word: cut by time. When only one window has words in the
+        # shared span, that window's words are kept whole.
+        if not any(word.start >= overlap_start for word in result[tail_from:]):
+            cut = overlap_start
+        elif not any(word.start <= overlap_end for word in chunk[:head_to]):
+            cut = overlap_end
+        else:
+            cut = middle
+        while result and result[-1].start >= cut:
+            result.pop()
+        floor = cut
+        if result:
+            floor = max(cut, result[-1].end - STITCH_STRADDLE_TOLERANCE_SECONDS)
+        result.extend(word for word in chunk if word.start >= floor)
+    return result
+
+
+def _find_shared_word(
+    tail: List[Word], head: List[Word], middle: float
+) -> tuple[int, int] | None:
+    """
+    Indices (into `tail`, into `head`) of the word both windows transcribed
+    that is best for a seam, or None.
+    """
+    tail_keys = [normalize_text(word.word) for word in tail]
+    head_keys = [normalize_text(word.word) for word in head]
+    matcher = difflib.SequenceMatcher(None, tail_keys, head_keys, autojunk=False)
+    best: tuple[int, int] | None = None
+    best_rank: tuple[bool, float] | None = None
+    for block in matcher.get_matching_blocks():
+        for offset in range(block.size):
+            tail_index, head_index = block.a + offset, block.b + offset
+            if not tail_keys[tail_index]:
+                continue
+            tail_word, head_word = tail[tail_index], head[head_index]
+            if abs(tail_word.start - head_word.start) > STITCH_MAX_SHIFT_SECONDS:
+                continue
+            rank = (block.size < 2, abs((tail_word.start + head_word.start) / 2 - middle))
+            if best_rank is None or rank < best_rank:
+                best, best_rank = (tail_index, head_index), rank
+    return best
 
 
 class MatchInfo(NamedTuple):
