@@ -12,6 +12,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.app_types.voice import Voice
+from tts_audiobook_tool.tts_models import omnivoice_model
 from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
 from voice_cache_test_support import cache_key_prefix, write_voice_file
 
@@ -19,6 +20,7 @@ from voice_cache_test_support import cache_key_prefix, write_voice_file
 class FakeOmniVoice:
     def __init__(self):
         self.create_calls: list[tuple] = []
+        self.create_inference_mode: list[bool] = []
         self.created_prompts: list[VoiceClonePrompt] = []
         self.generate_calls: list[dict] = []
         self.cpu_calls = 0
@@ -40,6 +42,7 @@ class FakeOmniVoice:
 
     def create_voice_clone_prompt(self, ref_audio: str, ref_text: str | None) -> VoiceClonePrompt:
         self.create_calls.append((ref_audio, ref_text))
+        self.create_inference_mode.append(torch.is_inference_mode_enabled())
         # Float dtype on purpose: the real prompt carries float tokens, and
         # float tensors (unlike int ones) can hold gradients, which the
         # CPU-cloning step must strip
@@ -120,6 +123,43 @@ def test_omnivoice_reuses_voice_clone_prompt_for_a_b_a(tmp_path):
 
     # Generation consumed the cached object directly (identity)
     assert model._model.generate_calls[-1]["voice_clone_prompt"] is cached_a
+
+
+def test_omnivoice_creates_voice_clone_prompt_under_inference_mode(tmp_path):
+    # The library method records an autograd graph unless the caller disables
+    # it (testx/omnivoice_clone_prompt_vram.py)
+    voice_path = tmp_path / "voice.wav"
+    write_voice_file(voice_path, b"x")
+    model = make_model()
+
+    assert isinstance(generate_clone(model, str(voice_path), "words"), list)
+
+    assert model._model.create_inference_mode == [True]
+    # Cloned outside inference_mode, so the cached tokens are ordinary tensors
+    cached: VoiceClonePrompt = next(iter(model._voice_clone_cache.values()))
+    assert not cached.ref_audio_tokens.is_inference()
+
+
+@pytest.mark.parametrize(
+    "cuda_available, reserved_gib, allocated_gib, expect_empty",
+    [
+        (False, 8.0, 2.0, False),   # no CUDA: no-op
+        (True, 2.5, 2.0, False),    # small cache: kept for reuse
+        (True, 3.0, 2.0, False),    # exactly 1 GiB slack: kept
+        (True, 7.0, 2.0, True),     # large transient peak: released
+    ],
+)
+def test_release_cached_vram_if_large(monkeypatch, cuda_available, reserved_gib, allocated_gib, expect_empty):
+    gib = 1024**3
+    calls: list[str] = []
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: cuda_available)
+    monkeypatch.setattr(torch.cuda, "memory_reserved", lambda *a, **k: int(reserved_gib * gib))
+    monkeypatch.setattr(torch.cuda, "memory_allocated", lambda *a, **k: int(allocated_gib * gib))
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: calls.append("empty"))
+
+    omnivoice_model._release_cached_vram_if_large()
+
+    assert calls == (["empty"] if expect_empty else [])
 
 
 def test_omnivoice_rebuilds_on_transcript_and_file_change(tmp_path):
