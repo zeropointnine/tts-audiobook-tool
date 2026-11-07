@@ -14,7 +14,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-    "pytest"
+    "pytest",
+    "pytest-xdist",
 ]
 
 [tool.setuptools.packages.find]

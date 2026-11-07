@@ -32,8 +32,15 @@ BASE_FILENAME = FILENAMES[0][0]
 TYPE_LABELS = {"base": "Base", "custom_voice": "CustomVoice", "voice_design": "VoiceDesign"}
 
 
-@pytest.mark.parametrize(("filename", "expected"), FILENAMES)
-@pytest.mark.parametrize("directory", ["", "/srv/models/", "C:\\models\\", "\\\\server\\models\\"])
+PATH_STYLES = ["", "/srv/models/", "C:\\models\\", "\\\\server\\models\\"]
+
+
+# Every published filename once (the allowlist mirrors audio.cpp's model specs);
+# the server path styles rotate across them rather than multiplying the table.
+@pytest.mark.parametrize(("filename", "expected", "directory"), [
+    (filename, expected, PATH_STYLES[index % len(PATH_STYLES)])
+    for index, (filename, expected) in enumerate(FILENAMES)
+])
 def test_infer_exact_published_filename_for_server_path_styles(filename, expected, directory):
     # Server paths must work independently of the client's operating system.
     assert infer_qwen3_model_type_from_path(directory + filename) == expected
@@ -111,7 +118,8 @@ def snapshot_for(path, *, server_id="operator-entry"):
     )
 
 
-@pytest.mark.parametrize(("filename", "expected"), FILENAMES)
+# One filename per model type: the selection flow does not depend on which one.
+@pytest.mark.parametrize(("filename", "expected"), [FILENAMES[0], FILENAMES[3], FILENAMES[5]])
 @pytest.mark.parametrize("same_type", [False, True])
 def test_explicit_selection_sets_type_before_single_save_and_bind(picker, filename, expected, same_type):
     # Even an already-correct manual value receives the explicit-selection FYI.

@@ -7,10 +7,12 @@ from typing import cast
 import pytest
 from textual.widgets import Input, Static
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import ConsoleOutput
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import worker_app as worker_app_module
+from tts_audiobook_tool.textual import worker_session
 from tts_audiobook_tool.textual.generation_app import GenerationApp, GenerationTranscript
 from tts_audiobook_tool.textual.real_time_playback_app import RealTimePlaybackApp
 from tts_audiobook_tool.textual.worker_content import WorkerLogContentArea
@@ -44,11 +46,26 @@ def session(request, monkeypatch):
     return app, cancellations, resets
 
 
-def test_escape_cancels_then_resets_but_ctrl_c_does_neither(session) -> None:
+def hotkey_text(app) -> str:
+    hotkey_id = "#realtime-hotkey" if isinstance(app, RealTimePlaybackApp) else "#generation-hotkey"
+    return str(app.query_one(hotkey_id, Static).render())
+
+
+def log_document(app) -> str:
+    return "\n".join(app.query_one(WorkerLogContentArea).worker_log.line_texts())
+
+
+def test_escape_cancels_then_resets_but_ctrl_c_does_neither(session, monkeypatch, tmp_path) -> None:
+    # The full cancel -> hard-reset ladder, for each host app: the first ESC
+    # requests a cooperative cancel, the second resets the worker at once
+    # (no confirmation dialog), and the reset summary links the worker log.
     app, cancellations, resets = session
+    log_path = str(tmp_path / "worker log.log")  # a path with a space must still link
+    monkeypatch.setattr(worker_session, "make_worker_log_file_path", lambda: log_path)
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
+            assert "[ESC] to interrupt" in hotkey_text(app)
             await pilot.press("ctrl+c")
             assert cancellations == []
             assert app.is_running
@@ -58,12 +75,9 @@ def test_escape_cancels_then_resets_but_ctrl_c_does_neither(session) -> None:
             assert cancellations == ["job"]
             assert app.cancel_requested
             assert resets == []
-            hotkey = app.query_one("#realtime-hotkey" if isinstance(app, RealTimePlaybackApp)
-                                   else "#generation-hotkey", Static)
-            assert "[ESC] to kill process" in str(hotkey.render())
-            document = "\n".join(app.query_one(WorkerLogContentArea).worker_log.line_texts())
-            assert "[ESC] again to hard-reset" in document
-            assert "CTRL-C" not in document
+            assert "[ESC] to kill process" in hotkey_text(app)
+            assert "[ESC] again to hard-reset" in log_document(app)
+            assert "CTRL-C" not in log_document(app)
 
             await pilot.press("ctrl+c")
             assert resets == []
@@ -72,7 +86,40 @@ def test_escape_cancels_then_resets_but_ctrl_c_does_neither(session) -> None:
             await pilot.pause()
             assert cancellations == ["job"]
             assert resets == [True]
-            assert app.terminal_result.hard_reset_cause is HardResetCause.USER_ESCALATION
+            assert len(app.screen_stack) == 1
+            result = app.terminal_result
+            assert result.status.name == "WORKER_RESET"
+            assert result.hard_reset_cause is HardResetCause.USER_ESCALATION
+            assert f"Worker log: {text_util.make_terminal_hyperlink(log_path, is_file=True)}" in result.message
+            # Once stopped, the prompt moves on to ENTER (continue/finish).
+            assert "[ENTER] to" in hotkey_text(app)
+
+    asyncio.run(exercise())
+
+
+def test_remote_mode_escape_cancels_without_offering_hard_reset(session, monkeypatch) -> None:
+    # A remote (SGL-Omni) worker holds no local model memory, so the hard reset
+    # is not offered: ESC only requests a cancel and further presses do nothing.
+    app, cancellations, resets = session
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("escape")
+            assert cancellations == ["job"]
+            assert app.cancel_requested
+            assert "Cancellation requested" in log_document(app)
+            assert "hard-reset" not in log_document(app)
+            assert "kill process" not in hotkey_text(app)
+            assert "Waiting for the current generation to stop" in hotkey_text(app)
+
+            await pilot.press("escape", "escape")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert cancellations == ["job"]
+            assert resets == []
+            assert not app.reset_in_progress
+            assert app.terminal_result is None
 
     asyncio.run(exercise())
 

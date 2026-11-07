@@ -227,13 +227,16 @@ def test_seed_uses_existing_uint32_random_fixed_and_caller_cap(
     assert draws == ([] if draw_stop is None else [draw_stop])
 
 
+DELAY_SEED_CAP = TtsModelType.require_by_id(IDS[0]).value.max_random_seed
+
+
 @pytest.mark.parametrize("stored_seed,force_random,caller_cap,expected,draw_stop", [
-    (-1, False, -1, 2147483647, 2147483648),
-    (-1, False, 2**32 - 1, 2147483647, 2147483648),
-    (2**32 - 1, True, -1, 2147483647, 2147483648),
+    (-1, False, -1, DELAY_SEED_CAP, DELAY_SEED_CAP + 1),
+    (-1, False, 2**32 - 1, DELAY_SEED_CAP, DELAY_SEED_CAP + 1),
+    (2**32 - 1, True, -1, DELAY_SEED_CAP, DELAY_SEED_CAP + 1),
     (-1, False, 7, 7, 8),
     (-1, False, 0, 0, 1),
-    (2147483647, False, -1, 2147483647, None),
+    (DELAY_SEED_CAP, False, -1, DELAY_SEED_CAP, None),
     (123, False, 7, 123, None),
 ])
 def test_delay_random_seed_int32_cap_reaches_payload_through_dispatch(
@@ -258,7 +261,7 @@ def test_delay_random_seed_int32_cap_reaches_payload_through_dispatch(
     assert not isinstance(result, str)
     assert draws == ([] if draw_stop is None else [draw_stop])
     assert [payload["seed"] for payload in capture] == [expected, expected]
-    assert all(0 <= payload["seed"] <= 2147483647 for payload in capture)
+    assert all(0 <= payload["seed"] <= 2**31 - 1 for payload in capture)  # the server parses int32
     assert all("max_random_seed" not in payload for payload in capture)
     assert project.get_model_setting(model_id, "seed") == stored_seed
 

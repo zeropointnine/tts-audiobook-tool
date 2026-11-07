@@ -30,7 +30,7 @@ def make_project(tmp_path):
 @pytest.mark.parametrize("lines, expected", [
     ([0, 4, 0], [0]),
     ([1, 3], [1, 3]),
-    ([4, 5], [0, 3]),
+    ([4, 5], [0]),  # invalid assignments (-1, 99) both fall back to voice 0, as inference does
     (None, [0]),
     ([], []),
 ])

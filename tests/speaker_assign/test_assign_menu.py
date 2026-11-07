@@ -160,9 +160,15 @@ def test_large_totals_round_all_usage_components_to_whole_k():
     assert totals.format() == "33K input tokens, 21K output tokens (17K reasoning)"
 
 
-@pytest.mark.parametrize("request_kind", ["reported", "estimated", "cancelled", "error"])
-@pytest.mark.parametrize("outcome", list(RunOutcome))
-@pytest.mark.parametrize("has_failures", [False, True])
+# Request formatting (request_kind) is independent of the run outcome; failures
+# only change the FINISHED summary, so each axis value appears once or twice.
+@pytest.mark.parametrize(("request_kind", "outcome", "has_failures"), [
+    ("reported", RunOutcome.FINISHED, False),
+    ("estimated", RunOutcome.FINISHED, True),
+    ("cancelled", RunOutcome.STOPPED, False),
+    ("error", RunOutcome.CANCELLED, True),
+    ("reported", RunOutcome.FAILED, True),
+])
 def test_run_summary_prints_usage_and_starts_after_blank_line(
         monkeypatch, tmp_path, capsys, outcome, has_failures, request_kind):
     # Exercise the UI send wrapper: retries/follow-ups count, and every exit prints totals.

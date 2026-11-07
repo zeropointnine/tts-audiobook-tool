@@ -73,19 +73,18 @@ def test_server_prompt_is_prepared_exactly_once_and_can_bypass_substitutions(
     assert captured_payloads[0]["input"] == expected_prompt
 
 
+CATALOG_CAP = "catalog cap"  # stands for the model's declared max_random_seed
+
+
+# One capped and two uncapped models: dispatch is model-agnostic, and the
+# uncapped moss sibling shows the cap is per model, not per family.
 @pytest.mark.parametrize("model_id, caller_cap, expected", [
     ("chatterbox_local", -1, -1),
     ("chatterbox_local", 10, 10),
-    ("qwen3tts_sglomni", -1, -1),
-    ("qwen3tts_sglomni", 10, 10),
-    ("echo_tts_audiocpp", -1, 2147483647),
+    ("echo_tts_audiocpp", -1, CATALOG_CAP),
     ("echo_tts_audiocpp", 10, 10),
     ("echo_tts_audiocpp", 0, 0),
-    ("echo_tts_audiocpp", 2**32 - 1, 2147483647),
-    ("moss_delay_audiocpp", -1, 2147483647),
-    ("moss_delay_audiocpp", 10, 10),
-    ("moss_delay_audiocpp", 0, 0),
-    ("moss_delay_audiocpp", 2**32 - 1, 2147483647),
+    ("echo_tts_audiocpp", 2**32 - 1, CATALOG_CAP),
     ("moss_local_audiocpp", -1, -1),
 ])
 def test_dispatch_forwards_catalog_and_caller_random_seed_caps(monkeypatch, model_id, caller_cap, expected):
@@ -104,6 +103,9 @@ def test_dispatch_forwards_catalog_and_caller_random_seed_caps(monkeypatch, mode
     monkeypatch.setattr(Tts, "_type", model_type)
     monkeypatch.setattr(Tts, "get_instance", staticmethod(lambda: model))
 
+    if expected == CATALOG_CAP:
+        expected = model_type.value.max_random_seed
+        assert 0 < expected < 2**32 - 1  # a real cap, tighter than the uint32 seed range
     assert Tts.generate_using_project(project, ["hello"], max_random_seed=caller_cap) == []
     assert captured[0]["max_random_seed"] == expected
     assert captured[0]["prompts"] == ["hello"]

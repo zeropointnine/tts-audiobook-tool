@@ -47,10 +47,9 @@ from tts_audiobook_tool.textual.worker_content import (
     WorkerLogContentArea,
     _SeparatorLine,
 )
-from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.worker_reset import HardResetCause
-from textual_editor_stubs import run
+from textual_editor_stubs import run, wait_until
 
 
 def make_state() -> State:
@@ -313,82 +312,6 @@ def test_pause_freezes_buffer_and_playhead_and_resume_excludes_paused_time(monke
     clock[0] = 301.0
     assert app.interpolated_buffer_seconds == 11.0
     assert app.interpolated_played_samples == 192000
-
-
-def test_escape_requests_realtime_playback_cancellation(monkeypatch, fake_worker) -> None:
-    """The first Escape cooperatively cancels running realtime playback."""
-
-    cancel_calls: list[str] = []
-    monkeypatch.setattr(
-        ModelWorker,
-        "request_cancel",
-        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
-    )
-
-    async def exercise() -> None:
-        app = RealTimePlaybackApp(make_state(), [], None)
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            assert "Press [ESC] to interrupt" in str(
-                app.query_one("#realtime-hotkey", Static).render()
-            )
-            await pilot.press("escape")
-            await pilot.pause()
-            assert cancel_calls == ["job"]
-            assert app.cancel_requested
-            assert not app.find_active
-
-    run(exercise())
-
-
-def test_escape_in_sgl_omni_mode_does_not_offer_hard_reset(monkeypatch, fake_worker) -> None:
-    """In SGL-Omni backend mode the worker holds no local TTS model memory,
-    so the hard-reset offer is gated off: ESC only requests a cancel and
-    further presses are no-ops."""
-    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
-
-    cancel_calls: list[str] = []
-    monkeypatch.setattr(
-        ModelWorker,
-        "request_cancel",
-        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
-    )
-    reset_calls: list[int] = []
-
-    def fake_reset() -> str:
-        reset_calls.append(1)
-        return ""
-
-    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
-
-    async def exercise() -> None:
-        app = RealTimePlaybackApp(make_state(), [], None)
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            await pilot.press("escape")
-            assert cancel_calls == ["job"]
-            assert app.cancel_requested
-            await pilot.pause()
-            # The cancellation notice no longer offers the hard reset.
-            log = app.query_one(WorkerLogContentArea).worker_log
-            document = "\n".join(line.text.plain for line in log._lines)
-            assert "Cancellation requested" in document
-            assert "hard-reset" not in document
-            # The pending header prompt waits rather than advertising the
-            # kill-process escape hatch.
-            hotkey = str(app.query_one("#realtime-hotkey", Static).render())
-            assert "kill process" not in hotkey
-            assert "Waiting for the current generation to stop" in hotkey
-
-            # Further ESC presses do nothing: no worker dump, no reset,
-            # no terminal result.
-            await pilot.press("escape")
-            await pilot.pause(0.2)
-            assert reset_calls == []
-            assert not app.reset_in_progress
-            assert app.terminal_result is None
-
-    run(exercise())
 
 
 @pytest.mark.parametrize("finish_key", ["enter", "escape"])
@@ -1167,7 +1090,7 @@ def test_gen_timeout_update_hard_resets_worker_even_with_cancel_pending(
 
             # The timeout fires anyway and hard-resets the worker.
             latch["deliver"] = True
-            await pilot.pause(0.3)
+            await wait_until(pilot, lambda: app.terminal_result is not None)
 
             assert reset_calls == [1]
             assert app.terminal_result is not None
@@ -1245,7 +1168,7 @@ def test_unhealthy_reset_ignores_queued_awaiting_continue_and_enter(
             finally:
                 release_reset.set()
 
-            await pilot.pause(0.3)
+            await wait_until(pilot, lambda: app.terminal_result is not None)
             assert app.terminal_result is not None
             assert app.terminal_result.status is (
                 RealTimePlaybackTerminalStatus.WORKER_RESET

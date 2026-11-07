@@ -45,7 +45,7 @@ from tts_audiobook_tool.textual.word_substitutions_dialog import (
     WordSubstitutionsDialog,
 )
 
-from textual_editor_stubs import run
+from textual_editor_stubs import run, wait_until
 
 
 @dataclass
@@ -409,7 +409,7 @@ def test_pressing_q_previews_in_place_with_unsaved_staged_state() -> None:
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("q")
-            await pilot.pause(0.3)
+            await wait_until(pilot, lambda: isinstance(app.screen, QuickGenModal) and app.screen.terminal_result is not None)
             assert isinstance(app.screen, QuickGenModal)
             assert app.is_running is True
             assert app.staged == {"apple": "ay", "zebra": "z"}
@@ -447,7 +447,7 @@ def test_preview_preflight_problems_show_in_modal_and_do_not_submit() -> None:
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("q")
-            await pilot.pause(0.2)
+            await wait_until(pilot, lambda: isinstance(app.screen, QuickGenModal) and app.screen.terminal_result is not None)
             assert isinstance(app.screen, QuickGenModal)
 
             await pilot.press("q")
@@ -484,7 +484,8 @@ def test_completed_preview_autoplays_in_memory_sound() -> None:
         ):
             async with app.run_test() as pilot:
                 await pilot.press("down", "q")
-                await pilot.pause(0.6)
+                # The clean preview auto-dismisses, then plays.
+                await wait_until(pilot, lambda: play.called and not isinstance(app.screen, QuickGenModal))
                 assert not isinstance(app.screen, QuickGenModal)
                 assert app.selected_index == 1
                 played = play.call_args.args[0]
@@ -566,7 +567,7 @@ def test_preview_shapes_playback_with_project_settings() -> None:
         ):
             async with app.run_test() as pilot:
                 await pilot.press("q")
-                await pilot.pause(0.6)
+                await wait_until(pilot, lambda: play.called)
                 prepare.assert_called_once_with(
                     sound,
                     high_shelf=HighShelfEq.MODERATE,

@@ -36,7 +36,7 @@ from tts_audiobook_tool.textual.quick_gen_modal import (
 )
 from tts_audiobook_tool.textual.worker_content import WorkerLogContentArea
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from textual_editor_stubs import run
+from textual_editor_stubs import run, wait_until
 
 
 class HostApp(App[None]):
@@ -88,6 +88,16 @@ def header_text(modal: QuickGenModal) -> str:
     )
 
 
+async def settle(pilot, app: App, modal: QuickGenModal) -> None:
+    """Waits past the terminal-summary settle timer (or a threaded reset) for
+    the terminal result and, when it auto-exits, for the dismissal."""
+    await wait_until(
+        pilot,
+        lambda: modal.terminal_result is not None and not (modal.auto_exit and modal in app.screen_stack),
+        what="quick-gen terminal result",
+    )
+
+
 def test_clean_success_dismisses_immediately(monkeypatch) -> None:
     # A cleanly completed job closes the modal with no review step.
     feed_events(monkeypatch, [[GenerationFinished("job", GenerationTerminalStatus.COMPLETED, "")]])
@@ -101,7 +111,7 @@ def test_clean_success_dismisses_immediately(monkeypatch) -> None:
             assert "Quick generate - line 3" in header_text(modal)
             assert "to cancel" in header_text(modal)
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
             assert len(app.results) == 1
             assert app.results[0] is not None and app.results[0].completed_cleanly
             assert len(app.screen_stack) == 1
@@ -121,7 +131,7 @@ def test_preview_success_returns_sound(monkeypatch) -> None:
             app.push_screen(modal, app.results.append)
             await pilot.pause()
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
 
     run(exercise())
     assert app.results[0] is not None and app.results[0].sound is sound
@@ -141,7 +151,7 @@ def test_failure_stays_open_until_escape(monkeypatch) -> None:
             app.push_screen(modal, app.results.append)
             await pilot.pause()
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
             assert app.results == []
             assert len(app.screen_stack) == 2
             assert "some worker output" in log_text(modal)
@@ -174,7 +184,7 @@ def test_completed_with_word_errors_stays_open(monkeypatch) -> None:
             app.push_screen(modal, app.results.append)
             await pilot.pause()
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
             assert app.results == []
             await pilot.press("enter")
             await pilot.pause()
@@ -200,7 +210,7 @@ def test_preflight_problems_are_listed_and_nothing_is_submitted(monkeypatch) -> 
     async def exercise() -> None:
         async with app.run_test(size=(100, 30)) as pilot:
             app.push_screen(modal, app.results.append)
-            await pilot.pause(0.3)
+            await wait_until(pilot, lambda: "Voice file a.wav not found" in log_text(modal))
             text = log_text(modal)
             assert "Voice file a.wav not found" in text
             assert "Voice file b.wav has no transcript" in text
@@ -257,7 +267,7 @@ def test_watchdog_timeout_hard_resets_worker_and_waits_for_review(monkeypatch) -
             await pilot.pause()
             delivered["on"] = True
             modal._drain_worker_events()
-            await pilot.pause(0.5)
+            await settle(pilot, app, modal)
             assert resets == [1]
             assert modal.terminal_result is not None
             assert modal.terminal_result.status is GenerationTerminalStatus.WORKER_RESET
@@ -300,7 +310,7 @@ def test_late_updates_do_not_preempt_a_reset_in_progress(monkeypatch) -> None:
             modal._drain_worker_events()
             assert modal.reset_in_progress is True
             modal._drain_worker_events()
-            await pilot.pause(0.5)
+            await settle(pilot, app, modal)
             assert resets == [1]
             assert modal.terminal_result.hard_reset_cause is HardResetCause.GENERATION_TIMEOUT
 
@@ -353,8 +363,7 @@ def test_job_height_sets_dialog_height(monkeypatch) -> None:
     async def exercise() -> None:
         async with app.run_test(size=(100, 40)) as pilot:
             app.push_screen(modal, app.results.append)
-            await pilot.pause(0.3)
-            assert modal.query_one("#quick-gen-dialog").region.height == 16
+            await wait_until(pilot, lambda: modal.query_one("#quick-gen-dialog").region.height == 16)
 
     run(exercise())
 
@@ -369,7 +378,7 @@ def test_status_is_right_justified_on_the_title_row(monkeypatch) -> None:
     async def exercise() -> None:
         async with app.run_test(size=(100, 30)) as pilot:
             app.push_screen(modal, app.results.append)
-            await pilot.pause(0.3)
+            await wait_until(pilot, lambda: "Status:" in str(modal.query_one("#quick-gen-status", Static).render()))
             title = modal.query_one("#quick-gen-title", Static)
             status = modal.query_one("#quick-gen-status", Static)
             header = modal.query_one("#quick-gen-header")
@@ -448,7 +457,7 @@ def test_abnormal_exit_after_terminal_event_reconciles_without_reset(monkeypatch
             app.push_screen(modal, app.results.append)
             await pilot.pause()
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
             await pilot.press("ctrl+p", "q", "u", "i", "t", "enter")
             await pilot.pause()
 
@@ -475,7 +484,7 @@ def test_normal_dismissal_leaves_reconciliation_to_editor(monkeypatch) -> None:
             app.push_screen(modal, app.results.append)
             await pilot.pause()
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
 
     run(exercise())
     assert len(app.results) == 1
@@ -552,7 +561,7 @@ def test_exit_during_reset_finishes_existing_reset_once(monkeypatch) -> None:
     [
         ("generation", 1, [0], 0),
         ("generation", 0, [1], 1),
-        ("generation", 2, [2], 1),
+        ("generation", 2, [0], 0),  # invalid assignment 99 falls back to voice 0
         ("preview", None, [0], 0),
     ],
 )
@@ -575,7 +584,7 @@ def test_quick_job_preflight_checks_only_job_voices(
             Voice(),
             Voice(file_name="missing.flac", transcript="Missing file."),
         ],
-        # Selected line 1 is not line 0; the final assignment must clamp.
+        # Selected line 1 is not line 0; the final (invalid) assignment falls back to voice 0.
         phrase_groups=[SimpleNamespace(voice_index=index) for index in (1, 0, 99)],
     )
     monkeypatch.setattr(quick_gen_module.readiness, "get_run_blocker_text", lambda *_a, **_k: "")
@@ -673,7 +682,7 @@ def test_staged_job_shows_review_and_returns_decision(monkeypatch, tmp_path, key
             app.push_screen(modal, app.results.append)
             await pilot.pause()
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
             assert app.results == []
             assert modal.review_pending
             assert modal.query_one("#quick-gen-review").display
@@ -712,7 +721,7 @@ def test_review_keys_switch_and_toggle_playback(monkeypatch, tmp_path) -> None:
             app.push_screen(modal, app.results.append)
             await pilot.pause()
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
             await pilot.press("1")
             assert modal.review_playing == "original"
             await pilot.press("1")
@@ -739,7 +748,7 @@ def test_review_without_original_shows_it_unavailable(monkeypatch, tmp_path) -> 
             app.push_screen(modal, app.results.append)
             await pilot.pause()
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
             assert "[1] Play original sound (none)" in review_text(modal)
 
     run(exercise())
@@ -757,7 +766,7 @@ def test_cancelled_staged_job_offers_no_review(monkeypatch, tmp_path) -> None:
             app.push_screen(modal, app.results.append)
             await pilot.pause()
             modal._drain_worker_events()
-            await pilot.pause(0.4)
+            await settle(pilot, app, modal)
             assert not modal.review_pending
             assert "to close" in header_text(modal)
             await pilot.press("enter")

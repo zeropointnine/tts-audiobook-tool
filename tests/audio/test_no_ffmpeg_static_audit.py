@@ -17,8 +17,6 @@ import ast
 import re
 from pathlib import Path
 
-import pytest
-
 PACKAGE = Path(__file__).resolve().parents[2] / "tts_audiobook_tool"
 EXCLUDED_DIRS = {"tts_models"}
 
@@ -36,23 +34,28 @@ def app_sources() -> list[Path]:
 
 def findings(path: Path, root: Path = PACKAGE.parent) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+    relative = path.relative_to(root)
     found = []
+
+    def add(node: ast.AST, message: str) -> None:
+        # Built only for findings: formatting a location for every node dominated the scan time.
+        found.append(f"{relative}:{getattr(node, 'lineno', '?')}: {message}")
+
     for node in ast.walk(tree):
-        where = f"{path.relative_to(root)}:{getattr(node, 'lineno', '?')}"
         if isinstance(node, ast.Constant) and isinstance(node.value, str) and _EXECUTABLE.match(node.value):
-            found.append(f"{where}: FFmpeg executable {node.value!r}")
+            add(node, f"FFmpeg executable {node.value!r}")
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name.split(".")[0] in _FORBIDDEN_MODULES:
-                    found.append(f"{where}: import {alias.name}")
+                    add(node, f"import {alias.name}")
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             if node.module.split(".")[0] in _FORBIDDEN_MODULES:
-                found.append(f"{where}: from {node.module} import ...")
+                add(node, f"from {node.module} import ...")
         elif (
             isinstance(node, ast.Attribute) and node.attr == "load"
             and isinstance(node.value, ast.Name) and node.value.id == "librosa"
         ):
-            found.append(f"{where}: librosa.load (audioread fallback)")
+            add(node, "librosa.load (audioread fallback)")
     return found
 
 
@@ -66,9 +69,10 @@ def test_scan_covers_the_app_owned_audio_modules() -> None:
         assert expected in names
 
 
-@pytest.mark.parametrize("path", app_sources(), ids=lambda path: path.relative_to(PACKAGE).as_posix())
-def test_app_code_has_no_system_ffmpeg_dependency(path: Path) -> None:
-    assert findings(path) == []
+def test_app_code_has_no_system_ffmpeg_dependency() -> None:
+    # One scan of the whole package; a failure lists every offending file:line.
+    found = [finding for path in app_sources() for finding in findings(path)]
+    assert found == [], "\n".join(found)
 
 
 def test_audit_detects_each_kind_of_finding(tmp_path: Path) -> None:

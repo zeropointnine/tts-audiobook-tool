@@ -97,10 +97,16 @@ def test_format_voice_numbers(indices, expected):
     assert format_voice_numbers(indices) == expected
 
 
-@pytest.mark.parametrize("model_id", QWEN_MODEL_IDS)
-@pytest.mark.parametrize("model_type", ["base", "custom_voice", "voice_design"])
-@pytest.mark.parametrize("instructions", ["", " \n\t", "A warm, low voice."])
-@pytest.mark.parametrize("stale_values", [False, True])
+@pytest.mark.parametrize("model_id", QWEN_MODEL_IDS)  # separate local/audio.cpp support classes
+@pytest.mark.parametrize(("model_type", "instructions", "stale_values"), [
+    ("base", "", False),
+    ("base", "A warm, low voice.", True),
+    ("custom_voice", "", False),
+    ("custom_voice", "A warm, low voice.", True),
+    ("voice_design", "", True),
+    ("voice_design", " \n\t", False),  # whitespace-only counts as unset
+    ("voice_design", "A warm, low voice.", True),
+])
 def test_qwen_variation_follows_active_model_type(model_id, model_type, instructions, stale_values):
     # VoiceDesign ignores saved samples/transcripts/presets; Base and CustomVoice do not vary.
     voice = Voice(

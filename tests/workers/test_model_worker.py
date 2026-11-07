@@ -649,17 +649,9 @@ def test_state_for_worker_mirrors_init_attribute_set() -> None:
 
     # Must match exactly the instance attributes set by State.__init__, so a
     # worker State behaves like the main process' State for property access.
-    assert set(vars(state)) == {
-        "_project",
-        "_prefs",
-        "dont_show_scan_message",
-        "has_shown_main_menu",
-        "pocket_voice_clone_access_validated",
-        "pending_project_load_checks",
-        "pending_tts_model_change",
-        "pending_binding_notice",
-        "binding_notice_key",
-    }
+    # Compared against a real State() (prefs are isolated per test) so a new
+    # __init__ attribute is caught without a hand-maintained list here.
+    assert set(vars(state)) == set(vars(State()))
     assert state.project is None
     assert state.dont_show_scan_message is False
     assert state.pocket_voice_clone_access_validated is False

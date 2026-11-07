@@ -457,6 +457,14 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
     def _update_header(self) -> None:
         if not self.is_mounted or self.teardown_in_progress:
             return
+        try:
+            self._refresh_header()
+        except NoMatches:
+            # As with the waveform: the header interval can fire while the app
+            # is shutting down and its widgets are already being removed
+            return
+
+    def _refresh_header(self) -> None:
         header = self.query_one(RealTimePlaybackHeader)
         header.update_memory_text()
         header.update_status(self.phase)

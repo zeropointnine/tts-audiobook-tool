@@ -1,4 +1,5 @@
 import builtins
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -89,6 +90,21 @@ def test_ask_advanced_escape_cancels():
 
 def test_ask_advanced_ctrl_c_cancels():
     assert _run_prompt(b"\x03") == ""
+
+
+@pytest.mark.parametrize("data", [b"\x1b", b"\x03"], ids=["escape", "ctrl-c"])
+def test_ask_advanced_cancel_keys_do_not_wait_for_longer_bindings(data):
+    # ESC and (with the prefill selected) Ctrl-C prefix longer Emacs bindings;
+    # prompt-toolkit's default 1 s multi-key wait made cancelling feel laggy.
+    start = time.monotonic()
+    assert _run_prompt(data) == ""
+    assert time.monotonic() - start < 0.5
+
+
+def test_ask_advanced_alt_key_burst_still_reaches_meta_binding():
+    # Alt+B arrives as one ESC-b burst, so the short wait still sees the meta
+    # binding (backward-word) instead of cancelling on the lone ESC.
+    assert _run_prompt(b"\x1b[F\x1bbX\r", prefill="one two") == "one Xtwo"
 
 
 def test_ask_advanced_ctrl_d_preserves_eof_behavior_for_empty_input():

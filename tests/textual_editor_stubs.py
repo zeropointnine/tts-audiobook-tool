@@ -9,7 +9,10 @@ shared ``asyncio.run`` driver for every Textual test module.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
+
+from textual.css.query import NoMatches
 
 from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
@@ -20,6 +23,27 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 def run(coroutine):
     return asyncio.run(coroutine)
+
+
+async def wait_until(pilot, predicate: Callable[[], object], *, timeout: float = 5.0, what: str = "") -> None:
+    """Polls ``predicate`` between short pilot pauses instead of a fixed sleep.
+
+    Use for state reached through timers, threads or worker-event polling
+    (eg the terminal-summary settle timer). A query on a not-yet-composed
+    screen (``NoMatches``) counts as not ready. Ends with an idle pause so the
+    resulting refresh has been processed. Fails after ``timeout`` seconds.
+    """
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        try:
+            if predicate():
+                break
+        except NoMatches:
+            pass
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError(f"timed out after {timeout}s waiting for {what or predicate}")
+        await pilot.pause(0.01)
+    await pilot.pause()
 
 
 def make_phrase_group(text: str, voice_index: int = 0) -> PhraseGroup:

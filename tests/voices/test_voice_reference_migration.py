@@ -120,11 +120,12 @@ def test_explicit_top_level_list_wins_even_empty(explicit):
 
 
 def test_owner_object_masks_flat_list_and_retains_other_settings():
+    # sr must be a declared non-default choice; an undeclared value would be reset regardless.
     project = Project.model_validate({'glm_voice_file_name': 'stale.flac', 'model_settings': {
-        'models': {'glm_local': {'parameters': {'sr': 48000}}},
+        'models': {'glm_local': {'parameters': {'sr': 32000}}},
     }})
     assert project.voice_references == [Voice()]
-    assert project.get_model_setting('glm_local', 'sr') == 48000
+    assert project.get_model_setting('glm_local', 'sr') == 32000
 
 
 def test_unavailable_model_and_unrelated_unknown_objects_survive():

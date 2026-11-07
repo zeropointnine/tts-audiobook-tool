@@ -308,8 +308,9 @@ def test_echo_menus_partition_voice_selections_and_settings_without_headings(mon
 
     assert [text_util.strip_ansi_codes(get_string_from(state, item.label)) for item in items] == [
         # Echo does not use transcripts, so a missing one is not flagged
-        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: suzie yeung hanya 1_4",
-        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: second",
+        # (the dimmed line count appears once there is more than one voice)
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 1: suzie yeung hanya 1_4 (0 lines)",
+        f"{voice_menu_shared.LABEL_VOICE_SAMPLE_ITEM} 2: second (0 lines)",
         voice_menu_shared.LABEL_ADD_VOICE_SAMPLE,
         voice_menu_shared.LABEL_CLEAR_VOICES,
         voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS,
@@ -665,12 +666,13 @@ def test_echo_payload_sends_steps_top_level_and_cfg_controls_in_options(
         == "Echo-TTS does not support streaming"
 
 
+ECHO_SEED_CAP = TtsModelType.require_by_id(ECHO_ID).value.max_random_seed
+
+
+# Echo's catalog cap reaching its payload; the cap/caller/stored-seed table for
+# the shared audio.cpp adapter path lives in test_moss_audio_cpp.
 @pytest.mark.parametrize("stored_seed, force_random, caller_cap, expected_seed, expected_stop", [
-    (-1, False, -1, 2147483647, 2147483648),
-    (2**32 - 1, True, -1, 2147483647, 2147483648),
-    (-1, False, 7, 7, 8),
-    (-1, False, 0, 0, 1),
-    (-1, False, 2**32 - 1, 2147483647, 2147483648),
+    (-1, False, -1, ECHO_SEED_CAP, ECHO_SEED_CAP + 1),
     (2**32 - 1, False, 7, 2**32 - 1, None),
 ])
 def test_echo_random_seed_cap_reaches_payload_through_dispatch(

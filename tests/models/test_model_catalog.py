@@ -144,15 +144,15 @@ def test_shipped_voice_sample_duration_recommendations():
 
 
 def test_catalog_random_seed_cap_defaults_and_int32_limits():
+    # Expected values come from the TOML itself, so catalog edits don't break this.
     raw = read_catalog(CATALOG_PATH)
     specs, _, _ = load_catalog()
-    assert {entry["id"]: entry["spec"]["max_random_seed"]
-            for entry in raw["models"] if "max_random_seed" in entry["spec"]} == {
-        "echo_tts_audiocpp": 2147483647,
-        "moss_delay_audiocpp": 2147483647,
-    }
+    declared = {entry["id"]: entry["spec"]["max_random_seed"]
+                for entry in raw["models"] if "max_random_seed" in entry["spec"]}
+    assert declared  # the optional key is exercised by the shipped catalog
     for spec in specs:
-        expected = 2147483647 if spec.id in ("echo_tts_audiocpp", "moss_delay_audiocpp") else -1
+        expected = declared.get(spec.id, -1)  # -1: no cap declared
+        assert -1 <= expected <= 2**31 - 1  # servers take int32 seeds
         assert type(spec.max_random_seed) is int
         assert spec.max_random_seed == expected
         assert TtsModelType.require_by_id(spec.id).value.max_random_seed == expected

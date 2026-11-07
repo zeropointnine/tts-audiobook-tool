@@ -58,6 +58,7 @@ from textual_editor_stubs import (
     StubProject,
     StubSoundSegment,
     StubSoundSegments,
+    wait_until,
 )
 
 
@@ -281,6 +282,16 @@ def test_initial_queue_is_loaded_from_project_generation_range(
     assert app.staged_queued_indices == expected_indices
 
 
+async def wait_for_quick_gen_result(pilot, app) -> None:
+    """Waits until the pushed quick-gen modal has its terminal result (worker
+    poll plus the terminal-summary settle timer, or pre-flight problems)."""
+    await wait_until(
+        pilot,
+        lambda: isinstance(app.screen, QuickGenModal) and app.screen.terminal_result is not None,
+        what="quick-gen terminal result",
+    )
+
+
 def patch_quick_job(
     project: StubProject,
     *,
@@ -394,7 +405,7 @@ def test_q_preflight_problems_show_in_modal_without_saving_or_deleting() -> None
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("down", "q")
-            await pilot.pause(0.2)
+            await wait_for_quick_gen_result(pilot, app)
             assert isinstance(app.screen, QuickGenModal)
             assert project.save_calls == []
             assert project.sound_segments.deleted_index_batches == []
@@ -418,7 +429,7 @@ def test_q_leaves_project_untouched_while_job_runs() -> None:
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("space", "down", "q")
-            await pilot.pause(0.3)
+            await wait_for_quick_gen_result(pilot, app)
             assert isinstance(app.screen, QuickGenModal)
             assert app.is_running is True
             assert project.save_calls == []
@@ -436,7 +447,7 @@ def test_q_uses_highlighted_project_index_under_filter() -> None:
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("f", "3", "down", "q")
-            await pilot.pause(0.3)
+            await wait_for_quick_gen_result(pilot, app)
 
     run_with_patches(patches, exercise())
     assert info.indices == [3]
@@ -451,7 +462,7 @@ def test_quick_gen_review_enter_keeps_new_sound_and_refreshes_row() -> None:
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("down", "down", "q")
-            await pilot.pause(0.6)
+            await wait_for_quick_gen_result(pilot, app)
             assert isinstance(app.screen, QuickGenModal)
             assert app.screen.review_pending
             await pilot.press("enter")
@@ -478,7 +489,7 @@ def test_quick_gen_review_escape_discards_new_sound() -> None:
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("down", "q")
-            await pilot.pause(0.6)
+            await wait_for_quick_gen_result(pilot, app)
             assert app.screen.review_pending  # type: ignore[attr-defined]
             await pilot.press("escape")
             await pilot.pause()
@@ -508,7 +519,7 @@ def test_quick_gen_preserves_multiple_selection_anchor_and_scroll() -> None:
             assert app.selection_anchor_index == 38
 
             await pilot.press("q")
-            await pilot.pause(0.6)
+            await wait_for_quick_gen_result(pilot, app)
             await pilot.press("enter")
             await pilot.pause()
             assert not isinstance(app.screen, QuickGenModal)
@@ -554,7 +565,7 @@ def test_kept_quick_gen_selects_nearest_remaining_line_when_filtered_out(
             option_list.highlighted = app.phrase_indices.index(2)
             await pilot.pause()
             await pilot.press("q")
-            await pilot.pause(0.6)
+            await wait_for_quick_gen_result(pilot, app)
             await pilot.press("enter")
             await pilot.pause()
 
@@ -598,7 +609,7 @@ def test_quick_gen_preserves_surviving_selection_across_section_row_removal() ->
             assert app.highlighted_content_line_index() == 0
 
             await pilot.press("q")
-            await pilot.pause(0.6)
+            await wait_for_quick_gen_result(pilot, app)
             await pilot.press("enter")
             await pilot.pause()
             assert len(app.list_items) == 5
@@ -678,7 +689,7 @@ def test_failed_quick_gen_keeps_original_sound_and_shows_no_review() -> None:
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("down", "q")
-            await pilot.pause(0.6)
+            await wait_for_quick_gen_result(pilot, app)
             assert isinstance(app.screen, QuickGenModal)
             assert not app.screen.review_pending
             await pilot.press("escape")
@@ -700,7 +711,7 @@ def test_editor_find_and_select_all_are_blocked_while_modal_is_open() -> None:
     async def exercise() -> None:
         async with app.run_test() as pilot:
             await pilot.press("q")
-            await pilot.pause(0.2)
+            await wait_for_quick_gen_result(pilot, app)
             assert isinstance(app.screen, QuickGenModal)
             await pilot.press("ctrl+f", "ctrl+a")
             await pilot.pause()
@@ -1546,7 +1557,7 @@ def test_q_in_info_dialog_closes_it_and_quick_generates_displayed_segment() -> N
         ):
             async with app.run_test() as pilot:
                 await pilot.press("down", "i", "q")
-                await pilot.pause(0.3)
+                await wait_for_quick_gen_result(pilot, app)
                 assert isinstance(app.screen, QuickGenModal)
                 assert app.is_running is True
 
@@ -1679,10 +1690,9 @@ def test_playback_status_clears_dynamically_when_sound_finishes() -> None:
                 )
 
                 current_sound_id = ""
-                await pilot.pause(0.2)
-                assert str(app.query_one("#status-right", Static).render()) == (
+                await wait_until(pilot, lambda: str(app.query_one("#status-right", Static).render()) == (
                     "0 lines queued for generation"
-                )
+                ))
                 assert app.playing_phrase_index is None
 
     run(exercise())

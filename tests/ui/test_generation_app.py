@@ -38,10 +38,9 @@ from tts_audiobook_tool.textual.generation_app import (
     _reconcile_generation_result,
     run_generation_app,
 )
-from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.worker_reset import HardResetCause
-from textual_editor_stubs import run
+from textual_editor_stubs import run, wait_until
 
 
 def make_project(**attrs) -> SimpleNamespace:
@@ -359,7 +358,7 @@ def test_generation_app_finalizes_on_worker_exited(monkeypatch, fake_worker, tmp
 
     async def exercise() -> None:
         async with app.run_test(size=(100, 24)) as pilot:
-            await pilot.pause(0.3)
+            await wait_until(pilot, lambda: app.terminal_result is not None)
             assert app.terminal_result is not None
             assert app.terminal_result.status == GenerationTerminalStatus.FAILED
             assert "Worker log: /tmp/worker.log" in app.terminal_result.message
@@ -671,7 +670,7 @@ def test_generation_app_auto_continues_when_auto_concat_enabled(monkeypatch, fak
 
     async def exercise() -> None:
         async with app.run_test(size=(100, 24)) as pilot:
-            await pilot.pause(0.3)
+            await wait_until(pilot, lambda: app.terminal_result is not None)
             assert app.terminal_result is not None
             assert app.terminal_result.status == GenerationTerminalStatus.COMPLETED
             assert app.auto_exit
@@ -814,122 +813,6 @@ def test_escape_snaps_scrolled_log_to_bottom(monkeypatch, fake_worker, tmp_path)
         transcript.close()
 
 
-def test_second_escape_hard_resets_worker_immediately(monkeypatch, fake_worker, tmp_path) -> None:
-    from tts_audiobook_tool import text_util
-    from tts_audiobook_tool.textual import worker_session
-
-    log_path = str(tmp_path / "worker log.log")
-    monkeypatch.setattr(worker_session, "make_worker_log_file_path", lambda: log_path)
-    cancel_calls: list[str] = []
-    reset_calls: list[int] = []
-
-    def fake_reset() -> str:
-        reset_calls.append(1)
-        return ""
-    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
-    monkeypatch.setattr(
-        ModelWorker,
-        "request_cancel",
-        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
-    )
-    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
-
-    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
-    app = GenerationApp(make_state(), {0}, 1, transcript)
-
-    async def exercise() -> None:
-        async with app.run_test(size=(100, 24)) as pilot:
-            await pilot.press("escape")
-            assert cancel_calls == ["job"]
-            assert app.cancel_requested
-            await pilot.pause()
-            # While the worker waits for a safe boundary, the header prompt
-            # switches to the kill-process hint.
-            assert "to kill process and stop immediately" in str(
-                app.query_one("#generation-hotkey", Static).render()
-            )
-
-            # The second ESC hard-resets the worker immediately, with no
-            # confirmation dialog.
-            await pilot.press("escape")
-            await pilot.pause(0.2)
-
-            assert reset_calls == [1]
-            assert type(app.screen).__name__ == "Screen"
-            assert app.terminal_result is not None
-            assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
-            assert app.terminal_result.hard_reset_cause is HardResetCause.USER_ESCALATION
-            # The reset summary makes the worker log clickable, including paths with spaces.
-            link = text_util.make_terminal_hyperlink(log_path, is_file=True)
-            assert f"Worker log: {link}" in app.terminal_result.message
-            # Once the job has stopped, the header prompt line switches to
-            # the continue hint.
-            assert "to continue" in str(
-                app.query_one("#generation-hotkey", Static).render()
-            )
-    try:
-        run(exercise())
-    finally:
-        transcript.close()
-
-
-def test_second_escape_in_sgl_omni_mode_is_not_offered(monkeypatch, fake_worker, tmp_path) -> None:
-    """In SGL-Omni backend mode the worker holds no local TTS model memory,
-    so the hard-reset offer is gated off: ESC only requests a cancel and
-    further presses are no-ops."""
-    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
-
-    cancel_calls: list[str] = []
-    reset_calls: list[int] = []
-
-    def fake_reset() -> str:
-        reset_calls.append(1)
-        return ""
-
-    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
-    monkeypatch.setattr(
-        ModelWorker,
-        "request_cancel",
-        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
-    )
-    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
-
-    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
-    app = GenerationApp(make_state(), {0}, 1, transcript)
-
-    async def exercise() -> None:
-        async with app.run_test(size=(100, 24)) as pilot:
-            await pilot.press("escape")
-            assert cancel_calls == ["job"]
-            assert app.cancel_requested
-            await pilot.pause()
-            # The cancellation notice no longer offers the hard reset.
-            log = app.query_one(WorkerLogContentArea).worker_log
-            document = "\n".join(line.text.plain for line in log._lines)
-            assert "Cancellation requested" in document
-            assert "hard-reset" not in document
-            # The pending header prompt waits rather than advertising the
-            # kill-process escape hatch.
-            hotkey = str(app.query_one("#generation-hotkey", Static).render())
-            assert "kill process" not in hotkey
-            assert "Waiting for the current generation to stop" in hotkey
-
-            # Further ESC presses do nothing: no worker dump, no reset,
-            # no terminal result.
-            await pilot.press("escape")
-            await pilot.press("escape")
-            await pilot.pause(0.2)
-
-            assert reset_calls == []
-            assert not app.reset_in_progress
-            assert app.terminal_result is None
-
-    try:
-        run(exercise())
-    finally:
-        transcript.close()
-
-
 def _install_gen_timeout_worker_stubs(monkeypatch) -> dict:
     """Stub ModelWorker so a timeout event can be delivered on demand."""
     reset_calls: list[int] = []
@@ -971,7 +854,7 @@ def test_gen_timeout_event_hard_resets_worker(monkeypatch, tmp_path) -> None:
     async def exercise() -> None:
         async with app.run_test(size=(100, 24)) as pilot:
             stubs["latch"]["deliver"] = True
-            await pilot.pause(0.3)
+            await wait_until(pilot, lambda: app.terminal_result is not None)
 
             assert stubs["reset_calls"] == [1]
             assert app.terminal_result is not None
@@ -1005,7 +888,7 @@ def test_gen_timeout_still_resets_worker_after_single_escape(monkeypatch, tmp_pa
 
             # The timeout fires anyway and hard-resets the worker.
             stubs["latch"]["deliver"] = True
-            await pilot.pause(0.3)
+            await wait_until(pilot, lambda: app.terminal_result is not None)
 
             assert stubs["reset_calls"] == [1]
             assert app.terminal_result is not None

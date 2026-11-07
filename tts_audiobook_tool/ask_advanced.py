@@ -16,6 +16,11 @@ from prompt_toolkit.styles import Style
 
 _SELECTION_STYLE = Style.from_dict({"selected": "reverse"})
 _ESCAPE_SEQUENCE_TIMEOUT_SECONDS = 0.05
+# prompt-toolkit waits this long (1 s by default) before firing a binding that is
+# also a prefix of a longer one: ESC (Emacs meta bindings) and, with the prefill
+# selected, Ctrl-C (`c-c >`/`c-c <`). Alt-key combos arrive as one burst, so a
+# short wait keeps them working; only a separately typed ESC-then-key is lost.
+_KEY_SEQUENCE_TIMEOUT_SECONDS = 0.05
 _HISTORY_KEYS = (
     "up",
     "down",
@@ -126,6 +131,7 @@ def _ask_with_prompt_toolkit(
         output=prompt_output,
     )
     session.app.ttimeoutlen = _ESCAPE_SEQUENCE_TIMEOUT_SECONDS
+    session.app.timeoutlen = _KEY_SEQUENCE_TIMEOUT_SECONDS
 
     def select_prefill() -> None:
         if not prefilled_input:
