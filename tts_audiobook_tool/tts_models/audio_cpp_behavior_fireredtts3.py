@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.text_ops.language_util import map_language
+from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution, LanguageStatus
 from tts_audiobook_tool.tts_models.audio_cpp_behavior import AudioCppModelBehavior, ParameterValues
 
 if TYPE_CHECKING:
@@ -67,18 +67,13 @@ class FireRedTts3Behavior(AudioCppModelBehavior):
         """FireRedTTS3 language tag for a project language code, or None."""
         return map_language(language_code or "", _TAG_BY_CODE)
 
-    def resolve_language(self, language: str) -> str:
-        # The catalog's "normalized" policy hands over the base code; send the
-        # exact tag the session requires. Readiness blocks unmapped codes first;
-        # "" would omit the field rather than send an unknown tag.
-        return map_language(language, _TAG_BY_CODE) or ""
-
-    def get_blocking_issues(self, project: Project, values: ParameterValues) -> list[ReadinessIssue]:
-        if self.get_language_tag(project.language_code) is None:
-            shown = (project.language_code or "").strip() or "(empty)"
-            return [ReadinessIssue(
-                "language", f"FireRedTTS3 does not support project language {shown!r}")]
-        return []
+    def resolve_language(self, language: str) -> LanguageResolution:
+        # The catalog's "normalized" policy hands over the base code; the session
+        # requires an exact tag, so an unmapped (or empty) code blocks readiness.
+        tag = map_language(language, _TAG_BY_CODE)
+        if tag:
+            return LanguageResolution(LanguageStatus.MAPPED, tag)
+        return LanguageResolution(LanguageStatus.UNSUPPORTED)
 
     def get_warning_issues(self, project: Project, values: ParameterValues) -> list[str]:
         tag = self.get_language_tag(project.language_code)

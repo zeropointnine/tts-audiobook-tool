@@ -986,7 +986,8 @@ def test_indextts2_requires_a_voice_sample_before_network(monkeypatch):
 
 
 @pytest.mark.parametrize("project_language, expected", [
-    ("es-MX", 'Language value passed to model: es (project language code = "es-MX"; applies to IndexTTS2.5 only)'),
+    ("es-MX", 'Language value passed to model: es (project language code = "es-MX"; '
+              "not checked against the model's language list; applies to IndexTTS2.5 only)"),
     ("", "Language value passed to model: none (project language code not set; applies to IndexTTS2.5 only)"),
 ])
 def test_indextts2_preflight_reports_language_hint_with_variant_note(project_language, expected):
@@ -1066,7 +1067,8 @@ def test_fireredtts3_blocks_unmapped_project_language_before_network(monkeypatch
     assert len(issues) == 1
     monkeypatch.setattr(AudioCppUtil, "generate", lambda *args, **kwargs: pytest.fail("network attempted"))
     result = AudioCppBackendAdapter(item, support, "firered-base").generate_using_project(project, ["hello"])
-    assert isinstance(result, str) and "does not support project language" in result
+    # The adapter stops with the same message readiness reports
+    assert result == issues[0].verbose
 
 
 @pytest.mark.parametrize("project_language, weaker_note", [("en", False), ("zh", False), ("yue", False), ("fr", True)])

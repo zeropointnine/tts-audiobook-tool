@@ -2,9 +2,11 @@ from __future__ import annotations
 from abc import abstractmethod
 from enum import Enum
 
-from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.constants import MAX_WORDS_PER_SEGMENT_RECO_RANGE
 from tts_audiobook_tool.text_ops.language_util import normalize_language_code
+from tts_audiobook_tool.tts_models.language_resolution import (
+    NOT_USED, LanguageResolution, LanguageStatus, resolve_unverified,
+)
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -44,40 +46,26 @@ class ChatterboxBaseModel(TtsBaseModel):
         name = ChatterboxBaseModel.repetition_penalty_setting(model_type)
         return float(ChatterboxBaseModel.LOCAL.number(name).default)
 
-    @staticmethod
-    def resolve_language_id(language_code: str) -> str:
-        """
-        Multilingual `language_id` for a free-form project code ("en-US" -> "en").
-        The model's supported list holds base codes only. Shared by readiness,
-        the request, and the pre-flight note.
-        """
-        return normalize_language_code(language_code)
-
     @abstractmethod
     def supported_languages_multi(self) -> list[str]:
         """ List of supported languages (applies to Multilingual variant only) """
         ...
 
     @classmethod
-    def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:
-
-        if not instance:
-            return [] # Can't know if language is invalid w/o loading model code
-        else:
-            assert(isinstance(instance, ChatterboxBaseModel))
-            if ChatterboxBaseModel.resolve_language_id(project.language_code) not in instance.supported_languages_multi():
-                return [ReadinessIssue("supported language code", f"Language code {project.language_code} not supported by current model")]
-            else:
-                return []
-
-    def get_warning_issues(self, project: Project) -> list[str]:
-        warnings = super().get_warning_issues(project)
-        # Multilingual receives the base project code as `language_id`; Turbo takes none.
-        if project.get_model_setting('chatterbox_local', 'type').is_multilingual:
-            from tts_audiobook_tool.tts_models.model_support import make_language_value_note
-            warnings.append(make_language_value_note(
-                ChatterboxBaseModel.resolve_language_id(project.language_code), project.language_code))
-        return warnings
+    def resolve_language(cls, project: Project, instance: TtsBaseModel | None = None) -> LanguageResolution:
+        """
+        Multilingual receives the base project code ("en-US" -> "en") as
+        `language_id`; Turbo takes none. The supported list (base codes only)
+        is only known once the model code is loaded, ie with an `instance`.
+        """
+        if not project.get_model_setting('chatterbox_local', 'type').is_multilingual:
+            return NOT_USED
+        code = normalize_language_code(project.language_code)
+        if not isinstance(instance, ChatterboxBaseModel):
+            return resolve_unverified(code)
+        if code in instance.supported_languages_multi():
+            return LanguageResolution(LanguageStatus.MAPPED, code)
+        return LanguageResolution(LanguageStatus.UNSUPPORTED)
 
     @classmethod
     def get_menu_text(

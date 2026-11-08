@@ -424,7 +424,9 @@ def test_dots_get_warning_issues_reports_language_hint():
     warnings = model.get_warning_issues(
         Project.model_validate({"language_code": "ja"})
     )
-    assert 'Language value passed to model: ja (project language code = "ja")' in warnings
+    # Dots' accepted set is langcodes', unknown to the app, so the note says so
+    assert ('Language value passed to model: ja (project language code = "ja"; '
+            "not checked against the model's language list)") in warnings
 
     warnings = model.get_warning_issues(
         Project.model_validate({"language_code": ""})

@@ -19,7 +19,7 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.audio_cpp_configured import AudioCppBackendAdapter, AudioCppModelSupport, AudioCppSettings
 from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
 from tts_audiobook_tool.tts_models.audio_cpp_detection import detect_audio_cpp_models
-from tts_audiobook_tool.tts_models.model_support import make_language_value_note
+from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution, LanguageStatus, make_language_note
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 MODEL_ID = "qwen3tts_audiocpp"
@@ -281,11 +281,12 @@ def test_voice_design_missing_instructions_is_a_hint_not_a_blocker(monkeypatch, 
     assert "instruction" not in sent[0]["options"]
 
 
-@pytest.mark.parametrize("language,expected", [
-    ("EN-us", "english"), ("Chinese", "chinese"), ("zh-CN", "chinese"),
-    ("unsupported", "auto"), ("", "auto"),
+@pytest.mark.parametrize("language,expected,status", [
+    ("EN-us", "english", LanguageStatus.MAPPED), ("Chinese", "chinese", LanguageStatus.MAPPED),
+    ("zh-CN", "chinese", LanguageStatus.MAPPED),
+    ("unsupported", "auto", LanguageStatus.NO_MATCH), ("", "auto", LanguageStatus.NOT_SET),
 ])
-def test_language_payload_and_warning_agree(monkeypatch, tmp_path, definition, language, expected):
+def test_language_payload_and_warning_agree(monkeypatch, tmp_path, definition, language, expected, status):
     # Older servers reject ISO hints; warnings must describe the actual full-name/auto value sent.
     project = make_project(tmp_path, "voice_design")
     project.language_code = language
@@ -295,7 +296,8 @@ def test_language_payload_and_warning_agree(monkeypatch, tmp_path, definition, l
     assert not isinstance(adapter.generate_using_project(project, ["hello"]), str)
     assert sent[0]["language"] == expected
     assert [warning for warning in support.get_warning_issues(project)
-            if warning.startswith("Language value passed to model:")] == [make_language_value_note(expected, language)]
+            if warning.startswith("Language value passed to model:")] == [
+        make_language_note(LanguageResolution(status, expected), language)]
 
 
 def test_discovery_keeps_all_four_exact_choices():

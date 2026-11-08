@@ -8,6 +8,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+    from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution
 
 
 class ModelSupport(Protocol):
@@ -15,6 +16,9 @@ class ModelSupport(Protocol):
 
     def prepare_text_for_inference(self, project: Project, text: str, *, apply_word_substitutions: bool = True) -> str: ...
     def get_blocking_issues(self, project: Project, instance: object = None) -> list[ReadinessIssue]: ...
+    # How the project language code reaches the model (see language_resolution);
+    # requests, the pre-flight note and any language blocker all derive from it.
+    def resolve_language(self, project: Project, instance: object = None) -> LanguageResolution: ...
     def get_output_sample_rate(self, project: Project, instance: object = None) -> int: ...
     def get_menu_text(self, project: Project, instance: object = None) -> str: ...
     def get_voice_tag(self, project: Project) -> str: ...
@@ -74,21 +78,3 @@ def make_max_words_exceed_warning(project: Project, reco: tuple[int, int, str], 
         f"{Ansi.ITALICS}Output accuracy on longer prompts may be degraded"
     )
 
-
-def make_language_value_note(value: str | None, language_code: str | None, detail: str = "") -> str:
-    """
-    The informational pre-flight note naming the language value a model receives:
-    the value actually sent (after any mapping from the project language code),
-    with the project code it was derived from, plus an optional qualifying `detail`
-    (eg "applies to IndexTTS2.5 only"). Shared by every model that passes a
-    language to inference, eg::
-
-        Language value passed to model: English (project language code = "en")
-
-    A `value` of None or "" means no language reaches the model ("none").
-    """
-    code = (language_code or "").strip()
-    source = f'project language code = "{code}"' if code else "project language code not set"
-    if detail:
-        source += f"; {detail}"
-    return f"Language value passed to model: {value or 'none'} ({source})"

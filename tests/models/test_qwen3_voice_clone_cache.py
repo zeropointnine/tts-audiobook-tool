@@ -368,4 +368,4 @@ def test_qwen_voice_design_warnings_do_not_read_model_global_instructions(monkey
         'Language value passed to model: english (project language code = "en")']
     project.language_code = "xx"
     assert model.get_warning_issues(project) == [
-        'Language value passed to model: auto (project language code = "xx"; no matching Qwen3-TTS language)']
+        'Language value passed to model: auto (project language code = "xx"; no matching model language)']

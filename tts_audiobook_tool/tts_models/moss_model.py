@@ -351,7 +351,7 @@ class MossModel(MossBaseModel):
         seed = -1 if force_random_seed else project.get_model_setting('moss_local', seed_setting_name)
         if seed == -1:
             seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)
-        language = MossBaseModel.get_language_name(project.language_code) if project.language_code else ""
+        language = self.resolve_language(project).value or ""
 
         return self.generate(
             prompts=prompts,

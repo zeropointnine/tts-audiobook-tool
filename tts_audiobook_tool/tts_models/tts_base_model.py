@@ -5,6 +5,9 @@ from typing import Any, Callable, TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.tts_models.language_resolution import (
+    NOT_USED, LanguageResolution, append_language_note, make_language_blocker,
+)
 from tts_audiobook_tool.tts_models.model_support import make_max_words_exceed_warning
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
@@ -359,7 +362,29 @@ class TtsBaseModel(ABC):
         # not checked here: it is validated lazily by the interactive
         # pre-flight (VoiceMenuShared.validate_voices) and at generation time,
         # so menu labels don't duplicate those checks.
-        return []
+        return cls.get_language_blocking_issues(project, instance)
+
+    @classmethod
+    def resolve_language(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> LanguageResolution:
+        """
+        How this model resolves the project language code (see
+        `language_resolution`). The request must send `.value`; the pre-flight
+        note and language blocker are derived from the same result. Default:
+        the model never receives a language.
+        """
+        return NOT_USED
+
+    @classmethod
+    def get_language_blocking_issues(
+            cls, project: Project, instance: TtsBaseModel | None
+    ) -> list[ReadinessIssue]:
+        """The language blocker, if any. Overrides of get_blocking_issues should include it."""
+        blocker = make_language_blocker(
+            cls.resolve_language(project, instance), project.language_code,
+            cls.INFO.ui.get("proper_name") or cls.INFO.id)
+        return [blocker] if blocker else []
 
     def get_warning_issues(self, project: Project) -> list[str]:
         """ Returns warning info based on the state of `project` and `self` """
@@ -373,7 +398,7 @@ class TtsBaseModel(ABC):
         if max_words_warning:
             warnings.append(max_words_warning)
 
-        return warnings
+        return append_language_note(warnings, self.resolve_language(project, self), project.language_code)
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:

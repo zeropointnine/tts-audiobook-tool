@@ -14,6 +14,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.qwen3_language import QWEN3_AUTO_LANGUAGE
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
@@ -193,7 +194,8 @@ class Qwen3Model(Qwen3BaseModel):
             max_random_seed: int = -1,
     ) -> list[Sound] | str:
 
-        language = self.resolve_language_value(project.language_code)[0]
+        # Always set: unmapped/empty codes resolve to Qwen3's "auto"
+        language = self.resolve_language(project).value or QWEN3_AUTO_LANGUAGE
         seed = -1 if force_random_seed else project.get_model_setting('qwen3tts_local', 'seed')
         if seed == -1:
             seed = random.randrange(0, get_random_seed_max(SEED_MAX - 1, max_random_seed) + 1)

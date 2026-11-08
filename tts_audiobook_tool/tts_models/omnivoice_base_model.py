@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from tts_audiobook_tool import util
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -34,14 +35,11 @@ class OmniVoiceBaseModel(TtsBaseModel):
             s += f" {COL_DIM}({target})"
         return s
 
-    def get_warning_issues(self, project: Project) -> list[str]:
-        warnings = super().get_warning_issues(project)
-        # Mirrors generation: the OmniVoice id, or none (language-agnostic) when empty
-        from tts_audiobook_tool.tts_models.model_support import make_language_value_note
+    @classmethod
+    def resolve_language(cls, project: Project, instance: TtsBaseModel | None = None) -> LanguageResolution:
+        # An OmniVoice id, or none (language-agnostic mode) when empty or unknown
         from tts_audiobook_tool.tts_models.omnivoice_language import resolve_omnivoice_language
-        warnings.append(make_language_value_note(
-            resolve_omnivoice_language(project.language_code), project.language_code))
-        return warnings
+        return resolve_omnivoice_language(project.language_code)
 
     @classmethod
     def validate_instructions(cls, value: str) -> str:

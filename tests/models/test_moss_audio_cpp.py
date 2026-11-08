@@ -23,7 +23,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.model_settings import REGISTRY
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-from tts_audiobook_tool.tts_models.model_support import make_language_value_note
+from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution, LanguageStatus, make_language_note
 from tts_audiobook_tool.tts_models.audio_cpp_configured import (
     AudioCppBackendAdapter, AudioCppModelSupport, AudioCppSettings,
 )
@@ -176,7 +176,9 @@ def test_unknown_language_is_omitted_from_both_payload_locations(capture, model_
         assert capture[0]["options"] == {"max_tokens": 1024, "text_chunk_size": 100000}
     else:
         assert capture[0]["options"] == {"text_chunk_size": 100000}
-    assert make_language_value_note(None, language) in AudioCppModelSupport(
+    # The note says why no language was sent: no code, or no MOSS tag for it
+    status = LanguageStatus.NO_MATCH if language else LanguageStatus.NOT_SET
+    assert make_language_note(LanguageResolution(status), language) in AudioCppModelSupport(
         definition(model_id)).get_warning_issues(project)
 
 

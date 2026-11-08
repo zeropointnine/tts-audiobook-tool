@@ -5,6 +5,7 @@ from enum import Enum
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.constants import TOP_K_MAX_DEFAULT, TOP_P_MAX_DEFAULT
 from tts_audiobook_tool.text_ops.language_util import map_language
+from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution, resolve_from_table
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -75,9 +76,17 @@ class MossBaseModel(TtsBaseModel):
     }
 
     @staticmethod
-    def get_language_name(language_code: str) -> str:
-        """MOSS language tag for a free-form project code ("en-US" -> "English"), or ""."""
-        return map_language(language_code, MossBaseModel.LANGUAGE_NAMES_BY_CODE) or ""
+    def resolve_language_code(language_code: str) -> LanguageResolution:
+        """
+        MOSS language tag for a free-form project code ("en-US" -> "English"); an
+        unknown language sends none rather than a tag the model wasn't trained on.
+        Shared by local MOSS and its audio.cpp / SGLang-Omni variants.
+        """
+        return resolve_from_table(map_language(language_code, MossBaseModel.LANGUAGE_NAMES_BY_CODE), language_code)
+
+    @classmethod
+    def resolve_language(cls, project: Project, instance: TtsBaseModel | None = None) -> LanguageResolution:
+        return MossBaseModel.resolve_language_code(project.language_code)
 
     @staticmethod
     def get_seed_setting_name(config: "MossConfigs") -> str:
@@ -130,14 +139,6 @@ class MossBaseModel(TtsBaseModel):
                 )
             ]
         return []
-
-    def get_warning_issues(self, project: Project) -> list[str]:
-        warnings = super().get_warning_issues(project)
-        # Informational more than a warning. An unknown name is not sent.
-        from tts_audiobook_tool.tts_models.model_support import make_language_value_note
-        language = MossBaseModel.get_language_name(project.language_code)
-        warnings.append(make_language_value_note(language, project.language_code))
-        return warnings
 
     @classmethod
     def should_trim_trailing_token_noise(

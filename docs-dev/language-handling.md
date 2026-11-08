@@ -190,12 +190,51 @@ Before text goes to a TTS model it passes through `PromptNormalizer`
 
 ### 6. TTS inference
 
-Behaviour varies sharply by model: the code is a hint for some, a contract for one
-(Chatterbox Multilingual), and irrelevant to the rest.
+Behaviour varies sharply by model: the code is a hint for some, a contract for a
+few (Chatterbox, FireRedTTS3), and irrelevant to the rest.
 
-**Model language mappings are translation, not branching.** Asking "what does this
-model call this language?" is answered by a per-model lookup table, not by the
-predicates. The rule:
+**One resolution, three consumers.** Every model answers "what language value does
+this request carry, and how sure are we?" with a `LanguageResolution`
+([`language_resolution.py`](<../tts_audiobook_tool/tts_models/language_resolution.py>)):
+a `value` (exactly what is sent; None omits the field), a `status`, and an optional
+`detail`. The model exposes it as `resolve_language(project, instance=None)` (on the
+`ModelSupport` protocol: local `TtsBaseModel` subclasses, `AudioCppModelSupport`,
+and the SGLang-Omni `ConfiguredModelSupport`). The request sends `.value`. The
+pre-flight note (`make_language_note`) and the readiness blocker
+(`make_language_blocker`) are built from the same object by shared code, so what the
+user is told cannot drift from what is sent.
+
+| Status | Meaning | Pre-flight note |
+|---|---|---|
+| `MAPPED` | the code maps to a value the model is known to accept | `Language value passed to model: English (project language code = "en-US")` |
+| `UNVERIFIED` | a value is sent, but the app doesn't know the model's language list | `… xx (project language code = "xx"; not checked against the model's language list)` |
+| `NOT_SET` | empty project code; the value is the model's default | `… none (project language code not set)` (or `auto` for Qwen3) |
+| `NO_MATCH` | code set, but the model has no equivalent; a fallback is sent | `… auto (project language code = "xx"; no matching model language)` |
+| `UNSUPPORTED` | the model can't run with this code | no note; readiness blocks with `<Model> does not support project language "xx"` (or `<Model> requires a project language code` when empty), short label `language` |
+| `NOT_USED` | the model never receives a language | `Language: not used by this model (project language code = "de")`; nothing when the code is empty |
+
+A `detail` (eg the catalog's IndexTTS2 `language_hint_note`, "applies to IndexTTS2.5
+only") is appended inside the parentheses. Warning order is the same everywhere:
+max-words warning, then the language note, then model-specific extras (eg
+FireRedTTS3's "output … may be weaker" note).
+
+Wiring:
+
+- **Local models:** `TtsBaseModel.resolve_language` defaults to `NOT_USED`;
+  `TtsBaseModel.get_warning_issues` appends the note and `get_blocking_issues`
+  returns `get_language_blocking_issues`. Overrides of `get_blocking_issues` must
+  include `get_language_blocking_issues` themselves.
+- **audio.cpp:** `AudioCppModelSupport.resolve_language_code` applies the catalog
+  `language_policy` (`omit` → `NOT_USED`; `moss` → the MOSS table; `normalized` →
+  base code; `project_code` → raw), then the behavior's `resolve_language(language)
+  -> LanguageResolution` (default: `UNVERIFIED`), then the catalog detail. The
+  language blocker is part of readiness and is rechecked by the adapter before any
+  request.
+- **SGLang-Omni:** MOSS families use the MOSS resolver; everything else is `NOT_USED`.
+
+**Model language mappings are translation, not branching.** "What does this model
+call this language?" is answered by a per-model lookup table, not by the
+predicates:
 
 ```python
 model_value = map_language(project.language_code, MODEL_TABLE)  # None if empty/unmapped
@@ -203,29 +242,29 @@ model_value = map_language(project.language_code, MODEL_TABLE)  # None if empty/
 
 `language_util.map_language` normalizes, then looks up. Model tables are keyed by
 **base code only**; aliases, region suffixes and case are the shared pipeline's job, so
-`en-US`, `eng` and `English` always reach the `"en"` entry.
+`en-US`, `eng` and `English` always reach the `"en"` entry. `resolve_from_table`
+turns a lookup result into `MAPPED` / `NOT_SET` / `NO_MATCH`.
 [`test_model_language_mappings.py`](<../tests/models/test_model_language_mappings.py>)
-asserts every table is base-keyed.
+asserts every table is base-keyed, and pins the note/blocker wording per status.
 
 Predicates still apply where model code genuinely *branches* on a language. The one
 known case, AuK's English-vs-Chinese duration estimate in `auk_duration.py`, still has
 its own `startswith` normalizer that mirrors upstream.
 
-| Behaviour | Models | Resolver |
+| Model | Resolver | Statuses |
 |---|---|---|
-| Normalized table lookup | MOSS: local, both audio.cpp variants, both SGLang-Omni variants | `MossBaseModel.get_language_name` → `LANGUAGE_NAMES_BY_CODE` |
-| | Qwen3: local and audio.cpp, one shared table | `qwen3_language.resolve_qwen3_language` → `QWEN3_LANGUAGE_NAMES`; `"auto"` when unmapped |
-| | FireRedTTS3 (audio.cpp) | `FireRedTts3Behavior.get_language_tag` → `_TAG_BY_CODE`; readiness blocks unmapped codes |
-| Base code plus a few id corrections | OmniVoice: local and audio.cpp | `omnivoice_language.resolve_omnivoice_language` (`ar` → `arb`, `tl` → `fil`, `nb`/`nob` kept as `nb`); audio.cpp via `OmniVoiceBehavior` (`language_policy = "project_code"`, so the behavior sees the raw code) |
-| Normalized code sent as-is | audio.cpp Dots, IndexTTS2, Chatterbox (`language_policy = "normalized"`); Dots local (`DotsBaseModel.resolve_language`) | `AudioCppModelSupport.resolve_request_language` / `DotsBaseModel.resolve_language` |
-| Contract on the normalized code | Chatterbox Multilingual (local) | `ChatterboxBaseModel.resolve_language_id`, compared against the library's base-code `SUPPORTED_LANGUAGES` by readiness and the project menu, and sent as `language_id` |
-| | Chatterbox (audio.cpp) | `ChatterboxBehavior` readiness checks the server's own 19-code list (mirrored from audio.cpp; the server doesn't report it) |
-| No language sent | audio.cpp `language_policy = "omit"`: CosyVoice3, Fish S2 / Drama3, GLM, and Breeze, Echo, Higgs v3 (which never read the field) | n/a |
+| MOSS: local, both audio.cpp variants, both SGLang-Omni variants | `MossBaseModel.resolve_language_code` → `LANGUAGE_NAMES_BY_CODE` | `MAPPED`; else `NO_MATCH` / `NOT_SET` sending nothing |
+| Qwen3: local and audio.cpp, one shared table | `qwen3_language.resolve_qwen3_language` → `QWEN3_LANGUAGE_NAMES` | `MAPPED`; else `NO_MATCH` / `NOT_SET` sending `"auto"` |
+| FireRedTTS3 (audio.cpp) | `FireRedTts3Behavior.resolve_language` → `_TAG_BY_CODE` | `MAPPED`; else `UNSUPPORTED` (empty included: the session requires a tag) |
+| OmniVoice: local and audio.cpp | `omnivoice_language.resolve_omnivoice_language`: base code, `ar` → `arb`, `tl` → `fil`, `nb`/`nob` kept as `nb`, checked against `OMNIVOICE_LANGUAGE_IDS` (copied from the library, which matches audio.cpp's table); audio.cpp via `OmniVoiceBehavior` (`language_policy = "project_code"`, so it sees the raw code) | `MAPPED`; else `NO_MATCH` / `NOT_SET` sending nothing (automatic language selection, instead of audio.cpp's generation error) |
+| Chatterbox Multilingual (local) | `ChatterboxBaseModel.resolve_language`: base code vs the loaded library's `SUPPORTED_LANGUAGES` | with an instance: `MAPPED` / `UNSUPPORTED` (empty included); without one: `UNVERIFIED`. Turbo: `NOT_USED` |
+| Chatterbox (audio.cpp) | `ChatterboxBehavior.resolve_language`: base code vs the server's 19-code list (mirrored from audio.cpp; the server doesn't report it) | `MAPPED` / `UNSUPPORTED`; empty is `NOT_SET` (the session uses English) |
+| Dots (local); audio.cpp Dots, IndexTTS2 | base code via `DotsBaseModel.resolve_language` / the `normalized` policy | `UNVERIFIED` / `NOT_SET` |
+| audio.cpp CosyVoice3, Fish S2 / Drama3, GLM, Breeze, Echo, Higgs v3 (`omit`); SGLang-Omni non-MOSS; local models without an override | — | `NOT_USED` |
 
-No model passes the raw project code through any more. The `project_code` policy
-remains in the catalog schema, but its only user (OmniVoice) has a behavior that
-resolves the code; the base behavior's identity `resolve_language` would send it
-verbatim.
+The `project_code` policy remains in the catalog schema, but its only user
+(OmniVoice) has a behavior that resolves the code; the base behavior would send the
+raw code as `UNVERIFIED`.
 
 **Do any models use region/script subtags?** No. Checked against the audio.cpp source
 (`/d/p/audio.cpp-repo`) and the local libraries, for every model that used to
@@ -236,23 +275,16 @@ receive the raw code:
 | Breeze, Echo (audio.cpp) | no | — | ignored |
 | Higgs v3 (audio.cpp) | no (declares only `"Auto"`) | — | ignored |
 | Chatterbox (audio.cpp) | yes | 19 base codes; lowercases, cuts at `-`, empty means `en`, otherwise errors | worked; `en_us`/`eng` and `zh`/`ja`/`ru`/`he` were generation errors |
-| OmniVoice (audio.cpp) | yes | ~650 exact ids (ISO 639-1, else 639-3, eg `yue`, `nan`, `nn`, `nb`, `fil`, `arb`) or English names; otherwise errors | generation error |
+| OmniVoice (audio.cpp) | yes | 646 exact ids (ISO 639-1, else 639-3, eg `yue`, `nan`, `nn`, `nb`, `fil`, `arb`) or English names; otherwise errors | generation error |
 | OmniVoice (local) | yes | same vocabulary; otherwise warns and goes language-agnostic | silently dropped |
 | Dots (local) | yes | normalizes with `langcodes` itself (strips region, prefers macrolanguage) | worked |
 
 OmniVoice's three-letter ids (`nan` Min Nan, `nn` Nynorsk, …) are separate languages,
 not region subtags. Normalization keeps them, because unknown three-letter codes
 pass through unchanged. Only `nb` conflicts with the shared aliases, hence the
-Bokmål exception. `test_omnivoice_resolved_ids_exist_in_library` (run under
-`venv-omni`) checks every aliased base code resolves to a real OmniVoice id.
-
-Every model that passes a language reports it in the pre-flight warnings through
-`tts_models/model_support.make_language_value_note`, which names the value
-actually sent and the project code it came from, eg
-`Language value passed to model: English (project language code = "en-US")`
-("none" when no language reaches the model). The shown value must come from the
-same resolver as the request (`resolve_request_language`, `get_language_name`,
-`resolve_language_value`, `resolve_language_id`) so the two cannot drift.
+Bokmål exception. `test_omnivoice_id_list_matches_library` (run under `venv-omni`)
+checks the app's id copy equals the library's and that every aliased base code
+resolves.
 
 ### 7. Voice-clone reference transcription
 
@@ -325,7 +357,7 @@ export's `project_snapshot` embeds `language_code` verbatim (see
 | Segmentation record | `book.segmentation_settings.language_code` snapshot | raw snapshot | shows "(none)" in dialogs |
 | Enhance/conversation | `ChunkingConfig` → pysbd | base code (inside `PhraseSegmenter`) | as Segmentation |
 | Prompt prep | `PromptNormalizer` (num2words / substitutions) | base code / `is_english` | digits unexpanded; rules skipped |
-| TTS: model mappings | per-model language tables / resolvers | base code via `map_language` or a model resolver (see §6) | `None` / empty / `auto`; readiness block for FireRedTTS3 and Chatterbox |
+| TTS: model mappings | `resolve_language` → `LanguageResolution` (see §6) | base code via `map_language` or a model resolver | `None` / `auto` sent, or readiness block (FireRedTTS3, Chatterbox); the pre-flight note says which |
 | TTS: Chatterbox ML | readiness check, `language_id` | base code vs the model's list | readiness failure |
 | Whisper STT | `Transcriber`, `ModelWorker.transcribe_audio_blocking` | base code | auto-detect (`language=None`) |
 | Validation | `TextNormalizer`, `Whitelist`, `WordEquivalence`, `Validator` | predicates | language-independent pass only |
@@ -521,8 +553,8 @@ normalization, for the same reason.
 
 **One field, many masters.** `language_code` simultaneously serves as: a segmentation
 hint (pysbd), a text-normalization dialect selector, a whitelist/equivalence table
-key, a Whisper hint, a num2words locale, a TTS model parameter, and — for exactly one
-model — a hard contract. These duties have genuinely different vocabularies. pysbd
+key, a Whisper hint, a num2words locale, a TTS model parameter, and — for a few
+models (Chatterbox, FireRedTTS3) — a hard contract. These duties have genuinely different vocabularies. pysbd
 wants its own language identifiers; Whisper wants its two-letter codes; num2words
 wants locale tags; Chatterbox Multilingual wants its private list of exact strings;
 the whitelist only knows `en` and `es`. A single free-form string is the lowest common
@@ -597,9 +629,10 @@ are external and consulted with the base code.
 - **Project default `"en"`** — same section (leaning: leave it).
 - **Korean in `CJK_LANGUAGES`** — Korean is space-delimited, so whitespace word
   logic could plausibly apply; it is grouped with zh/ja for historical reasons.
-- **OmniVoice readiness** — the audio.cpp session still errors at generation time for
-  a base code OmniVoice doesn't know (local OmniVoice just goes language-agnostic).
-  A readiness check would need OmniVoice's id list in the main process.
+- **Mirrored language lists** — `OMNIVOICE_LANGUAGE_IDS` and Chatterbox audio.cpp's
+  `SUPPORTED_LANGUAGES` are copies (neither server nor library can be queried from
+  the main process). The OmniVoice copy is checked against the library under
+  `venv-omni`; the Chatterbox one needs updating by hand when audio.cpp changes.
 - **AuK duration estimate** — its own `startswith` language normalizer could use the
   shared pipeline, but it deliberately mirrors upstream.
 - **Input limit** — the 5-character validator rejects `english` and `zh-Hant` even

@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution, resolve_unverified
 from tts_audiobook_tool.tts_models.audio_cpp_definition import (
     AudioCppModelDefinition,
     AudioCppParameter,
@@ -90,9 +91,13 @@ class AudioCppModelBehavior:
     def requires_voice_preset(self, values: ParameterValues) -> bool:
         return False
 
-    def resolve_language(self, language: str) -> str:
-        """Translate the catalog-normalized project language into a model hint."""
-        return language
+    def resolve_language(self, language: str) -> LanguageResolution:
+        """
+        Translate the project language (base code under the catalog's
+        "normalized" policy, raw under "project_code") into the family's value.
+        Default: send it as-is, unchecked against the family's language list.
+        """
+        return resolve_unverified(language)
 
     def get_ignored_parameters(self, values: ParameterValues) -> frozenset[str]:
         """Catalog parameters the server does not read under these values;

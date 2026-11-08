@@ -15,6 +15,9 @@ from tts_audiobook_tool.tts_models.audio_cpp_definition import (
     AudioCppTextParameter,
 )
 from tts_audiobook_tool.tts_models.audio_cpp_behavior import get_audio_cpp_behavior
+from tts_audiobook_tool.tts_models.language_resolution import (
+    NOT_USED, LanguageResolution, append_language_note, make_language_blocker,
+)
 from tts_audiobook_tool.tts_models.model_support import make_max_words_exceed_warning
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -131,6 +134,7 @@ class AudioCppModelSupport:
         if not issues:
             # Behavior rules assume valid values; invalid ones are reported above.
             issues.extend(self.behavior.get_blocking_issues(project, values))
+        issues.extend(self.get_language_blocking_issues(project))
         try:
             seed = project.get_model_setting(self.INFO.id, "seed")
             if type(seed) is not int or seed < -1 or seed > 2**32 - 1:
@@ -147,44 +151,50 @@ class AudioCppModelSupport:
                 issues.append(ReadinessIssue("audio.cpp server", Tts._remote_issue or "Selected audio.cpp model is unavailable"))
         return issues
 
-    def resolve_request_language(self, language_code: str) -> str | None:
-        """The language value a request sends for this project code, or None when
-        the request omits the field. Shared by the payload and the pre-flight note."""
+    def resolve_language_code(self, language_code: str) -> LanguageResolution:
+        """
+        How this family resolves a project language code (see
+        `language_resolution`). The payload sends `.value` (None omits the
+        field); the pre-flight note and the language blocker derive from the
+        same result.
+        """
         policy = self.definition.language_policy
         if policy == "omit":
-            return None  # The family auto-detects and never receives a language field.
-        language = language_code or ""
+            return NOT_USED  # The family never reads a language field.
         if policy == "moss":
             from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
-            language = MossBaseModel.get_language_name(language)
-        if policy == "normalized":
-            # Base lowercase code ("en-US"/"English" -> "en"); empty is omitted below.
-            from tts_audiobook_tool.text_ops.language_util import normalize_language_code
-            language = normalize_language_code(language)
-        language = self.behavior.resolve_language(language)
-        # Keep other families' existing empty/ISO language fields, but omit an
-        # unknown MOSS hint instead of inserting a tag the model wasn't trained on.
-        if language or policy == "project_code":
-            return language
-        return None
+            resolution = MossBaseModel.resolve_language_code(language_code or "")
+        else:
+            language = language_code or ""
+            if policy == "normalized":
+                # Base lowercase code ("en-US"/"English" -> "en")
+                from tts_audiobook_tool.text_ops.language_util import normalize_language_code
+                language = normalize_language_code(language)
+            resolution = self.behavior.resolve_language(language)
+        return resolution.with_detail(self.definition.language_hint_note)
+
+    def resolve_language(self, project: Project, instance: object = None) -> LanguageResolution:
+        return self.resolve_language_code(project.language_code)
+
+    def get_language_blocking_issues(self, project: Project) -> list[ReadinessIssue]:
+        blocker = make_language_blocker(
+            self.resolve_language(project), project.language_code,
+            self.INFO.ui.get("proper_name") or self.INFO.id)
+        return [blocker] if blocker else []
 
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = []
-        if self.definition.language_policy != "omit":
-            from tts_audiobook_tool.tts_models.model_support import make_language_value_note
-            warnings.append(make_language_value_note(
-                self.resolve_request_language(project.language_code), project.language_code,
-                self.definition.language_hint_note))
         # The "voices may vary" note: voice_variation_warning.get_run_warnings()
+        warning = self.get_max_words_exceed_warning(project)
+        if warning:
+            warnings.append(warning)
+        append_language_note(warnings, self.resolve_language(project), project.language_code)
         try:
             values = self.get_values(project)
         except ValueError:
             pass  # Invalid settings are reported as blocking issues instead.
         else:
             warnings.extend(self.behavior.get_warning_issues(project, values))
-        warning = self.get_max_words_exceed_warning(project)
-        if warning:
-            warnings.append(warning)
         return warnings
 
     def should_trim_trailing_token_noise(self, project: Project, instance: object = None) -> bool:
@@ -300,7 +310,8 @@ class AudioCppBackendAdapter:
             values = self.support.get_values(project)
             # Readiness normally stops these first; recheck so no caller can
             # send a request the behavior has ruled out.
-            blockers = self.support.behavior.get_blocking_issues(project, values)
+            blockers = (self.support.get_language_blocking_issues(project)
+                        + self.support.behavior.get_blocking_issues(project, values))
             if blockers:
                 return blockers[0].verbose
             seed = -1 if force_random_seed else project.get_model_setting(self.INFO.id, "seed")
@@ -369,7 +380,7 @@ class AudioCppBackendAdapter:
         # Family-pinned constants first, then the user's declared controls; a
         # parameter targeting the same key wins over a pinned one.
         options: dict[str, int | float | str] = dict(self.definition.request_options)
-        request_language = self.support.resolve_request_language(language)
+        request_language = self.support.resolve_language_code(language).value
         if request_language is not None:
             if self.definition.language_target == "options":
                 options["language"] = request_language

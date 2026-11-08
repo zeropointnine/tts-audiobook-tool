@@ -14,6 +14,7 @@ from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.auk_duration import estimate_instruct_tts_seconds
+from tts_audiobook_tool.tts_models.language_resolution import NOT_USED, LanguageResolution, append_language_note
 from tts_audiobook_tool.tts_models.model_support import make_max_words_exceed_warning
 from tts_audiobook_tool.tts_models.sgl_omni_behavior import ParameterValues, get_sgl_omni_behavior
 from tts_audiobook_tool.tts_models.sgl_omni_definition import ChoiceParameter, NumericParameter, SglOmniModelDefinition
@@ -164,18 +165,24 @@ class ConfiguredModelSupport:
             issues.append(server_issue)
         return issues
 
-    def get_warning_issues(self, project: Project) -> list[str]:
-        warnings = []
+    def resolve_language(self, project: Project, instance: object = None) -> LanguageResolution:
+        """
+        How this family resolves the project language code (see
+        `language_resolution`): only the MOSS families send one. The payload
+        sends `.value`; the pre-flight note derives from the same result.
+        """
         if self.definition.language_policy == "moss":
             from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
-            from tts_audiobook_tool.tts_models.model_support import make_language_value_note
-            # Mirrors the payload: an unknown name omits the field.
-            language = MossBaseModel.get_language_name(project.language_code)
-            warnings.append(make_language_value_note(language, project.language_code))
+            return MossBaseModel.resolve_language_code(project.language_code)
+        return NOT_USED
+
+    def get_warning_issues(self, project: Project) -> list[str]:
+        warnings = []
         # The "voices may vary" note: voice_variation_warning.get_run_warnings()
         warning = self.get_max_words_exceed_warning(project)
         if warning:
             warnings.append(warning)
+        append_language_note(warnings, self.resolve_language(project), project.language_code)
         top_k = self.definition.parameters.get("top_k")
         if top_k and top_k.max_request_value is not None:
             stored = ConfiguredSettings.stored(project, top_k, self.INFO.id)
@@ -354,11 +361,9 @@ class SglOmniBackendAdapter:
                 payload["stage_params"] = {"auk_engine": {"gen_seconds": (
                     reference_seconds * len(prompt.encode("utf-8")) /
                     max(1, len(transcript.encode("utf-8"))) / speed)}}
-            if self.definition.language_policy == "moss":
-                from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
-                language = MossBaseModel.get_language_name(project.language_code)
-                if language:
-                    payload["language"] = language
+            language = self.support.resolve_language(project).value
+            if language:
+                payload["language"] = language
             payloads.append(payload)
         if streaming:
             result = SglOmniUtil.generate_streaming(SglOmniUtil.get_base_url(), payloads[0],

@@ -4,7 +4,8 @@ from enum import Enum
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.tts_models.qwen3_language import QWEN3_AUTO_LANGUAGE, resolve_qwen3_language
+from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution
+from tts_audiobook_tool.tts_models.qwen3_language import resolve_qwen3_language
 from tts_audiobook_tool.util import *
 
 from typing import TYPE_CHECKING
@@ -80,17 +81,10 @@ class Qwen3BaseModel(TtsBaseModel):
     def is_model_type_supported(self) -> bool:
         return self.model_type in ["base", "custom_voice", "voice_design"] # ie, all current types
 
-    def resolve_language_value(self, language_code: str) -> tuple[str, str]:
-        """
-        Returns qwen model's language value, and a note detail ("" when the code maps).
-        Qwen uses English names for language values (see `qwen3_language`).
-        """
-        language = resolve_qwen3_language(language_code or "")
-        if language:
-            return language, ""
-        if (language_code or "").strip():
-            return QWEN3_AUTO_LANGUAGE, "no matching Qwen3-TTS language"
-        return QWEN3_AUTO_LANGUAGE, ""
+    @classmethod
+    def resolve_language(cls, project: Project, instance: TtsBaseModel | None = None) -> LanguageResolution:
+        # Qwen uses English names for language values (see `qwen3_language`)
+        return resolve_qwen3_language(project.language_code)
 
     # ---
 
@@ -191,16 +185,6 @@ class Qwen3BaseModel(TtsBaseModel):
                 ... # voice-clone state is validated lazily (validate_voices)
 
         return items
-
-    def get_warning_issues(self, project: Project) -> list[str]:
-
-        warnings = super().get_warning_issues(project)
-
-        from tts_audiobook_tool.tts_models.model_support import make_language_value_note
-        language, detail = self.resolve_language_value(project.language_code)
-        warnings.append(make_language_value_note(language, project.language_code, detail))
-
-        return warnings
 
     # ---
 
