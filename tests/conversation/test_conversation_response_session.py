@@ -582,10 +582,11 @@ def test_save_chat_output_saves_concatenated_sounds(tmp_path, monkeypatch) -> No
 
     monkeypatch.setattr(internals.SoundFileUtil, "save_flac", fake_save_flac)
     monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(file_tag="testmodel"))
+    # Chat tags via the generation dispatcher for voice slot 0
     monkeypatch.setattr(
         Tts,
-        "get_model_support",
-        lambda project: SimpleNamespace(get_voice_tag=lambda project: "voice1"),
+        "get_voice_tag_for_selection_index",
+        lambda project, index: f"voice{index + 1}",
     )
 
     session.save_chat_output_if_needed()

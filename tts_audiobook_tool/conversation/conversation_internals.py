@@ -709,7 +709,8 @@ class _ResponseEngine:
     def make_chat_file_name(self) -> str:
         timestamp = SoundSegmentUtil.make_timestamp_string()
         model = Tts.get_info(self.project).file_tag
-        voice = Tts.get_model_support(self.project).get_voice_tag(self.project)
+        # Chat synthesizes with voice slot 0; tag it as generation would
+        voice = Tts.get_voice_tag_for_selection_index(self.project, 0)
         text = " " + app_text.sanitize_for_filename(self.render_response_text()[:50])
         return f"[{timestamp}] [chat] [{model}] [{voice}]{text}.flac"
 

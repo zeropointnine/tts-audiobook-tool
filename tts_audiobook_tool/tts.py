@@ -142,13 +142,16 @@ class Tts:
             return support.get_voice_tag(project)
 
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+        voice = ProjectVoiceUtil.current_voice(project, model_type, voice_selection_index)
         # A voice's preset takes precedence over its sample
-        preset = ProjectVoiceUtil.active_voice_preset(
-            project, ProjectVoiceUtil.current_voice(project, model_type, voice_selection_index)
-        )
+        preset = ProjectVoiceUtil.active_voice_preset(project, voice)
         if preset:
             return support.get_voice_tag_for_preset(preset)
-        voice_value = ProjectVoiceUtil.current_voice_value(project, model_type, voice_selection_index)
+        # The tag identifies the voice entry, not the exact audio used: derive
+        # it from the entry's stored sample name so an active crop (design-time
+        # tuning of the same voice) does not read as a different voice in
+        # segment file names or the concat output's voice summary.
+        voice_value = voice.file_name if voice is not None else ""
         if not voice_value:
             if ProjectVoiceUtil.has_any_voice_sample(project):
                 # A sample-less voice among sampled ones generates with the

@@ -4,6 +4,7 @@ default voice; a voice's sample is set (or replaced) from its own submenu.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import cast
@@ -253,6 +254,18 @@ def test_voice_tag_of_sample_less_voice_among_sampled_ones_is_not_the_primary(mo
     assert Tts.get_voice_tag_for_selection_index(project, 1) == "none"
     # The project itself is untouched
     assert project.voice_references == [Voice("suzie.flac", "t"), Voice()]
+
+
+def test_voice_tag_names_the_entry_not_its_active_crop(tmp_path):
+    # Generation uses the crop's audio, but the tag stays the entry's sample
+    # name so a crop does not read as a second voice in file names
+    voice = Voice("suzie.flac", "t", crop=VoiceCrop("0123abcd.flac", 0.5, 2.5, "crop t"))
+    project = make_project(tmp_path, [voice])
+    crop_path = ProjectVoiceUtil.resolve_cropped_voice_file_path(project, voice)
+    os.makedirs(os.path.dirname(crop_path), exist_ok=True)
+    open(crop_path, "wb").close()
+    assert ProjectVoiceUtil.current_voice_value(project, model(), 0) == "crops/0123abcd.flac"
+    assert Tts.get_voice_tag_for_selection_index(project, 0) == "suzie"
 
 
 @pytest.mark.parametrize("model_id, flagged", [("glm_local", True), ("moss_local", False)])
