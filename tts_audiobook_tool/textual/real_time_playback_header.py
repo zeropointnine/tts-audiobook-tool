@@ -171,7 +171,7 @@ class RealTimePlaybackWaveform(Static):
     Positive peaks extend up from the zero axis and negative peaks down,
     each measured independently. Bars are COL_DIM; the already-played prefix
     is redrawn in COL_DEFAULT. Silent stretches show the flat zero axis.
-    With no envelope (before the first segment) the band is just the axis.
+    With no envelope (before the first segment) the band is blank.
     The app drives `show` from its
     fast waveform tick; the plain rendered rows are cached per (envelope,
     width), and the widget is only updated when the played column changes.
@@ -198,6 +198,11 @@ class RealTimePlaybackWaveform(Static):
         cached = self._lines_cache
         if cached is not None and cached[0] == cache_key:
             lines = cached[1]
+        elif not envelope:
+            # Nothing has played yet: leave the band blank rather than
+            # drawing a lone zero axis.
+            lines = [" " * columns] * (2 * WAVEFORM_HALF_ROWS)
+            self._lines_cache = (cache_key, lines)
         else:
             # Both halves share the fixed reference peak, so their heights
             # are directly comparable.

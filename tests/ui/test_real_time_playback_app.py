@@ -76,15 +76,13 @@ def test_app_source_band_is_framed_below_the_shared_divider(fake_worker) -> None
             log_y = app.query_one("#realtime-output-shell").region.y
             assert header_y < divider_y < waveform.region.y < band_text_y < band_rule_y < log_y
             # The waveform (2 * WAVEFORM_HALF_ROWS rows) sits directly above
-            # the text band, and with no segment yet shows just the dim
-            # midline, on the row above center, across its width.
+            # the text band, and with no segment yet is blank (no zero axis).
             half = WAVEFORM_HALF_ROWS
             assert waveform.outer_size == Size(80, 2 * half)
             assert waveform.region.bottom == band_text_y
             rows = str(waveform.render()).split("\n")
             assert len(rows) == 2 * half
-            assert rows[half - 1] == "▁" * 78
-            assert all(row.strip() == "" for i, row in enumerate(rows) if i != half - 1)
+            assert all(row.strip() == "" for row in rows)
             # Exactly two rule widgets: the shared divider and the band's own.
             assert len(app.query(Rule)) == 2
             # 2-line text area plus the 1-line closing rule.
