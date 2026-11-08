@@ -133,7 +133,7 @@ The band was playing "Fly Me to the Moon."
 The play is titled "Hamlet."
 ```
 
-Properly typeset dialog is always set off from the preceding sentence by punctuation: a comma (`She said, "Yes."`), a colon, a dash, or sentence-ending punctuation (`He turned. "Go away."`), or it begins the paragraph. The attribution-verb exemption (case-insensitive stem match against the same English verb list used for attribution continuation) keeps comma-less attributions dialog:
+Properly typeset dialog is always set off from the preceding sentence by punctuation: a comma (`She said, "Yes."`), a colon, a dash, or sentence-ending punctuation (`He turned. "Go away."`), or it begins the paragraph. The attribution-verb exemption (case-insensitive match against the inflected forms — `-s`, `-ed`, `-ing`, plus irregular `said`/`told` — of the same English verb list used for attribution continuation; a word that merely begins with a listed verb, such as "address", does not qualify) keeps comma-less attributions dialog:
 
 ```text
 He said "Hello."

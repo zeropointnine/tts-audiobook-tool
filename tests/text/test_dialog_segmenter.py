@@ -104,6 +104,9 @@ class TestDialogSegmenter(unittest.TestCase):
             'The play is titled "Hamlet."',
             'His favorite was \u201cCrime and Punishment.\u201d',
             'She hummed "somewhere over the rainbow" all day.',
+            # Begins with a listed verb ("add", "state") but is not one.
+            'Mail it to the address "Main Street."',
+            'She read the statement "We Are Closed."',
         ):
             with self.subTest(text=text):
                 groups = segment_one(text)
@@ -117,6 +120,16 @@ class TestDialogSegmenter(unittest.TestCase):
             [group.text for group in groups],
             ["He said ", '"Hello." ', "Then she left."],
         )
+
+    def test_accepts_comma_less_quote_after_inflected_attribution_verb(self):
+        # Inflected forms of listed verbs are exempt too ("stating" drops
+        # the "e" of "state").
+        for verb in ("stating", "replying", "whispering"):
+            with self.subTest(verb=verb):
+                groups = segment_one(f'He was {verb} "Hello." Then she left.')
+
+                self.assertEqual(groups[1].text, '"Hello." ')
+                self.assertTrue(groups[1].is_dialog)
 
     def test_accepts_lowercase_quote_longer_than_three_words(self):
         groups = segment_one(
@@ -592,11 +605,11 @@ class TestPhraseQuoteEnd(unittest.TestCase):
 
 class TestPhraseQuoteEndNameVerb(unittest.TestCase):
     """
-    For language code "en" only, a piece ending at a close-quote also gets
-    reason PHRASE_QUOTE_END when the continuation is a capital-initial word
-    (a speaker name) whose next word starts with a whitelisted attribution
-    verb stem (eg, "Some dialog," John said.; the stem "say" also accepts
-    "says"/"saying").
+    For language codes normalizing to "en" only, a piece ending at a
+    close-quote also gets reason PHRASE_QUOTE_END when the continuation is a
+    capital-initial name word (a speaker name) whose next word is an
+    inflected form of a whitelisted attribution verb (eg, "Some dialog,"
+    John said.; "say" also accepts "says"/"saying").
     """
 
     @staticmethod
@@ -654,10 +667,18 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
                 self.assertEqual(groups[0].text, quote)
                 self.assertEqual(groups[0].phrases[-1].reason, Reason.PHRASE)
 
-    def test_name_verb_prefix_match_accepts_inflected_forms(self):
-        # A verb word hits when it starts with a listed stem, so inflected
-        # forms are recognized even when they are not listed verbatim
-        # ("says", "saying" from "say"; "adding" from "add"; ...).
+    def test_name_verb_rule_accepts_en_variant_codes(self):
+        # Free-form project codes are normalized, so region/alias variants
+        # of English enable the rule just like "en".
+        for language_code in ("en-US", "en_GB", "EN", "eng", "English"):
+            with self.subTest(language_code=language_code):
+                groups = segment_one_lang('"Some dialog," John said.', language_code)
+                self.assertEqual(groups[0].phrases[-1].reason, Reason.PHRASE_QUOTE_END)
+
+    def test_name_verb_match_accepts_inflected_forms(self):
+        # Inflected forms of a listed verb are recognized even when they are
+        # not listed verbatim ("says", "saying" from "say"; "adding" from
+        # "add"; "continuing" drops the "e"; "cried" from "cry").
         cases = (
             ('"Some dialog," John says.', '"Some dialog," ', "John says."),
             ('"Some dialog." John saying.', '"Some dialog." ', "John saying."),
@@ -666,6 +687,8 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
             ('"Some dialog," Jane answering.', '"Some dialog," ', "Jane answering."),
             ('"Some dialog." Tom told her.', '"Some dialog." ', "Tom told her."),
             ('"Some dialog." Jane cried.', '"Some dialog." ', "Jane cried."),
+            ('"Some dialog," Anne continuing.', '"Some dialog," ', "Anne continuing."),
+            ('"Some dialog," Tom replies.', '"Some dialog," ', "Tom replies."),
         )
         for text, quote, attribution in cases:
             with self.subTest(text=text):
@@ -677,6 +700,40 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
                         [(attribution, Reason.SENTENCE)],
                     ],
                 )
+
+    def test_word_merely_starting_with_verb_stem_does_not_hit(self):
+        # Verbs are matched as whole inflected forms, not prefixes: words
+        # that only begin with a listed verb ("remark", "cry", "add",
+        # "state") are not attributions.
+        cases = (
+            '"Wow." Truly remarkable work.',
+            '"Run!" The crystal shattered.',
+            '"Go." Your address is wrong.',
+            '"No." The statement was final.',
+        )
+        for text in cases:
+            with self.subTest(text=text):
+                groups = segment_one_lang(text, "en")
+                self.assertNotEqual(groups[0].phrases[-1].reason, Reason.PHRASE_QUOTE_END)
+
+    def test_possessive_or_punctuated_name_does_not_hit(self):
+        # A possessive ("John's answer") or a word carrying punctuation is
+        # not a speaker name, even when a listed verb follows it.
+        cases = (
+            '"Yes." John\'s answer was final.',
+            '"Yes." John’s answer was final.',
+            '"Yes." Well, said nothing.',
+        )
+        for text in cases:
+            with self.subTest(text=text):
+                groups = segment_one_lang(text, "en")
+                self.assertNotEqual(groups[0].phrases[-1].reason, Reason.PHRASE_QUOTE_END)
+
+    def test_name_with_internal_apostrophe_or_hyphen_hits(self):
+        for name in ("O'Brien", "D’Arcy", "Mary-Jane"):
+            with self.subTest(name=name):
+                groups = segment_one_lang(f'"Some dialog," {name} said.', "en")
+                self.assertEqual(groups[0].phrases[-1].reason, Reason.PHRASE_QUOTE_END)
 
     def test_line_break_between_name_and_verb_defeats_match(self):
         groups = segment_one_lang('"Some dialog,"\nJohn\nsaid.', "en")
