@@ -77,6 +77,32 @@ def test_language_class_predicates(
 
 
 @pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("en-US", "English"),
+        ("eng", "English"),
+        ("Deutsch", None),  # endonyms are not aliased
+        ("ger", "German"),
+        ("german", "German"),
+        ("pt-BR", None),  # not in the table
+        ("", None),
+        ("  ", None),
+    ],
+)
+def test_map_language(raw: str, expected: str | None) -> None:
+    table = {"en": "English", "de": "German"}
+    assert language_util.map_language(raw, table) == expected
+
+
+def test_alias_table_never_aliases_a_base_code() -> None:
+    # An alias must never be a base code with its own entry (eg "es" -> "pt"),
+    # which would silently redirect that language; base codes normalize to themselves
+    aliases = language_util._LANGUAGE_ALIASES
+    assert not set(aliases) & set(language_util._ALIASES_BY_BASE)
+    assert all(normalize_language_code(base) == base for base in language_util._ALIASES_BY_BASE)
+
+
+@pytest.mark.parametrize(
     "language_code", ["en-US", "en_GB", "eng", "English", "es-419", "spa"]
 )
 def test_subsystems_share_normalization(language_code: str) -> None:

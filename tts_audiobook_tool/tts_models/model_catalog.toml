@@ -2067,6 +2067,8 @@ project_links = [
 ]
 
 [models.audio_cpp]
+# The family never reads the language field; send none.
+language_policy = "omit"
 # Selected Voice.instructions[model ID] is sent as options.instruction when used.
 voice_instructions = true
 menu = [
@@ -2160,6 +2162,9 @@ project_links = [
 ]
 
 [models.audio_cpp]
+# Base code ("en_US"/"eng" -> "en"): the session only cuts at "-" and
+# rejects anything else; readiness checks the server's language list.
+language_policy = "normalized"
 menu = [
     { kind = "voice_samples" },
     { parameter = "temperature", label = "Temperature", target_menu = "model" },
@@ -2425,6 +2430,8 @@ project_links = [
 ]
 
 [models.audio_cpp]
+# The family never reads the language field; send none.
+language_policy = "omit"
 # One request below this size stays inside a single ~300-codepoint server
 # chunk; longer text enters the family's multi-chunk path.
 #
@@ -2881,6 +2888,8 @@ project_links = [
 ]
 
 [models.audio_cpp]
+# The family declares only "Auto" and never reads the field; send none.
+language_policy = "omit"
 menu = [
     { kind = "voice_samples" },
     { parameter = "temperature", label = "Temperature", target_menu = "model" },
@@ -3228,6 +3237,9 @@ instructions_message = "Enter voice design instructions for this voice:\n(Must c
 instructions_label = "Voice design"
 
 [models.audio_cpp]
+# The raw code reaches OmniVoiceBehavior.resolve_language, which normalizes it
+# into OmniVoice's own id vocabulary (keeping eg "nb" distinct from "no").
+language_policy = "project_code"
 # Selected Voice.instructions[model ID] is sent as options.instruction when used.
 voice_instructions = true
 # Optional in the family, but used when present: the reference transcript

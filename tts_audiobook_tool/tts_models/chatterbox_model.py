@@ -135,7 +135,7 @@ class ChatterboxModel(ChatterboxBaseModel):
         repetition_penalty: float
         turbo_top_k: int | None = None
         if self._model_type.is_multilingual:
-            language_id = project.language_code
+            language_id = ChatterboxBaseModel.resolve_language_id(project.language_code)
         else:
             # Unset sends no top-k (the library default)
             stored_top_k = project.get_model_setting('chatterbox_local', 'turbo_top_k')

@@ -11,30 +11,65 @@ Any logic that gives a language special treatment ("English-only rule",
 predicates here (`is_english`, `is_spanish`, `is_cjk`,
 `is_validation_supported`) rather than comparing strings directly. Code that
 hands a language to an external library that only understands base codes
-(pysbd, Whisper, num2words) should pass `normalize_language_code(...)`.
+(pysbd, Whisper, num2words) should pass `normalize_language_code(...)`. Code
+that translates the project code into a TTS model's own language vocabulary
+should use `map_language` with a table keyed by base code.
 
 Keeping the alias table and base-code rule here, in one place, stops those
 features from drifting apart. See docs-dev/language-handling.md.
 """
 
+from collections.abc import Mapping
+from typing import TypeVar
 
-# Common full names and ISO 639-2/3 codes -> primary 2-letter (or Whisper-style) code.
-# Keeps language-keyed features from being silently disabled by a
-# region/script/name-qualified project language code.
+_T = TypeVar("_T")
+
+
+# Base code -> its ISO 639-2 (T and B) / 639-3 codes and English names.
+# Covers every language some TTS model's language table knows, so those tables
+# can be keyed by base code only (see `map_language`).
+_ALIASES_BY_BASE: dict[str, tuple[str, ...]] = {
+    "ar": ("ara", "arabic"),
+    "cs": ("ces", "cze", "czech"),
+    "da": ("dan", "danish"),
+    "de": ("deu", "ger", "german"),
+    "el": ("ell", "gre", "greek"),
+    "en": ("eng", "english"),
+    "es": ("spa", "spanish"),
+    "fa": ("fas", "per", "persian", "farsi"),
+    "fi": ("fin", "finnish"),
+    "fr": ("fra", "fre", "french"),
+    "he": ("heb", "hebrew"),
+    "hi": ("hin", "hindi"),
+    "hu": ("hun", "hungarian"),
+    "id": ("ind", "indonesian"),
+    "it": ("ita", "italian"),
+    "ja": ("jpn", "japanese"),
+    "ko": ("kor", "korean"),
+    "mk": ("mkd", "mac", "macedonian"),
+    "ms": ("msa", "may", "malay"),
+    "nl": ("nld", "dut", "dutch"),
+    # Bokmål is the standard written Norwegian; Whisper and Chatterbox only know "no"
+    "no": ("nor", "nob", "nb", "norwegian"),
+    "pl": ("pol", "polish"),
+    "pt": ("por", "portuguese"),
+    "ro": ("ron", "rum", "romanian"),
+    "ru": ("rus", "russian"),
+    "sv": ("swe", "swedish"),
+    "sw": ("swa", "swahili"),
+    "th": ("tha", "thai"),
+    "tl": ("tgl", "tagalog"),
+    "tr": ("tur", "turkish"),
+    "uk": ("ukr", "ukrainian"),
+    "vi": ("vie", "vietnamese"),
+    "yue": ("cantonese",),
+    "zh": ("zho", "chi", "cmn", "chinese", "mandarin"),
+}
+
+# Alias -> base code. Keeps language-keyed features from being silently
+# disabled by a name- or three-letter-qualified project language code.
 _LANGUAGE_ALIASES: dict[str, str] = {
-    "english": "en",
-    "eng": "en",
-    "spanish": "es",
-    "spa": "es",
-    "chinese": "zh",
-    "zho": "zh",
-    "chi": "zh",
-    "cmn": "zh",  # Mandarin
-    "japanese": "ja",
-    "jpn": "ja",
-    "korean": "ko",
-    "kor": "ko",
-    "cantonese": "yue",
+    alias: base for base, aliases in _ALIASES_BY_BASE.items() for alias in aliases
 }
 
 # Languages exempted from whitespace-based word logic (word-error validation,
@@ -80,3 +115,17 @@ def is_validation_supported(language_code: str) -> bool:
     Empty ("no language") is supported.
     """
     return not is_cjk(language_code)
+
+
+def map_language(language_code: str, table: Mapping[str, _T]) -> _T | None:
+    """
+    Looks up a free-form project code in a table keyed by base code, eg a TTS
+    model's ``{"en": "English", ...}``. Returns None when the code is empty or
+    the language is not in the table.
+
+    Tables should hold base codes only: aliases, region/script suffixes, and
+    case are resolved here, so ``en-US``, ``eng`` and ``English`` all reach the
+    ``"en"`` entry.
+    """
+    code = normalize_language_code(language_code)
+    return table.get(code) if code else None

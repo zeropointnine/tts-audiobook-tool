@@ -520,7 +520,7 @@ def test_higgs_payload_carries_top_level_controls_and_reference_transcript(monke
     assert payload["voice_ref"]["data"].startswith("data:audio/wav;base64,")
     assert {key: value for key, value in payload.items() if key != "voice_ref"} == {
         "model": "higgs-audio-tts", "input": "hello", "response_format": "wav",
-        "seed": 7, "language": "fr", "temperature": 0.8, "top_p": 0.8, "top_k": 12,
+        "seed": 7, "temperature": 0.8, "top_p": 0.8, "top_k": 12,
         "reference_text": "the exact words spoken",
         "options": {"text_chunk_size": 100000},
     }
@@ -545,7 +545,7 @@ def test_higgs_generates_without_a_reference_sample(monkeypatch):
     assert not isinstance(adapter.generate_using_project(project, ["hello"]), str)
     assert captured == [{
         "model": "higgs-audio-tts", "input": "hello", "response_format": "wav",
-        "seed": 7, "language": "fr", "temperature": 0.8, "top_p": 0.8, "top_k": 30,
+        "seed": 7, "temperature": 0.8, "top_p": 0.8, "top_k": 30,
         "options": {"text_chunk_size": 100000},
     }]
 
@@ -581,7 +581,7 @@ def test_breeze_payload_sends_instructions_and_the_reference_transcript(monkeypa
     # Missing/cleared instructions leave the model's own default intact.
     expected = {
         "model": "breeze-clone", "input": "hello", "response_format": "wav",
-        "seed": 7, "language": "en", "temperature": 0.9, "top_p": 1.0, "top_k": 0,
+        "seed": 7, "temperature": 0.9, "top_p": 1.0, "top_k": 0,
         "guidance_scale": 1.0, "reference_text": "the exact words spoken",
         "options": {"text_chunk_size": 100000},
     }
@@ -659,7 +659,7 @@ def test_echo_payload_sends_steps_top_level_and_cfg_controls_in_options(
     # scales are only readable inside `options`. Truncation is left to the server.
     assert {key: value for key, value in payload.items() if key != "voice_ref"} == {
         "model": "echo-tts", "input": "hello", "response_format": "wav", "seed": 7,
-        "language": "en", "num_inference_steps": 32,
+        "num_inference_steps": 32,
         "options": {"text_guidance_scale": 3.0, "speaker_guidance_scale": 8.0},
     }
     assert adapter.generate_using_project(project, ["x"], on_stream_end=lambda: None) \
@@ -1088,12 +1088,14 @@ def test_fireredtts3_language_note_shows_the_tag_sent():
 
 
 @pytest.mark.parametrize("project_language, expected", [
-    ("en-US", 'Language value passed to model: en-US (project language code = "en-US")'),
+    ("en-US", 'Language value passed to model: en (project language code = "en-US")'),
+    ("ar", 'Language value passed to model: arb (project language code = "ar")'),
     ("", "Language value passed to model: none (project language code not set)"),
 ])
-def test_project_code_family_language_note_shows_raw_code(project_language, expected):
-    # A default ("project_code") family sends the project code verbatim, so the
-    # note does too; "omit" families send none and print no note.
+def test_omnivoice_language_note_shows_resolved_id(project_language, expected):
+    # OmniVoice's behavior resolves the raw project code into an OmniVoice id
+    # (the session rejects "en-US"), and the note shows that id; "omit"
+    # families send none and print no note.
     project = FakeProject(model_id=OMNIVOICE_ID)
     project.language_code = project_language
     assert expected in AudioCppModelSupport(definition(OMNIVOICE_ID)).get_warning_issues(project)
@@ -1344,11 +1346,14 @@ def test_models_default_to_catalog_driven_behavior():
     # shipped behavior also verifies each subclass's REQUIRED_PARAMETERS against
     # the shipped catalog.
     from tts_audiobook_tool.tts_models.audio_cpp_behavior import AudioCppModelBehavior
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_chatterbox import ChatterboxBehavior
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_cosyvoice3 import CosyVoice3Behavior
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_fireredtts3 import FireRedTts3Behavior
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_omnivoice import OmniVoiceBehavior
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_qwen3 import Qwen3Behavior
     registered = {COSYVOICE3_ID: CosyVoice3Behavior, FIREREDTTS3_ID: FireRedTts3Behavior,
-                  "qwen3tts_audiocpp": Qwen3Behavior}
+                  "qwen3tts_audiocpp": Qwen3Behavior, "chatterbox_audiocpp": ChatterboxBehavior,
+                  OMNIVOICE_ID: OmniVoiceBehavior}
     for model_id, item in load_audio_cpp_definitions().models.items():
         behavior = AudioCppModelSupport(item).behavior
         expected = registered.get(model_id, AudioCppModelBehavior)

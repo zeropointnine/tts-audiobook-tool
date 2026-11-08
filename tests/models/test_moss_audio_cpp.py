@@ -432,12 +432,13 @@ def test_existing_families_keep_default_language_policy_and_postprocessing():
     for model_id, item in load_audio_cpp_definitions().models.items():
         if model_id in IDS:
             continue
+        # Families that never read the field omit it; the rest get the base code,
+        # except OmniVoice, whose behavior resolves the raw code itself
         expected_policy = {"fish_s2_audiocpp": "omit", "fish_drama3_audiocpp": "omit", "glm_tts_audiocpp": "omit",
                            "cosyvoice3_audiocpp": "omit",
-                           "dots_audiocpp": "normalized",
-                           "qwen3tts_audiocpp": "normalized",
-                           "indextts2_audiocpp": "normalized",
-                           "fireredtts3_audiocpp": "normalized"}.get(model_id, "project_code")
+                           "breeze_tts_2_audiocpp": "omit", "echo_tts_audiocpp": "omit",
+                           "higgs_v3_audiocpp": "omit",
+                           "omnivoice_audiocpp": "project_code"}.get(model_id, "normalized")
         # IndexTTS2.5 and FireRedTTS3 read their language from `options`, not the top level.
         expected_target = "options" if model_id in ("indextts2_audiocpp", "fireredtts3_audiocpp") else "top_level"
         assert item.language_policy == expected_policy and item.language_target == expected_target

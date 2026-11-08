@@ -140,7 +140,7 @@ def on_language(state: State, __: MenuItem) -> None:
             return "Bad value"
 
         # (2) Required model language
-        if required_model_languages and not code in required_model_languages:
+        if required_model_languages and language_util.normalize_language_code(code) not in required_model_languages:
             return "Language code not supported by Chatterbox Multilingual"
 
         # (3) Hint-side-effect re: CJK

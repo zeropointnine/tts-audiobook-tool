@@ -14,6 +14,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
+from tts_audiobook_tool.tts_models.omnivoice_language import resolve_omnivoice_language
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
@@ -147,10 +148,13 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             audio_chunk_threshold=self.AUDIO_CHUNK_THRESHOLD_SECONDS,
         )
 
+        # OmniVoice id, or None (language-agnostic mode) when the code is empty
+        language = resolve_omnivoice_language(project.language_code)
+
         if has_voice:
             return self._generate_voice_clone(
                 prompts=prompts,
-                language=project.language_code,
+                language=language,
                 voice_path=voice_path,
                 ref_text=ref_text,
                 instruct=instruct,
@@ -162,7 +166,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         elif has_instruct:
             return self._generate_voice_design(
                 prompts=prompts,
-                language=project.language_code,
+                language=language,
                 instruct=instruct,
                 speed=speed,
                 seed=seed,
@@ -172,7 +176,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         else:
             return self._generate_auto_voice(
                 prompts=prompts,
-                language=project.language_code,
+                language=language,
                 speed=speed,
                 seed=seed,
                 generation_config=generation_config,
@@ -221,7 +225,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             speed: float,
             seed: int,
             generation_config: OmniVoiceGenerationConfig,
-            language: str,
+            language: str | None,
             print_params: bool = False,
     ) -> list[Sound] | str:
 
@@ -280,7 +284,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             speed: float,
             seed: int,
             generation_config: OmniVoiceGenerationConfig,
-            language: str,
+            language: str | None,
             print_params: bool = False,
     ) -> list[Sound] | str:
 
@@ -320,7 +324,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             speed: float,
             seed: int,
             generation_config: OmniVoiceGenerationConfig,
-            language: str,
+            language: str | None,
             print_params: bool = False,
     ) -> list[Sound] | str:
 

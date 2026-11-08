@@ -11,6 +11,7 @@ import ntpath
 from typing import ClassVar
 
 from tts_audiobook_tool.tts_models.audio_cpp_behavior import AudioCppModelBehavior, ParameterValues
+from tts_audiobook_tool.tts_models.qwen3_language import QWEN3_AUTO_LANGUAGE, resolve_qwen3_language
 
 
 # Exact GGUF package filenames from audio.cpp model_specs/qwen3_tts.json.
@@ -60,12 +61,7 @@ class Qwen3Behavior(AudioCppModelBehavior):
 
     def resolve_language(self, language: str) -> str:
         # Full names also work on older audio.cpp servers that reject ISO codes.
-        languages = {
-            "zh": "chinese", "en": "english", "ja": "japanese", "ko": "korean",
-            "de": "german", "fr": "french", "ru": "russian", "pt": "portuguese",
-            "es": "spanish", "it": "italian",
-        }
-        return language if language in languages.values() else languages.get(language, "auto")
+        return resolve_qwen3_language(language) or QWEN3_AUTO_LANGUAGE
 
     def get_ignored_parameters(self, values: ParameterValues) -> frozenset[str]:
         return frozenset({"model_type"})

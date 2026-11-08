@@ -104,7 +104,7 @@ class DotsModel(DotsBaseModel):
             prompts=prompts,
             voice_path=voice_path,
             voice_transcript=voice_transcript,
-            language=project.language_code.strip() or None,
+            language=DotsBaseModel.resolve_language(project.language_code),
             speaker_scale=speaker_scale,
             num_steps=num_steps,
             guidance_scale=guidance_scale,

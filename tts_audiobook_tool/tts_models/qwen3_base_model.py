@@ -4,6 +4,7 @@ from enum import Enum
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.qwen3_language import QWEN3_AUTO_LANGUAGE, resolve_qwen3_language
 from tts_audiobook_tool.util import *
 
 from typing import TYPE_CHECKING
@@ -82,38 +83,14 @@ class Qwen3BaseModel(TtsBaseModel):
     def resolve_language_value(self, language_code: str) -> tuple[str, str]:
         """
         Returns qwen model's language value, and a note detail ("" when the code maps).
-        Project language code is expected to be a 2-letter ISO-mumblemumble language code, but
-        Qwen uses english names for language value.
+        Qwen uses English names for language values (see `qwen3_language`).
         """
-
-        # This hardcoded map may need updating if model's supported languages changes with future updates.
-        # Or, consider expanding this with the assumption that future models or finetunes will also
-        # use english word values.
-        MAP = {
-            'zh': 'chinese',
-            'en': 'english',
-            'fr': 'french',
-            'de': 'german',
-            'it': 'italian',
-            'ja': 'japanese',
-            'ko': 'korean',
-            'pt': 'portuguese',
-            'ru': 'russian',
-            'es': 'spanish'
-        }
-
-        language_code = (language_code or "").lower()
-
-        if language_code.startswith("zh"):
-            result = "chinese", ""
-        elif language_code in MAP:
-            result = MAP[language_code], ""
-        elif language_code:
-            result = "auto", "no matching Qwen3-TTS language"
-        else:
-            result = "auto", ""
-
-        return result
+        language = resolve_qwen3_language(language_code or "")
+        if language:
+            return language, ""
+        if (language_code or "").strip():
+            return QWEN3_AUTO_LANGUAGE, "no matching Qwen3-TTS language"
+        return QWEN3_AUTO_LANGUAGE, ""
 
     # ---
 

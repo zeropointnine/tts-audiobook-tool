@@ -4,6 +4,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.constants import SEED_MAX as APP_SEED_MAX
+from tts_audiobook_tool.text_ops.language_util import normalize_language_code
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -154,10 +155,19 @@ class DotsBaseModel(TtsBaseModel):
         target = ellipsize_path_for_menu(target.removeprefix("dots-studio/"))
         return f"{cls.INFO.ui['proper_name']} {COL_DIM}({target})"
 
+    @staticmethod
+    def resolve_language(language_code: str) -> str | None:
+        """
+        Base project code for Dots, or None (no language tag) when empty. The
+        library normalizes with `langcodes` itself, dropping region subtags, so
+        this matches what it uses; it also keeps the pre-flight note honest.
+        """
+        return normalize_language_code(language_code or "") or None
+
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = super().get_warning_issues(project)
         from tts_audiobook_tool.tts_models.model_support import make_language_value_note
-        # Mirrors generation: the stripped code, or None (auto-detect) when empty.
-        language = project.language_code.strip() if project.language_code else ""
-        warnings.append(make_language_value_note(language, project.language_code))
+        # Mirrors generation
+        warnings.append(make_language_value_note(
+            DotsBaseModel.resolve_language(project.language_code), project.language_code))
         return warnings

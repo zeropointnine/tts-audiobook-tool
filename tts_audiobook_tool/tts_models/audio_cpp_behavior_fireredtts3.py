@@ -20,39 +20,39 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import ReadinessIssue
-from tts_audiobook_tool.text_ops.language_util import normalize_language_code
+from tts_audiobook_tool.text_ops.language_util import map_language
 from tts_audiobook_tool.tts_models.audio_cpp_behavior import AudioCppModelBehavior, ParameterValues
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 
-# Normalized base code (ISO 639-1, plus a few ISO 639-2/3 and English-name
-# spellings that free-form project codes often use) -> FireRedTTS3 tag.
+# Base code -> FireRedTTS3 tag. Aliases ("eng", "german", ...) and region
+# suffixes are resolved by `language_util.map_language`.
 _TAG_BY_CODE: dict[str, str] = {
-    "ar": "Arabic", "arabic": "Arabic",
-    "cs": "Czech", "ces": "Czech", "cze": "Czech", "czech": "Czech",
-    "de": "German", "deu": "German", "ger": "German", "german": "German",
-    "el": "Greek", "ell": "Greek", "gre": "Greek", "greek": "Greek",
-    "en": "English", "eng": "English", "english": "English",
-    "es": "Spanish", "spa": "Spanish", "spanish": "Spanish",
-    "fi": "Finnish", "fin": "Finnish", "finnish": "Finnish",
-    "fr": "French", "fra": "French", "fre": "French", "french": "French",
-    "hi": "Hindi", "hin": "Hindi", "hindi": "Hindi",
-    "id": "Indonesian", "ind": "Indonesian", "indonesian": "Indonesian",
-    "it": "Italian", "ita": "Italian", "italian": "Italian",
-    "ja": "Japanese", "jpn": "Japanese", "japanese": "Japanese",
-    "ko": "Korean", "kor": "Korean", "korean": "Korean",
-    "nl": "Dutch", "nld": "Dutch", "dut": "Dutch", "dutch": "Dutch",
-    "pl": "Polish", "pol": "Polish", "polish": "Polish",
-    "pt": "Portuguese", "por": "Portuguese", "portuguese": "Portuguese",
-    "ro": "Romanian", "ron": "Romanian", "rum": "Romanian", "romanian": "Romanian",
-    "ru": "Russian", "rus": "Russian", "russian": "Russian",
-    "th": "Thai", "tha": "Thai", "thai": "Thai",
-    "tr": "Turkish", "tur": "Turkish", "turkish": "Turkish",
-    "uk": "Ukrainian", "ukr": "Ukrainian", "ukrainian": "Ukrainian",
-    "vi": "Vietnamese", "vie": "Vietnamese", "vietnamese": "Vietnamese",
-    "yue": "Cantonese", "cantonese": "Cantonese",
-    "zh": "Chinese", "zho": "Chinese", "chi": "Chinese", "chinese": "Chinese",
+    "ar": "Arabic",
+    "cs": "Czech",
+    "de": "German",
+    "el": "Greek",
+    "en": "English",
+    "es": "Spanish",
+    "fi": "Finnish",
+    "fr": "French",
+    "hi": "Hindi",
+    "id": "Indonesian",
+    "it": "Italian",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "th": "Thai",
+    "tr": "Turkish",
+    "uk": "Ukrainian",
+    "vi": "Vietnamese",
+    "yue": "Cantonese",
+    "zh": "Chinese",
 }
 
 # Tags whose text frontend is a full native normalizer; the others only get
@@ -65,13 +65,13 @@ class FireRedTts3Behavior(AudioCppModelBehavior):
     @staticmethod
     def get_language_tag(language_code: str) -> str | None:
         """FireRedTTS3 language tag for a project language code, or None."""
-        return _TAG_BY_CODE.get(normalize_language_code(language_code or ""))
+        return map_language(language_code or "", _TAG_BY_CODE)
 
     def resolve_language(self, language: str) -> str:
         # The catalog's "normalized" policy hands over the base code; send the
         # exact tag the session requires. Readiness blocks unmapped codes first;
         # "" would omit the field rather than send an unknown tag.
-        return _TAG_BY_CODE.get(language, "")
+        return map_language(language, _TAG_BY_CODE) or ""
 
     def get_blocking_issues(self, project: Project, values: ParameterValues) -> list[ReadinessIssue]:
         if self.get_language_tag(project.language_code) is None:

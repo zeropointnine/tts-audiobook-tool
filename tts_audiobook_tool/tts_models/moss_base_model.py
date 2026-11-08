@@ -4,6 +4,7 @@ from enum import Enum
 
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.constants import TOP_K_MAX_DEFAULT, TOP_P_MAX_DEFAULT
+from tts_audiobook_tool.text_ops.language_util import map_language
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -75,7 +76,8 @@ class MossBaseModel(TtsBaseModel):
 
     @staticmethod
     def get_language_name(language_code: str) -> str:
-        return MossBaseModel.LANGUAGE_NAMES_BY_CODE.get(language_code.strip().lower(), "")
+        """MOSS language tag for a free-form project code ("en-US" -> "English"), or ""."""
+        return map_language(language_code, MossBaseModel.LANGUAGE_NAMES_BY_CODE) or ""
 
     @staticmethod
     def get_seed_setting_name(config: "MossConfigs") -> str:

@@ -36,10 +36,11 @@ class OmniVoiceBaseModel(TtsBaseModel):
 
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = super().get_warning_issues(project)
-        # The project code goes to the library verbatim; it resolves it (or falls
-        # back to language-agnostic mode) itself.
+        # Mirrors generation: the OmniVoice id, or none (language-agnostic) when empty
         from tts_audiobook_tool.tts_models.model_support import make_language_value_note
-        warnings.append(make_language_value_note(project.language_code, project.language_code))
+        from tts_audiobook_tool.tts_models.omnivoice_language import resolve_omnivoice_language
+        warnings.append(make_language_value_note(
+            resolve_omnivoice_language(project.language_code), project.language_code))
         return warnings
 
     @classmethod
