@@ -520,9 +520,9 @@ class QuickGenModal(WorkerSessionMixin[QuickGenResult], ModalScreen[QuickGenResu
     # console / transcript
     # ----------------------------------------------------------------
 
-    def _record_console_output(self, text: str) -> None:
+    def _record_console_output(self, text: str, stream: str) -> None:
         if self.transcript is not None:
-            self.transcript.write_chunk(text)
+            self.transcript.write_chunk(text, stream)
 
     def _append_application_lines(self, lines: list[str]) -> None:
         self._append_lines(lines)

@@ -94,13 +94,17 @@ class GenerationTranscript:
             return
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._file = open(path, "w", encoding="utf-8", newline="\n")
-        self._pending_control = ""
+        # Incomplete trailing control sequences, held per source stream so
+        # interleaved stdout/stderr chunks cannot complete each other's.
+        self._pending_controls: dict[str, str] = {}
 
-    def write_chunk(self, text: str) -> None:
+    def write_chunk(self, text: str, stream: str = "stdout") -> None:
         if self._file is None or not text:
             return
-        text = self._pending_control + text
-        self._pending_control, text = _split_pending_control(text)
+        text = self._pending_controls.pop(stream, "") + text
+        pending, text = _split_pending_control(text)
+        if pending:
+            self._pending_controls[stream] = pending
         plain_text = text_util.strip_ansi_codes(text)
         # Retain each dynamic progress update as a readable transcript line,
         # even though carriage returns replace one live row in the UI.
@@ -111,7 +115,9 @@ class GenerationTranscript:
     def write_lines(self, lines: list[str]) -> None:
         if not lines:
             return
-        self.write_chunk("".join(f"{line}\n" for line in lines))
+        # App-generated lines are their own source: they neither complete nor
+        # get glued onto a worker stream's pending control fragment.
+        self.write_chunk("".join(f"{line}\n" for line in lines), stream="app")
 
     def close(self) -> None:
         if self._file is not None and not self._file.closed:
@@ -278,8 +284,8 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             )
         )
 
-    def _record_console_output(self, text: str) -> None:
-        self.transcript.write_chunk(text)
+    def _record_console_output(self, text: str, stream: str) -> None:
+        self.transcript.write_chunk(text, stream)
 
     def _append_application_lines(self, lines: list[str]) -> None:
         self._append_lines(lines)

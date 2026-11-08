@@ -101,11 +101,17 @@ def _split_pending_control(text: str) -> tuple[str, str]:
 
 
 class ConsoleLineAssembler:
-    """Convert stream chunks into append-only lines plus one replaceable live line."""
+    """Convert stream chunks into append-only lines plus one replaceable live line.
+
+    The live line is shared, as on a real terminal, but a control sequence
+    left incomplete at the end of a chunk is held per source stream: it may
+    only be completed by the next chunk from the same stream, never by
+    interleaved output from the other one.
+    """
 
     def __init__(self) -> None:
         self.current_line = ""
-        self._pending_control = ""
+        self._pending_controls: dict[str, str] = {}
 
     @staticmethod
     def _normalize_cursor_controls(text: str) -> str:
@@ -116,9 +122,11 @@ class ConsoleLineAssembler:
         text = _CURSOR_HOME_RE.sub("\r", text)
         return _ERASE_LINE_RE.sub("", text)
 
-    def feed(self, text: str) -> tuple[list[str], str]:
-        text = self._pending_control + text
-        self._pending_control, text = _split_pending_control(text)
+    def feed(self, text: str, stream: str = "stdout") -> tuple[list[str], str]:
+        text = self._pending_controls.pop(stream, "") + text
+        pending, text = _split_pending_control(text)
+        if pending:
+            self._pending_controls[stream] = pending
 
         completed: list[str] = []
         for character in self._normalize_cursor_controls(text):
@@ -134,7 +142,7 @@ class ConsoleLineAssembler:
     def finish(self) -> list[str]:
         # An incomplete control sequence at end of stream is discarded, never
         # replayed into a later feed or emitted as text.
-        self._pending_control = ""
+        self._pending_controls.clear()
         if not self.current_line:
             return []
         line = self.current_line
@@ -260,10 +268,10 @@ class WorkerSessionMixin(Generic[ResultT], _SessionHostBase):
     def _handle_console_output(self, event: ConsoleOutput) -> None:
         """Relay one console chunk: record it, then feed it to the log's
         current line."""
-        self._record_console_output(event.text)
+        self._record_console_output(event.text, event.stream)
         if self._skip_log_updates():
             return
-        completed, live = self.assembler.feed(event.text)
+        completed, live = self.assembler.feed(event.text, event.stream)
         self._feed_console(completed, live)
 
     def _handle_console_flush(self, event: ConsoleFlush) -> None:
@@ -272,7 +280,7 @@ class WorkerSessionMixin(Generic[ResultT], _SessionHostBase):
         (or an app line committed it, in which case the terminal
         overwrote the bar and it is gone for good)."""
 
-    def _record_console_output(self, text: str) -> None:
+    def _record_console_output(self, text: str, stream: str) -> None:
         """Record console text outside the on-screen log (no-op by default)."""
 
     def _skip_log_updates(self) -> bool:

@@ -200,6 +200,33 @@ def test_console_line_assembler_finish_discards_pending_control() -> None:
     assert live == ""
 
 
+def test_console_line_assembler_holds_split_control_per_stream() -> None:
+    # A CSI fragment ending a stdout chunk must not swallow the start of an
+    # interleaved stderr chunk; it completes with the next stdout chunk. The
+    # live line itself stays shared, as on a terminal.
+    assembler = ConsoleLineAssembler()
+    assembler.feed("out\x1b[3", "stdout")
+    lines, live = assembler.feed("err line\n", "stderr")
+    assert lines == ["outerr line"]
+    lines, live = assembler.feed("1mred\n", "stdout")
+    assert lines == ["\x1b[31mred"]
+    assert live == ""
+
+
+def test_transcript_holds_split_control_per_stream(tmp_path) -> None:
+    # Same per-stream rule for the transcript; app lines are a separate
+    # source and are written immediately.
+    path = tmp_path / "generation.log"
+    transcript = GenerationTranscript(str(path))
+    transcript.write_chunk("out\x1b[3", "stdout")
+    transcript.write_chunk("err line\n", "stderr")
+    transcript.write_lines(["app line"])
+    transcript.write_chunk("1mred\n", "stdout")
+    transcript.close()
+
+    assert path.read_text(encoding="utf-8") == "outerr line\napp line\nred\n"
+
+
 def test_transcript_strips_ansi_but_keeps_all_lines(tmp_path) -> None:
     path = tmp_path / "generation.log"
     transcript = GenerationTranscript(str(path))

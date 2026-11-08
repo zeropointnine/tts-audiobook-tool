@@ -27,8 +27,7 @@ def strip_ansi_codes(s: str, and_line_feeds: bool=False) -> str:
     Remove complete OSC, 7-bit CSI and two-byte ESC sequences.
 
     Not a general terminal sanitizer: DCS/SOS/PM/APC payloads, 8-bit C1
-    forms and incomplete sequences are not handled (see
-    docs-dev/special_codes_refactor.md).
+    forms and incomplete sequences are not handled.
     """
     s = _OSC_ESCAPE_RE.sub('', s)
     s = _ANSI_ESCAPE_RE.sub('', s)

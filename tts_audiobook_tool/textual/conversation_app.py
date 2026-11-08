@@ -373,7 +373,7 @@ class ConversationTextualApp(App[ConversationAppResult]):
         event = message.event
         if isinstance(event, ConsoleFlush):
             return
-        complete, live = self._console_assembler.feed(event.text)
+        complete, live = self._console_assembler.feed(event.text, event.stream)
         self._initialization_lines.extend(self._unfiltered_console_lines(complete))
         if self._update_initialization_content(
             "\n".join((*self._initialization_lines, live))
