@@ -211,7 +211,7 @@ user is told cannot drift from what is sent.
 | `NOT_SET` | empty project code; the value is the model's default | `… none (project language code not set)` (or `auto` for Qwen3) |
 | `NO_MATCH` | code set, but the model has no equivalent; a fallback is sent | `… auto (project language code = "xx"; no matching model language)` |
 | `UNSUPPORTED` | the model can't run with this code | no note; readiness blocks with `<Model> does not support project language "xx"` (or `<Model> requires a project language code` when empty), short label `language` |
-| `NOT_USED` | the model never receives a language | `Language: not used by this model (project language code = "de")`; nothing when the code is empty |
+| `NOT_USED` | the model never receives a language | `Model does not utilize a language code (project language code = "de")`; nothing when the code is empty |
 
 A `detail` (eg the catalog's IndexTTS2 `language_hint_note`, "applies to IndexTTS2.5
 only") is appended inside the parentheses. Warning order is the same everywhere:

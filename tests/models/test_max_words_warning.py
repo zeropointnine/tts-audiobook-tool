@@ -65,5 +65,5 @@ def test_base_get_warning_issues_includes_max_words_warning(monkeypatch):
     warnings = instance.get_warning_issues(project)
     assert len(warnings) == 2
     assert "Source text's max word length" in warnings[0]
-    assert warnings[1].startswith("Language: not used by this model")
+    assert warnings[1].startswith("Model does not utilize a language code")
     assert "exceeds GLM-TTS recommended model limit (40)" in warnings[0]

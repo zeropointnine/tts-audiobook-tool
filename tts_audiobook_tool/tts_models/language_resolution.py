@@ -79,7 +79,7 @@ def make_language_note(resolution: LanguageResolution, language_code: str) -> st
         Language value passed to model: English (project language code = "en-US")
         Language value passed to model: auto (project language code = "xx"; no matching model language)
         Language value passed to model: xx (project language code = "xx"; not checked against the model's language list)
-        Language: not used by this model (project language code = "de")
+        Model does not utilize a language code (project language code = "de")
 
     UNSUPPORTED has no note (the readiness blocker reports it), and NOT_USED
     has none when the project code is empty.
@@ -90,7 +90,7 @@ def make_language_note(resolution: LanguageResolution, language_code: str) -> st
     if status is LanguageStatus.NOT_USED:
         if not (language_code or "").strip():
             return None
-        return f"Language: not used by this model ({_source(language_code)})"
+        return f"Model does not utilize a language code ({_source(language_code)})"
     parts = [_source(language_code)]
     if status is LanguageStatus.NO_MATCH:
         parts.append("no matching model language")

@@ -45,7 +45,7 @@ S = LanguageStatus
          "Language value passed to model: none (project language code not set)"),
         (LanguageResolution(S.MAPPED, "es", "applies to IndexTTS2.5 only"), "es",
          'Language value passed to model: es (project language code = "es"; applies to IndexTTS2.5 only)'),
-        (NOT_USED, "de", 'Language: not used by this model (project language code = "de")'),
+        (NOT_USED, "de", 'Model does not utilize a language code (project language code = "de")'),
         (NOT_USED, "", None),  # nothing to say when there is no code to ignore
         (LanguageResolution(S.UNSUPPORTED), "xx", None),  # the blocker reports it instead
     ],
