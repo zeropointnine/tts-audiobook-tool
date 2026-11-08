@@ -1020,10 +1020,13 @@ class ProjectSerializationUtil:
         The settings snapshot embedded in an ABR audio file's metadata.
 
         `dir_path` is deliberately excluded: it is an absolute path in the
-        writing machine's grammar, and an ABR file is meant to be shared.
-        `source_dir_display` carries the same value for messaging only, so a
-        recipient can be told where the settings came from without the app
-        ever treating it as a resolvable location.
+        writing machine's grammar, and an ABR file is meant to be shared, so
+        nothing may rely on it resolving. `source_dir_display` carries the same
+        value, chiefly so a recipient can be told where the settings came from.
+        On import it is also tried, opportunistically, as a place to copy
+        supporting files from, but only when it resolves here to something
+        that looks like a project directory (the same-machine re-import case);
+        see `ProjectTransferUtil.get_snapshot_source_dir`.
         """
         snapshot = ProjectSerializationUtil.to_project_json_dict(project)
         snapshot.pop("dir_path", None)

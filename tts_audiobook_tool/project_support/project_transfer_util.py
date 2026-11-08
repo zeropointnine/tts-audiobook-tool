@@ -35,6 +35,25 @@ class SourceFileMatch(NamedTuple):
     relative_path: str
 
 
+class SupportingFilesCopyResult(NamedTuple):
+    """
+    Outcome of copying a project's supporting files into another project.
+
+    `copied` and `missing_voice_dest_paths` are project-relative destination
+    paths (eg "voice/narrator.flac"), which is the form a user needs in order
+    to put a missing file in place by hand. The `missing_*_paths` lists name
+    where the file was looked for, for display.
+    """
+    copied: list[str]
+    missing_text_paths: list[str]
+    missing_voice_paths: list[str]
+    missing_voice_dest_paths: list[str]
+
+    @property
+    def missing_paths(self) -> list[str]:
+        return self.missing_text_paths + self.missing_voice_paths
+
+
 class ProjectTransferUtil:
     """
     Snapshot import/export and supporting-project-file transfer helpers.
@@ -68,6 +87,13 @@ class ProjectTransferUtil:
         ('vibevoice_local', 'target'),
         ('vibevoice_local', 'lora_target'),
     )
+
+    # Supporting files that many valid projects never have (eg the EPUB copy
+    # only exists for EPUB imports), so their absence is not worth reporting.
+    OPTIONAL_SUPPORTING_FILE_NAMES = frozenset({
+        PROJECT_TEXT_RAW_FILE_NAME,
+        PROJECT_TEXT_EPUB_FILE_NAME,
+    })
 
     @staticmethod
     def load_raw_abr_metadata_string(abr_path: str) -> str:
@@ -328,16 +354,53 @@ class ProjectTransferUtil:
         voice_file_names: list[str],
         *,
         strict_copy_errors: bool = False,
+        optional_file_names: frozenset[str] | set[str] = OPTIONAL_SUPPORTING_FILE_NAMES,
     ) -> list[str]:
+        """
+        Copies supporting files (see `transfer_supporting_project_files`) and
+        returns the paths of required files that could not be copied.
+        """
+        return ProjectTransferUtil.transfer_supporting_project_files(
+            project,
+            source_dir,
+            text_file_names,
+            voice_file_names,
+            strict_copy_errors=strict_copy_errors,
+            optional_file_names=optional_file_names,
+        ).missing_paths
+
+    @staticmethod
+    def transfer_supporting_project_files(
+        project: Project,
+        source_dir: str,
+        text_file_names: list[str],
+        voice_file_names: list[str],
+        *,
+        strict_copy_errors: bool = False,
+        optional_file_names: frozenset[str] | set[str] = OPTIONAL_SUPPORTING_FILE_NAMES,
+    ) -> SupportingFilesCopyResult:
         """
         Copies text files to the destination project root and voice samples
         into its voice subdir, preserving nested paths and upgrading legacy
         root layouts. Managed crops are copied only from source voice/crops.
+
+        Files in `optional_file_names` are copied when present, but their
+        absence is not reported.
         """
         if not isinstance(source_dir, str):
             source_dir = ''
 
-        missing_paths: list[str] = []
+        copied: list[str] = []
+        missing_text_paths: list[str] = []
+        missing_voice_paths: list[str] = []
+        missing_voice_dest_paths: list[str] = []
+
+        def add_missing(display_path: str, file_name: str, is_voice_file: bool) -> None:
+            if is_voice_file:
+                missing_voice_paths.append(display_path)
+                missing_voice_dest_paths.append(ProjectTransferUtil.get_voice_file_dest_relative_path(file_name))
+            else:
+                missing_text_paths.append(display_path)
 
         for file_names, is_voice_file in ((text_file_names, False), (voice_file_names, True)):
             for file_name in file_names:
@@ -361,15 +424,13 @@ class ProjectTransferUtil:
                     )
                     missing_path = path_norm.join_project_relative(source_dir, file_name) if source_dir else file_name
                 if not match.path:
-                    missing_paths.append(missing_path)
+                    if file_name not in optional_file_names:
+                        add_missing(missing_path, file_name, is_voice_file)
                     continue
 
                 relative_path = match.relative_path
-                if is_voice_file and path_norm.split_relative(relative_path)[0] != PROJECT_VOICE_SUBDIR:
-                    # Upgrade legacy root layouts, retaining the actual nested
-                    # path. Flattening would lose crops and overwrite samples
-                    # in different directories that share a basename.
-                    relative_path = f"{PROJECT_VOICE_SUBDIR}/{relative_path}"
+                if is_voice_file:
+                    relative_path = ProjectTransferUtil.get_voice_file_dest_relative_path(relative_path)
 
                 dest_path = path_norm.join_project_relative(project.dir_path, relative_path)
                 try:
@@ -380,9 +441,25 @@ class ProjectTransferUtil:
                 except Exception as exc:
                     if strict_copy_errors:
                         raise OSError(f"Could not copy supporting file {match.path} to {dest_path}: {exc}") from exc
-                    missing_paths.append(match.path)
+                    add_missing(match.path, file_name, is_voice_file)
+                    continue
+                copied.append(relative_path)
 
-        return missing_paths
+        return SupportingFilesCopyResult(copied, missing_text_paths, missing_voice_paths, missing_voice_dest_paths)
+
+    @staticmethod
+    def get_voice_file_dest_relative_path(file_name: str) -> str:
+        """
+        Where a voice file belongs in a destination project, relative to the
+        project directory: always under the voice subdir. Legacy root layouts
+        are upgraded while retaining the actual nested path — flattening would
+        lose crops and overwrite samples in different directories that share
+        a basename.
+        """
+        name_parts = path_norm.split_relative(file_name)
+        if name_parts and name_parts[0] == PROJECT_VOICE_SUBDIR:
+            return "/".join(name_parts)
+        return "/".join([PROJECT_VOICE_SUBDIR, *name_parts])
 
     @staticmethod
     def find_supporting_project_file_source_path(

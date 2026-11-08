@@ -10,7 +10,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
-from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
+from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil, SupportingFilesCopyResult
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -80,16 +80,24 @@ class ProjectNewMenu:
         if migrate_current_settings and old_project.dir_path:
             ProjectTransferUtil.apply_project_settings(state.project, old_project)
             text_file_names, voice_file_names = ProjectTransferUtil.collect_supporting_project_file_names(old_project)
-            missing_paths = ProjectTransferUtil.copy_supporting_project_files(
+            optional_file_names = set(ProjectTransferUtil.OPTIONAL_SUPPORTING_FILE_NAMES)
+            if not old_project.phrase_groups:
+                # A project with no text yet has no text file to miss.
+                optional_file_names.add(PROJECT_TEXT_FILE_NAME)
+            transfer = ProjectTransferUtil.transfer_supporting_project_files(
                 state.project,
                 old_project.dir_path,
                 text_file_names,
                 voice_file_names,
+                optional_file_names=optional_file_names,
             )
             speaker_assign_errors = SpeakerAssignFileUtil.copy_files(old_project.dir_path, state.project.dir_path)
             state.project.save()
             state.set_existing_project(state.project.dir_path)
-            ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
+            ProjectNewMenu.print_missing_supporting_files_warning(transfer.missing_paths)
+            ProjectNewMenu.print_supporting_files_todo(
+                state.project.dir_path, transfer.missing_voice_dest_paths, bool(transfer.missing_text_paths),
+            )
             for error in speaker_assign_errors:
                 printt(f"{COL_ERROR}{error}{COL_DEFAULT}")
             if speaker_assign_errors:
@@ -180,10 +188,10 @@ class ProjectNewMenu:
             new_project = Project(dir_path=dest_path)
             ProjectTransferUtil.apply_project_settings(new_project, snapshot_project)
             source_dir = ProjectTransferUtil.get_snapshot_source_dir(project_snapshot, abr_path)
-            missing_paths = []
+            text_file_names, voice_file_names = ProjectTransferUtil.collect_supporting_project_file_names(snapshot_project)
+            transfer: SupportingFilesCopyResult | None = None
             if source_dir:
-                text_file_names, voice_file_names = ProjectTransferUtil.collect_supporting_project_file_names(snapshot_project)
-                missing_paths = ProjectTransferUtil.copy_supporting_project_files(
+                transfer = ProjectTransferUtil.transfer_supporting_project_files(
                     new_project,
                     source_dir,
                     text_file_names,
@@ -215,10 +223,25 @@ class ProjectNewMenu:
 
             print_feedback("Project directory set:", state.project.dir_path)
 
-            if not source_dir:
-                ProjectNewMenu.print_snapshot_source_dir_hint(project_snapshot)
-            elif missing_paths:
-                ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
+            # The ABR holds settings only, so the text comes solely from a
+            # copied project_text.json; judge by what actually loaded.
+            needs_text = not loaded_project.phrase_groups
+            if transfer is None:
+                voice_dest_paths = [
+                    ProjectTransferUtil.get_voice_file_dest_relative_path(name) for name in voice_file_names
+                ]
+                ProjectNewMenu.print_snapshot_source_dir_hint(
+                    project_snapshot, dest_path, voice_dest_paths, needs_text,
+                )
+            else:
+                # Name the source even on full success: it may have been
+                # inferred from the ABR file's location rather than recorded.
+                ProjectNewMenu.print_copied_supporting_files(source_dir, transfer.copied)
+                if transfer.missing_paths:
+                    ProjectNewMenu.print_missing_supporting_files_warning(transfer.missing_paths)
+                ProjectNewMenu.print_supporting_files_todo(
+                    dest_path, transfer.missing_voice_dest_paths, needs_text,
+                )
 
             hints.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
             did_succeed = True
@@ -236,20 +259,70 @@ class ProjectNewMenu:
                 ask.ask_enter_to_continue()
 
     @staticmethod
-    def print_snapshot_source_dir_hint(project_snapshot: dict) -> None:
+    def print_snapshot_source_dir_hint(
+        project_snapshot: dict,
+        dest_dir: str,
+        voice_dest_paths: list[str],
+        needs_text: bool,
+    ) -> None:
         """
-        Explains why supporting files could not be copied when the settings in
-        an ABR file came from a project directory that does not exist here —
-        typically because the file was made on another computer.
+        Explains that nothing besides settings was imported when the source
+        project of an ABR file could not be found — typically because the file
+        was made on another computer — and what remains to be done by hand.
+        Prints nothing when the new project needs nothing more.
         """
+        if not voice_dest_paths and not needs_text:
+            return
+
+        missing_things = []
+        if voice_dest_paths:
+            missing_things.append("voice samples")
+        if needs_text:
+            missing_things.append("book text")
+        verb = "were" if voice_dest_paths else "was"
+        printt(f"{COL_ERROR}The project's {' and '.join(missing_things)} {verb} not copied.{COL_DEFAULT}")
+
         source_dir = ProjectTransferUtil.get_snapshot_source_dir_display(project_snapshot)
-        if not source_dir:
-            printt(f"{COL_DIM}No source project directory was found for this ABR file.")
+        if source_dir:
+            printt(f"The settings came from a project at {source_dir},")
+            printt("which is not available on this computer, and no project directory")
+            printt("was found next to the audio file.")
         else:
-            printt(f"{COL_DIM}The settings in this audio file came from a project at {source_dir},")
-            printt("which is not a project directory on this computer.")
-        printt("The settings were imported, but supporting files such as voice samples must be copied")
-        printt(f"into the new project directory by hand.{COL_DEFAULT}")
+            printt("The audio file does not record which project its settings came from,")
+            printt("and no project directory was found next to it.")
+        printt(f"{COL_DIM}(An ABR audio file stores project settings only, not voice samples or text.){COL_DEFAULT}")
+        printt()
+        ProjectNewMenu.print_supporting_files_todo(dest_dir, voice_dest_paths, needs_text)
+
+    @staticmethod
+    def print_supporting_files_todo(dest_dir: str, voice_dest_paths: list[str], needs_text: bool) -> None:
+        """
+        Tells the user what to put in place by hand to finish a new project
+        whose supporting files could not all be copied.
+
+        `voice_dest_paths` are project-relative paths under the voice subdir.
+        """
+        if not voice_dest_paths and not needs_text:
+            return
+
+        printt("To finish setting up the new project:")
+        if voice_dest_paths:
+            voice_dir = os.path.join(dest_dir, PROJECT_VOICE_SUBDIR)
+            printt(f"- Copy these voice files into {COL_ACCENT}{voice_dir}{os.sep}{COL_DEFAULT}")
+            prefix = PROJECT_VOICE_SUBDIR + "/"
+            for path in voice_dest_paths:
+                printt(f"    {path.removeprefix(prefix)}")
+        if needs_text:
+            printt("- Import the book text from the Text menu")
+        printt()
+
+    @staticmethod
+    def print_copied_supporting_files(source_dir: str, copied: list[str]) -> None:
+        if not copied:
+            return
+        printt(f"Copied supporting files from {COL_ACCENT}{source_dir}{COL_DEFAULT}:")
+        for path in copied:
+            printt(f"{COL_DIM}- {path}")
         printt()
 
     @staticmethod

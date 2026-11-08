@@ -112,6 +112,43 @@ def test_copy_supporting_project_files_copies_all_discovered_voice_files_and_rep
     assert not (dest_dir / 'missing.flac').exists()
 
 
+def test_transfer_reports_copied_and_missing_files_in_destination_terms(tmp_path: Path) -> None:
+    """
+    The detailed result says what was copied and where each missing voice file
+    belongs in the new project, so the UI can tell the user exactly what to put
+    where. Absent optional text files (raw text, EPUB copy) are not reported:
+    many valid projects never have them.
+    """
+    source_dir = tmp_path / 'source'
+    dest_dir = tmp_path / 'destination'
+    (source_dir / PROJECT_VOICE_SUBDIR).mkdir(parents=True)
+    dest_dir.mkdir()
+    (source_dir / PROJECT_TEXT_FILE_NAME).write_text('{}')
+    (source_dir / 'legacy-root.flac').write_bytes(b'root')
+    source_project = Project(
+        dir_path=str(source_dir),
+        voice_references=[
+            {'file_name': 'legacy-root.flac', 'transcript': ''},
+            {'file_name': 'nested/missing.flac', 'transcript': ''},
+            {**_cropped_reference(), 'file_name': 'other-missing.flac'},
+        ],
+    )
+
+    result = ProjectTransferUtil.transfer_supporting_project_files(
+        Project(dir_path=str(dest_dir)),
+        str(source_dir),
+        *ProjectTransferUtil.collect_supporting_project_file_names(source_project),
+    )
+
+    assert result.copied == [PROJECT_TEXT_FILE_NAME, 'voice/legacy-root.flac']
+    assert result.missing_text_paths == []
+    assert result.missing_voice_dest_paths == [
+        'voice/nested/missing.flac', 'voice/other-missing.flac', 'voice/crops/a.flac',
+    ]
+    assert result.missing_paths == result.missing_voice_paths
+    assert len(result.missing_voice_paths) == 3
+
+
 def test_copy_supporting_project_files_upgrades_legacy_root_voice_files(tmp_path: Path) -> None:
     """
     Voice files found at a legacy project root are copied into the destination
@@ -136,11 +173,7 @@ def test_copy_supporting_project_files_upgrades_legacy_root_voice_files(tmp_path
         *ProjectTransferUtil.collect_supporting_project_file_names(source_project),
     )
 
-    assert missing_paths == [
-        str(source_dir / PROJECT_TEXT_FILE_NAME),
-        str(source_dir / PROJECT_TEXT_RAW_FILE_NAME),
-        str(source_dir / PROJECT_TEXT_EPUB_FILE_NAME),
-    ]
+    assert missing_paths == [str(source_dir / PROJECT_TEXT_FILE_NAME)]
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == b'narrator'
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'root.flac').read_bytes() == b'root'
     assert not (dest_dir / 'root.flac').exists()
@@ -174,11 +207,7 @@ def test_copy_supporting_project_files_recovers_names_saved_by_another_os(tmp_pa
         *ProjectTransferUtil.collect_supporting_project_file_names(source_project),
     )
 
-    assert missing_paths == [
-        str(source_dir / PROJECT_TEXT_FILE_NAME),
-        str(source_dir / PROJECT_TEXT_RAW_FILE_NAME),
-        str(source_dir / PROJECT_TEXT_EPUB_FILE_NAME),
-    ]
+    assert missing_paths == [str(source_dir / PROJECT_TEXT_FILE_NAME)]
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'narrator.flac').read_bytes() == b'narrator'
 
 
@@ -203,11 +232,7 @@ def test_copy_supporting_project_files_does_not_escape_the_project_dir(tmp_path:
         *ProjectTransferUtil.collect_supporting_project_file_names(source_project),
     )
 
-    assert missing_paths == [
-        str(source_dir / PROJECT_TEXT_FILE_NAME),
-        str(source_dir / PROJECT_TEXT_RAW_FILE_NAME),
-        str(source_dir / PROJECT_TEXT_EPUB_FILE_NAME),
-    ]
+    assert missing_paths == [str(source_dir / PROJECT_TEXT_FILE_NAME)]
     assert (dest_dir / PROJECT_VOICE_SUBDIR / 'escaped.flac').read_bytes() == b'escaped'
 
 

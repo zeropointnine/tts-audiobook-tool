@@ -213,18 +213,58 @@ def test_abr_import_explains_a_source_project_that_is_not_here(monkeypatch, tmp_
     with _quiet_project_setter():
         _run_abr_import(monkeypatch, tmp_path, state)
 
-    assert "not a project directory on this computer" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "not available on this computer" in output
+    assert "Import the book text" in output
+    # No voice references, so there is nothing voice-related to ask for.
+    assert "The project's book text was not copied" in output
+    assert "Copy these voice files" not in output
 
 
-def test_abr_import_stays_quiet_when_the_source_project_is_here(monkeypatch, tmp_path, capsys):
+def test_abr_import_lists_the_voice_files_to_copy_by_hand(monkeypatch, tmp_path, capsys):
+    # With no source project, the user is told which files the imported
+    # settings refer to and exactly where in the new project they belong.
+    state = _make_state()
+    _stub_abr_snapshot(monkeypatch, tmp_path, {
+        "version": 4,
+        "source_dir_display": "C:\\Users\\lee\\mybook",
+        "voice_references": [{"file_name": "narrator.flac", "transcript": ""}],
+    })
+    errors, _ = _collect_exits(monkeypatch)
+
+    with _quiet_project_setter():
+        assert ProjectNewMenu.make_new_project_using_abr(state) is True, errors
+
+    output = capsys.readouterr().out
+    assert "voice samples and book text were not copied" in output
+    assert "C:\\Users\\lee\\mybook" in output
+    assert str(tmp_path / "dest" / PROJECT_VOICE_SUBDIR) in output
+    assert "    narrator.flac" in output
+
+
+def test_abr_import_names_the_directory_files_were_copied_from(monkeypatch, tmp_path, capsys):
+    # The source may be inferred from the ABR file's location rather than
+    # recorded, so a successful copy still says where the files came from.
     state = _make_state()
     source_dir = tmp_path / "source_project"
     (source_dir / PROJECT_VOICE_SUBDIR).mkdir(parents=True)
+    (source_dir / PROJECT_VOICE_SUBDIR / "narrator.flac").write_bytes(b"voice")
+    _stub_abr_snapshot(monkeypatch, tmp_path, {
+        "version": 4,
+        "source_dir_display": str(source_dir),
+        "voice_references": [{"file_name": "narrator.flac", "transcript": ""}],
+    })
+    errors, _ = _collect_exits(monkeypatch)
 
     with _quiet_project_setter():
-        _run_abr_import(monkeypatch, tmp_path, state, str(source_dir))
+        assert ProjectNewMenu.make_new_project_using_abr(state) is True, errors
 
-    assert "not a project directory on this computer" not in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "not available on this computer" not in output
+    assert "Copied supporting files from" in output
+    assert str(source_dir) in output
+    assert "- voice/narrator.flac" in output
+    assert "Copy these voice files" not in output
 
 
 # --- Old and damaged ABR settings snapshots ---
@@ -307,7 +347,7 @@ def test_abr_import_does_not_copy_files_from_cwd_without_source(monkeypatch, tmp
         assert ProjectNewMenu.make_new_project_using_abr(state) is True
     assert not (tmp_path / "dest" / "narrator.flac").exists()
     assert not (tmp_path / "dest" / PROJECT_VOICE_SUBDIR / "narrator.flac").exists()
-    assert "No source project directory was found" in capsys.readouterr().out
+    assert "does not record which project" in capsys.readouterr().out
 
 
 def test_abr_import_copy_failure_keeps_previous_project_selected(monkeypatch, tmp_path):
