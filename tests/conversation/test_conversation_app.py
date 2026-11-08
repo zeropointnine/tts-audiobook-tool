@@ -24,7 +24,7 @@ from tts_audiobook_tool.textual.conversation_app import (
 )
 from tts_audiobook_tool.textual.conversation_widgets import ConversationRole
 from tts_audiobook_tool.textual.textual_shared import STYLE_DIM
-from textual_editor_stubs import run
+from textual_editor_stubs import run, wait_until
 
 
 class FakeResponse:
@@ -813,6 +813,7 @@ def test_render_snapshot_styles_pending_sentence_dim_italic() -> None:
         pending_sentences=("pending one", "pending two"),
         render_buffer="preview",
         play_position_samples=50,
+        playback_audible=True,
         llm_content_received=True,
     )
     text = ConversationTextualApp._render_snapshot(snapshot)
@@ -835,6 +836,64 @@ def test_render_snapshot_styles_pending_sentence_dim_italic() -> None:
         assert other_style is not None
         assert not other_style.italic
         assert other_style.color == Color.parse("#888888")
+
+
+def test_render_snapshot_highlights_nothing_while_playback_is_silent() -> None:
+    from rich.color import Color
+    from rich.style import Style
+
+    # During an underrun the cursor rests at the end of the first segment,
+    # which is also the first sample of the next, not-yet-audible segment.
+    segments = (("First.", 0, 100), ("Second.", 100, 200))
+
+    def colors(audible: bool) -> list:
+        text = ConversationTextualApp._render_snapshot(
+            ResponseSnapshot(
+                spoken_segments=segments,
+                play_position_samples=100,
+                playback_audible=audible,
+                render_buffer="",
+                llm_content_received=True,
+            )
+        )
+        return [
+            (Style.parse(style) if isinstance(style, str) else style).color
+            for _start, _end, style in text.spans
+        ]
+
+    dim = Color.parse(STYLE_DIM)
+    assert colors(audible=False) == [dim, dim]
+    assert colors(audible=True) == [dim, Color.default()]
+
+
+def test_unchanged_response_frames_are_not_pushed_to_the_transcript() -> None:
+    # The refresh timer polls at a fixed rate; identical renders must not
+    # re-render the entry or re-scroll the transcript.
+    async def exercise() -> None:
+        runtime = FakeRuntime()
+        app = ConversationTextualApp(make_state(), runtime=runtime)  # type: ignore[arg-type]
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            app._submit(PromptSubmission("hello"))
+            await wait_until(pilot, lambda: runtime.submissions, what="response running")
+            updates = []
+            original = app.transcript.update_entry
+            app.transcript.update_entry = lambda entry, content: (
+                updates.append(content.plain), original(entry, content)
+            )
+            for _ in range(3):
+                app._refresh_active_response()
+            assert updates.count("partial reply") <= 1
+            runtime.response.value = ResponseSnapshot(
+                render_buffer="partial reply, more", llm_content_received=True
+            )
+            for _ in range(3):
+                app._refresh_active_response()
+            assert updates.count("partial reply, more") == 1
+            runtime.release.set()
+
+    run(exercise())
 
 
 def test_blockers_fail_inside_textual_and_enter_returns() -> None:

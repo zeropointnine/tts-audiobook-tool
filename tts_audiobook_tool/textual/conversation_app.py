@@ -201,6 +201,7 @@ class ConversationTextualApp(App[ConversationAppResult]):
         self._initialization_entry: ConversationEntry | None = None
         self._turn_started_at: float | None = None
         self._last_snapshot_key: tuple | None = None
+        self._last_rendered_response: Text | None = None
         self._last_snapshot_change_at: float = time.monotonic()
         self._stall_notice_shown = False
         self._interrupt_requested_turn_id: int | None = None
@@ -491,6 +492,7 @@ class ConversationTextualApp(App[ConversationAppResult]):
         self._turn_started_at = time.monotonic()
         self._last_snapshot_change_at = time.monotonic()
         self._last_snapshot_key = None
+        self._last_rendered_response = None
         self._stall_notice_shown = False
         try:
 
@@ -576,15 +578,24 @@ class ConversationTextualApp(App[ConversationAppResult]):
                 ConversationRole.SYSTEM,
                 "Still waiting for the LLM response... Esc to interrupt.",
             )
-        self.transcript.update_entry(entry, self._render_snapshot(snapshot))
+        # The timer polls at a fixed rate; only push a frame that differs,
+        # sparing the widget re-render and tail scroll on idle ticks.
+        rendered = self._render_snapshot(snapshot)
+        if rendered != self._last_rendered_response:
+            self._last_rendered_response = rendered
+            self.transcript.update_entry(entry, rendered)
 
     @staticmethod
     def _render_snapshot(snapshot: ResponseSnapshot) -> Text:
+        """Pure function of the snapshot. Only the segment being heard is
+        highlighted; while playback is silent (before the first audio, during
+        an underrun) nothing is, since the cursor position then marks where
+        playback stopped, which is also the start of the next segment."""
         result = Text()
         position = snapshot.play_position_samples
         active_index = (
             None
-            if snapshot.playback_done
+            if snapshot.playback_done or not snapshot.playback_audible
             else next(
                 (
                     index
@@ -596,10 +607,8 @@ class ConversationTextualApp(App[ConversationAppResult]):
                 None,
             )
         )
-        for index, (text, _start, end) in enumerate(snapshot.spoken_segments):
+        for index, (text, _start, _end) in enumerate(snapshot.spoken_segments):
             style = STYLE_DEFAULT if index == active_index else STYLE_DIM
-            if end <= position or snapshot.playback_done:
-                style = STYLE_DIM
             result.append(text, style=style)
         for index, text in enumerate(snapshot.pending_sentences):
             style = f"bold italic {STYLE_DIM}" if index == 0 else STYLE_DIM

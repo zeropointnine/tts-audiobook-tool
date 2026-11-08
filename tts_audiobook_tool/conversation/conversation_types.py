@@ -36,6 +36,9 @@ class ResponseSnapshot:
     pending_sentences: tuple[str, ...] = ()
     render_buffer: str = "..."
     play_position_samples: int = 0
+    # False before the first audio, during underruns, and while paused; the
+    # position is then where playback stopped, not something being heard.
+    playback_audible: bool = False
     playback_done: bool = False
     llm_content_received: bool = False
     interrupted: bool = False

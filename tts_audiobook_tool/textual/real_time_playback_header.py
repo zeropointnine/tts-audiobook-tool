@@ -135,9 +135,14 @@ class RealTimePlaybackHeader(Vertical):
         zero_buffer_is_error: bool = True,
     ) -> None:
         buffer_value = duration_string(buffer_seconds, include_tenth=True)
-        if buffer_seconds <= 0.0 and zero_buffer_is_error:
-            buffer_value = f"{COL_ERROR}{buffer_value}{COL_DEFAULT}"
-        stats = f"Processed: {processed}/{total}  Buffer: {COL_OK}{buffer_value}{COL_DEFAULT}"
+        if buffer_seconds <= 0.0:
+            # An empty buffer is an underrun while generation is still live;
+            # once the run is over (finished, cancelled, terminal) it is just
+            # the drained remainder, so it is shown dimmed.
+            buffer_color = COL_ERROR if zero_buffer_is_error else COL_DIM
+        else:
+            buffer_color = COL_OK
+        stats = f"Processed: {processed}/{total}  Buffer: {buffer_color}{buffer_value}{COL_DEFAULT}"
         self.query_one("#realtime-stats", Static).update(Text.from_ansi(stats))
 
     def update_hotkey(self, mode: PromptMode, paused: bool = False) -> None:

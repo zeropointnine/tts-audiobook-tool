@@ -240,19 +240,25 @@ class _ResponseEngine:
     def snapshot(self) -> ResponseSnapshot:
         """Read immutable turn state before, during, or after run().
 
-        The engine owns synchronization of its text state. Playback position
-        and lifecycle flags are sampled independently, not atomically with text.
+        The engine owns synchronization of its text state. The playback cursor
+        and lifecycle flags are sampled separately, not under the text lock.
+        That is safe for display: segments are registered right after their
+        audio is queued (tts_worker), and queued audio becomes audible only
+        after the output latency, so a cursor can't point at audible audio
+        whose segment a snapshot misses.
         """
         with self.state_lock:
             segments = tuple(self.spoken_segments)
             pending = tuple(self.pending_sentences)
             render_buffer = self.render_buffer
             received = self.llm_content_received
+        cursor = self.sound_stream.cursor()
         return ResponseSnapshot(
             spoken_segments=segments,
             pending_sentences=pending,
             render_buffer=render_buffer,
-            play_position_samples=self.sound_stream.play_position_samples,
+            play_position_samples=cursor.position,
+            playback_audible=cursor.audible,
             playback_done=self.playback_done,
             llm_content_received=received,
             interrupted=self.interrupt_requested.is_set(),
@@ -601,14 +607,25 @@ class _ResponseEngine:
                             start,
                             self.log_tts_first_audio_latency,
                         )
-                    is_first_tts_chunk = not self.spoken_segments
+                    # Register the whole chunk as one segment right away, so
+                    # its text is never shown as pending while its audio plays.
+                    # Phrase alignment (STT) runs afterwards, outside the lock,
+                    # and splices in finer segments covering the same range.
+                    # Only this worker appends segments, so the index holds.
+                    with self.state_lock:
+                        is_first_tts_chunk = not self.spoken_segments
+                        if self.pending_sentences and self.pending_sentences[0] == text:
+                            self.pending_sentences.pop(0)
+                        segment_idx = len(self.spoken_segments)
+                        self.spoken_segments.append((text, start, end))
                     spoken_segments = self.make_spoken_segments(
                         text, dry_sound, start, end, is_first_tts_chunk
                     )
-                    with self.state_lock:
-                        if self.pending_sentences and self.pending_sentences[0] == text:
-                            self.pending_sentences.pop(0)
-                        self.spoken_segments.extend(spoken_segments)
+                    if spoken_segments != [(text, start, end)]:
+                        with self.state_lock:
+                            self.spoken_segments[segment_idx:segment_idx + 1] = (
+                                spoken_segments
+                            )
                 # On interruption, preserve accepted text; run() owns cleanup.
 
             except Exception as e:

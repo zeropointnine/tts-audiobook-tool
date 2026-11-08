@@ -1,11 +1,37 @@
 import signal
+from collections import deque
 from contextlib import contextmanager
+from dataclasses import dataclass, replace
 import numpy as np
 import sounddevice as sd
 import threading
 from numpy import ndarray
-from typing import Callable, Iterator, Optional
+from typing import Callable, Iterable, Iterator, Optional
 from tts_audiobook_tool.util import *
+
+
+@dataclass(frozen=True)
+class PlaybackCursor:
+    """
+    What is audible at one instant, in cumulative-stream frame indices.
+
+    position: the frame being heard while audible; otherwise where playback
+        stopped (the end of the last audible chunk), or 0 before any audio.
+    audible: False before the first audio, during underruns, and while paused.
+        A position frozen at the end of one chunk equals the first frame of the
+        next one, so callers must check this flag rather than infer it.
+    """
+    position: int = 0
+    audible: bool = False
+
+
+@dataclass(frozen=True)
+class _PlaybackAnchor:
+    """One callback's audio chunk, pinned to the stream clock."""
+    dac_time: float  # stream time when the chunk's first frame is heard
+    start: int  # cumulative frame index of the chunk's first frame
+    end: int  # one past its last frame
+    then_silent: bool  # the device outputs silence after this chunk
 
 
 class SoundDeviceStream:
@@ -16,6 +42,9 @@ class SoundDeviceStream:
 
     # TODO using this causes app exit to take a long time?
     """
+
+    # Far more than the callbacks that can be scheduled ahead of the DAC
+    _MAX_ANCHORS = 32
 
     @staticmethod
     @contextmanager
@@ -78,13 +107,12 @@ class SoundDeviceStream:
         # Together with len(buffer), gives frames already consumed by the callback.
         self.total_samples_added = 0
 
-        # Clock-anchored playback tracking, updated each callback that consumes audio.
-        # last_dac_time: outputBufferDacTime from the most recent non-silent callback.
-        # last_dac_consumed: cumulative samples consumed *before* that callback's chunk.
-        # last_audio_dac_end: DAC time when the last audio sample of that chunk will be heard.
-        # Initialise last_dac_time to inf so play_position_samples returns 0 before first callback.
-        self.last_dac_time: float = float('inf')
-        self.last_dac_consumed: int = 0
+        # Clock-anchored playback tracking: one anchor per callback that consumes
+        # audio, newest last. Several are kept because callbacks run ahead of the
+        # DAC by the output latency, so the chunk being heard is usually not the
+        # newest one (see cursor_at()).
+        self._anchors: deque[_PlaybackAnchor] = deque(maxlen=SoundDeviceStream._MAX_ANCHORS)
+        # last_audio_dac_end: DAC time when the last consumed audio frame will be heard.
         self.last_audio_dac_end: float = 0.0
 
         # DAC end time of audio scheduled before the most recent
@@ -129,6 +157,7 @@ class SoundDeviceStream:
             if self.is_paused or (self.pause_requested is not None and self.pause_requested()):
                 # If paused, stream silence.
                 outdata.fill(0)
+                self._mark_then_silent()
                 return
 
             # Determine how much data to pull from the buffer
@@ -146,13 +175,19 @@ class SoundDeviceStream:
             if chunk_size < frames:
                 outdata[chunk_size:].fill(0)
 
-            # Anchor playback position to the stream clock so play_position_samples
+            # Anchor playback position to the stream clock so the cursor
             # advances continuously and is accurate regardless of audio backend.
-            if chunk_size > 0:
+            if chunk_size == 0:
+                self._mark_then_silent()
+            else:
                 chunk_start = self.total_samples_added - len(self.buffer) - chunk_size
                 chunk_end = chunk_start + chunk_size
-                self.last_dac_consumed = chunk_start
-                self.last_dac_time = time.outputBufferDacTime
+                self._anchors.append(_PlaybackAnchor(
+                    dac_time=time.outputBufferDacTime,
+                    start=chunk_start,
+                    end=chunk_end,
+                    then_silent=chunk_size < frames,
+                ))
                 self.last_audio_dac_end = time.outputBufferDacTime + chunk_size / self.sample_rate
                 callback_sample_index = self.first_audio_output_sample_index
                 if (
@@ -169,6 +204,11 @@ class SoundDeviceStream:
                 first_audio_output_callback()
             except Exception:
                 pass
+
+    def _mark_then_silent(self) -> None:
+        """Record that the newest chunk is followed by silence. Caller holds the lock."""
+        if self._anchors and not self._anchors[-1].then_silent:
+            self._anchors[-1] = replace(self._anchors[-1], then_silent=True)
 
     def add_data(self, data: ndarray) -> tuple[int, int]:
         """
@@ -257,8 +297,8 @@ class SoundDeviceStream:
         playback mid-response (e.g. Ctrl-C) while keeping the stream
         alive for the next response.
 
-        Resets position-tracking state so play_position_samples returns
-        0 again until the next callback fires, and resets
+        Resets position-tracking state so the cursor returns to 0
+        (not audible) until the next callback fires, and resets
         total_samples_added so sample indices from add_data() restart
         from 0 for the next response.
 
@@ -272,8 +312,7 @@ class SoundDeviceStream:
             )
             self.buffer = self._empty_buffer()
             self.total_samples_added = 0
-            self.last_dac_time = float('inf')
-            self.last_dac_consumed = 0
+            self._anchors.clear()
             self.last_audio_dac_end = 0.0
             self.first_audio_output_callback = None
             self.first_audio_output_sample_index = None
@@ -337,30 +376,61 @@ class SoundDeviceStream:
         with self.lock:
             return max(0, self.total_samples_added - len(self.buffer))
 
-    @property
-    def play_position_samples(self) -> int:
+    def cursor(self) -> PlaybackCursor:
         """
-        Current playback cursor in cumulative-stream sample indices — i.e. which
-        sample is audible right now.  Advances continuously using the PortAudio
-        stream clock (stream.time) anchored against outputBufferDacTime recorded
-        in the callback, so it is accurate regardless of audio backend (ALSA,
-        PulseAudio, PipeWire, etc.) and does not rely on the reported latency.
-        Returns 0 before the first callback has fired.
+        What is audible right now. Uses the PortAudio stream clock (stream.time)
+        against the outputBufferDacTime recorded in each callback, so it is
+        accurate regardless of audio backend (ALSA, PulseAudio, PipeWire, etc.)
+        and does not rely on the reported latency. See cursor_at().
         """
         stream = self.stream
         if stream is None:
-            return 0
+            return PlaybackCursor()
         with self.lock:
-            dac_time = self.last_dac_time
-            base = self.last_dac_consumed
-        if dac_time == float('inf'):
-            return 0  # no callback has fired yet
+            anchors = tuple(self._anchors)
         try:
-            return max(0, base + int((stream.time - dac_time) * self.sample_rate))
+            now = stream.time
         except sd.PortAudioError:
             # Stream may be stopping/closed concurrently while another thread
             # is sampling playback position during Ctrl-C teardown.
-            return 0
+            return PlaybackCursor()
+        return SoundDeviceStream.cursor_at(anchors, self.sample_rate, now)
+
+    @staticmethod
+    def cursor_at(
+        anchors: Iterable[_PlaybackAnchor], sample_rate: int, now: float
+    ) -> PlaybackCursor:
+        """
+        Pure cursor derivation from callback anchors (oldest first) and the
+        stream clock.
+
+        The chunk being heard is the newest one whose DAC time has arrived;
+        newer anchors belong to callbacks still running ahead of the DAC.
+        Extrapolation stops at that chunk's end, so the position never runs
+        ahead into audio that isn't audible yet, and it never moves backwards
+        when a later callback re-anchors (each chunk starts where the
+        previous one ended).
+
+        Past the end of a chunk, playback counts as audible unless the chunk
+        is known to be followed by silence (underrun or pause). Back-to-back
+        chunks can leave a sliver of clock jitter between them, which must
+        not read as a gap.
+        """
+        current: _PlaybackAnchor | None = None
+        for anchor in anchors:
+            if anchor.dac_time <= now:
+                current = anchor
+        if current is None:
+            return PlaybackCursor()
+        position = current.start + int((now - current.dac_time) * sample_rate)
+        if position < current.end:
+            return PlaybackCursor(position, True)
+        return PlaybackCursor(current.end, not current.then_silent)
+
+    @property
+    def play_position_samples(self) -> int:
+        """Current cursor position in cumulative-stream frames; see cursor()."""
+        return self.cursor().position
 
     @property
     def play_position_seconds(self) -> float:

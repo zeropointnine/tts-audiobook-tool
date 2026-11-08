@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import sounddevice as sd
 
-from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
+from tts_audiobook_tool.sound.sound_device_stream import PlaybackCursor, SoundDeviceStream
 
 
 def _callback(
@@ -47,13 +47,18 @@ def test_pause_predicate_preserves_and_resumes_samples(initially_paused: bool) -
         first_audio_output.assert_called_once_with()
         pause_event.set()
 
-    anchor = (stream.last_dac_time, stream.last_dac_consumed, stream.last_audio_dac_end)
+    anchor_count = len(stream._anchors)
+    audio_dac_end = stream.last_audio_dac_end
     for dac_time in (2.0, 3.0):
         np.testing.assert_array_equal(_callback(stream, frames=2, dac_time=dac_time), 0)
         np.testing.assert_array_equal(stream.buffer, samples[consumed:])
         assert stream.played_samples == consumed
         assert stream.total_samples_added == len(samples)
-        assert (stream.last_dac_time, stream.last_dac_consumed, stream.last_audio_dac_end) == anchor
+        # Paused callbacks don't anchor; the paused-over chunk reads as silent after it
+        assert len(stream._anchors) == anchor_count
+        assert stream.last_audio_dac_end == audio_dac_end
+        if anchor_count:
+            assert stream._anchors[-1].then_silent
     if initially_paused:
         first_audio_output.assert_not_called()
 
@@ -201,6 +206,65 @@ def test_clear_buffer_keeps_scheduled_tail_for_silence_detection() -> None:
     assert stream.is_playback_complete is False
     stream.stream = cast(sd.OutputStream, SimpleNamespace(time=10.2))
     assert stream.is_playback_complete is True
+
+
+def _cursor_at(stream: SoundDeviceStream, now: float) -> PlaybackCursor:
+    stream.stream = cast(sd.OutputStream, SimpleNamespace(time=now))
+    return stream.cursor()
+
+
+def test_cursor_across_underrun_never_runs_ahead_or_back() -> None:
+    # Regression: sentence 1 drains the buffer, sentence 2 arrives later. The
+    # old position extrapolated past sentence 1 into sentence 2 before it was
+    # audible, then jumped back into sentence 1 once a callback re-anchored on
+    # sentence 2's first block (whose DAC time lies a latency in the future).
+    # A 1024 Hz rate and binary-fraction times keep the arithmetic exact.
+    stream = SoundDeviceStream(sample_rate=1024)
+    s1_end = stream.add_data(np.zeros(1024, dtype=np.float32))[1]
+    _callback(stream, frames=4096, dac_time=10.0)  # partial: buffer runs dry
+
+    assert _cursor_at(stream, 9.5) == PlaybackCursor(0, False)  # not audible yet
+    assert _cursor_at(stream, 10.5) == PlaybackCursor(512, True)
+    # Gap: frozen at the end of sentence 1, explicitly silent
+    assert _cursor_at(stream, 12.0) == PlaybackCursor(s1_end, False)
+
+    s2_start, _s2_end = stream.add_data(np.zeros(4096, dtype=np.float32))
+    assert s2_start == s1_end
+    assert _cursor_at(stream, 12.25) == PlaybackCursor(s1_end, False)  # queued only
+    _callback(stream, frames=4096, dac_time=12.75)  # re-anchors in the future
+    assert _cursor_at(stream, 12.5) == PlaybackCursor(s1_end, False)  # no jump back
+    assert _cursor_at(stream, 13.0) == PlaybackCursor(s2_start + 256, True)
+
+
+def test_cursor_is_continuous_across_back_to_back_chunks() -> None:
+    # Callbacks run ahead of the DAC, so the chunk being heard is the newest
+    # one whose DAC time has arrived, not the newest anchor. Clock jitter
+    # leaving a sliver between back-to-back chunks must not read as silence.
+    stream = SoundDeviceStream(sample_rate=1024)
+    stream.add_data(np.zeros(3 * 512, dtype=np.float32))
+    _callback(stream, frames=512, dac_time=1.0)
+    _callback(stream, frames=512, dac_time=1.5 + 2**-10)  # one frame late
+    _callback(stream, frames=512, dac_time=2.0 + 2**-10)
+
+    assert _cursor_at(stream, 1.25) == PlaybackCursor(256, True)
+    assert _cursor_at(stream, 1.5) == PlaybackCursor(512, True)  # jitter sliver
+    assert _cursor_at(stream, 1.75 + 2**-10) == PlaybackCursor(768, True)
+    # Once the last chunk drains, the next (empty) callback marks the silence
+    assert _cursor_at(stream, 3.0) == PlaybackCursor(3 * 512, True)
+    _callback(stream, frames=512, dac_time=2.5 + 2**-10, underflow=True)
+    assert _cursor_at(stream, 3.0) == PlaybackCursor(3 * 512, False)
+
+
+def test_cursor_is_silent_while_paused_and_after_clear() -> None:
+    stream = SoundDeviceStream(sample_rate=1024)
+    stream.add_data(np.zeros(1024, dtype=np.float32))
+    _callback(stream, frames=512, dac_time=1.0)
+    stream.pause()
+    _callback(stream, frames=512, dac_time=1.5)
+    assert _cursor_at(stream, 2.0) == PlaybackCursor(512, False)
+
+    stream.clear_buffer()
+    assert _cursor_at(stream, 2.0) == PlaybackCursor(0, False)
 
 
 def test_clear_buffer_without_scheduled_audio_is_immediately_silent() -> None:

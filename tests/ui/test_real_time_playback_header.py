@@ -50,7 +50,7 @@ def test_header_composes_and_updates_realtime_stats() -> None:
             finished_buffer = header.query_one("#realtime-stats", Static).render()
             assert isinstance(finished_buffer, Content)
             # A finished (expected) zero buffer shows the same text but is
-            # rendered in the OK color rather than being flagged as an error.
+            # rendered dimmed rather than being flagged as an error.
             assert str(finished_buffer) == str(zero_buffer)
             assert len(finished_buffer.spans) == 1
             assert len(zero_buffer.spans) == 1

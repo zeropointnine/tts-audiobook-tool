@@ -12,6 +12,7 @@ from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.sound.sound_device_stream import PlaybackCursor
 from tts_audiobook_tool.tts import Tts
 
 
@@ -27,7 +28,7 @@ def make_session(
     )
     sound_stream = MagicMock()
     sound_stream.channels = 1
-    sound_stream.play_position_samples = 0
+    sound_stream.cursor.return_value = PlaybackCursor()
     sound_stream.is_playback_complete = True
     session = ResponseSession(
         llm=LlmSession(
@@ -56,6 +57,7 @@ def test_snapshot_is_available_before_run_and_detached_from_mutable_state() -> N
     assert initial.pending_sentences == ()
     assert initial.render_buffer == "..."
     assert initial.play_position_samples == 0
+    assert not initial.playback_audible
     assert not initial.playback_done
     assert not initial.llm_content_received
     assert not initial.interrupted
@@ -65,7 +67,7 @@ def test_snapshot_is_available_before_run_and_detached_from_mutable_state() -> N
         session.pending_sentences.append("Pending.")
         session.render_buffer = "Partial"
         session.llm_content_received = True
-    session.sound_stream.play_position_samples = 50
+    session.sound_stream.cursor.return_value = PlaybackCursor(50, True)
     current = session.snapshot()
     with session.state_lock:
         session.spoken_segments.clear()
@@ -77,6 +79,7 @@ def test_snapshot_is_available_before_run_and_detached_from_mutable_state() -> N
     assert current.render_buffer == "Partial"
     assert current.llm_content_received
     assert current.play_position_samples == 50
+    assert current.playback_audible
 
 
 @pytest.mark.parametrize("interrupt_before_run", [False, True])
@@ -682,6 +685,45 @@ def test_non_streaming_tts_applies_room_reverb(
         if channels == 2:
             assert not np.allclose(pause[:, 0], pause[:, 1])
     assert session.snapshot().spoken_segments == ((text, 0, len(played)),)
+
+
+def test_non_streaming_chunk_is_spoken_while_phrase_alignment_runs(monkeypatch) -> None:
+    # The chunk's audio is queued before STT phrase alignment, so its text must
+    # already be a spoken segment (not pending) while alignment runs; the
+    # phrase segments then replace it in place, covering the same range.
+    monkeypatch.setattr(Tts, "get_info", lambda project: SimpleNamespace(can_stream=False))
+    session = make_session()
+    session.sound_stream.sample_rate = 48000
+    session.sound_stream.add_data.side_effect = lambda data: (1000, 1000 + len(data))
+    monkeypatch.setattr(
+        ModelWorker,
+        "synthesize_chat_blocking",
+        lambda *_args, **_kwargs: ((Sound(np.zeros(4800, np.float32), 48000),), ""),
+    )
+    session.spoken_segments = [("Earlier.", 0, 1000)]
+    text = "First half, second half."
+    seen_during_alignment = []
+
+    def align(text, sound, start, end, is_first):
+        seen_during_alignment.append(session.snapshot())
+        mid = (start + end) // 2
+        return [("First half,", start, mid), (" second half.", mid, end)]
+
+    monkeypatch.setattr(session, "make_spoken_segments", align)
+    session.pending_sentences = [text]
+    session.tts_q.put((text, Reason.SENTENCE))
+    session.tts_q.put(None)
+
+    session.tts_worker()
+
+    during = seen_during_alignment[0]
+    assert during.pending_sentences == ()
+    (_, start, end) = during.spoken_segments[1]
+    assert during.spoken_segments[1][0] == text
+    final = session.snapshot().spoken_segments
+    assert final[0] == ("Earlier.", 0, 1000)
+    assert [segment[0] for segment in final[1:]] == ["First half,", " second half."]
+    assert (final[1][1], final[-1][2]) == (start, end)
 
 
 @pytest.mark.parametrize("channels", [1, 2])
