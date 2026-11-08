@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed architecture and migration plan.
+Proposed architecture and migration plan. Phase 1 (immediate correctness fixes) is done; Phases 2+ are not started.
+
+Code references and audit findings were last re-verified against the codebase on 2026-11-08. Since the first draft, line input moved to prompt-toolkit, LLM chat moved to a Textual app (removing the conversation UI's own width code), the console-mode generation fallback was removed, and `ConsoleLineAssembler` moved to `textual/worker_session.py`.
 
 ## Summary
 
@@ -60,11 +62,12 @@ Most app-owned formatting constants and builders live in:
 
 Some literal sequences remain in:
 
-- `tts_audiobook_tool/ask_advanced.py`
-- `tts_audiobook_tool/conversation/conversation_internals.py`
-- `tts_audiobook_tool/concat_util.py`
+- `tts_audiobook_tool/concat_util.py` (CSI `1G` / CSI `K` progress line)
+- `tts_audiobook_tool/system_support/terminal.py` (`CLEAR_SCREEN_SEQUENCE`)
 - developer scripts under `testx/`
 - the intentionally standalone `launch.py`
+
+Hotkey literals such as those in `ask.py` and `menus/menu_util.py` are keyboard-protocol values, not emission.
 
 Emission is already more centralized than parsing, but the remaining literals make it harder to establish a complete supported-sequence vocabulary.
 
@@ -84,13 +87,13 @@ These callers implicitly require different policies even though they use one amb
 
 ### Input filtering
 
-`tts_audiobook_tool/ask.py` defines a second terminal-sequence expression and applies it to completed line input. `tts_audiobook_tool/ask_advanced.py` separately rejects ASCII controls and DEL in prefilled input before selecting an advanced editor.
+`tts_audiobook_tool/ask.py` defines a second terminal-sequence expression (`terminal_escape_sequence_pattern`) and applies it to completed line input. `tts_audiobook_tool/ask_advanced.py` reads line input through prompt-toolkit. It falls back to plain `input()` when the prefill contains ASCII controls or DEL, or when stdin/stdout are not TTYs. The prompt string is parsed by prompt-toolkit's `ANSI()` formatter.
 
 Raw hotkey handling in `ask.py` is a keyboard protocol and intentionally interprets escape sequences instead of stripping them.
 
 ### Worker stream normalization
 
-`ConsoleLineAssembler` in `tts_audiobook_tool/textual/worker_app.py` performs partial stream-aware terminal processing:
+`ConsoleLineAssembler` in `tts_audiobook_tool/textual/worker_session.py` (re-exported by `worker_app.py` and `generation_app.py`) performs partial stream-aware terminal processing. It has two consumers: `WorkerSessionMixin`, which backs `GenerationApp`, `RealTimePlaybackApp`, and `QuickGenModal`, and the initialization log in `ConversationApp`. It:
 
 - buffers selected incomplete CSI and OSC sequences;
 - converts CRLF to LF;
@@ -101,7 +104,9 @@ Raw hotkey handling in `ask.py` is a keyboard protocol and intentionally interpr
 - preserves OSC 8 for Rich;
 - produces committed lines plus one replaceable live line.
 
-`GenerationTranscript` in `tts_audiobook_tool/textual/generation_app.py` imports the assembler's private pending-control helper, strips sequences with `text_util.strip_ansi_codes()`, and turns carriage returns into newlines so progress history remains visible.
+`GenerationTranscript` in `tts_audiobook_tool/textual/generation_app.py` (used by `GenerationApp` and `QuickGenModal`) imports the assembler's private pending-control helper, strips sequences with `text_util.strip_ansi_codes()`, and turns carriage returns into newlines so progress history remains visible. Unlike the UI, it writes each chunk immediately rather than buffering to newline.
+
+`ConsoleOutputFilter` in `textual/worker_content.py` uses `Text.from_ansi(...).plain` to judge whether a line is blank.
 
 ### Rich rendering
 
@@ -111,30 +116,25 @@ Many Textual components use `Text.from_ansi()`. This correctly converts supporte
 
 ### Display width
 
-Width is currently calculated through several mechanisms:
+Width is currently calculated through two mechanisms:
 
-- `Ui.ANSI_RE` and `Ui.display_width()` in the conversation UI;
-- `_display_width()` in the Windows advanced input editor;
 - `Text.cell_len` and `rich.cells.cell_len` in Textual code;
-- `len(strip_ansi_codes(...))` for dividers and labels.
+- `len(strip_ansi_codes(...))` for console dividers and labels (`util.py`, `menus/speaker_assign/speaker_assign_menu_shared.py`, `project_support/segment_transcript_util.py`).
 
-These implementations disagree for some terminal sequences, CJK text, combining characters, emoji, and tabs.
+These disagree for CJK text, combining characters, and emoji. The conversation UI's `Ui.ANSI_RE` / `Ui.display_width()` and the Windows editor's `_display_width()` no longer exist. They were removed when chat moved to Textual and line input moved to prompt-toolkit.
 
 ## Audit findings
 
-### Broken OSC and string-control filtering in line input
+### Broken OSC and string-control filtering in line input (fixed in Phase 1)
 
-The alternation in `tts_audiobook_tool/ask.py` places the generic two-byte ESC branch before OSC and DCS-family branches. Consequently, `ESC ]`, `ESC P`, `ESC X`, `ESC ^`, and `ESC _` are consumed as complete two-byte sequences before the longer alternatives can match.
+The alternation in `tts_audiobook_tool/ask.py` placed the generic two-byte ESC branch before OSC and DCS-family branches. Consequently, `ESC ]`, `ESC P`, `ESC X`, `ESC ^`, and `ESC _` were consumed as two-byte sequences, leaving the payload behind. For example, `x ESC]0;TITLE BEL y` became `x0;TITLE\x07y`.
 
-The introducer and terminator may be removed while the payload remains. Examples include terminal-title parameters, OSC 8 URI parameters, and DCS payload text.
-
-This is the highest-priority correctness defect.
+The pattern now tries string controls first and fails closed. An unterminated OSC/DCS-family string or CSI drops its payload, and a stray ESC is removed. C1 forms are still not recognized.
 
 ### General stripping is not general terminal sanitization
 
-`text_util.strip_ansi_codes()`:
+`text_util.strip_ansi_codes()` (its regexes are now precompiled):
 
-- recompiles its regular expressions on every call;
 - handles complete OSC and common 7-bit CSI;
 - does not remove DCS/SOS/PM/APC payloads;
 - does not recognize 8-bit C1 forms;
@@ -142,19 +142,6 @@ This is the highest-priority correctness defect.
 - can expose payload from malformed or incomplete sequences.
 
 The name obscures these limitations.
-
-### Conversation width uses a narrower grammar
-
-`Ui.ANSI_RE` recognizes only `ESC [` followed by digits/semicolons and an ASCII letter. It misses:
-
-- OSC hyperlinks;
-- private CSI parameters such as `?` and `>`;
-- colon-separated SGR parameters;
-- CSI intermediates;
-- valid non-letter final bytes;
-- C1 forms.
-
-Missed printable parameters and OSC payloads distort wrapping calculations. That can cause incorrect cursor clearing, stale rows, or overwritten output.
 
 ### Streaming recognition is incomplete
 
@@ -166,11 +153,11 @@ The worker stream's pending-control logic handles only a restricted trailing CSI
 - DCS/SOS/PM/APC strings;
 - C1 forms.
 
-Valid sequences split at unsupported positions can leak fragments into visible output or transcripts.
+Valid sequences split at unsupported positions can leak fragments. The UI hides most of these for committed lines because the assembler buffers to newline before Rich parses the line, but the live line can show fragments transiently. The transcript writes per chunk, so leaks persist there. For example, `a ESC[38:2` followed by `:1:2:3mb` is written to the transcript as a raw ESC sequence. DCS payloads leak into both the UI and the transcript even when unsplit.
 
 ### End-of-stream behavior is unspecified
 
-`ConsoleLineAssembler.finish()` and `GenerationTranscript.close()` silently discard pending incomplete control sequences. This may be a reasonable fail-closed policy, but it is neither shared nor explicitly tested.
+`ConsoleLineAssembler.finish()` discards any pending incomplete control sequence; Phase 1 made it clear the pending state so a reused assembler does not replay the fragment. `GenerationTranscript.close()` also discards its pending state. The two policies are implemented separately, and only the assembler's is tested.
 
 The architecture must specify handling for incomplete terminal data at EOF.
 
@@ -182,13 +169,13 @@ The project does not need a full terminal emulator, but the supported approximat
 
 ### stdout and stderr share parser state
 
-One worker assembler processes both streams. A partial sequence emitted by stdout can be completed with text from the next stderr event, or vice versa. The transcript has an analogous shared pending state.
+One worker assembler processes both streams, and `ConsoleOutput.stream` is ignored. A partial sequence emitted by stdout can be completed with text from the next stderr event, or vice versa. Verified: stdout `out ESC[3` followed by stderr `err line` produces `outrr line`, because the `e` is consumed as a CSI final byte. The transcript and `ConversationApp`'s assembler have the same shared pending state.
 
 Incremental recognition state must be maintained per `(operation_id, stream)`. Streams may be merged only after each has been tokenized or normalized independently.
 
-### Console mode bypasses normalization
+### Blocking worker calls bypass normalization
 
-Console-mode generation writes `ConsoleOutput.text` directly to the real stdout or stderr before feeding the assembler. Textual output removes at least non-hyperlink OSC before rendering, while console output can pass arbitrary worker-generated control sequences to the user's terminal.
+The console-mode generation fallback has been removed; generation always runs through Textual. However, `ModelWorker._dispatch_console_event()` still falls back to `_write_console_output()` when no console handler is supplied. That function writes `ConsoleOutput.text` directly to the real stdout or stderr. This covers worker startup output and menu-side blocking calls such as `get_model_state_blocking()`, `clear_models_if_running_blocking()`, and `probe_lava_sr_blocking()`. Textual output removes at least non-hyperlink OSC before rendering, while this path can pass arbitrary worker-generated control sequences to the user's terminal.
 
 This permits inconsistent behavior and potentially dangerous controls such as OSC 52 clipboard operations. Worker libraries may usually be trusted, but raw output should still be subject to an explicit allowlist.
 
@@ -198,15 +185,15 @@ This permits inconsistent behavior and potentially dangerous controls such as OS
 
 All captured or untrusted terminal output should be normalized before it reaches Rich.
 
-### OSC 8 construction permits sequence injection
+### OSC 8 construction permitted sequence injection (target fixed in Phase 1)
 
-`text_util.make_terminal_hyperlink()` interpolates the link target and display text directly into an OSC 8 sequence. BEL, ESC, or ST in either value can terminate the sequence and inject additional terminal controls.
+`text_util.make_terminal_hyperlink()` interpolated the link target directly into an OSC 8 sequence, so BEL, ESC, or ST in it could terminate the sequence and inject additional terminal controls. C0, DEL, and C1 characters in the target are now percent-encoded.
 
-The target must be validated or safely encoded. Display text should be appended as literal content where possible, or sanitized according to the output sink.
+The display text sits between the open and close sequences, not inside the OSC, so it cannot break the hyperlink's structure. Controls in it are an ordinary content-sanitization concern for the output sink. It is still emitted unchanged, partly because some callers may pass styled labels. File URIs are still built by prefixing `file://` to the raw path.
 
 ### Input policies are inconsistent
 
-Advanced-input prefill rejects ASCII controls and DEL, but not C1 controls or Unicode formatting/bidirectional controls. The Windows editor permits typed TAB and generally accepts characters at or above U+0020. Post-read filtering in `ask.py` removes only recognized terminal sequences and does not define a broader C0/C1 policy.
+Advanced-input prefill falls back to `input()` on ASCII controls and DEL, but not on C1 controls or Unicode formatting/bidirectional controls. Typed input is whatever prompt-toolkit's Emacs-mode buffer accepts. Post-read filtering in `ask.py` removes only recognized terminal sequences and does not define a broader C0/C1 policy.
 
 Input sanitation must distinguish:
 
@@ -223,7 +210,7 @@ This should not be merged blindly with terminal rendering policy. Instead, conte
 
 ### Width calculation is inconsistent
 
-`len(strip_ansi_codes(...))` is not a cell-width calculation. It is wrong for wide characters and combining sequences. The two custom width implementations also differ from Rich's cell measurement and incompletely model emoji.
+`len(strip_ansi_codes(...))` is not a cell-width calculation. It is wrong for wide characters and combining sequences.
 
 A single cell-width primitive should be used after producing the sink's visible plain text.
 
@@ -394,7 +381,7 @@ The distinction between UI replacement and transcript history is intentional and
 
 ### Console-output policy
 
-Console mode must no longer write raw worker chunks before normalization. It should emit a safe reconstruction from normalized tokens:
+Worker output written straight to the terminal (currently the handler-less blocking-call path) must no longer contain raw worker chunks. It should emit a safe reconstruction from normalized tokens:
 
 - allowlisted SGR only;
 - validated OSC 8 only if hyperlinks are desired in console mode;
@@ -471,7 +458,6 @@ The refactor should initially preserve these tested behaviors:
 8. SGR becomes Rich style spans rather than visible bytes.
 9. ANSI prefixes do not affect hanging-indent offsets.
 10. Unsupported terminals receive an ESC-free startup error.
-11. Conversation rendering retains its existing exact-width no-phantom-row behavior.
 
 Any intentional behavior change should be isolated and documented separately from parser consolidation.
 
@@ -579,14 +565,13 @@ Before replacing implementations:
 
 These tests should distinguish behavior that must be preserved from defects that should be fixed.
 
-### Phase 1: Immediate correctness fixes
+### Phase 1: Immediate correctness fixes (done)
 
 1. Fix the `ask.py` alternation ordering so OSC and DCS-family strings are recognized before generic ESC sequences.
 2. Precompile any retained transitional regular expressions at module scope.
-3. Validate or reject control characters in OSC 8 targets.
-4. Document the temporary limitations until the tokenizer lands.
-
-This phase should be small and independently reviewable.
+3. Validate or reject control characters in OSC 8 targets (percent-encoded).
+4. Document the temporary limitations until the tokenizer lands (`strip_ansi_codes()` docstring).
+5. Clear `ConsoleLineAssembler`'s pending control state in `finish()`.
 
 ### Phase 2: Introduce shared recognition
 
@@ -617,26 +602,23 @@ Replace formatting-oriented `len(strip_ansi_codes(...))` with the shared cell-wi
 4. Define and test EOF behavior.
 5. Keep stdout and stderr parser states separate.
 6. Remove transcript imports of private worker UI helpers.
+7. Migrate `ConversationApp`'s initialization assembler as well.
 
-### Phase 5: Normalize console output
+### Phase 5: Normalize blocking-call console output
 
-1. Stop writing raw `ConsoleOutput.text` directly to terminal streams.
+1. Stop `ModelWorker._write_console_output()` writing raw `ConsoleOutput.text` directly to terminal streams.
 2. Reconstruct safe terminal output from normalized events or emit plain output.
 3. Allow only supported SGR, validated OSC 8, and documented line controls.
-4. Verify parity between console and Textual paths.
+4. Verify parity with the Textual worker-log path.
 
 ### Phase 6: Unify width calculation
 
-1. Replace `Ui.ANSI_RE` with shared normalization.
-2. Replace `Ui.display_width()` with Rich cell-width facilities where compatible.
-3. Reuse the width helper in the Windows advanced editor.
-4. Replace remaining formatting-oriented `len()` calculations.
-5. Verify conversation cursor-clearing invariants.
+1. Replace formatting-oriented `len(strip_ansi_codes(...))` calculations with the shared cell-width API.
 
 ### Phase 7: Consolidate emission and developer scripts
 
 1. Move reusable literal controls into `Ansi` or named builders.
-2. Replace simplified `ANSI_RE` copies under `testx/` where package imports are appropriate.
+2. Replace simplified `ANSI_RE` copies (`testx/stt_to_llm.py`, `testx/stt_to_llm_to_tts.py`, `tests/audio/test_waveform_util.py`) where package imports are appropriate.
 3. Retain standalone definitions in `launch.py` unless its deployment model changes.
 4. Remove deprecated wrappers after all application call sites migrate.
 

@@ -25,13 +25,23 @@ from tts_audiobook_tool.util import *
 # to False if a low-level hotkey read fails unexpectedly.
 can_hotkey = sys.stdin.isatty()
 
-# Common ANSI/VT terminal escape sequences produced by cursor/function keys.
+# ANSI/VT terminal escape sequences that can end up in completed line input
+# (cursor/function keys, pasted terminal output). Alternatives are ordered
+# longest-introducer first: OSC (ESC ]) and DCS/SOS/PM/APC (ESC P/X/^/_)
+# must be tried before the generic two-byte form, which would otherwise
+# consume only the introducer and leave the payload behind.
+#
+# Fails closed: a string control runs to its terminator, the next ESC, or the
+# end of input, and its payload is dropped either way. An unterminated CSI or
+# a stray ESC is dropped as well.
 terminal_escape_sequence_pattern = re.compile(
     r"\x1b(?:"
-    r"[@-Z\\-_]"
-    r"|\[[0-?]*[ -/]*[@-~]"
-    r"|\][^\x1b\x07]*(?:\x07|\x1b\\)"
-    r"|[PX^_].*?(?:\x1b\\)"
+    r"\][^\x07\x1b]*(?:\x07|\x1b\\)?"  # OSC, terminated by BEL or ST
+    r"|[PX^_][^\x1b]*(?:\x1b\\)?"  # DCS/SOS/PM/APC, terminated by ST
+    r"|\[[0-?]*[ -/]*(?:[@-~]|$)"  # CSI
+    r"|O[ -~]"  # SS3 (application-mode cursor and F1-F4 keys)
+    r"|[ -/]*[0-~]"  # other ESC sequences (two-byte and nF)
+    r"|"  # stray ESC
     r")"
 )
 

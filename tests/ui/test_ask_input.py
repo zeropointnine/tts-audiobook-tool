@@ -176,6 +176,31 @@ def test_ask_advanced_falls_back_to_input_without_tty(monkeypatch):
     assert prompts == ["prompt: "]
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # Cursor/function keys: CSI and SS3 forms.
+        ("ab\x1b[Ac\x1b[3~d", "abcd"),
+        ("a\x1bOPb", "ab"),
+        # OSC and DCS-family strings must lose their payload, not just the
+        # introducer (the generic two-byte form previously matched first).
+        ("x\x1b]0;TITLE\x07y", "xy"),
+        ("x\x1b]8;;http://u\x1b\\L\x1b]8;;\x1b\\y", "xLy"),
+        ("x\x1bPpayload\x1b\\y", "xy"),
+        ("x\x1b_apc\x1b\\y", "xy"),
+        # Fail closed: unterminated strings and CSI drop their payload.
+        ("x\x1b]0;unterminated", "x"),
+        ("x\x1b]0;cut\x1b[31my", "xy"),
+        ("x\x1b[12", "x"),
+        # Two-byte and nF sequences, and a stray trailing ESC.
+        ("a\x1b7b\x1b(Bc", "abc"),
+        ("abc\x1b", "abc"),
+    ],
+)
+def test_strip_terminal_escape_sequences(raw, expected):
+    assert ask._strip_terminal_escape_sequences(raw) == expected
+
+
 def test_ask_advanced_falls_back_for_unsafe_control_characters(monkeypatch):
     prompts = []
 

@@ -188,6 +188,18 @@ def test_console_line_assembler_handles_partial_lines_and_carriage_replacement()
     assert assembler.finish() == ["next"]
 
 
+def test_console_line_assembler_finish_discards_pending_control() -> None:
+    # A control fragment pending at end of stream is dropped and not
+    # prepended to text fed after finish().
+    assembler = ConsoleLineAssembler()
+    assembler.feed("tail\x1b]0;tit")
+    assert assembler.finish() == ["tail"]
+
+    lines, live = assembler.feed("le\x07next\n")
+    assert lines == ["le\x07next"]
+    assert live == ""
+
+
 def test_transcript_strips_ansi_but_keeps_all_lines(tmp_path) -> None:
     path = tmp_path / "generation.log"
     transcript = GenerationTranscript(str(path))

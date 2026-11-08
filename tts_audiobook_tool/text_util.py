@@ -13,20 +13,44 @@ def combine_ansi_lines(lines: list[str]) -> str:
     return f"{Ansi.RESET}\n".join(lines) + Ansi.RESET
 
 
+# OSC sequences (terminal title, hyperlinks, ...): ESC ] params,
+# terminated by BEL or ST (ESC \).
+_OSC_ESCAPE_RE = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)')
+# 7-bit CSI and two-byte ESC sequences.
+_ANSI_ESCAPE_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+# C0 controls, DEL and C1 controls: never valid inside an OSC 8 URI.
+_URI_CONTROL_RE = re.compile(r'[\x00-\x1f\x7f-\x9f]')
+
+
 def strip_ansi_codes(s: str, and_line_feeds: bool=False) -> str:
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    # OSC sequences (terminal title, hyperlinks, ...): ESC ] params,
-    # terminated by BEL or ST (ESC \).
-    osc_escape = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)')
-    s = osc_escape.sub('', s)
-    s = ansi_escape.sub('', s)
+    """
+    Remove complete OSC, 7-bit CSI and two-byte ESC sequences.
+
+    Not a general terminal sanitizer: DCS/SOS/PM/APC payloads, 8-bit C1
+    forms and incomplete sequences are not handled (see
+    docs-dev/special_codes_refactor.md).
+    """
+    s = _OSC_ESCAPE_RE.sub('', s)
+    s = _ANSI_ESCAPE_RE.sub('', s)
     if and_line_feeds:
         s = s.replace("\r", "").replace("\n", "")
     return s
 
+def _percent_encode_controls(match: re.Match[str]) -> str:
+    return "".join(f"%{byte:02X}" for byte in match.group(0).encode("utf-8"))
+
 def make_terminal_hyperlink(url: str, text: str = "", is_file: bool=False) -> str:
+    """
+    Wrap `text` (default: `url`) in an OSC 8 terminal hyperlink.
+
+    Control characters in the link target are percent-encoded so that they
+    cannot terminate the OSC sequence early and inject other terminal
+    controls. The display text sits outside the OSC sequence and is emitted
+    unchanged.
+    """
     display = text or url
     link = f"file://{url}" if is_file else url
+    link = _URI_CONTROL_RE.sub(_percent_encode_controls, link)
     return f"\x1b]8;;{link}\x1b\\{display}\x1b]8;;\x1b\\"
 
 def strip_quotes_around_path_string(s: str) -> str:

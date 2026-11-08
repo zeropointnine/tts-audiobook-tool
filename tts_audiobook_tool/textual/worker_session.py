@@ -132,6 +132,9 @@ class ConsoleLineAssembler:
         return completed, self.current_line
 
     def finish(self) -> list[str]:
+        # An incomplete control sequence at end of stream is discarded, never
+        # replayed into a later feed or emitted as text.
+        self._pending_control = ""
         if not self.current_line:
             return []
         line = self.current_line
