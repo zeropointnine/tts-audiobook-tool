@@ -571,7 +571,7 @@ def on_select_import(state: State, item: MenuItem) -> bool:
     if dialog_line_count:
         ask_assign_dialog_voice(state, dialog_line_count)
 
-    if state.project.language_code in ("en", "es"):
+    if Whitelist.supports_language(state.project.language_code):
         hints.show_hint_if_necessary(
             state.prefs,
             HINT_TOLERANCE_FIRST_CLASS

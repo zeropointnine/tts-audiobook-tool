@@ -40,7 +40,7 @@ from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types import Word
 from tts_audiobook_tool.app_types.phrase import Phrase
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
-from tts_audiobook_tool.text_ops.language_util import normalize_language_code
+from tts_audiobook_tool.text_ops.language_util import is_english, normalize_language_code
 
 
 # Windows of at most this many source x transcript cells are aligned with the
@@ -138,7 +138,7 @@ def align_phrases_detailed(
         transcript_tokens.extend(tokens)
         token_word.extend([word_index] * len(tokens))
 
-    alignment = _align_tokens(source_tokens, transcript_tokens, phonetic=(language == "en"))
+    alignment = _align_tokens(source_tokens, transcript_tokens, phonetic=is_english(language))
     if alignment is None:
         return AnchoredAlignmentResult([], [], did_interrupt=True)
 
@@ -179,7 +179,10 @@ def _expand_token(token: str, language_code: str) -> tuple[str, ...]:
     spoken = ""
     if token.isascii() and token.isdigit() and len(token) <= 6:
         spoken = _number_to_words(int(token), language_code, "cardinal")
-    elif language_code in ("", "en"):
+    # TODO: "" (no language) is treated as English here, unlike elsewhere in
+    # the app where empty means "no language-specific rules" (pending
+    # decision; see docs-dev/language-handling.md)
+    elif language_code == "" or is_english(language_code):
         match = _ORDINAL_EN_RE.fullmatch(token)
         if match:
             spoken = _number_to_words(int(match.group(1)), "en", "ordinal")
@@ -192,6 +195,7 @@ def _expand_token(token: str, language_code: str) -> tuple[str, ...]:
 def _number_to_words(value: int, language_code: str, to: str) -> str:
     try:
         from num2words import num2words
+        # "" -> English: same pending policy as the TODO in _expand_token
         return num2words(value, lang=language_code or "en", to=to)
     except Exception:
         # Unsupported language (NotImplementedError) or conversion: keep digits

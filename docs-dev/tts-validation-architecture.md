@@ -151,7 +151,7 @@ This ordering is important: Whisper sees the **post-processed** audio, not the r
 `GenerateUtil.generate_and_validate_batch()` consults `Stt.should_skip()` before transcribing. Transcription is skipped (and a `SkippedResult` is recorded instead of a word-error result) when:
 
 - the STT variant is disabled in prefs ("Whisper disabled"), or
-- the project language is a known-unsupported CJK language per `Validator.is_unsupported_language_code()` (`VALIDATION_UNSUPPORTED_LANGUAGES = ["zh", "ja", "ko"]`, "Unsupported language").
+- the project language is a CJK language, per `not language_util.is_validation_supported(...)` (base code in `CJK_LANGUAGES` = `zh`, `ja`, `ko`, `yue`; "Unsupported language"). See [language handling](<language-handling.md>).
 
 Realtime playback also skips transcription while its audio buffer is below 60 seconds (including the first segment, before a stream exists). The worker checks this at the start of each segment. Once at least 60 seconds are buffered, validation is enabled and the project's `max_retries` controls retry attempts only; it does not multiply the buffer threshold. Normal STT-disabled and unsupported-language skips still apply.
 

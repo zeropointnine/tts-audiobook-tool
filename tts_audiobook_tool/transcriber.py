@@ -9,6 +9,7 @@ from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.model_runtime import ModelRuntimeRole, current_role
 from tts_audiobook_tool.model_worker import ConsoleEventHandler, ModelWorker
 from tts_audiobook_tool.stt import Stt
+from tts_audiobook_tool.text_ops.language_util import normalize_language_code
 
 from tts_audiobook_tool.util import make_error_string
 
@@ -42,6 +43,8 @@ class Transcriber:
         Makes temporary resampled audio if necessary.
         """
         sound = Transcriber.prepare_sound_for_whisper(sound)
+        # Whisper only knows base codes ("en-US" -> "en")
+        language_code = normalize_language_code(language_code)
 
         if current_role() is ModelRuntimeRole.INTERACTIVE_MAIN:
             if state is None:

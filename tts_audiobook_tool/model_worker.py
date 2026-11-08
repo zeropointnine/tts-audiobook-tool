@@ -20,6 +20,7 @@ from typing import Any, Callable, TextIO
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.text_ops.language_util import normalize_language_code
 from tts_audiobook_tool.model_worker_protocol import (
     AudioFileUpsampled,
     AudioTranscribed,
@@ -1816,6 +1817,9 @@ class ModelWorker:
     ) -> tuple[AudioTranscribed | None, str]:
         if cancel_check is not None and cancel_check():
             return None, "Model worker operation was cancelled"
+        # Whisper only knows base codes: "en-US" would otherwise be dropped as
+        # unsupported, leaving Whisper to auto-detect
+        language = normalize_language_code(language or "") or None
         error = cls._start_with_console_handler(console_handler)
         if error:
             return None, error

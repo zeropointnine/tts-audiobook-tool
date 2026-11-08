@@ -21,6 +21,7 @@ else:
     ndarray = Any
 
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.text_ops import language_util
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -452,7 +453,7 @@ class Strictness(tuple[str, int, str], Enum):
 
     @staticmethod
     def get_recommended_default(language_code: str) -> Strictness:
-        if language_code == "en":
+        if language_util.is_english(language_code):
             return Strictness.MODERATE
         else:
             return Strictness.LOW

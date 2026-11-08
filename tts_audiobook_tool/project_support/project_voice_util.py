@@ -1125,11 +1125,3 @@ class ProjectVoiceUtil:
             value = PROJECT_BATCH_SIZE_MAX
         project.set_model_setting(project.get_tts_model_type().id, binding.name, value)
         project.save()
-
-    @staticmethod
-    def is_language_cjk(project: Project) -> bool:
-        if project.language_code in ["zh", "ja", "ko"]:
-            return True
-        if project.language_code.startswith(("zh-", "ja-", "ko-")):
-            return True
-        return False

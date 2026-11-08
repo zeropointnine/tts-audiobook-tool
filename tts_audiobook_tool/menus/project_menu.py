@@ -12,7 +12,7 @@ from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.system_support.platforms import open_directory
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.validator import Validator
+from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 
 class ProjectMenu:
@@ -144,14 +144,14 @@ def on_language(state: State, __: MenuItem) -> None:
             return "Language code not supported by Chatterbox Multilingual"
 
         # (3) Hint-side-effect re: CJK
-        if Validator.is_unsupported_language_code(code): # (not to be confused with chatterbox multilingual requirement)
-            text = HINT_VALIDATION_UNSUPPORTED_LANGUAGE.text.replace("%1", str(VALIDATION_UNSUPPORTED_LANGUAGES))
+        if not language_util.is_validation_supported(code): # (not to be confused with chatterbox multilingual requirement)
+            text = HINT_VALIDATION_UNSUPPORTED_LANGUAGE.text.replace("%1", str(sorted(language_util.CJK_LANGUAGES)))
             hint = replace(HINT_VALIDATION_UNSUPPORTED_LANGUAGE, text=text)
             hints.show_hint(hint, and_prompt=True)
 
         # (4) Hint-side-effect re: strictness non-en
         if not Whitelist.supports_language(code) and state.project.strictness != Strictness.LOW:
-            if not Validator.is_unsupported_language_code(code):
+            if language_util.is_validation_supported(code):
                 state.project.strictness = Strictness.LOW
                 state.project.save()
                 hints.show_hint(HINT_FORCED_STRICTNESS_LOW, and_prompt=True)

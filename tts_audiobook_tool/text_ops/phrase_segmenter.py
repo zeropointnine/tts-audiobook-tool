@@ -8,6 +8,7 @@ import pysbd
 
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.quote_spans import find_quote_spans
 
 
@@ -88,10 +89,13 @@ class PhraseSegmenter:
         """
 
         from pysbd.languages import Language
+        # Base code first, so region/alias forms ("es-MX", "zh_CN", "spa")
+        # reach their pysbd rules instead of the English fallback
+        pysbd_lang = language_util.normalize_language_code(pysbd_lang)
         try:
             _ = Language.get_language_code(pysbd_lang)
         except Exception:
-            pysbd_lang = "en"  # fail silently
+            pysbd_lang = "en"  # fail silently (also covers "" = no language)
 
         if not source:
             return []
@@ -364,7 +368,7 @@ class PhraseSegmenter:
 
     @staticmethod
     def is_citation_or_reference_like_parenthetical(content: str, language_code: str) -> bool:
-        if language_code.lower() != "en":
+        if not language_util.is_english(language_code):
             return False
 
         normalized = " ".join(content.split())

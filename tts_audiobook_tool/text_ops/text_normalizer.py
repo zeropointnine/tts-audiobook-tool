@@ -7,6 +7,7 @@ from whisper_normalizer.english import EnglishNumberNormalizer
 
 from tts_audiobook_tool.text_ops.spanish_number_normalizer import SpanishNumberNormalizer
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.text_ops import language_util
 
 
 class TextNormalizer:
@@ -33,9 +34,9 @@ class TextNormalizer:
         text = re.sub(r"\b'|'\b", "", text)
 
         # Language-specific treatments
-        if language_code == "en":
+        if language_util.is_english(language_code):
             text = normalize_common_en_specific(text)
-        elif language_code == "es":
+        elif language_util.is_spanish(language_code):
             text = normalize_common_es_specific(text)
 
         # Replace punctuation (including em-dash and en-dash) with space
@@ -61,9 +62,9 @@ class TextNormalizer:
         
         normalized_transcript = TextNormalizer.normalize_common(transcript, language_code)
         
-        if language_code == "en":
+        if language_util.is_english(language_code):
             normalized_transcript = normalize_transcript_en_specific(normalized_source, normalized_transcript)
-        elif language_code == "es":
+        elif language_util.is_spanish(language_code):
             normalized_transcript = normalize_transcript_es_specific(normalized_source, normalized_transcript)
         
         return normalized_transcript

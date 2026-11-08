@@ -52,13 +52,16 @@ class PromptNormalizer:
         if un_all_caps:
             text = PromptNormalizer.un_all_caps_prompt(text) 
 
-        if language_code:
+        # Base code, so alias forms reach num2words (eg "spa" -> "es";
+        # num2words' own fallback would truncate it to the unknown "sp")
+        num2words_lang = language_util.normalize_language_code(language_code)
+        if num2words_lang:
             # Expand relatively small "int words" to prevent TTS model from "naively" verbalizing a string of digits
             MAX_VALUE = 999
             try:
                 text = re.sub(
                     r'\d+', 
-                    lambda x: x.group() if int(x.group()) > MAX_VALUE else num2words(int(x.group()), lang=language_code), 
+                    lambda x: x.group() if int(x.group()) > MAX_VALUE else num2words(int(x.group()), lang=num2words_lang), 
                     text
                 )        
             except NotImplementedError:
@@ -73,10 +76,10 @@ class PromptNormalizer:
         prompt: str, substitutions: dict[str, str], language_code: str
     ) -> str:
 
-        # Normalize first so alias/region codes (eg "en-US", "eng") reach the
-        # English noun-suffix rule, matching how the whitelist and word
-        # equivalence subsystems resolve language codes
-        language_code = language_util.normalize_language_code(language_code)
+        # Alias/region codes (eg "en-US", "eng") reach the English noun-suffix
+        # rule, matching how the whitelist and word equivalence subsystems
+        # resolve language codes
+        is_english = language_util.is_english(language_code)
 
         prompt_raw_words_original = app_text.get_words(prompt)
         prompt_raw_words = []
@@ -98,7 +101,7 @@ class PromptNormalizer:
                     prompt_word = substitute_word
                     break
                 
-                if language_code == "en":
+                if is_english:
                     
                     TREAT_AS_NOUN = True # bc why not
                     if TREAT_AS_NOUN: 

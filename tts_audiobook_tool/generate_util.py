@@ -37,6 +37,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
+from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -168,7 +169,7 @@ class GenerateUtil:
         # Otherwise the queue degenerates to the single-voice shape: a flat,
         # optionally word-count-bucketed list of items chunked into
         # sub-batches of batch_size, and generate() resolves each voice.
-        is_cjk = ProjectVoiceUtil.is_language_cjk(state.project)
+        is_cjk = language_util.is_cjk(state.project.language_code)
         voice_of_index: dict[int, int] | None = None
         if batch_size > 1:
             voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())

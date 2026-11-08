@@ -35,6 +35,7 @@ def test_clean_quick_generation_retries_then_omits_metrics_summary(monkeypatch) 
         phrase_groups=[phrase_group],
         sound_segments=sound_segments,
         generate_range_string="all",
+        language_code="en",
         save=MagicMock(return_value=""),
     )
     state = cast(
@@ -86,6 +87,7 @@ def test_staged_generation_leaves_project_segments_and_range_alone(monkeypatch) 
         phrase_groups=[phrase_group],
         sound_segments=sound_segments,
         generate_range_string="all",
+        language_code="en",
         save=MagicMock(return_value=""),
     )
     state = cast(
@@ -127,6 +129,7 @@ def test_failed_quick_generation_keeps_metrics_summary(monkeypatch) -> None:
         phrase_groups=[phrase_group],
         sound_segments=sound_segments,
         generate_range_string="all",
+        language_code="en",
         save=MagicMock(return_value=""),
     )
     state = cast(

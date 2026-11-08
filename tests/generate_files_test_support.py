@@ -30,6 +30,7 @@ def make_generate_state(num_groups: int = 2, max_retries: int = 2) -> State:
         phrase_groups=phrase_groups,
         sound_segments=sound_segments,
         generate_range_string="all",
+        language_code="en",
         # No voice binding, so lines take the flat single-voice queue
         get_tts_model_type=lambda: TtsModelType.require_by_id("none"),
         save=MagicMock(return_value=""),
@@ -72,10 +73,6 @@ def generate_files_mock_stack(
         # Run warnings (incl. the voice-variation note) read real project voice data
         patch("tts_audiobook_tool.generate_util.get_run_warnings", return_value=[]),
         patch("tts_audiobook_tool.generate_util.Tts.clear_continuation"),
-        patch(
-            "tts_audiobook_tool.generate_util.ProjectVoiceUtil.is_language_cjk",
-            return_value=False,
-        ),
         patch(
             "tts_audiobook_tool.generate_util"
             ".app_memory.show_vram_memory_warning_if_necessary",

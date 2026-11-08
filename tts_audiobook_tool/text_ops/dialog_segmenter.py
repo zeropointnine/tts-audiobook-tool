@@ -7,7 +7,7 @@ import unicodedata
 
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.text_ops.language_util import normalize_language_code
+from tts_audiobook_tool.text_ops.language_util import is_english
 from tts_audiobook_tool.text_ops.quote_spans import (
     DOUBLE_QUOTE_STYLES,
     find_paragraph_chained_quote_spans,
@@ -500,7 +500,7 @@ class DialogSegmenter:
             return False
         if DialogSegmenter._continues_with_lowercase_alpha(text, offset):
             return True
-        if normalize_language_code(language_code or "") != "en":
+        if not is_english(language_code or ""):
             return False
         return DialogSegmenter._continues_with_name_verb(text, offset)
 

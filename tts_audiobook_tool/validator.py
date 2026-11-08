@@ -7,6 +7,7 @@ from typing import Mapping, Optional
 from tts_audiobook_tool import constants
 from tts_audiobook_tool.app_types import Sound, Strictness, Word
 from tts_audiobook_tool.model_manager import ModelManager
+from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.text_ops.word_equivalence import WordEquivalence
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
@@ -357,14 +358,18 @@ class Validator:
         keeping get_word_errors() backward-compatible.
         """
 
+        # Resolve language classes once (the closures below run per DP cell)
+        is_english = language_util.is_english(language_code)
+        is_first_class = Whitelist.supports_language(language_code)
+
         def is_match(a: str, b: str) -> bool:
             return (a == b) or sounds_the_same(a, b)
 
         def sounds_the_same(a: str, b: str) -> bool:
-            return TextNormalizer.sounds_the_same_en(a, b) if language_code == "en" else False
+            return TextNormalizer.sounds_the_same_en(a, b) if is_english else False
 
         def is_uncommon_word(word: str) -> bool:
-            return not Whitelist().has(word) if Whitelist.supports_language(language_code) else False
+            return not Whitelist().has(word) if is_first_class else False
 
         source_words = normalized_source.split()
         transcript_words = normalized_transcript.split()
@@ -505,10 +510,3 @@ class Validator:
 
         path.reverse()
         return path
-
-    @staticmethod
-    def is_unsupported_language_code(code: str) -> bool:
-        for item in VALIDATION_UNSUPPORTED_LANGUAGES:
-            if code.startswith(item):
-                return True
-        return False

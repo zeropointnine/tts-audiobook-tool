@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types import BookSection
 from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
+from tts_audiobook_tool.text_ops import language_util
 
 
 MAX_HEADING_SEGMENTS = 5
@@ -26,7 +27,7 @@ def heading_title_matches(text: str, title: str, language_code: str) -> bool:
         return False
     if candidate == title:
         return True
-    if language_code.replace("_", "-").casefold().split("-", 1)[0] != "en":
+    if not language_util.is_english(language_code):
         return False
     match = _ENGLISH_CHAPTER_PREFIX.fullmatch(title)
     return match is not None and candidate == match.group(1)

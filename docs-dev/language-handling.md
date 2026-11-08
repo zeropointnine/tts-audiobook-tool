@@ -5,9 +5,9 @@ through the full audiobook-creation process, in rough sequential order: project 
 text import & segmentation, prompt preprocessing, TTS inference, transcription &
 validation, and finally concatenation/export.
 
-It closes with some musings on the problems and tradeoffs of relying on this single
-field as a "source of truth" for everything it does, and on the question of
-language code normalization.
+It closes with the default/fallback-rule analysis (notably pysbd's English fallback),
+some musings on the problems and tradeoffs of relying on this single field as a
+"source of truth" for everything it does, and the open questions that remain.
 
 Related docs: [Project Spec v5](<project-spec-v5.md>) (project schema), [EPUB import flow](<epub-import-flow.md>)
 (import path), [TTS validation architecture](<tts-validation-architecture.md>) (validation), and
@@ -27,7 +27,9 @@ language_code: str = PROJECT_DEFAULT_LANGUAGE   # "en"
 - Defaults to `"en"` (`PROJECT_DEFAULT_LANGUAGE` in `constants_config.py`).
 - The intent (per the project menu prompt) is a two-letter code like `"en"`, `"es"`,
   `"zh"`, but nothing enforces that beyond a very light syntax check. Values like
-  `"en-US"`, `"en_GB"`, `"eng"`, or `"English"` can legitimately end up stored.
+  `"en-US"`, `"en_GB"`, or `"eng"` can legitimately be entered; longer values such as
+  `"English"` or `"zh-Hant"` exceed the menu's 5-character limit but can still arrive
+  via a hand-edited `project.json` (which is also not lowercased on load).
 - The canonical record of the code actually used when the current text was segmented
   is `Book.segmentation_settings.language_code` (see "Text import & segmentation"
   below). The old serialized `applied_language_code` key is accepted only as a legacy
@@ -40,24 +42,44 @@ language_code: str = PROJECT_DEFAULT_LANGUAGE   # "en"
 
 Input-side handling is minimal: the project menu normalizer only does
 `value.strip().lower()`. Everything downstream normalizes on read instead, via
-`tts_audiobook_tool/text_ops/language_util.py`:
+[`language_util.py`](<../tts_audiobook_tool/text_ops/language_util.py>):
 
 ```python
-normalize_language_code("en-US") == "en"
-normalize_language_code("en_GB") == "en"
-normalize_language_code("eng")   == "en"
+normalize_language_code("en-US")   == "en"
+normalize_language_code("en_GB")   == "en"
+normalize_language_code("eng")     == "en"
 normalize_language_code("English") == "en"
-normalize_language_code("")      == ""
+normalize_language_code("zho")     == "zh"
+normalize_language_code("")        == ""
 ```
 
-It lowercases, strips, takes the subtag before the first `-`, and runs a small alias
-table (`english/eng -> en`, `spanish/spa -> es`). The docstring there states the
-philosophy explicitly: features that key off a language normalize on read rather than
-at input. `Whitelist.normalize_language_code` and `WordEquivalence` delegate to this
-same function, and `tests/text/test_language_util.py` asserts the subsystems share it.
+It lowercases, strips, maps `_` to `-`, takes the subtag before the first `-`, and runs
+a small alias table: full names and ISO 639-2/3 codes for English, Spanish, Chinese
+(`zho`/`chi`/`cmn`), Japanese (`jpn`), Korean (`kor`), and `cantonese -> yue`.
 
-Not every consumer normalizes, though — several compare the raw stored value (see the
-musings at the end).
+### The rule: language-class predicates
+
+Any logic that gives a language special treatment must test the raw project code
+through one of these predicates, never by comparing strings:
+
+| Predicate | True for | Used by |
+|---|---|---|
+| `is_english(code)` | base `en` | text normalizer English pass, sounds-the-same, recommended strictness, prompt noun-suffix substitution, citation-parenthetical and dialog-attribution heuristics, heading chapter-prefix rule, enhance alignment |
+| `is_spanish(code)` | base `es` | text normalizer Spanish pass |
+| `is_cjk(code)` | base in `CJK_LANGUAGES` = `zh`, `ja`, `ko`, `yue` | word-count batching opt-out |
+| `is_validation_supported(code)` | `not is_cjk(code)` (empty is supported) | STT/validation skip gate, project-menu CJK hint and strictness exemption |
+| `Whitelist.supports_language(code)` | base in `Whitelist.LANGUAGES` (`en`, `es`) — "first-class" | uncommon-word detection, tolerance hints, uncommon-words inspector |
+
+The predicates normalize internally, so callers pass the stored value as-is; hot loops
+should resolve the predicate once outside the loop (as `Validator.get_word_errors`
+does). Code that hands the language to an external library that only understands base
+codes — pysbd, Whisper, num2words — passes `normalize_language_code(code)`.
+
+`Whitelist.normalize_language_code` and `WordEquivalence.normalize_language_code`
+delegate to the shared function. [`test_language_util.py`](<../tests/text/test_language_util.py>)
+pins a table of free-form codes against every predicate at once (including prefix
+traps like Javanese `jav` and Konkani `kok`, which are *not* Japanese/Korean), plus
+consumer wiring tests showing region-qualified codes behave like their base code.
 
 ---
 
@@ -80,12 +102,11 @@ The input validator does four things:
 2. **Model requirement** — if the current model is Chatterbox Multilingual, the code
    must be one of the model's `supported_languages_multi` (queried by inspecting the
    loaded model).
-3. **CJK warning** — if the code is a validation-unsupported language (`zh`, `ja`,
-   `ko` per `VALIDATION_UNSUPPORTED_LANGUAGES`), a hint warns that Whisper-based
-   validation will be skipped.
-4. **Strictness downgrade side effect** — if the language is not "first-class"
-   (no whitelist dictionary, i.e. not `en`/`es`) and strictness isn't already LOW, it
-   is forced to LOW and saved.
+3. **CJK warning** — if `not is_validation_supported(code)`, a hint warns that
+   Whisper-based validation will be skipped.
+4. **Strictness downgrade side effect** — if the language is not first-class
+   (`not Whitelist.supports_language(code)`), validation is supported, and strictness
+   isn't already LOW, it is forced to LOW and saved.
 
 After saving, the code is pushed into the `Whitelist` singleton
 (`Whitelist().set_language_code(...)`), which loads the bundled common-words
@@ -105,12 +126,15 @@ When text is imported (manual entry, plain text file, or EPUB), it is segmented 
 `PhraseGroup`s via `PhraseGrouper` / `PhraseSegmenter`, and the project language code
 is one of the inputs:
 
-- `pysbd` (the sentence-boundary detector) receives the language as `pysbd_lang`;
-  `PhraseSegmenter` guards against invalid pysbd language identifiers.
-- `PhraseSegmenter.sentence_string_to_phrase_strings(..., language_code)` and the
-  parenthetical heuristics (`is_phrase_worthy_parenthetical`, citation/reference
-  detection) branch on the code — several of these are English-only and
-  short-circuit for anything else.
+- `pysbd` (the sentence-boundary detector) receives the language as `pysbd_lang`.
+  `PhraseSegmenter.string_to_sentence_strings` normalizes it to the base code first
+  (so `es-MX` gets pysbd's Spanish rules), then falls back to `"en"` when pysbd has no
+  rules for it — including `""`. See "Default and fallback rules" below.
+- Several heuristics are English-only via `is_english` and short-circuit for anything
+  else: citation/reference-like parentheticals (`PhraseSegmenter`), the
+  name-plus-verb dialog attribution rule (`DialogSegmenter`), and the EPUB heading
+  chapter-prefix rule (`heading_end_detector`). Bare Roman-numeral headings are
+  spelled out through `num2words` with the base code (`roman_heading`).
 
 **The snapshot pattern.** The settings used for segmentation are recorded canonically
 on the book (`BookSegmentationSettings.language_code`). Legacy serialized
@@ -127,13 +151,12 @@ import time; `book.segmentation_settings.language_code` is the historical record
 
 Also of note: EPUB import reads `state.project.language_code` like any other text
 source — the EPUB's own `dc:language` metadata is not authoritative for the project
-(see `docs/epub-import-flow.md`, "Existing segmentation settings remain
+(see [EPUB import flow](<epub-import-flow.md>), "Existing segmentation settings remain
 authoritative"), and the EPUB section-skip heuristics currently bake in
-English-language assumptions regardless of the project language.
+English-language keywords regardless of the project language (no code check at all).
 
 After segmentation, the text menu shows the first-class-tolerance hint when
-`state.project.language_code in ("en", "es")` — a raw-string comparison, not a
-normalized one.
+`Whitelist.supports_language(state.project.language_code)`.
 
 ### 4. Pre-generation text flows (enhance / conversation)
 
@@ -152,12 +175,14 @@ Before text goes to a TTS model it passes through `PromptNormalizer`
 (`text_ops/prompt_normalizer.py`), which is language-aware in two places:
 
 - **Number expansion** — integers up to 999 are expanded to words via `num2words(...,
-  lang=language_code)` so models don't verbalize digit strings naively. Unsupported
-  `num2words` locales fail silently (`NotImplementedError` is swallowed, digits pass
-  through untouched).
-- **Prompt word substitutions** — noun-suffix rules etc.; this path *does* normalize
-  the code first via `language_util.normalize_language_code` so `"en-US"` reaches the
-  English rule.
+  lang=normalize_language_code(code))` so models don't verbalize digit strings
+  naively. The base code matters for aliases: num2words' own fallback truncates to
+  two letters, which turns `spa` into the unknown `sp`. (Region variants such as
+  num2words' `es_CO` are not reachable anyway, since its keys are case-sensitive and
+  project codes are lowercased.) Unsupported locales fail silently (digits pass
+  through untouched); an empty code skips expansion.
+- **Prompt word substitutions** — the English noun-suffix rule is gated on
+  `is_english`, so `"en-US"` reaches it.
 
 ### 6. TTS inference
 
@@ -174,7 +199,11 @@ Behavior varies sharply by model:
 - **Most other models** — ignore the language entirely.
 
 So for inference, the code is a hint for some models, a contract for one, and
-irrelevant to the rest.
+irrelevant to the rest. These per-model mappings translate the code into each model's
+own vocabulary rather than gating app logic, so they are outside the predicate rule
+above, and they are not yet consistent: the FireRedTTS3 and audio.cpp paths normalize
+first, MOSS does an exact lookup on the raw code (`en-us` maps to no language), Qwen3
+uses `startswith("zh")` plus an exact table, and Dots/OmniVoice pass the raw value.
 
 Every model that passes a language reports it in the pre-flight warnings through
 `tts_models/model_support.make_language_value_note`, which names the value
@@ -194,33 +223,42 @@ hinted the same language it will later validate in.
 ### 8. Generation-time transcription & validation
 
 This is the heaviest concentration of language-dependent logic; see
-`docs/tts-validation-architecture.md` for the full flow.
+[TTS validation architecture](<tts-validation-architecture.md>) for the full flow.
 
-**Whisper transcription** (`transcriber.py`):
-- The code is passed as `language=language_code or None` (empty string = let Whisper
-  auto-detect).
-- If the code isn't in Whisper's `supported_languages`, it is *silently dropped*
-  rather than raising; likewise, in the interactive-worker path, if the backend
-  reports the language unsupported, transcription is retried with `language=None`.
-- `stt.py` short-circuits the whole validation stage with "Unsupported language" when
-  `Validator.is_unsupported_language_code(state.project.language_code)` — i.e. the
-  code starts with `zh`, `ja`, or `ko` (a `startswith` match on the raw string).
+**Whisper transcription** (`transcriber.py`, `model_worker.py`):
+- The code is normalized to its base code at both entry points
+  (`Transcriber.transcribe_to_words` and `ModelWorker.transcribe_audio_blocking`, the
+  latter also covering enhance alignment and realtime conversation transcription).
+  Empty means `language=None` (Whisper auto-detects).
+- If the base code still isn't in Whisper's `supported_languages`, it is *silently
+  dropped* rather than raising; likewise, in the interactive-worker path, if the
+  backend reports the language unsupported, transcription is retried with
+  `language=None`.
+- `Stt.should_skip` short-circuits the whole validation stage with "Unsupported
+  language" when `not is_validation_supported(state.project.language_code)`.
 
 **Validation** (`validator.py`, `text_ops/text_normalizer.py`,
-`text_ops/word_equivalence.py`):
-- `TextNormalizer.normalize_common` branches on the *raw* code: `== "en"` applies
-  English-specific contraction/number normalization, `== "es"` Spanish rules,
-  anything else gets only the language-independent pass. `normalize_transcript` has
-  parallel `en`/`es` branches keyed the same way.
+`text_ops/word_equivalence.py`). Callers pass the raw project code; every branch
+below resolves it through a predicate:
+- `TextNormalizer.normalize_common` applies English-specific contraction/number
+  normalization when `is_english`, Spanish rules when `is_spanish`; anything else gets
+  only the language-independent pass. `normalize_transcript` has parallel branches.
 - `Validator.get_word_errors` combines the `Whitelist` (uncommon-word detection,
-  first-class `en`/`es` only), `WordEquivalence` lookups (per-language phrase
-  equivalence tables), and `sounds_the_same_en` — which is strictly `language_code
-  == "en"`.
+  first-class languages only), `WordEquivalence` lookups (per-language phrase
+  equivalence tables), and `sounds_the_same_en` (only when `is_english`).
 - `ExcessiveDurationResult.is_excessively_long` normalizes the source with the
   language code and computes words-per-second against a rate; language affects the
   word count via normalization.
-- `Strictness.get_recommended_default(language_code)` recommends a default tolerance
-  based on whether the language is English (raw `== "en"` comparison).
+- `Strictness.get_recommended_default(language_code)` recommends MODERATE when
+  `is_english`, else LOW.
+
+**Batching** (`generate_util.py`): when `is_cjk`, word-count sorting/bucketing of
+batch items is disabled, since whitespace word counts are meaningless for those
+scripts.
+
+**Enhance alignment** (`enhance/enhance_anchored_alignment.py`) normalizes the code
+and enables phonetic matching and English ordinal expansion for English — and, as
+the one remaining exception, also treats `""` as English (see open questions).
 
 The per-segment transcript metadata (`SegmentTranscriptData`) records the
 `language_code` used at transcription time, so saved debug artifacts are
@@ -232,26 +270,209 @@ The concatenation stage itself is **language-agnostic**: ordering, gap limiting,
 normalization, chapter markers, and break sound effects never consult the language
 code. The only language touchpoint at the end of the pipeline is metadata: the ABR
 export's `project_snapshot` embeds `language_code` verbatim (see
-`docs/abr-metadata-spec.md`), preserving the hint alongside the delivered audio.
+[ABR metadata spec](<abr-metadata-spec.md>)), preserving the hint alongside the delivered audio.
 
 ---
 
 ## Consumer summary
 
-| Stage | Consumer | Uses raw or normalized code? | Effect when absent/unsupported |
+| Stage | Consumer | How the code is resolved | Effect when absent/unsupported |
 |---|---|---|---|
-| Project setup | `menus/project_menu.py` | raw (lowercased at input) | required for Chatterbox-ML; strictness forced LOW |
+| Project setup | `menus/project_menu.py` | raw (lowercased at input); predicates for hints | required for Chatterbox-ML; strictness forced LOW |
 | Project load | `state.py` → `Whitelist` singleton | normalized | whitelist stays empty for non-first-class languages |
-| Segmentation | `PhraseSegmenter` / pysbd | raw, guarded | pysbd falls back / heuristics disabled |
+| Segmentation | `PhraseSegmenter` / pysbd | base code; `"en"` fallback | English sentence rules; English-only heuristics disabled |
 | Segmentation record | `book.segmentation_settings.language_code` snapshot | raw snapshot | shows "(none)" in dialogs |
-| Enhance/conversation | `ChunkingConfig` | raw | chunking degrades to language-neutral |
-| Prompt prep | `PromptNormalizer` (num2words / substitutions) | normalized (substitutions), raw (num2words lang) | digits unexpanded; rules skipped |
-| TTS: Dots / MOSS | model `generate()` | raw | `None` / empty language name |
+| Enhance/conversation | `ChunkingConfig` → pysbd | base code (inside `PhraseSegmenter`) | as Segmentation |
+| Prompt prep | `PromptNormalizer` (num2words / substitutions) | base code / `is_english` | digits unexpanded; rules skipped |
+| TTS: model mappings | per-model language tables | mixed (see §6) | `None` / empty / `auto` |
 | TTS: Chatterbox ML | readiness check | raw, exact match | readiness failure |
-| Whisper STT | `Transcriber` | raw | auto-detect (`language=None`) |
-| Validation | `TextNormalizer`, `Whitelist`, `WordEquivalence`, `Validator` | mixed (see musings) | language-independent pass only |
-| Skip gate | `Validator.is_unsupported_language_code` (`zh/ja/ko`) | raw, `startswith` | validation skipped entirely |
+| Whisper STT | `Transcriber`, `ModelWorker.transcribe_audio_blocking` | base code | auto-detect (`language=None`) |
+| Validation | `TextNormalizer`, `Whitelist`, `WordEquivalence`, `Validator` | predicates | language-independent pass only |
+| Skip gate | `Stt.should_skip` | `is_validation_supported` | validation skipped entirely |
+| Batching | `generate_util` | `is_cjk` | word-count sorting disabled |
 | Concat/export | concat (none); ABR metadata | verbatim snapshot | n/a |
+
+---
+
+## Default and fallback rules (considered, not yet acted on)
+
+This section records the analysis of what the app does when the code is empty or
+names a language a subsystem has no rules for — mainly the English fallback in
+sentence segmentation. Normalization was done first, on purpose, and none of the
+policy options below have been implemented yet.
+
+### Where an unknown or empty code gets English
+
+| Site | Trigger | Effect |
+|---|---|---|
+| pysbd, `PhraseSegmenter.string_to_sentence_strings` | base code pysbd has no rules for (`pt`, `sv`, `bn`, `th`, …), or `""` | English sentence rules |
+| `PhraseGrouper.text_to_groups(pysbd_lang="en")` default argument | none: every caller passes a value | n/a |
+| Enhance alignment `_expand_token` / `_number_to_words` | `""` | English ordinals (`1st`); numbers spelled out in English |
+| `PROJECT_DEFAULT_LANGUAGE = "en"` | code never set | English everywhere, incl. Whisper told `language="en"` |
+
+### Two fallback philosophies
+
+The app answers "what if we don't know the language?" in two different ways:
+
+- **Assume English:** pysbd and the enhance alignment tokenizer (the table above).
+- **Assume nothing** (no language-specific rules): text normalization (only the
+  language-independent pass), the Whitelist, sounds-the-same, word equivalence,
+  num2words in prompts (digits left alone), the English-only segmentation heuristics
+  (skipped), and Whisper (auto-detect).
+
+pysbd is the odd one out for a practical reason: it has to be given *some*
+language. The enhance case has no such constraint.
+
+### pysbd in detail
+
+**What "English" means in pysbd.** In pysbd 0.3.4, `English` is just `Common` +
+`Standard` (the generic base ruleset) with an English `SENTENCE_STARTERS` list. So the
+fallback really means "pysbd's generic rules":
+
+- **Terminal punctuation:** `. ! ?` plus CJK full-width `。！？．`.
+- **Abbreviations:** an English-centric list (titles, US states, months, and words
+  like `no`, `is`, `me`, `la`, `que`, `con`, `del`).
+- **How abbreviations work:** after a known abbreviation followed by a capitalised
+  word, pysbd splits *unless* the abbreviation is in the "prepositive" list (`mr`,
+  `dr`, `prof`, `st`, …). Number abbreviations (`no`, `art`, `pp`, …) only protect
+  their period before a digit. A title abbreviation pysbd doesn't know (`Sra.`, `Sig.`,
+  `Hr.`) is just a word ending a sentence.
+
+**Languages pysbd 0.3.4 supports:** am, ar, bg, da, de, el, en, es, fa, fr, hi, hy, it,
+ja, kk, mr, my, nl, pl, ru, sk, ur, zh. Notably missing: pt, sv, no, fi, cs, ro, hu,
+tr, uk, ko, vi, th, bn, ta, he, id.
+
+**Measured behaviour** (through `PhraseSegmenter.string_to_sentence_strings`, which
+adds the app's quote-interior boundary logic on top of pysbd):
+
+| Text | English rules | Native rules |
+|---|---|---|
+| es `Llegó el Sr. García con la Sra. López.` | splits after `Sr.` **and** `Sra.` | splits after `Sr.` only — pysbd's Spanish rules aren't perfect either |
+| de `Er kam z.B. am 3. Mai an.` | splits after `3.` | correct |
+| it `Il Sig. Rossi è arrivato.` | splits after `Sig.` | correct |
+| ru `Он пришёл в 5 ч. вечера.` | splits after `ч.` | correct |
+| zh / ja quoted dialogue | same result as native | raw pysbd differs (native zh splits inside quotes; English keeps the quote together), but the app's quote logic evens it out |
+| hi `।`, el `;`, ar `؟` (supported; shown to illustrate the English rules) | **no sentence splits at all** | correct |
+| pt `O Sr. Silva chegou.` (no pt rules) | splits after `Sr.` | n/a |
+| bn `।`, th (no bn/th rules) | no splits | n/a |
+| es with accented capitals (`Dr. Álvarez`, `Él`) | correct | correct |
+
+**The two failure modes:**
+
+- **Extra splits** after abbreviations the English list doesn't know (Latin and
+  Cyrillic scripts). This is the worse failure for audio: a sentence-length pause in
+  the middle of `Sr. | García`, and possibly a group boundary there. Merging short
+  sentences into groups may soften it, depending on segmentation strategy.
+- **Missed splits** in scripts with other terminal punctuation. pysbd covers several
+  of these natively (hi, mr, el, ar, fa, ur, am, hy, my), so since normalization this
+  hits only unsupported ones, eg Bengali/Nepali/Assamese (danda `।`) or Tigrinya
+  (`።`). Phrase splitting on
+  `, ; :` and the `max_words` limit catch some of it, but every sentence pause
+  (`Reason.SENTENCE`) is lost. For scripts without spaces, `max_words` does nothing
+  either, since word counts are whitespace-based.
+
+**What normalization already changed.** Before normalization, every region or alias
+form (`es-mx`, `zh-cn`, `ja-jp`, `en-us`, `spa`) also fell into the fallback:
+`es-mx` got English sentence rules even though pysbd has Spanish rules. That was a
+bug, not a policy, and it is fixed. Now only genuinely unsupported languages and `""`
+reach the fallback.
+
+Migration consequence: for an existing project with such a code, text re-segmented
+after the change gets native rules, while untouched text keeps its English-rule
+boundaries. Re-segmentation happens on new imports, and on text-editor edits, which
+re-segment with `book.segmentation_settings.language_code`. Nothing reports the mix.
+
+### Pros and cons of the English last resort
+
+**Pros**
+- It is effectively pysbd's generic ruleset, the base that the other languages'
+  rules extend.
+- Many abbreviations are shared across languages (`Dr.`, `St.`, `e.g.`, `etc.`), and
+  multi-period forms like `z.B.` are protected generically.
+- Its punctuation set covers Latin scripts and CJK, so for most unsupported
+  Latin-script languages the output is mostly right, with local errors.
+- Predictable and maintenance-free; `""` needs *some* answer and English is a sane
+  one.
+- The app layer covers the biggest gaps: quote handling, phrase splitting, word
+  limits, short-sentence merging.
+
+**Cons**
+- **Silent.** Nothing tells the user that sentence splitting used English rules, so
+  wrong pauses look like a model problem.
+- **Inconsistent** with the "assume nothing" philosophy used everywhere else.
+- **Wrong for some scripts** — those that end sentences with marks pysbd's generic
+  rules don't know (see missed splits above).
+
+### Options
+
+1. **Keep `"en"` as the last resort** (current behaviour).
+2. **Report the fallback.** Show something like "sentence rules: en (fallback; no
+   pysbd rules for `pt`)" in the segmentation info dialog and the post-import
+   summary. Cheap, and works alongside any other option. Implementation notes:
+   - Put the decision in one helper (eg `effective_pysbd_language(code) ->
+     (lang, is_fallback)`) used by both `PhraseSegmenter` and the UI, so the
+     message can't drift from the behaviour.
+   - The book's segmentation snapshot stores the user's code, not the rules
+     language actually used. Recording the effective language there would be a
+     schema change. Computing it at display time is simpler, but a pysbd upgrade
+     that adds a language would make old segmentation look native when it wasn't.
+3. **Map unsupported languages to a related pysbd language,** eg `pt/ca/gl → es`,
+   `bn/ne/as → hi` (danda), `uk/be → ru`, `no/sv → da`, `cs → sk`. Mainly useful for
+   scripts with other terminal punctuation. It's a hand-maintained table that
+   guesses, it surprises when it guesses wrong, and a related language's
+   abbreviations can mislead too.
+4. **A "neutral" custom ruleset** (generic rules minus the English abbreviations and
+   sentence starters), registered with pysbd. It would need overriding pysbd
+   internals (`LANGUAGE_CODES`), which is fragile across pysbd updates. It would
+   split after *every* abbreviation, probably worse than English for Latin text. And
+   it can't add terminal punctuation across the board, because Greek `;` is a
+   question mark in Greek but a semicolon everywhere else.
+
+**Current leaning:** 1 + 2 (keep English, make it visible). Leave 3 for later, only
+for the punctuation-mismatched scripts, if a user actually needs one. Skip 4.
+
+### Empty code in enhance alignment
+
+`_expand_token` treats `""` like `en` (English ordinals, num2words `"en"`); it is
+marked with a TODO.
+
+- **Why it's mostly harmless:** expansion runs on both the source and transcript
+  sides, so digits expand identically on both. It only matters when one side has
+  digits and the other has words. For a non-English project with a cleared code,
+  English words won't match native words — but not expanding wouldn't match either.
+- **Why change it:** it's the only place where `""` means English and isn't forced
+  to (unlike pysbd). Making it neutral would align it with the rest of the app.
+- **Cost of changing it:** an English project whose code was cleared would lose
+  number and ordinal matching during alignment.
+- **Leaning:** make it neutral (only expand when the normalized code is `en`).
+
+### The project default `"en"`
+
+A separate product question. It is right for most users, and English is the only
+language with full first-class treatment (whitelist, sounds-the-same, MODERATE
+recommended strictness). But a user who never touches the setting gets English
+everywhere, including Whisper being told `language="en"` instead of auto-detecting.
+
+Alternatives considered:
+- **Default to `""`:** Whisper auto-detects, but English users silently lose
+  first-class validation.
+- **Ask for the language when creating a project.**
+
+**Leaning:** leave it as is.
+
+### Sequencing
+
+Normalization (the predicates and base codes for pysbd, Whisper and num2words) was
+deliberately done before any fallback-policy change:
+
+- **Every option above assumes normalized input.** Option 1 *is* "normalize, then
+  fall back".
+- **It shrank the problem:** most fallback cases were region or alias forms.
+- **It keeps behaviour changes attributable:** normalization changes were bug fixes;
+  fallback changes are deliberate policy.
+
+The `""` → English behaviour in enhance alignment was kept as-is during
+normalization, for the same reason.
 
 ---
 
@@ -267,45 +488,38 @@ the whitelist only knows `en` and `es`. A single free-form string is the lowest 
 denominator that lets all of them be wrong in different ways. The saving grace is that
 for most consumers it is explicitly a *hint* with sane fallbacks (auto-detect,
 language-independent normalization, silently skipped rules). The design leans on
-graceful degradation, and mostly achieves it — but the degradation is silent, so a
-user who sets `"en-US"` gets subtly less validation than one who sets `"en"` (see
-below), with no warning anywhere.
+graceful degradation, and mostly achieves it — but the degradation is silent.
 
-**Raw vs normalized comparisons are inconsistent.** The codebase has a canonical
-normalizer (`language_util.normalize_language_code`) and a test asserting the
-whitelist and word-equivalence subsystems share it. But plenty of call sites still
-compare the raw stored value: `TextNormalizer.normalize_common` branches on
-`language_code == "en"` / `"es"`; `sounds_the_same_en` requires exactly `"en"`;
-`Strictness.get_recommended_default` compares raw; the text-menu hint checks
-`in ("en", "es")`; Whisper membership checks and the CJK `startswith` skip-gate use
-the raw string; Chatterbox Multilingual demands an exact member of its list. So
-`"en-US"` and `"eng"` normalize to first-class English for the whitelist, yet bypass
-the English text-normalizer branches, the sounds-the-same check, and the recommended
-strictness. Conversely the CJK gate is a `startswith` on the *raw* code, so `"zh"`
-skips validation but a hypothetical `"zh-Hant"`-style value behaves differently than
-the alias-collapsed `"zh"` elsewhere. The normalize-on-read philosophy is only
-half-applied, and the seams show precisely where behavior differs across the seam.
+**Raw vs normalized comparisons.** App logic that gives a language special treatment
+now goes through the `language_util` predicates, and the base code is what reaches
+pysbd, Whisper, and num2words, so `"en-US"`, `"eng"`, `"es-mx"`, and `"zh_CN"` behave
+like their base codes throughout text handling and validation. Before this, a single
+validation call for `"en-US"` ran the English whitelist (normalized) without English
+normalization or sounds-the-same (raw), and the two CJK detectors disagreed with
+each other (`zh_CN`, `zho`) and misfired on prefixes (`jav`, `kok` skipped validation;
+`yue` didn't). What remains raw is the model-vocabulary layer (§6) and Chatterbox
+Multilingual's exact-match contract, plus the input validator's 5-character limit.
 
 **Empty string is overloaded.** `""` means "no hint" (Whisper auto-detects,
-normalization goes language-independent) — but it is also the default value of the
-canonical `book.segmentation_settings.language_code` snapshot before any segmentation
-has happened. The `or None` /
-`or ""` coercions scattered at call sites make "unset" and "deliberately cleared"
-indistinguishable. The default of `"en"` for
+normalization goes language-independent) — except in pysbd and enhance alignment,
+where it means English (see "Default and fallback rules"). It is also the default value of
+the canonical `book.segmentation_settings.language_code` snapshot before any
+segmentation has happened. The `or None` / `or ""` coercions scattered at call sites
+make "unset" and "deliberately cleared" indistinguishable. The default of `"en"` for
 `language_code` itself is also a quiet opinion: a user who never touches the setting
 gets English hints everywhere, including Whisper being told `language="en"` rather
 than auto-detecting.
 
 **Should input normalize instead?** Normalizing at input (canonicalizing to a base
-two-letter code, or even a small structured type) would fix the raw-comparison
-inconsistencies by construction. The counterargument is real, though: region/script
+two-letter code, or even a small structured type) would make the predicates
+unnecessary by construction. The counterargument is real, though: region/script
 information would be thrown away, and some consumers genuinely want it — Whisper
-dialect hints, num2words locales, and Chatterbox Multilingual's exact list can
-distinguish things the base code collapses. The current snapshot/alias design is a
-compromise: store what the user said, normalize where a subsystem only understands
-base codes. The cost of that compromise is that every new language-keyed feature must
-remember to normalize, and must decide which comparison style it's using — and the
-test suite only pins the two subsystems that already do it right.
+dialect hints, model language tables, and Chatterbox Multilingual's exact list can
+distinguish things the base code collapses. The current design is a compromise:
+store what the user said, resolve it through `language_util` wherever app logic or a
+base-code library consumes it. The cost is that every new language-keyed feature must
+use the predicates rather than a string comparison — which `test_language_util.py`
+helps police only for the consumers it covers.
 
 **The whitelist singleton is hidden global state.** Language correctness for
 validation depends on `Whitelist().set_language_code(...)` having been called with the
@@ -327,14 +541,23 @@ another, with only the per-segment `SegmentTranscriptData` to tell them apart. A
 artifacts; nothing at concat time surfaces the mixed provenance (concat is
 language-blind by design, which is both a strength and a blind spot).
 
-**Unsupported-language policy is ad hoc.** `zh/ja/ko` hard-skip validation because
-Whisper tokenizes those languages wordlessly; that list lives in `constants.py` and is
-matched with `startswith` on the raw code. It's a reasonable pragmatic gate, but it's
-a second, independent notion of "which languages work" alongside Whitelist's
-first-class list, Whisper's `supported_languages`, pysbd's identifier set, and
-Chatterbox's requirement — five different support matrices, none derived from a
-single source of truth. Any future work here (e.g. CJK word segmentation for
-validation, or another first-class whitelist language) will have to touch several of
-them, and the risk is that they drift — exactly the drift the shared
-`normalize_language_code` was introduced to prevent for the two subsystems that
-already share it.
+**Several support matrices.** "Which languages work" is answered separately by
+`CJK_LANGUAGES` (validation and batching), `Whitelist.LANGUAGES` (first-class),
+Whisper's `supported_languages`, pysbd's identifier set, num2words' converters, and
+Chatterbox's requirement. The first two now live behind shared predicates; the rest
+are external and consulted with the base code.
+
+## Open questions
+
+- **English fallback policy** — see "Default and fallback rules" (leaning: keep
+  English, report it).
+- **`""` in enhance alignment** — same section (leaning: make it neutral). Marked
+  with a TODO in `_expand_token`.
+- **Project default `"en"`** — same section (leaning: leave it).
+- **Korean in `CJK_LANGUAGES`** — Korean is space-delimited, so whitespace word
+  logic could plausibly apply; it is grouped with zh/ja for historical reasons.
+- **Model language mappings** (§6) — whether to normalize before the MOSS/Qwen3/Dots/
+  OmniVoice lookups, and whether Chatterbox's exact-match check should accept
+  region/alias forms of a supported code.
+- **Input limit** — the 5-character validator rejects `english` and `zh-Hant` even
+  though the alias table understands them.

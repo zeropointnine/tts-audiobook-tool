@@ -28,7 +28,6 @@ PROJECT_TEXT_RAW_FILE_NAME = "project_text_raw.txt"
 PROJECT_TEXT_EPUB_FILE_NAME = "project_text.epub"
 
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
-VALIDATION_UNSUPPORTED_LANGUAGES = ["zh", "ja", "ko"]
 
 # Allow declared word/phrase equivalents during word-error alignment.
 # Other allowances (homophones and uncommon words) remain independent.
