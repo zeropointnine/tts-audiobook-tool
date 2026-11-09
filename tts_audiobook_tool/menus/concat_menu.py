@@ -93,7 +93,7 @@ class ConcatMenu:
 
             items.append(
                 MenuItem(
-                    "Pause modulation rules",
+                    "Pause modulation",
                     lambda _, __: ConcatMenu.prosody_modulation_menu(state)
                 )
             )
@@ -218,7 +218,7 @@ class ConcatMenu:
 
         MenuUtil.menu(
             state=state,
-            heading="Pause modulation rules",
+            heading="Pause modulation",
             items=make_items,
         )
 

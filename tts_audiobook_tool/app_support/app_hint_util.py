@@ -17,12 +17,17 @@ from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
 Hints related to 'high level app flow'
 """
 
-def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
+def show_pre_inference_hints(prefs: Prefs, project: Project, start_prompt: str = "") -> bool:
     """
     Shows one-time hints/warnings related to doing inference.
     Returns False if inference should *not* continue.
+
+    If start_prompt is given, ends with a single confirmation using it, which also
+    serves as the confirmation for any confirm-type hint (avoids a double prompt
+    when the caller would otherwise ask to start right after the hint).
     """
-    can_continue = True
+    # Confirm-type hint, shown last so its confirmation is the final prompt
+    confirm_hint: Hint | None = None
 
     # TTS-model hint/warning
     match project.get_tts_model_type().id:
@@ -39,7 +44,8 @@ def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
             target = project.get_model_setting('moss_local', 'target') or MossConfigs.get_default().value.repo_id
             target = "huggingface repo id: " + target
             hint = Hint.make_using(HINT_MOSS_REMOTE_CODE, target)
-            can_continue = show_hint_if_necessary(prefs, hint, and_confirm=True)
+            if not prefs.get_hint(hint.key):
+                confirm_hint = hint
 
     # cuDNN compatibility hint/warning
     if platform.system() == "Linux":
@@ -48,6 +54,16 @@ def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
             if version and version > CTRANSLATE_REQUIRED_CUDNN_VERSION:
                 hints.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
 
+    if confirm_hint:
+        hints.print_hint(confirm_hint)
+    if not confirm_hint and not start_prompt:
+        return True
+
+    from tts_audiobook_tool import ask
+    can_continue = ask.ask_confirm(start_prompt)
+    if can_continue and confirm_hint:
+        prefs.set_hint_true(confirm_hint.key)
+        prefs.save()
     return can_continue
 
 def get_startup_version_messages(

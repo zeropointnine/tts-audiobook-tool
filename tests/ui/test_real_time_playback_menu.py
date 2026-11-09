@@ -92,7 +92,7 @@ def test_start_always_passes_project_text_and_range(monkeypatch) -> None:
     monkeypatch.setattr(
         menu_module.app_hint_util,
         "show_pre_inference_hints",
-        lambda _prefs, _project: True,
+        lambda _prefs, _project, **_kwargs: True,
     )
     monkeypatch.setattr(menu_module.ask, "can_hotkey", False)
     monkeypatch.setattr(
@@ -157,7 +157,7 @@ def test_start_preflight_matches_runtime_range(monkeypatch, line_range, expected
     monkeypatch.setattr(menu_module.ProjectVoiceUtil, "get_job_voice_indices", staticmethod(resolve))
     monkeypatch.setattr(VoiceMenuShared, "validate_voices", staticmethod(validate))
     monkeypatch.setattr(menu_module.readiness, "get_run_blocker_text", lambda *_args, **_kwargs: "")
-    monkeypatch.setattr(menu_module.app_hint_util, "show_pre_inference_hints", lambda *_args: True)
+    monkeypatch.setattr(menu_module.app_hint_util, "show_pre_inference_hints", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(menu_module.ask, "can_hotkey", False)
     monkeypatch.setattr(menu_module, "run_real_time_playback_modal", lambda **kwargs: launches.append(kwargs))
 

@@ -139,16 +139,14 @@ def do_start(state: State) -> None:
         ask.ask_error(err)
         return
 
-    # Show pre-inference hint/warning if necessary
-    can_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
+    # Show pre-inference hint/warning if necessary, then confirm start
+    # (single prompt serves both the start confirmation and any confirm-type hint)
+    start_prompt = f"Press {make_hotkey_string('Y')} to start: " if ask.can_hotkey else ""
+    can_continue = app_hint_util.show_pre_inference_hints(
+        state.prefs, state.project, start_prompt=start_prompt
+    )
     if not can_continue:
         return
-
-    # Confirm and start proper
-    if ask.can_hotkey:
-        b = ask.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
-        if not b:
-            return
 
     # Pre-flight: verify shared voice samples (and transcripts) before the
     # full-screen playback app takes over the console.

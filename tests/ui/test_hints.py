@@ -95,3 +95,65 @@ def test_hints_are_still_marked_when_no_prompt_is_requested(
     assert prompts == []
     assert prefs.get_hint("alpha") and prefs.get_hint("beta")
     assert saves == [True]
+
+
+class _MossProject:
+    def get_tts_model_type(self):
+        return type("_Type", (), {"id": "moss_local"})()
+
+    def get_model_setting(self, _model_id: str, _key: str):
+        return "some/repo"
+
+
+@pytest.fixture
+def confirms(monkeypatch) -> list[str]:
+    from tts_audiobook_tool.app_support import app_hint_util
+    monkeypatch.setattr(app_hint_util.platform, "system", lambda: "Windows")
+    calls: list[str] = []
+
+    def fake_confirm(message: str = "") -> bool:
+        calls.append(message)
+        return True
+
+    monkeypatch.setattr(ask, "ask_confirm", fake_confirm)
+    return calls
+
+
+@pytest.mark.parametrize("start_prompt", ["", "Start? "])
+def test_confirm_hint_and_start_prompt_share_one_confirmation(
+    prefs: Prefs, confirms: list[str], prefs_path: Path, capsys, start_prompt: str
+) -> None:
+    # The MOSS remote-code warning's confirmation doubles as the caller's start
+    # prompt, so the user is asked only once (with the start prompt, if given).
+    from tts_audiobook_tool.app_support import app_hint_util
+
+    result = app_hint_util.show_pre_inference_hints(prefs, _MossProject(), start_prompt=start_prompt)  # type: ignore[arg-type]
+
+    assert result is True
+    assert confirms == [start_prompt]
+    assert "some/repo" in capsys.readouterr().out
+    assert prefs.get_hint("moss_remote_code")
+
+
+def test_start_prompt_still_asked_when_hint_already_shown(
+    prefs: Prefs, confirms: list[str], prefs_path: Path, capsys
+) -> None:
+    from tts_audiobook_tool.app_support import app_hint_util
+    prefs.set_hint_true("moss_remote_code")
+
+    app_hint_util.show_pre_inference_hints(prefs, _MossProject(), start_prompt="Start? ")  # type: ignore[arg-type]
+
+    assert confirms == ["Start? "]
+    assert "some/repo" not in capsys.readouterr().out
+
+
+def test_declined_confirmation_does_not_mark_hint(
+    prefs: Prefs, confirms: list[str], prefs_path: Path, monkeypatch
+) -> None:
+    from tts_audiobook_tool.app_support import app_hint_util
+    monkeypatch.setattr(ask, "ask_confirm", lambda _message="": False)
+
+    result = app_hint_util.show_pre_inference_hints(prefs, _MossProject(), start_prompt="Start? ")  # type: ignore[arg-type]
+
+    assert result is False
+    assert not prefs.get_hint("moss_remote_code")

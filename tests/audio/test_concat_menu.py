@@ -466,7 +466,7 @@ def test_concat_menu_heading_pluralizes_by_output_file_count(chapter_mode, marke
 
 
 def test_pause_timing_rules_menu_offers_limit_silence_gaps() -> None:
-    # The setting lives in the "Pause modulation rules" submenu; its label reflects the current value
+    # The setting lives in the "Pause modulation" submenu; its label reflects the current value
     project = Project.model_validate({"limit_silence_gaps": True, "limit_silence_gaps_duration": 0.4})
     state = cast(State, SimpleNamespace(project=project))
 
