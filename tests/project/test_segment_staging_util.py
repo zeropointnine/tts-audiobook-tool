@@ -148,12 +148,35 @@ def test_failed_accept_restores_same_named_old_pair(tmp_path, monkeypatch, fail_
     monkeypatch.setattr(staging, "_move", flaky_move)
     error = staging.accept_staged_segment(make_project(tmp_path), 2, staged)
     assert "disk full" in error
+    assert "could not be restored" not in error
     assert old.read_bytes() == name.encode()
     assert old.with_suffix(".json").read_text() == name
     assert other.exists()
     # The staged pair is back in place too.
     assert staged.read_bytes() == b"new audio"
     assert staged.with_suffix(".json").read_text() == "new json"
+
+
+def test_failed_rollback_is_reported(tmp_path, monkeypatch) -> None:
+    # When publishing the new audio fails (move 4) and restoring the old
+    # audio also fails (move 7, the last undo), the error says the previous
+    # sound was not restored rather than implying a clean rollback.
+    name = segment_name(None, "Same")
+    write_segment(tmp_path / "segments", name)
+    staged = write_segment(tmp_path / "temp", name)
+    real_move = staging._move
+    calls = {"count": 0}
+
+    def flaky_move(source, target) -> None:
+        calls["count"] += 1
+        if calls["count"] in (4, 7):
+            raise OSError("disk full")
+        real_move(source, target)
+
+    monkeypatch.setattr(staging, "_move", flaky_move)
+    error = staging.accept_staged_segment(make_project(tmp_path), 2, staged)
+    assert "disk full" in error
+    assert "previous sound could not be restored" in error
 
 
 def test_project_best_item_prefers_validated_clean_take(tmp_path) -> None:

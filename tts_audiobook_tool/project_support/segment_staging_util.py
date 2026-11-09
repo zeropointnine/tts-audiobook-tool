@@ -134,13 +134,17 @@ def accept_staged_segment(project: Project, phrase_index: int, staged_path: Path
             move(staged_json, dest_json)
         move(staged_path, dest_path)
     except OSError as e:
+        rollback_failed = False
         for source, target in reversed(moves):
             try:
                 _move(target, source)
             except OSError:
-                pass
+                rollback_failed = True
         project.sound_segments.force_invalidate()
-        return f"Couldn't keep new sound: {make_error_string(e)}"
+        message = f"Couldn't keep new sound: {make_error_string(e)}"
+        if rollback_failed:
+            message += " (previous sound could not be restored)"
+        return message
     stale_paths = [path for path in old_paths if path.name != dest_path.name]
     project.sound_segments.delete_path_snapshot(stale_paths)
     shutil.rmtree(backup_dir, ignore_errors=True)

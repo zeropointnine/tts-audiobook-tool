@@ -953,7 +953,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             return
         if error:
             # The acceptance rolled back: the line keeps its old audio (or
-            # none) and its queued state.
+            # none) and its queued state. The error notes a failed restore.
             self.notify(error, severity="error")
             return
 
