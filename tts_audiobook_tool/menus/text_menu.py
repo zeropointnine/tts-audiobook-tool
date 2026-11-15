@@ -3,7 +3,6 @@ from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.constants_config import PROJECT_DEFAULT_SEGMENTATION_STRATEGY
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
 from tts_audiobook_tool.text_ops.epub_format_reapply import reapply_epub_formatting
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
@@ -89,7 +88,7 @@ class TextMenu:
                     )
                 items.append(
                     MenuItem(
-                        make_subst_label, lambda _, __: TextMenu.word_substitutions_menu(state),
+                        make_subst_label, lambda _, __: TextMenu.edit_word_substitutions(state),
                     )
                 )
 
@@ -313,67 +312,18 @@ class TextMenu:
         )
 
     @staticmethod
-    def edit_word_substitutions(state: State) -> bool:
-        """Run the word-substitutions editor (its pronunciation preview runs in place)."""
+    def edit_word_substitutions(state: State) -> None:
+        """Run the word-substitutions editor, reporting launch or save failures.
+
+        Returns None so the Text menu stays open after the editor closes.
+        """
         run_result = run_content_textual_app(WordSubstitutionsApp(state))
         if not isinstance(run_result, ContentAppCompleted):
             ask.ask_error(run_result.message)
-            return False
-
+            return
         editor_result = run_result.result
         if isinstance(editor_result, EditorSaveFailed):
             ask.ask_error(editor_result.error)
-            return False
-        # Preserve the existing menu behavior: any normal editor close
-        # (saved or unchanged) returns to the parent Text menu.
-        return True
-
-    @staticmethod
-    def word_substitutions_menu(state: State) -> None:
-
-        def on_inspect(_, __) -> None:
-            normed_lang = language_util.normalize_language_code(state.project.language_code)
-            subheading = UNCOMMON_WORDS_DESC.replace("%1", normed_lang)
-            MenuUtil.print_screen_heading(state, "Uncommon words", subheading=subheading)
-
-            # Make list of project text words (unfiltered, still including whitespace)
-            all_words_raw = []
-            for group in state.project.phrase_groups:
-                for phrase in group.phrases:
-                    all_words_raw.extend(phrase.words)
-
-            items = app_text.get_uncommon_words(all_words_raw)
-            if not items:
-                printt("None found")
-            else:
-                for i in range(0, min(len(items), 25)):
-                    item = items[i]
-                    num_str = f"{COL_DIM}{str(item[1]).rjust(3)}"
-                    instances_str = f"{COL_DEFAULT}{' | '.join(item[2])}"
-                    print(f"{num_str}  {instances_str}")
-            printt()
-            ask.ask_enter_to_continue()
-
-        def items_maker(_) -> list[MenuItem]:
-            items = [
-                MenuItem(
-                    make_edit_substitutions_label,
-                    lambda _, __: TextMenu.edit_word_substitutions(state),
-                )
-            ]
-            # Only first-class languages (with a common-words dictionary) have
-            # anything to inspect; supports_language handles code normalization
-            if Whitelist.supports_language(state.project.language_code) and state.project.phrase_groups:
-                items.append(MenuItem("Inspect project text for uncommon words", on_inspect))
-            return items
-
-        MenuUtil.menu(
-            state,
-            heading=make_subst_label,
-            items=items_maker,
-            subheading=SUBSTITUTIONS_DESC,
-            breadcrumb="Word substitutions",
-        )
 
 
 
@@ -636,11 +586,6 @@ def on_ask_max_size(state: State, _) -> None:
         is_int=True
     )
 
-def make_edit_substitutions_label(state: State) -> str:
-    count = len(state.project.word_substitutions)
-    return f"Edit word substitutions {make_currently_string(count, value_prefix='items: ')}"
-
-
 def make_subst_label(state: State) -> str:
     num_subst = len(state.project.word_substitutions)
     if num_subst > 0:
@@ -663,20 +608,9 @@ Is required by the "Auto-identify characters" feature.
 
 For single-voice narration, leave this off to preserve natural flow."""
 
-SUBSTITUTIONS_DESC = \
-f"""Word pairs that get swapped into the text before it is sent to the TTS model.
-Good for fixing mispronounced names and unusual words.
-
-{COL_DIM}Eg, mapping "Nguyen" to "win" so the model pronounces it correctly.
-Works best with a bit of experimentation."""
-
 REAPPLY_FORMATTING_DESC = \
 """Sets the text's display formatting (bold, italics, underline, headings)
 from the EPUB, for use by the browser player. Project text, generated audio,
 markers and dialog assignments are not changed. Lines whose text was edited
 since import lose formatting where their words no longer match the EPUB."""
-
-UNCOMMON_WORDS_DESC = \
-f"""Words in the project text not found in the app's
-%1 \"common words\" dictionary, sorted by frequency."""
 

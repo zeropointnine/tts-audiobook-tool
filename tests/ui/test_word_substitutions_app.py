@@ -4,6 +4,7 @@ from typing import cast
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pytest
 from rich.text import Text
 from textual.timer import Timer
 from textual.widgets import Input, OptionList, Rule, Static
@@ -27,6 +28,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
     EditorSaved,
 )
+from tts_audiobook_tool.textual import uncommon_words_dialog as uncommon_module
 from tts_audiobook_tool.textual.textual_shared import (
     STYLE_HIGHLIGHT,
     NonWrappingOptionList,
@@ -38,7 +40,13 @@ from tts_audiobook_tool.textual.word_substitutions_app import (
     WordSubstitutionSentinel,
     WordSubstitutionsApp,
     fit_cell,
+    make_uncommon_word_preview_prompt,
     make_word_substitution_preview_prompt,
+)
+from tts_audiobook_tool.textual.uncommon_words_dialog import (
+    MAX_UNCOMMON_WORDS,
+    NONE_FOUND_LABEL,
+    UncommonWordsDialog,
 )
 from tts_audiobook_tool.textual.word_substitutions_dialog import (
     WordSubstitutionEdit,
@@ -58,6 +66,9 @@ class StubWordSubstitutionsProject:
     limit_silence_gaps: bool = False
     limit_silence_gaps_duration: float = 0.5
     normalization_type: NormalizationType = NormalizationType.DEFAULT
+    # Read by the uncommon-words list ([U]) gating and collection.
+    language_code: str = "en"
+    phrase_groups: list = field(default_factory=list)
 
     def save(self) -> str:
         self.save_calls += 1
@@ -73,12 +84,22 @@ class StubWordSubstitutionsProject:
         return self.high_shelf
 
 
+def make_phrase_group(words: list[str]) -> SimpleNamespace:
+    return SimpleNamespace(phrases=[SimpleNamespace(words=words)])
+
+
 def make_app(
     values: dict[str, str] | None = None,
     save_error: str = "",
+    *,
+    language_code: str = "en",
+    phrase_groups: list | None = None,
 ) -> tuple[WordSubstitutionsApp, StubWordSubstitutionsProject]:
     project = StubWordSubstitutionsProject(
-        dict(values or {}), save_error=save_error
+        dict(values or {}),
+        save_error=save_error,
+        language_code=language_code,
+        phrase_groups=list(phrase_groups or []),
     )
     state = cast(State, SimpleNamespace(project=cast(Project, project)))
     app = WordSubstitutionsApp(state)
@@ -172,6 +193,8 @@ def test_values_that_fill_their_column_exactly_are_not_ellipsized() -> None:
 
 
 def test_add_item_sentinel_uses_highlight_color() -> None:
+    # The sentinel label spans both word columns, so it isn't cropped to the
+    # original-word column's width (17 cells here).
     app, _ = make_app()
     add_index = len(app.list_items) - 1
 
@@ -264,12 +287,12 @@ def test_mounted_app_shows_header_and_no_items_sentinel_does_nothing() -> None:
             await pilot.pause()
             assert not isinstance(app.screen, WordSubstitutionsDialog)
 
-            # Row 1 is "Add item".
+            # Row 1 is "Add substitution word".
             await pilot.press("down")
             await pilot.press("enter")
             await pilot.pause()
             assert isinstance(app.screen, WordSubstitutionsDialog)
-            assert "Add item" in str(
+            assert "Add substitution word" in str(
                 app.screen.query_one("#word-substitutions-title", Static).render()
             )
             assert app.screen.query_one("#original-input", Input).value == ""
@@ -332,7 +355,7 @@ def test_pressing_x_on_sentinel_rows_deletes_nothing() -> None:
 
     async def exercise() -> None:
         async with app.run_test(size=(80, 24)) as pilot:
-            # Row 0 is "No items currently", row 1 is "Add item".
+            # Row 0 is "No items currently", row 1 is "Add substitution word".
             await pilot.press("x")
             await pilot.pause()
             assert app.staged == {}
@@ -597,3 +620,306 @@ def test_pressing_x_on_only_item_restores_empty_state() -> None:
             assert str(app.query_one("#status-left", Static).render()) == "Deleted item"
 
     run(exercise())
+
+
+# --- Uncommon words list ([U]) ---
+
+UNCOMMON_RESULT = [
+    ("ariekei", 3, ["Ariekei", "ariekei"]),
+    ("yggdrasil", 2, ["Yggdrasil"]),
+    ("zymurgy", 1, ["zymurgy"]),
+]
+
+
+def patch_uncommon_words(result=UNCOMMON_RESULT):
+    """Replace the whitelist lookup with a canned frequency-sorted result."""
+    return patch.object(
+        uncommon_module.app_text, "get_uncommon_words", lambda _words: result
+    )
+
+
+def make_uncommon_app(**kwargs) -> tuple[WordSubstitutionsApp, StubWordSubstitutionsProject]:
+    kwargs.setdefault("phrase_groups", [make_phrase_group(["Ariekei,", " the"])])
+    return make_app({"apple": "a"}, **kwargs)
+
+
+def header_text(app: WordSubstitutionsApp) -> str:
+    from tts_audiobook_tool.text_util import strip_ansi_codes
+
+    return "\n".join(strip_ansi_codes(line) for line in app.header_lines)
+
+
+def dialog_rows(dialog: UncommonWordsDialog) -> list[str]:
+    option_list = dialog.query_one("#uncommon-words-list", OptionList)
+    return [
+        str(option_list.get_option_at_index(index).prompt.plain)  # type: ignore[union-attr]
+        for index in range(option_list.option_count)
+    ]
+
+
+def test_uncommon_word_preview_prompt_names_only_the_word() -> None:
+    assert make_uncommon_word_preview_prompt("Ariekei") == "Original word: Ariekei"
+
+
+def test_header_describes_the_feature_below_its_title() -> None:
+    # The editor replaces the old submenu, so its header carries the
+    # description; it must fit an 80-column terminal since lines don't wrap.
+    app, _ = make_app()
+    lines = header_text(app).splitlines()
+
+    assert lines[0] == "Edit word substitutions"
+    assert lines[1] == word_subs_module.HEADER_DESCRIPTION
+    assert len(lines[1]) <= 80
+
+
+@pytest.mark.parametrize("language_code", ["en", "en-US", "English", "es-419"])
+def test_header_offers_uncommon_words_for_first_class_languages(language_code: str) -> None:
+    # Alias codes normalize to a language with a common-words dictionary.
+    app, _ = make_uncommon_app(language_code=language_code)
+
+    assert app.uncommon_words_available is True
+    assert "- [U] Uncommon words list  - [ESC] Finish" in header_text(app)
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"language_code": "zz"}, {"phrase_groups": []}]
+)
+def test_uncommon_words_hidden_without_dictionary_or_text(kwargs) -> None:
+    # Unsupported languages and empty projects hide the hint and ignore [U].
+    app, _ = make_uncommon_app(**kwargs)
+    assert "Uncommon words" not in header_text(app)
+    assert "- [ESC] Finish" in header_text(app)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("u")
+            await pilot.pause()
+            assert len(app.screen_stack) == 1
+
+    with patch_uncommon_words():
+        run(exercise())
+
+
+def test_pressing_u_shows_frequency_sorted_highlightable_list() -> None:
+    # The description names the normalized language code, rows keep the
+    # frequency order, and the list starts highlighted at its first row.
+    app, _ = make_uncommon_app(language_code="en-US")
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.press("u")
+            await pilot.pause()
+            dialog = app.screen
+            assert isinstance(dialog, UncommonWordsDialog)
+
+            desc = str(dialog.query_one("#uncommon-words-desc", Static).render())
+            assert "%1" not in desc
+            assert desc == (
+                "Source text words not found in the app's en common"
+                " words dictionary. These may have a higher likelihood of being"
+                " mispronounced by the TTS model."
+            )
+            hints = str(dialog.query_one("#uncommon-words-hints", Static).render())
+            assert hints == "- [Q] Preview pronunciation  - [ENTER] Add substitution word"
+
+            assert dialog_rows(dialog) == [
+                "3  Ariekei | ariekei",
+                "2  Yggdrasil",
+                "1  zymurgy",
+            ]
+            option_list = dialog.query_one("#uncommon-words-list", OptionList)
+            assert option_list.has_focus
+            assert option_list.highlighted == 0
+            await pilot.press("down")
+            assert option_list.highlighted == 1
+
+    with patch_uncommon_words():
+        run(exercise())
+
+
+def test_long_uncommon_words_list_scrolls_within_the_dialog() -> None:
+    items = [(f"word{i}", 100 - i, [f"Word{i}"]) for i in range(60)]
+    app, _ = make_uncommon_app()
+
+    async def exercise() -> None:
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("u")
+            await pilot.pause()
+            option_list = app.screen.query_one("#uncommon-words-list", OptionList)
+            assert option_list.size.height < 60
+            assert option_list.max_scroll_y > 0
+            await pilot.press("end")
+            await pilot.pause()
+            assert option_list.highlighted == 59
+            assert option_list.scroll_y > 0
+
+    with patch_uncommon_words(items):
+        run(exercise())
+
+
+@pytest.mark.parametrize(
+    "count, title",
+    [
+        (MAX_UNCOMMON_WORDS, "Uncommon words"),
+        (MAX_UNCOMMON_WORDS + 1, f"Uncommon words (first {MAX_UNCOMMON_WORDS} items)"),
+    ],
+)
+def test_uncommon_words_list_is_clamped_to_most_frequent(count: int, title: str) -> None:
+    # Only the top MAX_UNCOMMON_WORDS words are listed; the title notes the
+    # clamp only when words were actually dropped.
+    items = [(f"word{i}", 999 - i, [f"Word{i}"]) for i in range(count)]
+    app, _ = make_uncommon_app()
+
+    async def exercise() -> None:
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("u")
+            await pilot.pause()
+            dialog = app.screen
+            assert isinstance(dialog, UncommonWordsDialog)
+            assert str(dialog.query_one("#uncommon-words-title", Static).render()) == title
+            rows = dialog_rows(dialog)
+            assert len(rows) == MAX_UNCOMMON_WORDS
+            assert rows[-1] == f"{999 - MAX_UNCOMMON_WORDS + 1}  Word{MAX_UNCOMMON_WORDS - 1}"
+
+    with patch_uncommon_words(items):
+        run(exercise())
+
+
+def test_q_in_uncommon_words_list_previews_highlighted_word() -> None:
+    # Q previews the highlighted word once (the editor's own Q binding does
+    # not also fire), and the list is still open after the modal closes.
+    app, project = make_uncommon_app()
+    prompts, patchers = patch_preview_job(None, status=GenerationTerminalStatus.FAILED)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.press("u")
+            await pilot.pause()
+            dialog = app.screen
+            await pilot.press("down", "q")
+            await wait_until(pilot, lambda: isinstance(app.screen, QuickGenModal) and app.screen.terminal_result is not None)
+            assert len(app.screen_stack) == 3
+
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: app.screen is dialog)
+            assert app.modal_session_active is False
+
+    with patch_uncommon_words():
+        run_patched(patchers, exercise())
+    assert prompts == ["Original word: Yggdrasil"]
+    assert project.save_calls == 0
+
+
+def test_uncommon_words_list_reports_none_found() -> None:
+    app, _ = make_uncommon_app()
+    prompts, patchers = patch_preview_job(None)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.press("u")
+            await pilot.pause()
+            dialog = app.screen
+            assert isinstance(dialog, UncommonWordsDialog)
+            empty = str(dialog.query_one("#uncommon-words-empty", Static).render())
+            assert empty == NONE_FOUND_LABEL
+            await pilot.press("q")
+            await pilot.pause()
+            assert app.screen is dialog
+
+    with patch_uncommon_words([]):
+        run_patched(patchers, exercise())
+    assert prompts == []
+
+
+def test_escape_closes_uncommon_words_list_without_touching_the_editor() -> None:
+    # The list is read-only: closing it returns to the editor with no staged
+    # changes, and editor keys like [X] don't act on the rows beneath it.
+    app, project = make_uncommon_app()
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.press("u")
+            await pilot.pause()
+            await pilot.press("x")
+            await pilot.pause()
+            assert app.staged == {"apple": "a"}
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert len(app.screen_stack) == 1
+            assert app.is_running is True
+            assert app.has_changes is False
+
+    with patch_uncommon_words():
+        run(exercise())
+    assert project.save_calls == 0
+
+
+def test_enter_in_uncommon_words_list_adds_prefilled_substitution() -> None:
+    # ENTER opens the add dialog with the word prefilled and the substitution
+    # field focused; committing stages the pair, selects its editor row, and
+    # returns to the still-open list.
+    app, project = make_uncommon_app()
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.press("u")
+            await pilot.pause()
+            word_list = app.screen
+            await pilot.press("down", "enter")
+            await pilot.pause()
+            add_dialog = app.screen
+            assert isinstance(add_dialog, WordSubstitutionsDialog)
+            assert "Add substitution word" in str(
+                add_dialog.query_one("#word-substitutions-title", Static).render()
+            )
+            assert add_dialog.query_one("#original-input", Input).value == "Yggdrasil"
+            replacement = add_dialog.query_one("#replacement-input", Input)
+            assert replacement.has_focus
+
+            replacement.value = "Igg-drasil"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.screen is word_list
+            assert app.staged == {"apple": "a", "Yggdrasil": "Igg-drasil"}
+            assert app.list_items[app.selected_index] == WordSubstitutionItem(
+                "Yggdrasil", "Igg-drasil", 2
+            )
+            assert (
+                str(app.query_one("#status-left", Static).render())
+                == "Added substitution: Yggdrasil"
+            )
+
+    with patch_uncommon_words():
+        run(exercise())
+    assert project.save_calls == 0
+
+
+def test_enter_on_already_substituted_word_opens_edit_dialog() -> None:
+    # A word that already has a substitution (matched case-insensitively)
+    # edits that row rather than failing the add with "Already exists".
+    app, _ = make_app(
+        {"ariekei": "AriaKay"}, phrase_groups=[make_phrase_group(["Ariekei"])]
+    )
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.press("u")
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            dialog = app.screen
+            assert isinstance(dialog, WordSubstitutionsDialog)
+            assert "Edit item" in str(
+                dialog.query_one("#word-substitutions-title", Static).render()
+            )
+            assert dialog.query_one("#original-input", Input).value == "ariekei"
+            assert dialog.query_one("#replacement-input", Input).value == "AriaKay"
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert isinstance(app.screen, UncommonWordsDialog)
+            assert app.has_changes is False
+
+    with patch_uncommon_words():
+        run(exercise())

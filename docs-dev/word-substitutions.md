@@ -32,8 +32,8 @@ It covers:
 | Legacy parse / normalization | `tts_audiobook_tool/project_support/project_util.py` (`ProjectUtil.parse_word_substitutions_json_string`) |
 | Editor app | `tts_audiobook_tool/textual/word_substitutions_app.py` (`WordSubstitutionsApp`) |
 | Edit dialog | `tts_audiobook_tool/textual/word_substitutions_dialog.py` (`WordSubstitutionsDialog`) |
-| Menu surface | `tts_audiobook_tool/menus/text_menu.py` (`TextMenu.word_substitutions_menu`) |
-| Uncommon-words inspector | `tts_audiobook_tool/app_support/app_text.py` (`get_uncommon_words`) + `tts_audiobook_tool/text_ops/whitelist.py` |
+| Menu surface | `tts_audiobook_tool/menus/text_menu.py` (`TextMenu.edit_word_substitutions`) |
+| Uncommon-words list | `tts_audiobook_tool/textual/uncommon_words_dialog.py` (`UncommonWordsDialog`) + `tts_audiobook_tool/app_support/app_text.py` (`get_uncommon_words`) + `tts_audiobook_tool/text_ops/whitelist.py` |
 | Language-code normalization | `tts_audiobook_tool/text_ops/language_util.py` (`normalize_language_code`) |
 | Tests | `tests/text/test_prompt_normalizer.py`, `tests/ui/test_word_substitutions_app.py`, `tests/ui/test_word_substitutions_dialog.py`, `tests/text/test_text_menu.py`, `tests/text/test_language_util.py` |
 
@@ -360,30 +360,35 @@ but it means displayed casing is not guaranteed to persist across reloads.
 
 ---
 
-## 6. Menu surface: editor and uncommon-words inspector
+## 6. Menu surface: editor and uncommon-words list
 
-`Text > Word substitutions` (`TextMenu.word_substitutions_menu`) exposes one or
-two items, depending on project state:
+`Text > Word substitutions` (label `make_subst_label`, shown once the project
+has text) launches `WordSubstitutionsApp` directly via
+`TextMenu.edit_word_substitutions`; there is no intermediate submenu. Launch and
+save failures are reported with `ask_error`, and the Text menu stays open when
+the editor closes. The editor header's second line (`HEADER_DESCRIPTION`)
+carries the short feature description the old submenu used to show.
 
-| Item | Shown when | Action |
-| --- | --- | --- |
-| `Edit word substitutions (items: N)` | always | Runs `WordSubstitutionsApp`; on `EditorSaved` the menu exits one level |
-| `Inspect project text for uncommon words` | `Whitelist.supports_language(project.language_code)` and the project has phrase groups | Prints the uncommon-words report (§6.1) |
+The uncommon-words inspector lives inside the editor as a dialog
+(`textual/uncommon_words_dialog.py`), opened with `U`. The header line
+`- [U] Uncommon words list  - [ESC] Finish` advertises it, and the key is live,
+only when `Whitelist.supports_language(project.language_code)` holds and the
+project has phrase groups (`WordSubstitutionsApp.uncommon_words_available`).
 
 `Whitelist.supports_language()` is the app's "first-class language" check: the
 languages that have a bundled common-words dictionary (`Whitelist.LANGUAGES`,
 currently `en` and `es`). It normalizes its argument first via
 `text_ops/language_util.py`, so `en-US`, `eng`, and `English` all qualify, while
-a project in any other language simply hides the inspector item. (This is the
-same gate used by uncommon-word validation, so the inspector never offers words
-the validator would not treat as uncommon.)
+a project in any other language simply hides the feature. (This is the same
+gate used by uncommon-word validation, so the list never offers words the
+validator would not treat as uncommon.)
 
-### 6.1 Uncommon-words report
+### 6.1 Uncommon-words list
 
-The inspector is read-only; it never writes to the project. It flattens every
-`phrase.words` entry across `project.phrase_groups` (tokens still include their
-surrounding whitespace and punctuation) and calls
-`app_text.get_uncommon_words()`, which:
+The list is read-only; it never touches the staged map or the project.
+`collect_uncommon_words(project)` flattens every `phrase.words` entry across
+`project.phrase_groups` (tokens still include their surrounding whitespace and
+punctuation) and calls `app_text.get_uncommon_words()`, which:
 
 - strips outer punctuation/whitespace with `split_raw_word` and lowercases the
   token (fancy apostrophes are folded to `'`),
@@ -393,11 +398,46 @@ surrounding whitespace and punctuation) and calls
   `["yggdrasil", "Yggdrasil"]`),
 - sorts by descending occurrence count.
 
-The screen heading is `Uncommon words`; its subheading names the normalized
-project language (the `%1` slot in `UNCOMMON_WORDS_DESC` is filled with
-`language_util.normalize_language_code(project.language_code)`). The report
-prints at most the top 25 entries as `<count>  <variant> | <variant>`, or
-`None found`, then waits for ENTER.
+The editor computes the list on first `U` and caches it (the text can't change
+inside the editor).
+
+`UncommonWordsDialog` layout:
+
+```text
+Uncommon words [(first 100 items)]
+Source text words not found in the app's <lang> common words dictionary.
+These may have a higher likelihood of being mispronounced by the TTS
+model.                      ← word-wraps to the dialog width
+- [Q] Preview pronunciation  - [ENTER] Add substitution word
+──────────────────────────────
+<count>  <variant> | <variant>      ← scrollable, highlightable OptionList
+...
+```
+
+`<lang>` is `language_util.normalize_language_code(project.language_code)`
+filling the `%1` slot of `UNCOMMON_WORDS_DESC`. The description wraps, and the
+list's max height subtracts its wrapped line count; the hint line stays one row
+(ellipsized when narrow). Only the `MAX_UNCOMMON_WORDS`
+(100) most frequent entries are listed; when more exist, the title reads
+`Uncommon words (first 100 items)` (suffix dim). With no entries the list is
+replaced by `None found`.
+
+- `Q` previews the highlighted word through the editor's shared preview path
+  (`WordSubstitutionsApp.start_pronunciation_preview`): the `QuickGenModal`
+  opens over the dialog with the prompt `Original word: <word>`, where `<word>`
+  is the first casing seen. A clean result autoplays like the editor's own `Q`
+  preview, and the dialog stays open afterward.
+- `ENTER` (or clicking a row) opens `WordSubstitutionsDialog.for_add(...,
+  original=word)` over the list, prefilled with the word and with focus in the
+  substitution field. A word that already has a staged substitution
+  (case-insensitive) opens that row's edit dialog instead. A commit is staged
+  like any other edit (the editor row is selected and the status bar shows
+  `Added/Updated substitution: <word>`), and the list stays open so several
+  words can be handled in one pass.
+- `ESC` or a backdrop click closes the dialog.
+- While the dialog is on top, other editor keys that would otherwise bubble up are
+  ignored: `X` (delete), `Q` from the editor, `U`, and the priority bindings
+  (`CTRL-F`, `CTRL-A`, via `check_action`).
 
 ---
 
@@ -406,7 +446,7 @@ prints at most the top 25 entries as `<count>  <variant> | <variant>`, or
 `WordSubstitutionsDialog` is a modal with:
 
 ```text
-<Add item | Edit item>          <right-justified, dim: [ENTER] Submit>
+<Add substitution word | Edit item>  <right-justified, dim: [ENTER] Submit>
 <blank line>
 Original word:     [ input ]
 Substitution word: [ input ]
@@ -536,21 +576,21 @@ Behavioral invariants:
    one-character separation even when both are truncated.
 7. Neither a full source-text replacement (`ProjectTextIOUtil.set_phrase_groups_and_save`
    / `set_phrase_groups_chapters_and_save`) nor text-editor edits clear the table.
-8. The uncommon-words inspector is read-only and is offered only for first-class
+8. The uncommon-words list is read-only and is offered only for first-class
    languages when the project has phrase groups.
 
 Relevant tests:
 
 - `tests/text/test_prompt_normalizer.py` — end-to-end matching, capitalization,
   plural/possessive suffixes (including alias language codes such as `en-US`).
-- `tests/ui/test_word_substitutions_app.py` — staged edits and commit/rollback.
+- `tests/ui/test_word_substitutions_app.py` — staged edits and commit/rollback,
+  pronunciation previews, and the uncommon-words list (header gating incl.
+  alias codes, frequency rows, scrolling, `Q` preview prompt, read-only close).
 - `tests/ui/test_word_substitutions_dialog.py` — `normalize_original_key` cases,
   whitespace/punctuation-only errors, stale-error clearing, collision,
   equality-after-normalization, Tab/Enter/Esc behavior.
-- `tests/text/test_text_menu.py` — the edit item's label and count, presence and
-  absence of the uncommon-words inspector (phrase groups, language support,
-  alias codes), the inspector's printed report, and the text-import
-  confirmation.
+- `tests/text/test_text_menu.py` — the Text menu item launching the editor
+  directly, launch/save error reporting, and the text-import confirmation.
 - `tests/project/test_project_book_integration.py` — word substitutions surviving
   text-file/manual and EPUB import.
 - `tests/text/test_language_util.py` — the shared normalizer and the fact that the

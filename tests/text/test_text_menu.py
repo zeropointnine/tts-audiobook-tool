@@ -7,10 +7,9 @@ import tts_audiobook_tool.menus.text_menu as text_menu_module
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.constants import COL_DIM
 from tts_audiobook_tool.constants_hints import HINT_DIALOG_VOICE, HINT_TOLERANCE_FIRST_CLASS
-from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
+from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.menus.text_menu import TextMenu, on_select_import
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
-from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_ops.epub_extractor import EpubImportResult
 from tts_audiobook_tool.text_util import strip_ansi_codes
@@ -613,159 +612,38 @@ def test_text_import_does_not_confirm_when_nothing_to_invalidate(monkeypatch) ->
     assert len(captured["commit_calls"]) == 1
 
 
-def make_substitutions_state(values: dict[str, str]) -> State:
-    project = Project.model_validate({"word_substitutions": values})
-    return cast(State, SimpleNamespace(project=project))
-
-
-def make_phrase_group(words: list[str]) -> SimpleNamespace:
-    return SimpleNamespace(phrases=[SimpleNamespace(words=words)])
-
-
-def word_substitutions_menu_items(monkeypatch, state: State) -> list[MenuItem]:
-    captured: dict = {}
-
-    def fake_menu(*args, **kwargs) -> None:
-        captured.update(kwargs)
-
-    monkeypatch.setattr(text_menu_module.MenuUtil, "menu", fake_menu)
-    TextMenu.word_substitutions_menu(state)
-    items_maker = captured["items"]
-    return items_maker(state)
-
-
-def test_word_substitutions_menu_has_single_edit_item(monkeypatch) -> None:
-    state = make_substitutions_state({})
-
-    items = word_substitutions_menu_items(monkeypatch, state)
-
-    assert len(items) == 1
-    label = strip_ansi_codes(get_string_from(state, items[0].label))
-    assert label == "Edit word substitutions (items: 0)"
-
-
-def test_word_substitutions_menu_label_counts_items(monkeypatch) -> None:
-    state = make_substitutions_state({"Ariekei": "AriaKay", "kilohour": "kilo hour"})
-
-    items = word_substitutions_menu_items(monkeypatch, state)
-
-    label = strip_ansi_codes(get_string_from(state, items[0].label))
-    assert label == "Edit word substitutions (items: 2)"
-
-
-def test_word_substitutions_menu_includes_uncommon_words_inspector(monkeypatch) -> None:
-    state = make_substitutions_state({})
-    state.project.phrase_groups = cast(list, [make_phrase_group(["Ariekei"])])
-
-    items = word_substitutions_menu_items(monkeypatch, state)
-
-    assert len(items) == 2
-    label = strip_ansi_codes(get_string_from(state, items[1].label))
-    assert label == "Inspect project text for uncommon words"
-
-
-def test_word_substitutions_menu_omits_inspector_without_phrase_groups(monkeypatch) -> None:
-    state = make_substitutions_state({})
-
-    items = word_substitutions_menu_items(monkeypatch, state)
-
-    assert len(items) == 1
-
-
-def test_word_substitutions_menu_omits_inspector_for_unsupported_language(monkeypatch) -> None:
-    state = make_substitutions_state({})
-    state.project.phrase_groups = cast(list, [make_phrase_group(["Ariekei"])])
-    state.project.language_code = "zz"
-
-    items = word_substitutions_menu_items(monkeypatch, state)
-
-    assert len(items) == 1
-
-
-@pytest.mark.parametrize("language_code", ["en-US", "EN", "English", "es-419", "spa"])
-def test_word_substitutions_menu_inspector_accepts_first_class_language_aliases(
-    monkeypatch, language_code: str
-) -> None:
-    state = make_substitutions_state({})
-    state.project.phrase_groups = cast(list, [make_phrase_group(["Ariekei"])])
-    state.project.language_code = language_code
-
-    items = word_substitutions_menu_items(monkeypatch, state)
-
-    assert len(items) == 2
-
-
-def test_inspect_uncommon_words_prints_frequency_and_instances(monkeypatch, capsys) -> None:
-    state = make_substitutions_state({})
-    state.project.phrase_groups = cast(list, [make_phrase_group(["Ariekei", "Ariekei"])])
-    headings: list[dict] = []
+def test_text_menu_word_substitutions_item_launches_editor_directly(monkeypatch) -> None:
+    # Selecting "Word substitutions" runs the editor with no intermediate
+    # submenu, and the Text menu stays open afterward (handler is falsy).
+    state = cast(State, SimpleNamespace(project=SimpleNamespace(
+        phrase_groups=[object()],
+        book=SimpleNamespace(text_source_kind="plain_text"),
+        dir_path="",
+        word_substitutions={},
+    )))
+    captured_items: list[MenuItem] = []
     monkeypatch.setattr(
         text_menu_module.MenuUtil,
-        "print_screen_heading",
-        lambda *a, **k: headings.append({"args": a, "kwargs": k}),
+        "menu",
+        lambda state, heading, items, **kwargs: captured_items.extend(items(state)),
     )
-    monkeypatch.setattr(text_menu_module, "printt", lambda *a, **k: None)
-    monkeypatch.setattr(text_menu_module.ask, "ask_enter_to_continue", lambda *a, **k: None)
+    launched: list[object] = []
+    monkeypatch.setattr(text_menu_module, "WordSubstitutionsApp", lambda s: s)
     monkeypatch.setattr(
-        text_menu_module.app_text,
-        "get_uncommon_words",
-        lambda words: [("ariekai", 2, ["Ariekei", "ariekai"])],
+        text_menu_module,
+        "run_content_textual_app",
+        lambda app: launched.append(app) or ContentAppCompleted(EditorSaved()),
     )
 
-    items = word_substitutions_menu_items(monkeypatch, state)
-    items[1].handler(state, items[1])
+    TextMenu.menu(state)
+    item = captured_items[-1]
+    assert item.label is text_menu_module.make_subst_label
 
-    printed = strip_ansi_codes(capsys.readouterr().out).strip()
-    assert printed == "2  Ariekei | ariekai"
-    assert headings[0]["args"][1] == "Uncommon words"
-    subheading = headings[0]["kwargs"]["subheading"]
-    assert "%1" not in subheading
-    assert "en" in subheading
+    assert not item.handler(state, item)
+    assert launched == [state]
 
 
-def test_inspect_uncommon_words_subheading_uses_normalized_language(monkeypatch) -> None:
-    state = make_substitutions_state({})
-    state.project.phrase_groups = cast(list, [make_phrase_group(["Ariekei"])])
-    state.project.language_code = "en-US"
-    headings: list[dict] = []
-    monkeypatch.setattr(
-        text_menu_module.MenuUtil,
-        "print_screen_heading",
-        lambda *a, **k: headings.append({"args": a, "kwargs": k}),
-    )
-    monkeypatch.setattr(text_menu_module, "printt", lambda *a, **k: None)
-    monkeypatch.setattr(text_menu_module.ask, "ask_enter_to_continue", lambda *a, **k: None)
-    monkeypatch.setattr(text_menu_module.app_text, "get_uncommon_words", lambda words: [])
-
-    items = word_substitutions_menu_items(monkeypatch, state)
-    items[1].handler(state, items[1])
-
-    subheading = headings[0]["kwargs"]["subheading"]
-    assert "en-US" not in subheading
-    assert "en" in subheading
-
-
-def test_inspect_uncommon_words_reports_none_found(monkeypatch, capsys) -> None:
-    state = make_substitutions_state({})
-    state.project.phrase_groups = cast(list, [make_phrase_group(["the"])])
-    heading_calls: list[str] = []
-    monkeypatch.setattr(
-        text_menu_module.MenuUtil,
-        "print_screen_heading",
-        lambda *a, **k: heading_calls.append(a[1] if len(a) > 1 else ""),
-    )
-    monkeypatch.setattr(text_menu_module, "printt", lambda *a, **k: print(*a, **k))
-    monkeypatch.setattr(text_menu_module.ask, "ask_enter_to_continue", lambda *a, **k: None)
-    monkeypatch.setattr(text_menu_module.app_text, "get_uncommon_words", lambda words: [])
-
-    items = word_substitutions_menu_items(monkeypatch, state)
-    items[1].handler(state, items[1])
-
-    assert heading_calls == ["Uncommon words"]
-    assert "None found" in strip_ansi_codes(capsys.readouterr().out)
-
-
-def test_edit_word_substitutions_returns_true_on_saved(monkeypatch) -> None:
+def test_edit_word_substitutions_reports_nothing_on_saved(monkeypatch) -> None:
     errors: list[str] = []
     monkeypatch.setattr(
         text_menu_module, "WordSubstitutionsApp", lambda *_args, **_kwargs: object()
@@ -777,7 +655,7 @@ def test_edit_word_substitutions_returns_true_on_saved(monkeypatch) -> None:
     )
     monkeypatch.setattr(text_menu_module.ask, "ask_error", errors.append)
 
-    assert TextMenu.edit_word_substitutions(make_state()) is True
+    TextMenu.edit_word_substitutions(make_state())
     assert errors == []
 
 

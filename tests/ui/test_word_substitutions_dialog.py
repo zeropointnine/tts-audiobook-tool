@@ -23,7 +23,7 @@ def test_add_dialog_is_blank_and_edit_dialog_is_prefilled() -> None:
         async with app.run_test() as pilot:
             app.push_screen(WordSubstitutionsDialog.for_add(["Existing"]))
             await pilot.pause()
-            assert screen_text(app.screen, "word-substitutions-title") == "Add item"
+            assert screen_text(app.screen, "word-substitutions-title") == "Add substitution word"
             assert app.screen.query_one("#original-input", Input).value == ""
             assert app.screen.query_one("#replacement-input", Input).value == ""
             assert screen_text(app.screen, "word-substitutions-error") == ""

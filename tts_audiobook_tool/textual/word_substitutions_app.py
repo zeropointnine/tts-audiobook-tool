@@ -11,10 +11,11 @@ from textual.widgets import OptionList, Rule, Static
 from textual.timer import Timer
 
 from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentTextualApp,
     EditorSaveFailed,
@@ -26,6 +27,11 @@ from tts_audiobook_tool.textual.quick_gen_modal import (
     make_preview_job,
 )
 from tts_audiobook_tool.textual.textual_shared import STYLE_DIM, STYLE_HIGHLIGHT
+from tts_audiobook_tool.textual.uncommon_words_dialog import (
+    UncommonWordItem,
+    UncommonWordsDialog,
+    collect_uncommon_words,
+)
 from tts_audiobook_tool.textual.word_substitutions_dialog import (
     WordSubstitutionEdit,
     WordSubstitutionsDialog,
@@ -33,7 +39,11 @@ from tts_audiobook_tool.textual.word_substitutions_dialog import (
 from tts_audiobook_tool.util import make_error_string
 
 NO_ITEMS_LABEL = "No items currently"
-ADD_ITEM_LABEL = "Add item"
+ADD_ITEM_LABEL = "Add substitution word"
+# Kept within 80 cells: header lines don't wrap.
+HEADER_DESCRIPTION = (
+    "Word swaps applied before TTS, for fixing mispronounced names and unusual words"
+)
 
 
 def make_word_substitution_preview_prompt(
@@ -41,6 +51,11 @@ def make_word_substitution_preview_prompt(
 ) -> str:
     """Build the literal diagnostic prompt spoken by the preview action."""
     return f"Original word: {original}. Substitute word: {substitution}"
+
+
+def make_uncommon_word_preview_prompt(word: str) -> str:
+    """Build the literal diagnostic prompt for an uncommon-words list entry."""
+    return f"Original word: {word}"
 
 
 @dataclass(frozen=True)
@@ -54,7 +69,7 @@ class WordSubstitutionItem:
 
 @dataclass(frozen=True)
 class WordSubstitutionSentinel:
-    """A non-editable row such as "No items currently" or "Add item"."""
+    """A non-editable row such as "No items currently" or "Add substitution word"."""
 
     label: str
     is_add: bool
@@ -115,11 +130,15 @@ class WordSubstitutionTableRow:
         original: str,
         substitution: str,
         style: str = "",
+        *,
+        span: bool = False,
     ) -> None:
         self.ordinal = ordinal
         self.original = original
         self.substitution = substitution
         self.style = style
+        # Let `original` run across both word columns (sentinel labels).
+        self.span = span
 
     def render_line(self, width: int) -> Text:
         """Lay out the ordinal, original, and substitution columns.
@@ -140,9 +159,20 @@ class WordSubstitutionTableRow:
         else:
             text.append(ordinal_cell)
         text.append(" " * self.ORDINAL_GAP)
-        text.append(fit_cell(self.original, original_width, ellipsis=True))
-        text.append(" " * self.COLUMN_GAP)
-        text.append(fit_cell(self.substitution, substitution_width, ellipsis=True))
+        if self.span:
+            text.append(
+                fit_cell(
+                    self.original,
+                    original_width + self.COLUMN_GAP + substitution_width,
+                    ellipsis=True,
+                )
+            )
+        else:
+            text.append(fit_cell(self.original, original_width, ellipsis=True))
+            text.append(" " * self.COLUMN_GAP)
+            text.append(
+                fit_cell(self.substitution, substitution_width, ellipsis=True)
+            )
         if text.cell_len > width:
             text.truncate(width, overflow="crop")
         if self.style:
@@ -183,6 +213,7 @@ class WordSubstitutionsApp(ContentTextualApp[WordSubstitutionsResult]):
         *ContentTextualApp.BINDINGS,
         Binding("q", "quick_preview", show=False),
         Binding("x", "delete_item", show=False),
+        Binding("u", "show_uncommon_words", show=False),
     ]
 
     def __init__(self, state: State) -> None:
@@ -193,14 +224,27 @@ class WordSubstitutionsApp(ContentTextualApp[WordSubstitutionsResult]):
         self.list_items: list[WordSubstitutionListItem] = self.make_list_items()
         self.preview_sound_id = ""
         self.preview_status_timer: Timer | None = None
+        # Only first-class languages (with a common-words dictionary) have
+        # anything to inspect; supports_language handles code normalization.
+        self.uncommon_words_available = Whitelist.supports_language(
+            project.language_code
+        ) and bool(project.phrase_groups)
+        # Computed on first use; the project text can't change in this editor.
+        self.uncommon_words: list[UncommonWordItem] | None = None
+        uncommon_hint = (
+            f"[{COL_ACCENT}U{COL_DIM}] Uncommon words list  - "
+            if self.uncommon_words_available
+            else ""
+        )
         header_lines = [
             f"{COL_ACCENT}Edit word substitutions",
+            f"{COL_DEFAULT}{HEADER_DESCRIPTION}",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]"
             f"  - [CTRL-F] Find text",
             f"{COL_DIM}- [{COL_ACCENT}ENTER{COL_DIM}] Edit or add item"
             f"  - [{COL_ACCENT}Q{COL_DIM}] Preview pronunciation"
-            f"  - [{COL_ACCENT}X{COL_DIM}] Delete item"
-            f"  - [{COL_ACCENT}ESC{COL_DIM}] Finish",
+            f"  - [{COL_ACCENT}X{COL_DIM}] Delete item",
+            f"{COL_DIM}- {uncommon_hint}[{COL_ACCENT}ESC{COL_DIM}] Finish",
         ]
         super().__init__(
             project,
@@ -258,7 +302,7 @@ class WordSubstitutionsApp(ContentTextualApp[WordSubstitutionsResult]):
         if isinstance(item, WordSubstitutionSentinel):
             sentinel_style = STYLE_HIGHLIGHT if item.is_add else STYLE_DIM
             return WordSubstitutionTableRow(
-                "", item.label, "", style=find_style or sentinel_style
+                "", item.label, "", style=find_style or sentinel_style, span=True
             )
         return WordSubstitutionTableRow(
             str(item.ordinal),
@@ -317,15 +361,84 @@ class WordSubstitutionsApp(ContentTextualApp[WordSubstitutionsResult]):
         item = self.list_items[self.phrase_indices[self.selected_index]]
         if not isinstance(item, WordSubstitutionItem):
             return
-        job = make_preview_job(
-            self.state,
-            f"Preview pronunciation - {item.original}",
+        self.start_pronunciation_preview(
+            item.original,
             make_word_substitution_preview_prompt(item.original, item.substitution),
         )
+
+    def start_pronunciation_preview(self, word: str, prompt: str) -> None:
+        """Open the preview modal over the current screen for one prompt."""
+        if self.modal_session_active:
+            return
+        job = make_preview_job(self.state, f"Preview pronunciation - {word}", prompt)
         self.modal_session_active = True
         self.push_screen(
             QuickGenModal(self.state, job),
-            lambda result: self.handle_preview_result(result, item.original),
+            lambda result: self.handle_preview_result(result, word),
+        )
+
+    def check_action(
+        self, action: str, parameters: tuple[object, ...]
+    ) -> bool | None:
+        """Keep the editor's priority bindings (find, ...) out of the word list."""
+        if (
+            isinstance(self.screen, UncommonWordsDialog)
+            and action in self._PRIORITY_EDITOR_ACTIONS
+        ):
+            return False
+        return super().check_action(action, parameters)
+
+    def action_show_uncommon_words(self) -> None:
+        """Show the project's uncommon words, sorted by frequency."""
+        if not self.uncommon_words_available or self.find_active:
+            return
+        if len(self.screen_stack) > 1 or self.modal_session_active:
+            return
+        if self.uncommon_words is None:
+            self.uncommon_words = collect_uncommon_words(self.project)
+        self.push_screen(
+            UncommonWordsDialog(
+                self.uncommon_words,
+                self.project.language_code,
+                self.preview_uncommon_word,
+                self.add_uncommon_word,
+            )
+        )
+
+    def add_uncommon_word(self, word: str) -> None:
+        """Open the add dialog prefilled with an uncommon word.
+
+        A word that already has a substitution (case-insensitively) opens that
+        row's edit dialog instead. The uncommon-words list stays open beneath.
+        """
+        if self.modal_session_active:
+            return
+        existing_keys = list(self.staged.keys())
+        existing = next(
+            (key for key in existing_keys if key.casefold() == word.casefold()),
+            None,
+        )
+        if existing is None:
+            dialog = WordSubstitutionsDialog.for_add(existing_keys, original=word)
+        else:
+            dialog = WordSubstitutionsDialog.for_edit(
+                existing, self.staged[existing], existing_keys
+            )
+        self.push_screen(dialog, self.handle_uncommon_word_result)
+
+    def handle_uncommon_word_result(
+        self, result: WordSubstitutionEdit | None
+    ) -> None:
+        """Stage an edit made from the uncommon-words list and confirm it."""
+        if result is None:
+            return
+        self.handle_dialog_result(result)
+        verb = "Added" if result.previous_original is None else "Updated"
+        self.show_status_toast(left=f"{verb} substitution: {result.original}")
+
+    def preview_uncommon_word(self, word: str) -> None:
+        self.start_pronunciation_preview(
+            word, make_uncommon_word_preview_prompt(word)
         )
 
     def handle_preview_result(
@@ -391,6 +504,10 @@ class WordSubstitutionsApp(ContentTextualApp[WordSubstitutionsResult]):
     def action_delete_item(self) -> None:
         """Delete the highlighted substitution; sentinel rows are not deletable."""
         if self.find_active or self.selected_index is None:
+            return
+        # Unhandled keys bubble up from a modal screen (eg the uncommon-words
+        # list) to the app's bindings.
+        if len(self.screen_stack) > 1:
             return
         item = self.list_items[self.phrase_indices[self.selected_index]]
         if not isinstance(item, WordSubstitutionItem):

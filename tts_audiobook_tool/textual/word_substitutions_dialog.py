@@ -12,7 +12,7 @@ from textual.widgets import Input, Static
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM, COL_ERROR
 
-ADD_TITLE = "Add item"
+ADD_TITLE = "Add substitution word"
 EDIT_TITLE = "Edit item"
 ALREADY_EXISTS_MESSAGE = "Already exists"
 WHITESPACE_MESSAGE = "Original word can't contain spaces"
@@ -131,9 +131,11 @@ class WordSubstitutionsDialog(ModalScreen[WordSubstitutionEdit | None]):
         }
 
     @classmethod
-    def for_add(cls, existing_keys: Iterable[str]) -> "WordSubstitutionsDialog":
-        """Build a blank dialog for appending a new substitution."""
-        return cls(ADD_TITLE, "", "", existing_keys)
+    def for_add(
+        cls, existing_keys: Iterable[str], original: str = ""
+    ) -> "WordSubstitutionsDialog":
+        """Build a dialog for appending a new substitution, optionally prefilled."""
+        return cls(ADD_TITLE, original, "", existing_keys)
 
     @classmethod
     def for_edit(
@@ -190,6 +192,12 @@ class WordSubstitutionsDialog(ModalScreen[WordSubstitutionEdit | None]):
             Static("", id="word-substitutions-error", markup=False),
             id="word-substitutions-dialog",
         )
+
+    def on_mount(self) -> None:
+        # A prefilled add (eg from the uncommon-words list) only needs its
+        # substitution typed. Focusing here pre-empts AUTO_FOCUS.
+        if self.original and not self.substitution:
+            self.query_one("#replacement-input", Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id not in ("original-input", "replacement-input"):
