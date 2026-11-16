@@ -153,6 +153,11 @@ class Tts:
         # segment file names or the concat output's voice summary.
         voice_value = voice.file_name if voice is not None else ""
         if not voice_value:
+            # A named sample-less voice (eg one driven by instructions) is
+            # tagged by its name, keeping distinct sample-less voices distinct
+            # rather than collapsing them into the model's no-sample tag.
+            if voice is not None and voice.name.strip():
+                return ProjectVoiceUtil.make_voice_tag(voice.name.strip())
             if ProjectVoiceUtil.has_any_voice_sample(project):
                 # A sample-less voice among sampled ones generates with the
                 # model's built-in voice: tag it as the model would with no

@@ -524,8 +524,7 @@ class TtsBaseModel(ABC):
     @classmethod
     def get_voice_tag_for_preset(cls, preset: str) -> str:
         """Sound segment filename "voice tag" for a voice that uses a preset."""
-        from tts_audiobook_tool.app_support import app_text
-        return app_text.sanitize_for_filename(preset)[:30]
+        return ProjectVoiceUtil.make_voice_tag(preset)
 
     @classmethod
     def can_voice_clone(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:

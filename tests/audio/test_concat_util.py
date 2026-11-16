@@ -388,15 +388,17 @@ class TestVoiceTagSummary:
         assert SoundSegmentUtil.get_voice_tag_summary(paths) == ("", 0)
 
     def test_none_placeholder_does_not_compete_with_real_voices(self) -> None:
+        # "none" outnumbers every real voice yet is never the top tag; it still
+        # counts toward "+n" as an audibly different voice
         paths = [self._seg_filename(i, "none") for i in range(3)]
         paths += [self._seg_filename(i, "belle_concerned") for i in range(3, 5)]
         paths.append(self._seg_filename(5, "other_voice"))
-        assert SoundSegmentUtil.get_voice_tag_summary(paths) == ("belle_concerned", 1)
+        assert SoundSegmentUtil.get_voice_tag_summary(paths) == ("belle_concerned", 2)
 
     def test_real_voice_dominating_over_none(self) -> None:
         paths = [self._seg_filename(0, "none")]
         paths += [self._seg_filename(i, "belle_concerned") for i in range(1, 4)]
-        assert SoundSegmentUtil.get_voice_tag_summary(paths) == ("belle_concerned", 0)
+        assert SoundSegmentUtil.get_voice_tag_summary(paths) == ("belle_concerned", 1)
 
     def test_only_none_reports_none(self) -> None:
         paths = [self._seg_filename(i, "none") for i in range(2)]
@@ -455,7 +457,8 @@ class TestVoiceTagSummary:
                 num_chapters=1,
             )
 
-        assert "[belle_concerned +1]" in stem
+        # "none" counts toward "+n" (other_voice + none) but is not named
+        assert "[belle_concerned +2]" in stem
         assert "none" not in stem
 
     def test_make_stem_all_none_segments_show_none_tag(self) -> None:

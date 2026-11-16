@@ -184,10 +184,11 @@ class SoundSegmentUtil:
 
         Returns (most_common_voice_tag, num_other_distinct_tags).
         Unparsable or voiceless segments are ignored. The "none" placeholder
-        (segment generated without a voice clone) does not compete with real
-        voice tags: if at least one real voice tag is present, only those are
-        ranked; "none" is reported (extra count 0) only when it is the only
-        voice tag present. If no voice tags exist, returns ("", 0).
+        (segment generated without a voice clone) never competes for the top
+        spot against real voice tags, but it does count as one of the other
+        distinct tags when real ones are present. It is reported (extra count
+        0) only when it is the only voice tag present. If no voice tags exist,
+        returns ("", 0).
         Ties in count are broken alphabetically (first tag wins), keeping
         the result deterministic.
         """
@@ -204,7 +205,7 @@ class SoundSegmentUtil:
 
         if counts:
             top_tag = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
-            return top_tag, len(counts) - 1
+            return top_tag, len(counts) - 1 + (1 if has_none else 0)
 
         if has_none:
             return NONE_VOICE_TAG, 0

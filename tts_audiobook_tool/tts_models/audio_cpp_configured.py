@@ -249,8 +249,7 @@ class AudioCppModelSupport:
         return self.behavior.requires_voice_preset(values)
 
     def get_voice_tag_for_preset(self, preset: str) -> str:
-        from tts_audiobook_tool.app_support import app_text
-        return app_text.sanitize_for_filename(preset)[:30]
+        return ProjectVoiceUtil.make_voice_tag(preset)
 
 
 class AudioCppBackendAdapter:

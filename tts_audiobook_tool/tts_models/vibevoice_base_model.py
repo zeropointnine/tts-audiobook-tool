@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 
 from tts_audiobook_tool.app_types import ReadinessIssue
-from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.local_definition import require_local_definition
@@ -73,8 +72,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
         def get_lora_value() -> str:
             value = Path(project.get_model_setting('vibevoice_local', 'lora_target')).stem
-            value = app_text.sanitize_for_filename(value[:30])
-            return value
+            return ProjectVoiceUtil.make_voice_tag(value)
 
         match (bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("vibevoice_local"))), bool(project.get_model_setting('vibevoice_local', 'lora_target'))):
             case (False, False):

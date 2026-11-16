@@ -22,6 +22,11 @@ if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 
 
+# Sound segment file name voice tag length limit (see make_voice_tag)
+VOICE_TAG_MAX_LEN = 30
+VOICE_TAG_HASH_LEN = 5
+
+
 def _settings_registry():
     # ModelSettings registers Chatterbox's enum on import. Import lazily here
     # so the Chatterbox base class can import this module during its startup.
@@ -336,7 +341,33 @@ class ProjectVoiceUtil:
         if voice_file_name.endswith(postfix_decorator):
             voice_file_name = voice_file_name[:-len(postfix_decorator)]
 
-        return app_text.sanitize_for_filename(voice_file_name[:30])
+        return ProjectVoiceUtil.make_voice_tag(voice_file_name)
+
+    @staticmethod
+    def make_voice_tag(value: str) -> str:
+        """
+        Sound segment file name "voice tag" for a voice identifier
+        (sample file stem, preset id, voice name, LoRA name, ...).
+
+        Accented characters are folded to ASCII before the app's file name
+        sanitizing. A result longer than VOICE_TAG_MAX_LEN is truncated and
+        suffixed with a short hash of the full value, so long names sharing a
+        prefix stay distinct. A value with nothing left after sanitizing
+        (eg non-Latin script) gets a hash-only tag rather than an empty one,
+        which would break parsing of the segment file name's tags.
+        """
+        import unicodedata
+        from tts_audiobook_tool.app_support import app_hashing
+
+        folded = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+        tag = app_text.sanitize_for_filename(folded)
+        if tag and len(tag) <= VOICE_TAG_MAX_LEN:
+            return tag
+        hash_part = app_hashing.calc_hash_string(value)[:VOICE_TAG_HASH_LEN]
+        if not tag:
+            return f"v_{hash_part}"
+        prefix_len = VOICE_TAG_MAX_LEN - VOICE_TAG_HASH_LEN - 1
+        return tag[:prefix_len].rstrip("_") + "_" + hash_part
 
     @staticmethod
     def current_voice_reference_pair(

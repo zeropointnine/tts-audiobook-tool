@@ -256,6 +256,18 @@ def test_voice_tag_of_sample_less_voice_among_sampled_ones_is_not_the_primary(mo
     assert project.voice_references == [Voice("suzie.flac", "t"), Voice()]
 
 
+@pytest.mark.parametrize("voices, expected", [
+    ([Voice(name="Old Bob"), Voice(name="Narrator")], ["Old_Bob", "Narrator"]),
+    ([Voice("suzie.flac", "t", name="Suzie"), Voice(name="Old Bob")], ["suzie", "Old_Bob"]),
+])
+def test_named_sample_less_voice_is_tagged_by_its_name(voices, expected):
+    # Distinct sample-less voices would otherwise all collapse into the model's
+    # no-sample tag ("none"); a sampled voice keeps its sample-name tag
+    project = Project(tts_model_type="dots_local", voice_references=voices)
+    tags = [Tts.get_voice_tag_for_selection_index(project, i) for i in range(len(voices))]
+    assert tags == expected
+
+
 def test_voice_tag_names_the_entry_not_its_active_crop(tmp_path):
     # Generation uses the crop's audio, but the tag stays the entry's sample
     # name so a crop does not read as a second voice in file names
