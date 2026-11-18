@@ -153,12 +153,45 @@ It is intentionally more deliberate than raw `BeautifulSoup.get_text()`:
 - renders `<hr>` as a scene-break-like `* * *`,
 - keeps list items readable,
 - coalesces ordinary block boundaries, so nesting a paragraph inside layout containers does not manufacture a scene break,
-- preserves empty/spacer blocks (including image-only ornaments) as extra spacing, explicit `<br>` runs, and `<hr>` ornaments; CSS-only visual spacing is not interpreted,
+- preserves empty/spacer blocks (including image-only ornaments) as extra spacing, explicit `<br>` runs, and `<hr>` ornaments; CSS spacing is never measured, but a scene-break class name confirmed by space above becomes a space break (see [CSS-Only Scene Breaks](#css-only-scene-breaks-class-name-matching)),
 - normalizes whitespace and blank lines,
 - retains source-position information needed for fragment-aware slices,
 - warns when no readable body text is found.
 
 The plain text it produces carries no visual formatting. Headings (`h1`–`h6`), bold, italics and underline (semantic tags, stylesheet rules and inline `style` attributes) are captured alongside it as styled text and attached to the segmented phrases as the optional, display-only `Phrase.fmt`; see [Display Formatting Layer](text-formatting-layer.md). CSS layout, other stylesheet properties, inline links, images and footnote structure are not preserved. The source-of-truth text model remains plain text segmented into phrase groups.
+
+### CSS-Only Scene Breaks (Class-Name Matching)
+
+Some EPUBs mark a scene break only through styling on an otherwise ordinary paragraph, for example:
+
+```html
+<p>Menou's mission would be over soon.</p>
+<p class="space-break1">Meanwhile, Momo had made her way into the sewage system…</p>
+```
+```css
+p             { margin-top: 0; margin-bottom: 0; text-indent: 20pt; }
+.space-break1 { margin-top: 1.5em; }
+```
+
+A reading system renders the extra margin as a visible gap. EPUB has no standard scene-break element other than `<hr>`, so the only semantic signal is the class name chosen by the publisher.
+
+**Design decision: semantic class names only; spacing is never measured.** Inferring breaks from margin sizes was rejected. Deciding whether an extra gap is a scene break or just loose layout needs a threshold against some per-book baseline, and which blocks qualify is a judgment call. A wrong guess silently changes segmentation (break reasons, pauses, page-turn sounds) in ways that are hard to notice.
+
+Instead, `BeautifulSoupEpubChapterTextExtractor.starts_after_scene_break` adds the explicit `\n\n\n` boundary (which segmentation turns into `Reason.SPACE_BREAK`) before a `<p>` or `<div>` only when all of these hold:
+
+1. **Name.** One of the element's own classes (not an ancestor's), lowercased with `-`, `_` and whitespace removed, contains `spacebreak`, `scenebreak`, `sectionbreak`, `secbreak`, `sectbreak` or `textbreak`, or is entirely `sb` plus digits (`SB1`, `sb3`). A bare `space`, `break` or `transition` does not qualify: `copyright-space`, `text-standard-space-before`, `nospaceabove`, `pagebreak`/`mbp_pagebreak`/`softbreak` (empty Kindle/Calibre artifacts) and `transition*` are all used for other purposes.
+2. **Space above.** The element's resolved CSS (stylesheet rules plus inline `style`) gives it a positive `margin-top` or `padding-top`, shorthands included. This is a yes/no test with no threshold. It guards against names that do not mean what they say: *Slow Gods* uses `.space-break3`–`.space-break10` for verse indents and `.space-break2` with `margin-top: 0`. A document without stylesheets therefore never matches.
+3. **Prose.** The element has vocalizable text. A classed ornament paragraph (`x04-Space-Break-Orn`, `* * *`) is left to ordinary ornament handling, which already yields a space break.
+4. **Not first.** Readable text precedes it in the same document.
+
+The fragment list comes from a survey of 127 distinct EPUBs, covering Yen Press `space-break*`, PRH `x04-Space-Break-FL`, Macmillan/Tor `SB1`, J-Novel `section-break` and *The Traitor Baru Cormorant*'s `textbreak*`. Generated class names such as `calibre7` are deliberately not handled.
+
+Accepted side effects:
+
+- Front and back matter sometimes use these classes for visual grouping (credits, afterword acknowledgments). Those get breaks too; they are real visual gaps, so a pause is harmless.
+- A match directly after an existing break (an `<hr>`, ornament, heading or spacer) adds nothing, because `ensure_block_boundary` only tops spacing up to three line breaks.
+
+Breaks are decided at import time, so existing projects need re-importing to pick them up.
 
 ---
 

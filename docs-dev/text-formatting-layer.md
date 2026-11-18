@@ -105,7 +105,9 @@ Many EPUBs format emphasis only through CSS classes — eg, Calibre conversions'
 `<span class="italic">`, publisher classes such as `span.ePub-I`, or meaningless
 generated names like `.class4754`. `text_ops/epub_css.py` supports exactly what the
 formatting layer needs. CSS only changes which characters are styled, never the
-extracted text, so it cannot affect segmentation, TTS text or audio identity.
+extracted words, so it cannot affect TTS text or audio identity. The one narrow
+exception concerns whitespace: a top margin can confirm a scene-break class name,
+which adds a space break (see [CSS-Only Scene Breaks](epub-import-flow.md#css-only-scene-breaks-class-name-matching)).
 
 **Loading.** At load time `EpubExtractor.load_stylesheets` collects the book's
 `text/css` resources by package path. For each spine document,
@@ -117,7 +119,9 @@ Paths resolve relative to the referencing document or stylesheet; external URLs,
 `alternate` stylesheets and missing files are skipped.
 
 **Declarations.** Only `font-style`, `font-weight`, `text-decoration`,
-`text-decoration-line` and the `font` shorthand are read. Everything else is ignored.
+`text-decoration-line` and the `font` shorthand are read for formatting, plus
+`margin-top`/`padding-top` (and their shorthands) for the scene-break check.
+Everything else is ignored.
 
 **Rules** (settled once; not adjudicated per book):
 

@@ -227,3 +227,106 @@ def test_unknown_or_missing_stylesheets_degrade_to_no_styles() -> None:
     refs = (StylesheetRef(False, "missing.css", None, "t.xhtml"),)
     assert EpubStylesheets({}).resolver_for(refs) is None
     assert epub_css.parse_stylesheet("}}} .a { font-style: italic ") == []
+
+
+# --- CSS-only scene breaks (class-name matching; see docs-dev/epub-import-flow.md)
+
+
+def test_parse_declarations_reads_top_spacing_including_shorthands() -> None:
+    # Only the top side matters; a later shorthand overrides an earlier longhand.
+    assert parse_declarations("margin: 1em 0 0.5em") == {"margin-top": "1em"}
+    assert parse_declarations("margin-top: 2em; margin: 0 auto") == {"margin-top": "0"}
+    assert parse_declarations("padding-top: 3px") == {"padding-top": "3px"}
+
+
+@pytest.mark.parametrize("declarations, expected", [
+    ({"margin-top": "1.5em"}, True),
+    ({"margin-top": "22.5px"}, True),
+    ({"padding-top": "0.2em"}, True),
+    ({"margin-top": "0em"}, False),
+    ({"margin-top": "0"}, False),
+    ({"margin-top": "-1em"}, False),
+    ({"margin-top": "auto"}, False),
+    ({"margin-top": "inherit"}, False),
+    ({}, False),
+])
+def test_has_space_above_is_a_crisp_positive_length_test(declarations, expected) -> None:
+    assert epub_css.has_space_above(declarations) is expected
+
+
+@pytest.mark.parametrize("class_name, expected", [
+    # Names observed in publisher markup
+    ("space-break", True),
+    ("space-break1", True),
+    ("space-break-1", True),
+    ("x04-Space-Break-FL", True),
+    ("section-break", True),
+    ("section_break", True),
+    ("scenebreak", True),
+    ("secbreak", True),
+    ("textbreak3", True),
+    ("SB1", True),
+    ("sb3", True),
+    # Decoys: a bare "space"/"break"/"transition", or negated and Kindle names
+    ("copyright-space", False),
+    ("text-standard-space-before--tx", False),
+    ("nospaceabove", False),
+    ("pagebreak", False),
+    ("mbp_pagebreak", False),
+    ("softbreak", False),
+    ("transition", False),
+    ("sborn", False),
+    ("sb-std", False),
+])
+def test_is_scene_break_class(class_name, expected) -> None:
+    assert BeautifulSoupEpubChapterTextExtractor.is_scene_break_class(class_name) is expected
+
+
+def extract(html: str, css: str | None) -> str:
+    chapter = EpubSourceChapter(
+        "T", "t.xhtml", "application/xhtml+xml", html, css=resolver(css) if css is not None else None
+    )
+    return BeautifulSoupEpubChapterTextExtractor().extract_text(chapter).text
+
+
+SCENE_BREAK_CSS = """
+p { margin-top: 0; margin-bottom: 0; text-indent: 20pt; }
+.space-break1 { margin-top: 1.5em; }
+.space-break4 { margin-left: 7%; }
+.copyright-space { margin-top: 1em; }
+.x04-Space-Break-Orn { margin: 1em 0; text-align: center; }
+"""
+
+
+def test_scene_break_class_with_space_above_becomes_space_break() -> None:
+    # The motivating case: the break exists only as a classed paragraph's top margin.
+    html = '<body><p>Before.</p><p class="space-break1">After.</p></body>'
+    assert extract(html, SCENE_BREAK_CSS) == "Before.\n\n\nAfter."
+    # An inline style can supply the space too
+    html = '<body><p>Before.</p><p class="scene-break" style="margin-top: 2em">After.</p></body>'
+    assert extract(html, SCENE_BREAK_CSS) == "Before.\n\n\nAfter."
+
+
+@pytest.mark.parametrize("html", [
+    # A matching name without space above (eg, Slow Gods' verse indents)
+    '<body><p>Before.</p><p class="space-break4">After.</p></body>',
+    # A non-matching name with space above
+    '<body><p>Before.</p><p class="copyright-space">After.</p></body>',
+    # First text in the document: nothing to break from
+    '<body><p class="space-break1">After.</p></body>',
+])
+def test_scene_break_class_requires_name_space_and_preceding_text(html) -> None:
+    assert "\n\n\n" not in extract(html, SCENE_BREAK_CSS)
+
+
+def test_scene_break_class_needs_a_stylesheet_to_confirm_it() -> None:
+    # Without CSS the space-above check cannot pass, so the name alone does nothing.
+    html = '<body><p>Before.</p><p class="space-break1">After.</p></body>'
+    assert extract(html, None) == "Before.\n\nAfter."
+
+
+def test_scene_break_class_on_ornament_is_left_to_ornament_handling() -> None:
+    # The ornament paragraph itself is not vocalizable, so it gets no extra break;
+    # segmentation already treats a lone ornament line as a space break.
+    html = '<body><p>Before.</p><p class="x04-Space-Break-Orn">* * *</p><p>After.</p></body>'
+    assert extract(html, SCENE_BREAK_CSS) == "Before.\n\n* * *\n\nAfter."

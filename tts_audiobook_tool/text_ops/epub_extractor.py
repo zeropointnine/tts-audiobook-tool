@@ -25,6 +25,21 @@ from tts_audiobook_tool.text_ops.format_attach import attach_formatting_to_group
 from tts_audiobook_tool.text_ops.text_format import StyledText
 
 
+# Name fragments of classes that mark a CSS-only scene break, matched against
+# lowercased class names with `-`, `_` and whitespace removed. Chosen from a
+# survey of publisher markup; see docs-dev/epub-import-flow.md.
+SCENE_BREAK_CLASS_FRAGMENTS = (
+    "spacebreak",
+    "scenebreak",
+    "sectionbreak",
+    "secbreak",
+    "sectbreak",
+    "textbreak",
+)
+# Whole class names such as `SB1` or `sb3` (Macmillan/Tor "space break")
+SCENE_BREAK_SB_CLASS_RE = re.compile(r"sb\d*")
+
+
 @dataclass(frozen=True)
 class EpubNavigationTarget:
     title: str
@@ -341,6 +356,8 @@ class BeautifulSoupEpubChapterTextExtractor:
         is_block = name in self.BLOCK_TAGS
         if is_block:
             self.ensure_block_boundary(pieces)
+            if self.starts_after_scene_break(node, pieces, css):
+                self.ensure_block_boundary(pieces, line_breaks=3)
         if name == "li":
             pieces.append("- ")
         content_start = len(pieces)
@@ -379,26 +396,67 @@ class BeautifulSoupEpubChapterTextExtractor:
             is_spacer = not any(piece.strip() for piece in pieces[content_start:])
             self.ensure_block_boundary(pieces, line_breaks=3 if is_spacer else 2)
 
-    @staticmethod
-    def get_node_style(node: Any, inherited_style: int, css: EpubCssResolver | None = None) -> int:
+    @classmethod
+    def get_node_style(cls, node: Any, inherited_style: int, css: EpubCssResolver | None = None) -> int:
         """
         Display-style mask of an element, given the mask of its ancestors:
         tag defaults, then stylesheet rules, then its inline `style` attribute.
         """
         tag = (getattr(node, "name", None) or "").lower()
+        return epub_css.resolve_style(tag, inherited_style, cls.get_node_declarations(node, css))
+
+    @staticmethod
+    def get_node_classes(node: Any) -> frozenset[str]:
+        raw_classes = (node.get("class") or []) if hasattr(node, "get") else []
+        return frozenset(raw_classes.split() if isinstance(raw_classes, str) else raw_classes)
+
+    @classmethod
+    def get_node_declarations(cls, node: Any, css: EpubCssResolver | None) -> dict[str, str]:
+        """An element's own resolved declarations: stylesheet rules, then its inline `style` attribute."""
+        tag = (getattr(node, "name", None) or "").lower()
         declarations: dict[str, str] = {}
         if hasattr(node, "get"):
             if css is not None:
-                raw_classes = node.get("class") or []
-                classes = frozenset(raw_classes.split() if isinstance(raw_classes, str) else raw_classes)
                 element_id = node.get("id")
                 declarations.update(css.declarations_for(
-                    tag, classes, element_id if isinstance(element_id, str) else None
+                    tag, cls.get_node_classes(node), element_id if isinstance(element_id, str) else None
                 ))
             inline_css = node.get("style")
             if isinstance(inline_css, str) and inline_css:
                 declarations.update(epub_css.parse_declarations(inline_css))
-        return epub_css.resolve_style(tag, inherited_style, declarations)
+        return declarations
+
+    @staticmethod
+    def is_scene_break_class(class_name: str) -> bool:
+        """
+        Whether a class name semantically denotes a scene break, eg `space-break`,
+        `x04-Space-Break-FL`, `scenebreak`, `section_break` or `SB1`.
+        Bare `space`, `break` or `transition` do not qualify (eg `copyright-space`,
+        `pagebreak`). See docs-dev/epub-import-flow.md.
+        """
+        normalized = re.sub(r"[-_\s]", "", class_name.lower())
+        if any(fragment in normalized for fragment in SCENE_BREAK_CLASS_FRAGMENTS):
+            return True
+        return SCENE_BREAK_SB_CLASS_RE.fullmatch(normalized) is not None
+
+    @classmethod
+    def starts_after_scene_break(cls, node: Any, pieces: list[str], css: EpubCssResolver | None) -> bool:
+        """
+        Whether a paragraph-like element is the first prose after a CSS-only scene
+        break: it has a scene-break class name (`is_scene_break_class`) whose
+        styling gives it space above, it has vocalizable text, and readable text
+        precedes it in the document. Ornament elements (eg `* * *`) are excluded;
+        segmentation already treats them as breaks.
+        """
+        if getattr(node, "name", None) not in ("p", "div") or css is None:
+            return False
+        if not any(cls.is_scene_break_class(class_name) for class_name in cls.get_node_classes(node)):
+            return False
+        if not epub_css.has_space_above(cls.get_node_declarations(node, css)):
+            return False
+        if not app_text.is_vocalizable(node.get_text(" ")):
+            return False
+        return any(piece.strip() for piece in pieces)
 
     @staticmethod
     def record_piece_style(

@@ -44,7 +44,7 @@ By themselves, these models are unreliable at book scale. The app wraps them in 
 - Per-segment loudness leveling, so voice clones and lines match in loudness (ACX-style or louder target)
 - Optional post-processing: 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) upsampler, per-voice stereo positioning, room reverb
 
-A single project can utilize multiple voice-clone samples. An optional step applies an LLM-assisted character identification pass on the text to map character lines to voice clones, enabling "full-cast audio drama" productions.
+A single project can utilize multiple voice-clone samples. An optional step applies an LLM-assisted character identification pass on the text to map character lines to voice clones, enabling "full-cast audio drama"-like productions.
 
 It also includes a realtime audiobook playback mode and a voice chat feature, useful for voice/model testing.
 
@@ -64,9 +64,9 @@ https://github.com/user-attachments/assets/53e967bc-ea28-4dbc-944d-9c0376f3ddfa
 
 ### Browser player
 
-The included browser player displays text highlighted in sync with the generated audio — similar to the Kindle Whispersync or Google Play Books read-along experience. This works because the app embeds the text and word-level timing data directly into the metadata of the FLAC and M4B files it produces.
+An optional browser player displays text highlighted in sync with the generated audio — similar to the Kindle Whispersync or Google Play Books read-along experience. This works because the app embeds the text and word-level timing data directly into the metadata of the FLAC and M4B files it produces.
 
-The player is a static HTML page — no web server or install required. Open `browser_player/index.html` directly in any browser, or use the [hosted version](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
+The player is a static HTML page, which can be run locally without the use of a web server. Open `browser_player/index.html` directly in any browser, or use the [hosted version](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
 
 **Sample outputs**
 
@@ -88,13 +88,13 @@ These examples use the same source text, 15-second voice clone sample, and defau
 
 ### Enhance existing audiobooks
 
-This feature extends the browser player to work with professionally produced audiobooks — not just ones generated with this tool. It uses speech-to-text to align the existing audio with the corresponding book text, then embeds the same timing metadata the app normally produces during generation.
+This feature extends the browser player to work with pre-existing, professionally produced audiobooks (not just ones generated with this tool). It uses speech-to-text to align the existing audio with the corresponding book text, then embeds the same timing metadata the app normally produces during generation.
 
-Select `Tools` > `Enhance a pre-existing audiobook`, and choose your source audiobook file (M4A or M4B) and the corresponding book text. This feature is experimental.
+Select `Tools` > `Enhance a pre-existing audiobook`, and choose your source audiobook file (M4A or M4B) and the corresponding book text.
 
 ### tts-server-tool
 
-The project also includes an optional stand-alone REST service that runs the app's full configured TTS pipeline — your chosen model, voice clone, and project settings — and plays generated audio through the default sound device or serves it as an HTTP audio stream. This is aimed at developers who want to integrate the app's TTS capabilities into their own tools and workflows — for example, triggering spoken audio from a script, a home automation system, a chatbot, or any other application that can issue HTTP requests. See [server readme](tts_audiobook_tool/server/README-server.md) for setup and API details.
+The project also includes an optional stand-alone REST service that runs the app's full configured TTS pipeline, and plays generated audio through the default sound device or serves it as an HTTP audio stream. This is aimed at developers who want to integrate the app's TTS capabilities into their own tools and workflows — for example, triggering spoken audio from a script, a home automation system, a chatbot, or any other application that can issue HTTP requests. See [server readme](tts_audiobook_tool/server/README-server.md) for setup and API details.
 
 # Installation
 

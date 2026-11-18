@@ -3,9 +3,10 @@ Minimal EPUB stylesheet support for display formatting (bold, italic, underline)
 
 Only what the formatting layer needs is modeled: `font-style`, `font-weight`,
 `text-decoration`/`text-decoration-line` and the `font` shorthand, matched by
-simple compound selectors (`tag`, `.class`, `#id`, `tag.a.b`, `*`). Everything
-else is ignored, and malformed CSS degrades to "no styles". Extracted text is
-never affected. Rules and rationale: docs-dev/text-formatting-layer.md
+simple compound selectors (`tag`, `.class`, `#id`, `tag.a.b`, `*`). Top margin
+and padding are also read, solely to confirm scene-break class names (see
+docs-dev/epub-import-flow.md). Everything else is ignored, and malformed CSS
+degrades to "no styles". Rules and rationale: docs-dev/text-formatting-layer.md
 """
 
 from __future__ import annotations
@@ -46,7 +47,9 @@ _GLOBAL_VALUES = frozenset({"inherit", "initial", "unset", "revert"})
 def parse_declarations(text: str) -> dict[str, str]:
     """
     Parses a declaration block into canonical keys: "font-style", "font-weight"
-    and "text-decoration" (normalized to "underline", "none" or a global keyword).
+    and "text-decoration" (normalized to "underline", "none" or a global keyword),
+    plus "margin-top" and "padding-top" (also from the `margin`/`padding`
+    shorthands) for scene-break classes (see `has_space_above`).
     `!important` is ignored. Later declarations win.
     """
     result: dict[str, str] = {}
@@ -64,7 +67,28 @@ def parse_declarations(text: str) -> dict[str, str]:
             result["text-decoration"] = _normalize_decoration(value)
         elif prop == "font":
             result.update(_parse_font_shorthand(value))
+        elif prop in ("margin-top", "padding-top"):
+            result[prop] = value
+        elif prop in ("margin", "padding"):
+            # The first value of the shorthand is always the top side
+            result[f"{prop}-top"] = value.split()[0]
     return result
+
+
+_POSITIVE_LENGTH_RE = re.compile(r"^\+?(\d*\.?\d+)[a-z%]*$")
+
+
+def has_space_above(declarations: dict[str, str]) -> bool:
+    """
+    Whether resolved declarations give an element a positive top margin or top
+    padding. A deliberately crisp test (no threshold): only used to confirm a
+    scene-break class name, never to infer a break on its own.
+    """
+    for prop in ("margin-top", "padding-top"):
+        match = _POSITIVE_LENGTH_RE.match(declarations.get(prop, ""))
+        if match and float(match.group(1)) > 0:
+            return True
+    return False
 
 
 def _normalize_decoration(value: str) -> str:
