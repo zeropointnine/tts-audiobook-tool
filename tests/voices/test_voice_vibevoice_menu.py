@@ -44,7 +44,8 @@ def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
     assert get_string_from(state, items[-2].label).startswith(voice_menu_shared.LABEL_EDIT_VOICE_SELECTIONS)
     assert get_string_from(state, items[-1].label).startswith(voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES)
     label = strip_ansi_codes(get_string_from(state, select.label))
-    assert label.startswith("Select LoRA")
+    # Unset invites selection; once set, the item just names the current LoRA
+    assert label.startswith("LoRA " if lora_target else "Select LoRA ")
     assert (lora_target or "(optional)") in label
     assert select.blank_line_before
     assert len(items) == (8 if lora_target else 7)

@@ -707,6 +707,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Music detection/rejection (for MOSS-TTS-Local-Transformer)
 
 **OmniVoice**
+- LoRA support
 - Voice design
 - Steps, speed, CFG, seed
 
@@ -890,6 +891,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 
 # Update highlights
+
+**2026-11-19**
+
+- Added **LoRA support for OmniVoice**.
 
 **2026-11-05**
 

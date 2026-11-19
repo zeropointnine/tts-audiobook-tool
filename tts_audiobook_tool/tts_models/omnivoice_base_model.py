@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from tts_audiobook_tool import util
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
@@ -34,6 +35,40 @@ class OmniVoiceBaseModel(TtsBaseModel):
             target = util.ellipsize_path_for_menu(project.get_model_setting('omnivoice_local', 'target'))
             s += f" {COL_DIM}({target})"
         return s
+
+    @property
+    def has_lora(self) -> bool:
+        """Whether the LoRA set in the project was merged into this instance."""
+        return False
+
+    @property
+    def lora_error(self) -> str:
+        """Why the project's LoRA couldn't be loaded, or empty."""
+        return ""
+
+    @classmethod
+    def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:
+        issues = super().get_blocking_issues(project, instance)
+        if instance and project.get_model_setting('omnivoice_local', 'lora_target'):
+            assert isinstance(instance, OmniVoiceBaseModel)
+            if not instance.has_lora:
+                issues.append(ReadinessIssue("valid LoRA", "Couldn't load LoRA"))
+        return issues
+
+    @classmethod
+    def has_fixed_default_voice(cls, project: Project) -> bool:
+        # A LoRA gives sample-less voices a fixed speaker (voice_variation_warning)
+        return bool(project.get_model_setting('omnivoice_local', 'lora_target'))
+
+    @classmethod
+    def get_voice_tag(cls, project: Project) -> str:
+        # As for VibeVoice, a LoRA is the more salient identifier, even with a sample
+        lora_target = project.get_model_setting('omnivoice_local', 'lora_target')
+        if not lora_target:
+            return super().get_voice_tag(project)
+        from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+        from tts_audiobook_tool.target_util import make_target_display_name
+        return ProjectVoiceUtil.make_voice_tag(make_target_display_name(lora_target))
 
     @classmethod
     def resolve_language(cls, project: Project, instance: TtsBaseModel | None = None) -> LanguageResolution:

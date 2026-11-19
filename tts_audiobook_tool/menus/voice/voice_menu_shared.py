@@ -139,6 +139,9 @@ class VoiceMenuShared:
             case "mira_local":
                 from tts_audiobook_tool.menus.voice import VoiceMiraMenu
                 VoiceMiraMenu.menu(state)
+            case "omnivoice_local":
+                from tts_audiobook_tool.menus.voice.voice_omnivoice_menu import VoiceOmniVoiceMenu
+                VoiceOmniVoiceMenu.menu(state)
             case "pocket_local":
                 from tts_audiobook_tool.menus.voice import VoicePocketMenu
                 VoicePocketMenu.menu(state)

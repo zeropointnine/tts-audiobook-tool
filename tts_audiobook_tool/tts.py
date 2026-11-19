@@ -454,6 +454,7 @@ class Tts:
             "fish_s2_compile_enabled": resolve("fish_s2_local", "compile_enabled"),
             "pocket_model_code": project.get_model_setting('pocket_local', 'model_code'),
             "omnivoice_target": project.get_model_setting('omnivoice_local', 'target'),
+            "omnivoice_lora_target": project.get_model_setting('omnivoice_local', 'lora_target'),
         }
 
     @staticmethod
@@ -483,6 +484,7 @@ class Tts:
         dirty |= new_params.get("fish_s2_compile_enabled", False) != old_params.get("fish_s2_compile_enabled", False)
         dirty |= new_params.get("pocket_model_code", "") != old_params.get("pocket_model_code", "")
         dirty |= new_params.get("omnivoice_target", "") != old_params.get("omnivoice_target", "")
+        dirty |= new_params.get("omnivoice_lora_target", "") != old_params.get("omnivoice_lora_target", "")
         if dirty and current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:
             Tts.clear_tts_model()
 
@@ -879,7 +881,11 @@ class Tts:
             model_target = Tts._model_params.get("omnivoice_target", "") \
                         or OmniVoiceBaseModel.DEFAULT_REPO_ID
             from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
-            Tts._omnivoice = OmniVoiceModel(device=device_type, model_target=model_target)
+            Tts._omnivoice = OmniVoiceModel(
+                device=device_type,
+                model_target=model_target,
+                lora_target=Tts._model_params.get("omnivoice_lora_target", ""),
+            )
             printt()
         return Tts._omnivoice
 

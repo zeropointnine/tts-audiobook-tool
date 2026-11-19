@@ -414,19 +414,20 @@ def _make_server_tts_text(state: State) -> str:
         text += f" {COL_ERROR}({binding_issue_status(Tts._binding_issue)})"
     return text
 
+_LORA_MODEL_IDS = ("vibevoice_local", "omnivoice_local")
+
 def _make_voices_text(state: State) -> str:
     """The first voice that has a value (preset, sample, or instructions; see
     `ProjectVoiceUtil.resolve_voice_source`), then "+N more" counting every
     other voice. With no such voice, error-colored "required" when the model
     requires a value, else (non-blocking, so not error-colored) what the voices
     lack, eg "no sample set"; see `ProjectVoiceUtil.make_no_voice_value_text`.
-    For VibeVoice with a LoRA set, ", +LoRA" is appended last, or with no
-    voice, just "LoRA"."""
+    For a local model with a LoRA set (VibeVoice, OmniVoice), ", +LoRA" is
+    appended last, or with no voice, "LoRA (<ellipsized LoRA target>)"."""
     project = state.project
-    has_lora = (
-        project.tts_model_type == "vibevoice_local"
-        and bool(project.get_model_setting('vibevoice_local', 'lora_target'))
-    )
+    lora_target = (project.get_model_setting(project.tts_model_type, 'lora_target')
+                   if project.tts_model_type in _LORA_MODEL_IDS else "")
+    has_lora = bool(lora_target)
     lora_suffix = ", +LoRA" if has_lora else ""
     voices = project.voice_references
     sources = [ProjectVoiceUtil.resolve_voice_source(project, voice) for voice in voices]
@@ -435,7 +436,7 @@ def _make_voices_text(state: State) -> str:
         missing = any(source.kind == "missing" for source in sources)
         if has_lora and not missing:
             # The LoRA supplies a fixed speaker, so no voice is not a problem
-            return "LoRA"
+            return f"LoRA {QUALIFIER_COLOR}({ellipsize_path_for_menu(str(lora_target))})"
         if missing:
             text = COL_ERROR + "required"
             if lora_suffix:

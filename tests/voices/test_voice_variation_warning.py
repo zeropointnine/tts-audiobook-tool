@@ -162,8 +162,9 @@ def test_qwen_voice_design_groups_only_used_voices_once(model_id):
     assert get_run_warnings(project, _NoModelWarnings(), []) == []
 
 
-def test_vibevoice_lora_suppresses_the_note():
-    project = Project(tts_model_type="vibevoice_local", voice_references=[Voice()])
+@pytest.mark.parametrize("model_id", ["vibevoice_local", "omnivoice_local"])
+def test_lora_suppresses_the_note(model_id):
+    project = Project(tts_model_type=model_id, voice_references=[Voice()])
     assert get_voice_variation_warnings(project, [0]) == [f"{GENERIC_VOICE_VARIATION_NOTE} (Voice 1)"]
-    project.set_model_setting("vibevoice_local", "lora_target", "some/lora")
+    project.set_model_setting(model_id, "lora_target", "some/lora")
     assert get_voice_variation_warnings(project, [0]) == []

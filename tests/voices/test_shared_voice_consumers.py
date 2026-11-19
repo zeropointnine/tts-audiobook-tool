@@ -394,6 +394,7 @@ def test_static_menus_compose_voice_samples_and_model_seed(monkeypatch, module_n
     # Model-specific items sit between the voice list and the selection controls
     expected.extend({
         "indextts2_local": ["Select emotion voice sample", "Emotion vector", "Emotion alpha (strength)"],
+        "omnivoice_local": ["Select LoRA"],
         "vibevoice_local": ["Select LoRA"],
     }.get(model_id, []))
     expected.extend([

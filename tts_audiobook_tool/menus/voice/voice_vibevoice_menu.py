@@ -15,10 +15,8 @@ class VoiceVibeVoiceMenu:
         def make_lora_target_label(_) -> str:
             if project.get_model_setting('vibevoice_local', 'lora_target'):
                 value = ellipsize_path_for_menu(project.get_model_setting('vibevoice_local', 'lora_target'))
-                label = make_currently_string(value)
-            else:
-                label = f"{COL_DIM}(optional)"
-            return f"Select LoRA {label}"
+                return f"LoRA {make_currently_string(value)}"
+            return f"Select LoRA {COL_DIM}(optional)"
 
         def make_items(_: State) -> list[MenuItem]:
             items = VoiceMenuShared.make_voice_sample_items(

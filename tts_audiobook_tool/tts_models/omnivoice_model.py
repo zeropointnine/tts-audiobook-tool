@@ -52,7 +52,10 @@ class OmniVoiceModel(OmniVoiceBaseModel):
     # several voices can be kept at once.
     RETAINS_MULTIPLE_VOICE_CLONES = True
 
-    def __init__(self, model_target: str, device: DeviceType):
+    _has_lora = False
+    _lora_error = ""
+
+    def __init__(self, model_target: str, device: DeviceType, lora_target: str = ""):
 
         self._model_target = model_target
         self._device_type = device
@@ -72,6 +75,38 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             device_map=device_map,
             dtype=dtype,
         )
+
+        if lora_target:
+            self._load_lora(lora_target)
+
+    def _load_lora(self, lora_target: str) -> None:
+        """
+        Merges the adapter into the weights. A rejected adapter leaves the base
+        model usable (generation is then blocked by `get_blocking_issues`, as
+        for VibeVoice); a failure mid-merge propagates, since the weights may
+        be half-merged.
+        """
+        from tts_audiobook_tool.tts_models.omnivoice_lora import LoraLoadError, load_lora
+        printt()
+        printt(f"Loading LoRA adapter: {lora_target}")
+        try:
+            plan = load_lora(self._model, lora_target)
+        except LoraLoadError as e:
+            self._lora_error = str(e)
+            printt(f"{COL_ERROR}Couldn't load LoRA: {e}")
+            printt()
+            return
+        self._has_lora = True
+        printt(f"{COL_DIM}Merged {plan.describe()}")
+        printt()
+
+    @property
+    def has_lora(self) -> bool:
+        return self._has_lora
+
+    @property
+    def lora_error(self) -> str:
+        return self._lora_error
 
     def kill(self) -> None:
         model = self._model
