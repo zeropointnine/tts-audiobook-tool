@@ -387,9 +387,13 @@ class ModelMenuShared:
             project: Project,
             prompt: str,
             current_target: str,
-            callback: Callable[[Project, str], None]
+            callback: Callable[[Project, str], None],
+            local_file_markers: list[str] | None = None,
     ) -> None:
-        """ Gets line text input from user for a so-called "target" (ie, repo id or concrete file path) """
+        """
+        Gets line text input from user for a so-called "target" (ie, repo id or concrete file path).
+        `local_file_markers` overrides the files that make a local directory acceptable (`target_util.exist_test`).
+        """
         printt(prompt)
         new_target = ask.ask_input(prefill=current_target, lower=False)
         if not new_target:
@@ -399,7 +403,10 @@ class ModelMenuShared:
             print_feedback("Already set")
             return
 
-        _, err = target_util.exist_test(new_target)
+        if local_file_markers is None:
+            _, err = target_util.exist_test(new_target)
+        else:
+            _, err = target_util.exist_test(new_target, local_file_markers=local_file_markers)
         if err:
             ask.ask_error(err)
             return

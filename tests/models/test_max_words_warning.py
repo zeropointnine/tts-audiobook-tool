@@ -61,9 +61,8 @@ def test_base_get_warning_issues_includes_max_words_warning(monkeypatch):
         "kill": lambda *args, **kwargs: None,
     })
     instance = object.__new__(stub_cls)
-    # The max-words warning, then the model's language note (GLM-TTS takes none)
+    # Only the max-words warning: GLM-TTS takes no language, so there is no language note
     warnings = instance.get_warning_issues(project)
-    assert len(warnings) == 2
+    assert len(warnings) == 1
     assert "Source text's max word length" in warnings[0]
-    assert warnings[1].startswith("Model does not utilize a language code")
     assert "exceeds GLM-TTS recommended model limit (40)" in warnings[0]

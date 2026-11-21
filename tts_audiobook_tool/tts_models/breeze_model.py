@@ -43,7 +43,10 @@ class BreezeModel(BreezeBaseModel):
     # (about half the speed of non-CFG generation). False only for comparison probes.
     USE_CFG_DEPTH_GRAPH = True
 
-    def __init__(self, device: DeviceType):
+    _has_lora = False
+    _lora_error = ""
+
+    def __init__(self, device: DeviceType, lora_target: str = "", lora_strength: float = 1.0):
         if device != DeviceType.CUDA:
             raise ValueError(f"{self.INFO.ui['proper_name']} requires CUDA")
         self._device_type = device
@@ -62,6 +65,39 @@ class BreezeModel(BreezeBaseModel):
         self._batch_depth_decoder: BatchDepthDecoder | None = None
         # The fp32 codebooks-head weight the captured graph reads (see `_prepare_cfg_depth_graph()`)
         self._graph_head_weight: torch.Tensor | None = None
+        self._lora_strength = lora_strength
+        # Before any CUDA graph capture (the CFG depth graph is captured lazily), so graphs read merged weights
+        if lora_target:
+            self._load_lora(model_dir, lora_target, lora_strength)
+
+    def _load_lora(self, model_dir: Path, lora_target: str, strength: float) -> None:
+        """
+        Merges the adapter into the weights (`breeze_lora`). A rejected adapter leaves the base
+        model usable (generation is then blocked by `get_blocking_issues`, as for OmniVoice);
+        a failure mid-merge propagates, since the weights may be half-merged.
+        """
+        from tts_audiobook_tool.tts_models.breeze_lora import LoraLoadError, load_lora
+        assert self._model is not None
+        printt()
+        printt(f"Loading LoRA adapter: {lora_target}")
+        try:
+            plan, source = load_lora(self._model, str(model_dir), lora_target, strength)
+        except LoraLoadError as e:
+            self._lora_error = str(e)
+            printt(f"{COL_ERROR}Couldn't load LoRA: {e}")
+            printt()
+            return
+        self._has_lora = True
+        printt(f"{COL_DIM}Merged {plan.describe()} from {source.kind}, strength {strength:g}")
+        printt()
+
+    @property
+    def has_lora(self) -> bool:
+        return self._has_lora
+
+    @property
+    def lora_error(self) -> str:
+        return self._lora_error
 
     def kill(self) -> None:
         self.clear_voice_clone_cache()
@@ -121,6 +157,8 @@ class BreezeModel(BreezeBaseModel):
             }
             if instructions:
                 params["cfg"] = sampling.cfg
+            if self._has_lora:
+                params["lora_strength"] = self._lora_strength
             BreezeBaseModel.print_params(params)
 
         # The prompts arrive as one batch (orchestration `batch_size`, one voice per batch)

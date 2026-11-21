@@ -133,6 +133,9 @@ class VoiceMenuShared:
         # Only local models reach here; server variants are always handled by
         # the catalog menu above.
         match model_type.id:
+            case "breeze_tts_2_local":
+                from tts_audiobook_tool.menus.voice.voice_breeze_menu import VoiceBreezeMenu
+                VoiceBreezeMenu.menu(state)
             case "indextts2_local":
                 from tts_audiobook_tool.menus.voice import VoiceIndexTts2Menu
                 VoiceIndexTts2Menu.menu(state)

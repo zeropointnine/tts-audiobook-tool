@@ -89,6 +89,9 @@ settings = [
     { name = "repetition_penalty", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "cfg", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+    # Instavar-format LoRA (`breeze_lora`), merged at load; set in the voice menu
+    { name = "lora_target", section = "parameters", type = "str", default = "" },
+    { name = "lora_strength", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
 ]
 backend_kind = "local"
 
@@ -174,6 +177,14 @@ default_sentinel = -1
 min = 1.0
 max = 10.0
 input_prompt_suffix = "(used only by voices with instructions)"
+
+# Multiplier on the LoRA's alpha / rank (voice menu; only with a LoRA set). Changing it reloads the model.
+[models.local.parameters.lora_strength]
+type = "float"
+default = 1.0
+default_sentinel = -1
+min = 0.1
+max = 2.0
 
 [[models.local.menu]]
 parameter = "temperature"
@@ -2422,8 +2433,8 @@ substitutions = []
 proper_name = "Echo-TTS"
 short_name = "Echo-TTS"
 voice_sample_max_duration_s = 15
-voice_path_console = "Enter voice clone audio clip file path (~10s recommended, up to 15s): "
-voice_path_requestor = "Select voice clone audio clip (~10s recommended, up to 15s)"
+voice_path_console = "Enter voice clone audio clip file path (up to 15s): "
+voice_path_requestor = "Select voice clone audio clip (up to 15s)"
 project_links = [
     "https://github.com/LAION-AI/scaled-echo-tts",
     "https://huggingface.co/jordand/echo-tts-base",

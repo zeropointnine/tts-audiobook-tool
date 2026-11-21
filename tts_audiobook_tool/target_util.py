@@ -62,7 +62,9 @@ def make_target_display_name(target: str) -> str:
     """
     Short name for a target: the repo name for hf targets, else the directory
     name, qualified by its parent when it is a training checkpoint directory
-    (eg `checkpoint-900`) or a generic name like `lora`.
+    (eg `checkpoint-900`) or a generic name like `lora`. A generic parent is
+    skipped for the nearest non-generic ancestor
+    (eg `fw-leda/lora/checkpoint-step-000500` -> `fw-leda-checkpoint-step-000500`).
     """
     if not os.path.isdir(target):
         split = split_hf_subfolder_target(target)
@@ -71,11 +73,22 @@ def make_target_display_name(target: str) -> str:
             return repo_id.split("/")[-1]
     path = os.path.normpath(target)
     name = os.path.basename(path)
-    if name.startswith("checkpoint-") or name.lower() in ("lora", "adapter", "adapters"):
-        parent = os.path.basename(os.path.dirname(path))
+    if name.startswith("checkpoint-") or _is_generic_dir_name(name):
+        parent_path = os.path.dirname(path)
+        parent = os.path.basename(parent_path)
+        while _is_generic_dir_name(parent):
+            ancestor_path = os.path.dirname(parent_path)
+            ancestor = os.path.basename(ancestor_path)
+            if not ancestor or ancestor_path == parent_path:
+                break
+            parent_path, parent = ancestor_path, ancestor
         if parent:
             return f"{parent}-{name}"
     return name
+
+
+def _is_generic_dir_name(name: str) -> bool:
+    return name.lower() in ("lora", "adapter", "adapters")
 
 
 def exist_test(

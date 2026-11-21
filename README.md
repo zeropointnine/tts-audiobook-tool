@@ -654,6 +654,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 ### Locally generated using dedicated venv
 
 **Breeze TTS 2**
+- LoRA support, with strength setting (Train with [instavar/breeze-tts2-finetuning](https://github.com/instavar/breeze-tts2-finetuning)).
 - Voice clone, voice direction (voice sample + instructions) and voice design (instructions only)
 - Batch processing support
 - Audio tags
@@ -707,7 +708,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Music detection/rejection (for MOSS-TTS-Local-Transformer)
 
 **OmniVoice**
-- LoRA support
+- LoRA support (Train with [OmniVoice's LoRA finetuning recipe](https://github.com/k2-fsa/OmniVoice/blob/master/docs/lora_finetuning.md)).
 - Voice design
 - Steps, speed, CFG, seed
 
@@ -726,8 +727,8 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature, seed
 
 **VibeVoice**
+- LoRA support (Train with [voicepowered-ai/VibeVoice-finetuning](https://github.com/voicepowered-ai/VibeVoice-finetuning)).
 - Alternate VibeVoice models (eg, VibeVoice-7B or custom finetunes)
-- LoRA support!
 - Batch processing support
 - Streaming support (for the stand-alone server and LLM chat mode)
 - Music detection/rejection
@@ -854,7 +855,7 @@ The app ideally wants to use ~2-4 GB extra VRAM for the Whisper speech-to-text m
 
 ### Inference speeds, expectations
 
-Listed below are some anecdotal TTS inference speeds (locally hosted models only). The app adopts each respective model's reference implementation logic as much as possible. Note how CUDA inference speeds on Linux are typically significantly faster than on Windows.
+Listed below are some anecdotal TTS inference speeds (locally hosted models only). The app adopts each respective model's reference implementation logic as much as possible. Note how CUDA inference speeds on Linux are typically faster than on Windows, sometimes dramatically so.
 
 | TTS Model               | Setup                | Speed           | Notes                       |
 | ----------------------- | -------------------- | --------------- | --------------------------- |
@@ -891,6 +892,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 
 # Update highlights
+
+**2026-11-19**
+
+- Added **LoRA support for Breeze TTS 2** (See [instavar/breeze-tts2-finetuning](https://github.com/instavar/breeze-tts2-finetuning)).
 
 **2026-11-19**
 

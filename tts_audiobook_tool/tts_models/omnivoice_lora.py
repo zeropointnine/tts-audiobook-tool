@@ -23,15 +23,18 @@ upstream recipe writes it is supported; anything else (DoRA, per-module rank or
 alpha patterns, LoRA biases, embedding LoRA, other PEFT types, adapters for
 another base) is rejected rather than merged approximately. The merge cannot be
 undone in place: applying a different adapter requires reloading the model.
+The format-independent parts live in `lora_merge`.
 """
 from __future__ import annotations
 
 import json
 import math
 import os
-from dataclasses import dataclass, field
 
 import torch
+
+# Re-exported: callers and tests import these from here
+from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, apply_merge
 
 ADAPTER_CONFIG_FILE_NAME = "adapter_config.json"
 ADAPTER_WEIGHTS_FILE_NAME = "adapter_model.safetensors"
@@ -58,26 +61,6 @@ _PLAIN_LORA_CONFIG = {
     "use_bdlora": None,
     "arrow_config": None,
 }
-
-
-class LoraLoadError(Exception):
-    """The adapter could not be resolved or does not fit the model; the model is unchanged."""
-
-
-@dataclass
-class LoraMergePlan:
-    """A validated adapter, ready to merge. Tensors are on the CPU."""
-    rank: int
-    alpha: float
-    scale: float
-    # Model parameter name -> (A, B)
-    pairs: dict[str, tuple[torch.Tensor, torch.Tensor]] = field(default_factory=dict)
-    # Model parameter name -> replacement value
-    replacements: dict[str, torch.Tensor] = field(default_factory=dict)
-
-    def describe(self) -> str:
-        return (f"{len(self.pairs)} LoRA layers (r={self.rank}, alpha={self.alpha:g}), "
-                f"{len(self.replacements)} replaced")
 
 
 def resolve_adapter_dir(target: str) -> str:
@@ -172,23 +155,6 @@ def _plan_merge(model: torch.nn.Module, adapter_dir: str) -> LoraMergePlan:
     if not plan.pairs and not plan.replacements:
         raise LoraLoadError("Adapter has no tensors")
     return plan
-
-
-@torch.no_grad()
-def apply_merge(model: torch.nn.Module, plan: LoraMergePlan) -> None:
-    """Merges a validated plan into `model` in place. An exception here can leave
-    the model partially merged, so the caller must discard it."""
-    params = dict(model.named_parameters())
-    for name, value in plan.replacements.items():
-        target = params[name]
-        target.copy_(value.to(device=target.device, dtype=target.dtype))
-    for name, (a, b) in plan.pairs.items():
-        target = params[name]
-        # The delta is computed on the CPU in fp32, so the result doesn't
-        # depend on GPU matmul settings (eg TF32)
-        delta = (b.float() @ a.float()) * plan.scale
-        merged = target.float() + delta.to(target.device)
-        target.copy_(merged.to(target.dtype))
 
 
 def load_lora(model: torch.nn.Module, target: str) -> LoraMergePlan:

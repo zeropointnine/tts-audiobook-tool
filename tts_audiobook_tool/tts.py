@@ -455,6 +455,8 @@ class Tts:
             "pocket_model_code": project.get_model_setting('pocket_local', 'model_code'),
             "omnivoice_target": project.get_model_setting('omnivoice_local', 'target'),
             "omnivoice_lora_target": project.get_model_setting('omnivoice_local', 'lora_target'),
+            "breeze_lora_target": project.get_model_setting('breeze_tts_2_local', 'lora_target'),
+            "breeze_lora_strength": resolve("breeze_tts_2_local", "lora_strength"),
         }
 
     @staticmethod
@@ -485,6 +487,8 @@ class Tts:
         dirty |= new_params.get("pocket_model_code", "") != old_params.get("pocket_model_code", "")
         dirty |= new_params.get("omnivoice_target", "") != old_params.get("omnivoice_target", "")
         dirty |= new_params.get("omnivoice_lora_target", "") != old_params.get("omnivoice_lora_target", "")
+        dirty |= new_params.get("breeze_lora_target", "") != old_params.get("breeze_lora_target", "")
+        dirty |= new_params.get("breeze_lora_strength", 1.0) != old_params.get("breeze_lora_strength", 1.0)
         if dirty and current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:
             Tts.clear_tts_model()
 
@@ -844,7 +848,11 @@ class Tts:
         if not Tts._breeze:
             device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("breeze_tts_2_local"))
             from tts_audiobook_tool.tts_models.breeze_model import BreezeModel
-            Tts._breeze = BreezeModel(device_type)
+            Tts._breeze = BreezeModel(
+                device_type,
+                lora_target=Tts._model_params.get("breeze_lora_target", ""),
+                lora_strength=Tts._model_params.get("breeze_lora_strength", 1.0),
+            )
             printt()
         return Tts._breeze
 

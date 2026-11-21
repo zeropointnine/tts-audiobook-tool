@@ -90,6 +90,10 @@ def test_is_same_target_compares_subfolder_targets_as_strings():
     ("wjcwqc/PaigeVoice/lora", "PaigeVoice"),
     ("/exp/herman/checkpoint-900", "herman-checkpoint-900"),
     ("/exp/herman_v3", "herman_v3"),
+    # A generic parent (as Instavar's run layout) is skipped for the nearest meaningful ancestor
+    ("/runs/fw-leda/lora/checkpoint-step-000500", "fw-leda-checkpoint-step-000500"),
+    ("/runs/fw-leda/adapters/checkpoint-step-000500", "fw-leda-checkpoint-step-000500"),
+    ("/lora/checkpoint-step-000500", "lora-checkpoint-step-000500"),
 ])
 def test_make_target_display_name(target, expected):
     assert target_util.make_target_display_name(target) == expected
