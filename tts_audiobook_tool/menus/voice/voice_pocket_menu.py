@@ -32,6 +32,11 @@ def validate_voice_file(state: State) -> None:
     if state.pocket_voice_clone_access_validated:
         return
 
+    # Validation loads the model, which requires a selection; the missing
+    # selection is already reported as a blocker, so just defer the check.
+    if not state.project.get_model_setting('pocket_local', 'model_code'):
+        return
+
     # Only a voice that clones (no predefined voice taking precedence) needs access
     if PocketBaseModel.get_first_cloned_voice_file_name(state.project):
 

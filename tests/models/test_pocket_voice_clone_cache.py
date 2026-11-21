@@ -18,7 +18,7 @@ class FakePocketModel:
         self.device = torch.device("cpu")
         self.origin = None  # as when loaded without a language config
         self.temp = 1.0
-        self.lsd_decode_steps = 1
+        self.sampler_decode_steps = 1
         self.get_state_calls: list[str] = []
         self.created_states: list[dict] = []
 
@@ -155,3 +155,47 @@ def test_pocket_predefined_voice_resolves_under_configs(tmp_path):
 
     resolved = model._resolve_voice_source_path(name)
     assert os.path.isfile(resolved)
+
+
+def test_pocket_requires_a_model_code(monkeypatch):
+    # There is no implicit model: an empty code must fail before anything loads,
+    # rather than fall back to pocket's own default (whose "english" alias
+    # moves between releases).
+    from pocket_tts import TTSModel  # type: ignore
+    from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
+
+    requested: list = []
+
+    def fake_load_model(language=None, **_):
+        requested.append(language)
+        return FakePocketModel()
+
+    monkeypatch.setattr(TTSModel, "load_model", staticmethod(fake_load_model))
+
+    with pytest.raises(ValueError, match="No Pocket TTS model selected"):
+        PocketModel(DeviceType.CPU, "")
+    PocketModel(DeviceType.CPU, "dutch")
+
+    assert requested == ["dutch"]
+
+
+def test_pocket_listed_models_ship_with_installed_package():
+    # Every model code offered in the picker must exist as a bundled config in
+    # the installed pocket_tts, catching typos and codes dropped upstream.
+    from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
+
+    missing = [
+        code for code in PocketBaseModel.LANGUAGES
+        if not (CONFIGS_DIR / f"{code}.yaml").is_file()
+    ]
+    assert missing == []
+    assert set(PocketBaseModel.RECOMMENDED_BY_LANGUAGE.values()) <= set(PocketBaseModel.LANGUAGES)
+    assert set(PocketBaseModel.LANGUAGE_NOTES) <= set(PocketBaseModel.LANGUAGES)
+
+
+def test_pocket_predefined_voices_are_known_to_package():
+    # The predefined-voice list must only offer names pocket_tts can resolve.
+    from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
+
+    unknown = set(PocketBaseModel.PREDEFINED_VOICES) - set(_ORIGINS_OF_PREDEFINED_VOICES)
+    assert unknown == set()

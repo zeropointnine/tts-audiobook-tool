@@ -720,8 +720,8 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature, top_p, top_k, repetition_penalty, seed
 
 **Pocket TTS**
-- Selectable language models (english, french_241, german_241, italian, portuguese, spanish_241)
-- Predefined voices (alba, anna, azelma, etc)
+- Selectable models: English (incl. 24-layer and small 18M/7M/2M variants), French, German, Spanish, Italian, Portuguese, Dutch
+- Predefined voices (alba, anna, azelma, etc, plus per-language voices giovanni, lola, juergen, rafael, estelle, daan)
 - Streaming support (for the stand-alone server and LLM chat mode)
 - Supports CUDA acceleration (this is not mentioned in the project page)
 - Temperature, seed
@@ -893,9 +893,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-11-19**
+**2026-11-21**
 
 - Added **LoRA support for Breeze TTS 2** (See [instavar/breeze-tts2-finetuning](https://github.com/instavar/breeze-tts2-finetuning)).
+- **Updated Pocket TTS** to v4.0.1, which adds new and retrained models: `english_2026-10` (recommended), some very small English language variants, Dutch, and 6-layer French, German and Spanish.
 
 **2026-11-19**
 

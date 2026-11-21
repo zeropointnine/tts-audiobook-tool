@@ -731,8 +731,8 @@ Also applies to realtime playback."""
 ROOM_TONE_TITLE = "Room tone"
 
 ROOM_TONE_SUBHEADING = \
-"""Adds subtle room tone under the audio, preventing unnatural digital silence. ACX-recommended practice.
-Is also applied to realtime playback."""
+"""Adds subtle room tone under the audio, preventing unnatural digital silence.
+Is also applied to realtime playback. ACX-recommended practice."""
 
 STEREO_POSITION_TITLE = "Stereo position"
 

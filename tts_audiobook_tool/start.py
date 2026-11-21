@@ -298,6 +298,9 @@ class Start:
             # Pinned to 18.1.0 (16.1.x for vibevoice, capped by aiortc). 16.0 added
             # OutputContainer.set_chapters(), which M4B export needs.
             "av": "16.1",
+            # 4.x ships the new/retrained models and per-language predefined
+            # voices that the Pocket model and voice menus list.
+            "pocket-tts": "4.0.1",
         }
 
     def get_new_packages(self) -> list[str]:

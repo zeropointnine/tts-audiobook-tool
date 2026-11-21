@@ -1061,7 +1061,8 @@ preset_label = "Predefined voice"
 
 [models.local.parameters.temperature]
 type = "float"
-default = 0.7
+# Upstream default for every bundled model since pocket-tts 3.3.0
+default = 0.3
 default_sentinel = -1
 min = 0.01
 max = 2.0

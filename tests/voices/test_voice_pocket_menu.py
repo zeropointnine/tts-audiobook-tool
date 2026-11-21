@@ -11,9 +11,15 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 
 
-def make_state():
+def make_project(model_code: str = "english_2026-10", **kwargs) -> Project:
+    project = Project(tts_model_type="pocket_local", **kwargs)
+    project.set_model_setting("pocket_local", "model_code", model_code)
+    return project
+
+
+def make_state(model_code: str = "english_2026-10"):
     state = State.for_worker(Prefs(project_dir="", stt_variant=SttVariant.DISABLED))
-    state._project = Project(tts_model_type="pocket_local", voice_references=[
+    state._project = make_project(model_code, voice_references=[
         {"file_name": "voice.flac", "transcript": "Reference."},
     ])
     return state
@@ -33,7 +39,7 @@ def test_successful_access_check_is_silent_afterward_even_across_projects(monkey
     assert feedback == ["Validated"]
     output.clear()
     feedback.clear()
-    state._project = Project(tts_model_type="pocket_local", voice_references=[
+    state._project = make_project(voice_references=[
         {"file_name": "another.flac", "transcript": "Another reference."},
     ])
     menu.validate_voice_file(state)
@@ -93,3 +99,36 @@ def test_each_new_interactive_state_starts_unvalidated(monkeypatch):
     second = State()
     assert not second.pocket_voice_clone_access_validated
     assert first.pocket_voice_clone_access_validated
+
+
+def test_access_check_waits_for_a_model_selection(monkeypatch):
+    # The access check loads the model, which can't happen without a selected
+    # model code; the missing selection is reported as a blocker instead.
+    state = make_state(model_code="")
+    monkeypatch.setattr(menu.ModelWorker, "inspect_tts_blocking",
+                        lambda *_: pytest.fail("Must not load Pocket without a model selection"))
+    menu.validate_voice_file(state)
+    assert not state.pocket_voice_clone_access_validated
+
+
+def test_missing_model_selection_blocks_without_an_instance():
+    # A project without a Pocket model code is blocked up front (menus, run
+    # starts, server), with no implicit default model.
+    from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
+
+    issues = PocketBaseModel.get_blocking_issues(make_project(""), None)
+    assert [issue.short for issue in issues] == ["Pocket model selection"]
+    assert issues[0].verbose == PocketBaseModel.MODEL_NOT_SELECTED_MESSAGE
+    assert PocketBaseModel.get_blocking_issues(make_project("dutch"), None) == []
+
+
+@pytest.mark.parametrize("language_code, expected", [
+    ("en", "english_2026-10"), ("en-GB", "english_2026-10"), ("nl", "dutch_24l"),
+    ("fr", "french_24l"), ("ja", ""), ("", ""),
+])
+def test_recommended_model_follows_project_language(language_code, expected):
+    # The picker hint follows the project language; unsupported languages get none.
+    from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
+
+    project = make_project("", language_code=language_code)
+    assert PocketBaseModel.get_recommended_language(project) == expected

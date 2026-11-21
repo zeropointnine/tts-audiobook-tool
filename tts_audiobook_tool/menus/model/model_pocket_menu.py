@@ -15,10 +15,8 @@ class ModelPocketMenu:
 
         def make_language_label(_) -> str:
             lang = state.project.get_model_setting('pocket_local', 'model_code')
-            if lang:
-                label = make_currently_string(lang)
-            else:
-                label = make_currently_string(PocketBaseModel.DEFAULT_LANGUAGE)
+            # No default: a selection is required (see PocketBaseModel.get_blocking_issues)
+            label = make_currently_string(lang, required_predicate=lambda: not lang)
             return f"Pocket model {label}"
 
         def make_items(_: State) -> list[MenuItem]:
@@ -48,7 +46,7 @@ class ModelPocketMenu:
 def ask_language(state: State) -> None:
 
     languages = PocketBaseModel.LANGUAGES
-    default = PocketBaseModel.DEFAULT_LANGUAGE
+    recommended = PocketBaseModel.get_recommended_language(state.project)
 
     def on_select(lang: str) -> None:
 
@@ -68,17 +66,17 @@ def ask_language(state: State) -> None:
             state.project.save()
             _ = ModelWorker.clear_models_if_running_blocking()
             ask.ask_error(f"\n{error}")
+            return
         printt(f"{COL_DIM_ITALICS}OK ")
         printt()
 
     MenuUtil.options_menu(
         state=state,
         heading_text="Select Pocket TTS model",
-        labels=languages,
+        labels=[PocketBaseModel.make_language_label(code, recommended) for code in languages],
         values=languages,
-        subheading="Ensure your voice clone audio language matches the model you select below",
-        current_value=state.project.get_model_setting('pocket_local', 'model_code') or default,
-        default_value=default,
+        current_value=state.project.get_model_setting('pocket_local', 'model_code') or None,
+        default_value=None,
         on_select=on_select,
     )
 

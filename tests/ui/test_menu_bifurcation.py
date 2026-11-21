@@ -127,7 +127,7 @@ def test_all_local_voice_menus_keep_sample_selection_group(
         assert emotion_labels[2].startswith("Emotion alpha (strength)")
         assert "0.65" in emotion_labels[2] and "default" in emotion_labels[2]
         items, labels = items[:-3], labels[:-3]
-    elif model_id in ("omnivoice_local", "vibevoice_local"):
+    elif model_id in ("breeze_tts_2_local", "omnivoice_local", "vibevoice_local"):
         assert labels[-1].startswith("Select LoRA")
         assert items[-1].blank_line_before
         items, labels = items[:-1], labels[:-1]
@@ -171,6 +171,8 @@ def test_all_local_models_route_settings_without_sample_controls(monkeypatch, mo
         assert labels[0].startswith("FP16")
     elif model_id == "omnivoice_local":
         assert not any(label.startswith(("Voice design instructions", "Clear instructions")) for label in labels)
+        assert not any(label.startswith(("Select LoRA", "LoRA", "Clear LoRA")) for label in labels)
+    elif model_id == "breeze_tts_2_local":
         assert not any(label.startswith(("Select LoRA", "LoRA", "Clear LoRA")) for label in labels)
     elif model_id == "pocket_local":
         assert not any(label.startswith(("Select predefined voice", "Clear predefined voice")) for label in labels)

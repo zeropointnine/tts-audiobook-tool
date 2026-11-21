@@ -902,6 +902,10 @@ class Tts:
         require_model_owner("TTS")
         if not Tts._pocket:
             language = Tts._model_params.get("pocket_model_code", "")
+            if not language:
+                # Every load path (inspection, chat warm-up, preview, server)
+                # comes through here; fail with the same text as the blocker.
+                raise RuntimeError(PocketBaseModel.MODEL_NOT_SELECTED_MESSAGE)
             device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("pocket_local"))
             from tts_audiobook_tool.tts_models.pocket_model import PocketModel
             Tts._pocket = PocketModel(device=device_type, language=language)

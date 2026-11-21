@@ -36,8 +36,12 @@ class PocketModel(PocketBaseModel):
 
     def __init__(self, device: DeviceType, language: str = ""):
 
-        # Rem, "language" dictates model
-        self.model: TTSModel | None = TTSModel.load_model(language=language or None)
+        # Rem, "language" (a pocket model code) dictates model. It is required:
+        # an empty value would load pocket's own default, whose "english" alias
+        # moves between releases.
+        if not language:
+            raise ValueError(PocketBaseModel.MODEL_NOT_SELECTED_MESSAGE)
+        self.model: TTSModel | None = TTSModel.load_model(language=language)
         assert self.model
 
         self._device_type = device
@@ -171,7 +175,7 @@ class PocketModel(PocketBaseModel):
             assert self.model
             self.model.temp = temperature
 
-            self.model.lsd_decode_steps = PocketBaseModel.LSD
+            self.model.sampler_decode_steps = PocketBaseModel.SAMPLER_DECODE_STEPS
 
             if voice_path:
                 try:

@@ -201,8 +201,8 @@ def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, str | None]:
 
         case "pocket_local":
             from tts_audiobook_tool.tts_models.pocket_model import PocketModel
-            # language="" loads the language-agnostic default model
-            return PocketModel(device=DeviceType.CUDA, language=""), None
+            # A model code is required (there is no implicit default)
+            return PocketModel(device=DeviceType.CUDA, language="english_2026-10"), None
 
         case _:
             raise SystemExit(

@@ -3,7 +3,7 @@
 #################
 
 # Model dependencies
-pocket-tts==2.0.0
+pocket-tts==4.0.1
 
 # App dependencies
 

@@ -97,3 +97,9 @@ def test_current_versions_pass(monkeypatch):
     start.exit_on_missing_or_outdated_packages()
 
     assert printed == []
+
+
+def test_pocket_minimum_requires_4x():
+    # The Pocket model/voice lists include models and voices that only ship in pocket-tts 4.x
+    minimums = object.__new__(start_module.Start).get_minimum_package_versions()
+    assert start_module._release_numbers(minimums["pocket-tts"]) >= (4, 0, 1)
