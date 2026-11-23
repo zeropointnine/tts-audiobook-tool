@@ -17,6 +17,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.dots_base_model import (
     DotsBaseModel,
     DotsCompileMode,
@@ -38,7 +39,7 @@ class DotsModel(DotsBaseModel):
 
     def __init__(
         self,
-        model_target: str,
+        model_target: ModelTarget,
         device: DeviceType,
         compile_enabled: bool = DotsCompileMode.default().enabled,
     ):
@@ -58,7 +59,7 @@ class DotsModel(DotsBaseModel):
         precision = "bfloat16" if device == DeviceType.CUDA else "float32"
         optimize = compile_enabled and device == DeviceType.CUDA
         runtime = DotsTtsRuntime.from_pretrained(
-            model_target,
+            model_target.resolve_local_dir(),
             precision=precision,
             optimize=optimize,
             max_generate_length=DotsBaseModel.MAX_GENERATE_LENGTH,
@@ -71,7 +72,7 @@ class DotsModel(DotsBaseModel):
             )
 
     @property
-    def model_target(self) -> str:
+    def model_target(self) -> ModelTarget:
         return self._model_target
 
     def kill(self) -> None:

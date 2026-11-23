@@ -1,3 +1,4 @@
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
@@ -16,8 +17,8 @@ class ModelDotsMenu:
         def make_target_label(_: State) -> str:
             return ModelMenuShared.make_target_label(
                 label_prefix="Select dots.tts model",
-                target=state.project.get_model_setting('dots_local', 'target'),
-                default_target=DotsBaseModel.DEFAULT_REPO_ID,
+                target=state.project.get_model_target('dots_local'),
+                default_target=DotsBaseModel.DEFAULT_TARGET,
                 remove_prefixes=["dots-studio/"],
             )
 
@@ -44,7 +45,7 @@ class ModelDotsMenu:
                 )
             )
 
-            target = state.project.get_model_setting('dots_local', 'target')
+            target = state.project.get_model_target('dots_local')
             if not DotsBaseModel.is_sampling_locked_target(target):
                 name, variant = DotsBaseModel.get_num_steps_config(target)
                 items.append(item(name, f"Steps ({variant})"))
@@ -59,7 +60,6 @@ class ModelDotsMenu:
 
     @staticmethod
     def target_submenu(state: State) -> None:
-        targets = DotsBaseModel.PRESET_REPO_IDS
         sublabels = [
             "Full flow-matching (post-trained); configurable NFE and CFG 1.2",
             "MeanFlow-distilled student of SOAR; 4 steps, no CFG",
@@ -67,19 +67,19 @@ class ModelDotsMenu:
             "Distilled, fixed one-step sampling; 1 step, no CFG",
         ]
 
-        def on_select(target: str) -> None:
-            state.project.set_model_setting('dots_local', 'target', "" if target == DotsBaseModel.DEFAULT_REPO_ID else target)
+        def on_select(target: ModelTarget) -> None:
+            state.project.set_model_target('dots_local', None if target == DotsBaseModel.DEFAULT_TARGET else target)
             state.project.save()
             _ = ModelWorker.clear_models_if_running_blocking()
-            print_feedback("Model set:", target)
+            print_feedback("Model set:", target.value)
 
         MenuUtil.options_menu(
             state=state,
             heading_text="Select dots.tts model",
-            labels=targets,
-            values=targets,
-            current_value=DotsBaseModel.resolve_target(state.project.get_model_setting('dots_local', 'target')),
-            default_value=DotsBaseModel.DEFAULT_REPO_ID,
+            labels=DotsBaseModel.PRESET_REPO_IDS,
+            values=DotsBaseModel.PRESET_TARGETS,
+            current_value=DotsBaseModel.resolve_target(state.project.get_model_target('dots_local')),
+            default_value=DotsBaseModel.DEFAULT_TARGET,
             on_select=on_select,
             sublabels=sublabels,
             breadcrumb="dots.tts model",

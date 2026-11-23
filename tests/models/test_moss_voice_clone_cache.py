@@ -15,6 +15,7 @@ except importlib.metadata.PackageNotFoundError:
 
 import torch
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.tts_models.moss_model import MossModel
 from voice_cache_test_support import cache_key_prefix
@@ -71,7 +72,7 @@ class FakeModel:
 def make_model() -> MossModel:
     model = MossModel.__new__(MossModel)
     model._device_type = DeviceType.CPU
-    model.model_target = "fake"
+    model.model_target = ModelTarget.local("fake")
     model.dtype = torch.float32
     model._voice_info = None
     model.cached_continuation_history = []

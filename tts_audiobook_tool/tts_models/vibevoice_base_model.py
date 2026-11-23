@@ -1,6 +1,7 @@
 from abc import ABC
 
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.model_support import VoiceLoraMode
@@ -22,6 +23,8 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         "microsoft/VibeVoice-1.5b",
         "vibevoice/VibeVoice-7B",
     ]
+    PRESET_TARGETS = [ModelTarget.hf(repo_id) for repo_id in PRESET_REPO_IDS]
+    DEFAULT_TARGET = ModelTarget.hf(DEFAULT_REPO_ID)
 
     # CFG and steps defaults and bounds (`[models.local.parameters]`); see `LOCAL.resolve()`.
     # nb, their gradio demo CFG default is 1.3, which is IMO much too low
@@ -36,7 +39,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
 ) -> str:
-        target = project.get_model_setting('vibevoice_local', 'target') or VibeVoiceBaseModel.DEFAULT_REPO_ID
+        target = (project.get_model_target('vibevoice_local') or VibeVoiceBaseModel.DEFAULT_TARGET).value
         target = target.removeprefix("vibevoice/")
         target = target.removeprefix("microsoft/")
         target = ellipsize_path_for_menu(target)
@@ -66,9 +69,10 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
 def is_15b(project: Project) -> bool:
     # Best-guess using target value only
-    target = project.get_model_setting('vibevoice_local', 'target').lower()
-    if not target:
+    model_target = project.get_model_target('vibevoice_local')
+    if model_target is None:
         return True # 1.5B is the default
+    target = model_target.value.lower()
     if "1.5b" in target or "15b" in target:
         return True
     return False

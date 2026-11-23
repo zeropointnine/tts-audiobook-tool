@@ -2,7 +2,6 @@ import random
 from collections.abc import Iterable
 from pathlib import Path
 
-from huggingface_hub import snapshot_download
 
 import numpy as np
 import torch
@@ -18,6 +17,7 @@ from tts_audiobook_tool.app_types.voice import VoiceLora
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.tts_models.lora_switch import BaseWeightCache, LoraSwitcher, SafetensorsBaseWeights
 from tts_audiobook_tool.util import *
@@ -63,7 +63,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
     # several voices can be kept at once.
     RETAINS_MULTIPLE_VOICE_CLONES = True
 
-    def __init__(self, model_target: str, device: DeviceType):
+    def __init__(self, model_target: ModelTarget, device: DeviceType):
 
         self._model_target = model_target
         self._device_type = device
@@ -79,7 +79,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             dtype = torch.float32
 
         # Resolve once so base-weight restores use the exact checkpoint that was loaded.
-        model_dir = Path(model_target) if os.path.isdir(model_target) else Path(snapshot_download(model_target))
+        model_dir = Path(model_target.resolve_local_dir())
         self._model: OmniVoice = OmniVoice.from_pretrained(
             str(model_dir),
             device_map=device_map,

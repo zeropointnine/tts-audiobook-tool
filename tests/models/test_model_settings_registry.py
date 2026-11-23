@@ -284,3 +284,33 @@ def test_current_bindings_retain_frozen_legacy_storage_contracts() -> None:
         assert current.default == default, attr
         assert current.has_sentinel == (default == -1 and not attr.endswith("_seed")), attr
         assert current.preserve_default == attr.endswith("_seed"), attr
+
+
+def test_model_target_accessors_read_and_write_the_typed_pair() -> None:
+    # A model's custom target is the `target` / `target_type` pair, read and written together
+    from tts_audiobook_tool.app_types.model_target import ModelTarget
+
+    project = Project()
+    assert project.get_model_target("qwen3tts_local") is None
+    project.set_model_target("qwen3tts_local", ModelTarget.local("owner/repo"))
+    parameters = project.model_settings.models["qwen3tts_local"]["parameters"]
+    assert (parameters["target"], parameters["target_type"]) == ("owner/repo", "local")
+    # Repo-shaped, yet local: the stored kind wins over inference
+    assert project.get_model_target("qwen3tts_local") == ModelTarget.local("owner/repo")
+    project.set_model_target("qwen3tts_local", None)
+    assert "target" not in parameters and "target_type" not in parameters
+    assert project.get_model_target("qwen3tts_local") is None
+
+
+def test_untyped_model_target_reads_with_an_inferred_kind() -> None:
+    # Settings saved before target_type existed (or by an older build) still load as a target
+    from tts_audiobook_tool.app_types.model_target import TargetKind
+
+    project = Project.model_validate({"model_settings": {"models": {
+        "omnivoice_local": {"parameters": {"target": "owner/custom-base"}},
+        "vibevoice_local": {"parameters": {"target": "/models/vv", "target_type": "bogus"}},
+    }, "shared": {}}})
+    omnivoice = project.get_model_target("omnivoice_local")
+    vibevoice = project.get_model_target("vibevoice_local")
+    assert omnivoice is not None and (omnivoice.kind, omnivoice.inferred) == (TargetKind.HF, True)
+    assert vibevoice is not None and (vibevoice.kind, vibevoice.inferred) == (TargetKind.LOCAL, True)

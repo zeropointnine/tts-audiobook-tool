@@ -23,7 +23,7 @@ def test_per_voice_loras_do_not_change_model_load_params():
     before = Tts.get_model_params_using_project(project)
     project.voice_references = [Voice(loras={MODEL_ID: VoiceLora(ModelTarget.hf("owner/adapter"), 0.5)})]
     assert Tts.get_model_params_using_project(project) == before
-    assert before["vibevoice_target"] == "owner/custom-base"
+    assert before["vibevoice_target"] == ModelTarget.hf("owner/custom-base")
     assert "vibevoice_lora_path" not in before
     assert VibeVoiceBaseModel.voice_lora_mode(project) == "merged"
 

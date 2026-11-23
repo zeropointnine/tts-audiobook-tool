@@ -915,6 +915,7 @@ def test_moss_settings_are_private_and_architecture_scoped(model_id, prefixes, l
     if local_only:
         expected.extend([
             {"name": "target", "section": "parameters", "type": "str", "default": ""},
+            {"name": "target_type", "section": "parameters", "type": "str", "default": ""},
             {"name": "rolling_cont", "section": "parameters", "type": "int", "default": 0},
         ])
     for prefix in prefixes:

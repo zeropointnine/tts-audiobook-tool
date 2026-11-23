@@ -6,6 +6,7 @@ from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.constants import TOP_K_MAX_DEFAULT, TOP_P_MAX_DEFAULT
 from tts_audiobook_tool.text_ops.language_util import map_language
 from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution, resolve_from_table
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -124,7 +125,7 @@ class MossBaseModel(TtsBaseModel):
             is_local = (instance.get_loaded_arch_type() == MossArchType.LOCAL)
             return is_local
 
-        return MossConfigs.get_by_target(project.get_model_setting('moss_local', 'target')).is_local_arch
+        return MossConfigs.get_by_target(project.get_model_target('moss_local')).is_local_arch
 
     @classmethod
     def get_blocking_issues(
@@ -144,13 +145,13 @@ class MossBaseModel(TtsBaseModel):
     def should_trim_trailing_token_noise(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> bool:
-        return MossConfigs.get_by_target(project.get_model_setting('moss_local', 'target')).is_local_arch
+        return MossConfigs.get_by_target(project.get_model_target('moss_local')).is_local_arch
 
     @classmethod
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        s = project.get_model_setting('moss_local', 'target') or MossConfigs.get_default_repo_id()
+        s = (project.get_model_target('moss_local') or MossConfigs.get_default_target()).value
         s = s.removeprefix("OpenMOSS-Team/")
         s = util.ellipsize_path_for_menu(s)
         return s
@@ -159,7 +160,7 @@ class MossBaseModel(TtsBaseModel):
     def get_output_sample_rate(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> int:
-        return MossConfigs.get_by_target(project.get_model_setting('moss_local', 'target')).value.output_sample_rate
+        return MossConfigs.get_by_target(project.get_model_target('moss_local')).value.output_sample_rate
 
 # ---
 
@@ -205,6 +206,10 @@ class MossConfig:
     audio_top_k_min: int
     audio_top_k_max: int
     output_sample_rate: int
+
+    @property
+    def target(self) -> ModelTarget:
+        return ModelTarget.hf(self.repo_id)
 
 class MossConfigs(Enum):
 
@@ -274,26 +279,28 @@ class MossConfigs(Enum):
         return MossConfigs.DELAY
 
     @staticmethod
-    def get_default_repo_id() -> str:
-        return MossConfigs.get_default().value.repo_id
+    def get_default_target() -> ModelTarget:
+        return MossConfigs.get_default().value.target
 
     @staticmethod
-    def get_preset_by_target(target: str) -> "MossConfigs | None":
-        target = target.strip()
+    def get_preset_by_target(target: ModelTarget | None) -> "MossConfigs | None":
+        if target is None or not target.is_hf:
+            return None
         for config in MossConfigs:
-            if target == config.value.repo_id:
+            if target.value == config.value.repo_id:
                 return config
         return None
 
     @staticmethod
-    def get_by_target(target: str) -> "MossConfigs":
-        target = target.strip()
-        if not target:
+    def get_by_target(target: ModelTarget | None) -> "MossConfigs":
+        """The preset for a target, or for a custom one the best guess at its architecture
+        by name; the default preset for None."""
+        if target is None:
             return MossConfigs.get_default()
         config = MossConfigs.get_preset_by_target(target)
         if config:
             return config
-        return MossConfigs.LOCAL if "local" in target.lower() else MossConfigs.DELAY
+        return MossConfigs.LOCAL if "local" in target.value.lower() else MossConfigs.DELAY
 
     @property
     def is_local_arch(self) -> bool:

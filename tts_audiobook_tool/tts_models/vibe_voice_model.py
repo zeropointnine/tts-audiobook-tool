@@ -1,4 +1,3 @@
-import os
 import random
 from collections.abc import Iterable
 from pathlib import Path
@@ -6,7 +5,6 @@ from pathlib import Path
 import numpy as np
 import torch
 from typing import Callable
-from huggingface_hub import snapshot_download
 
 from tts_audiobook_tool import app_support
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference # type: ignore
@@ -19,6 +17,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.lora_switch import BaseWeightCache, LoraSwitcher, SafetensorsBaseWeights
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -62,21 +61,21 @@ class VibeVoiceModel(VibeVoiceBaseModel):
     def __init__(
             self,
             device: DeviceType,
-            model_target: str = "",
+            model_target: ModelTarget | None = None,
             max_new_tokens: int | None = None,
     ):
 
         self._device_type = device
         device_value = device.value
-        if not model_target:
-            model_target = VibeVoiceBaseModel.DEFAULT_REPO_ID
+        if model_target is None:
+            model_target = VibeVoiceBaseModel.DEFAULT_TARGET
         self.max_new_tokens = max_new_tokens
         self.audio_streamer: AudioStreamer | None = None
         self.stream_chunk_callback: StreamChunkCallback | None = None
         self.stream_end_callback: StreamEndCallback | None = None
 
         # Resolve once so base-weight restores use the exact checkpoint that was loaded
-        model_dir = Path(model_target) if os.path.isdir(model_target) else Path(snapshot_download(model_target))
+        model_dir = Path(model_target.resolve_local_dir())
 
         self.processor = VibeVoiceProcessor.from_pretrained(str(model_dir))
 

@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 import tts_audiobook_tool.model_worker as model_worker_module
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool import gen_timeout_util, text_util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types import Book, BookSection, Sound, SttVariant
@@ -1152,7 +1153,7 @@ def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
     assert len(commands) == 1
     command = commands[0]
     assert isinstance(command, InspectTtsCommand)
-    assert command.model_params["vibevoice_target"] == get_setting(project, "vibevoice_target")
+    assert command.model_params["vibevoice_target"] == ModelTarget.local(get_setting(project, "vibevoice_target"))
     assert command.settings.tts_model_type_id == "vibevoice_local"
     assert command.warm_models is False
     assert command.warm_stt is False

@@ -308,6 +308,8 @@ max = 2.0
 id = "dots_local"
 settings = [
     { name = "target", section = "parameters", type = "str", default = "" },
+    # Kind of `target` ("hf" | "local"); "" with a target: inferred (`ModelTarget.from_stored`)
+    { name = "target_type", section = "parameters", type = "str", default = "" },
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
     { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
@@ -891,6 +893,8 @@ settings = [
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
     { name = "target", section = "parameters", type = "str", default = "" },
+    # Kind of `target` ("hf" | "local"); "" with a target: inferred (`ModelTarget.from_stored`)
+    { name = "target_type", section = "parameters", type = "str", default = "" },
     { name = "rolling_cont", section = "parameters", type = "int", default = 0 },
     { name = "delay_temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "delay_top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
@@ -940,6 +944,8 @@ settings = [
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
     { name = "target", section = "parameters", type = "str", default = "" },
+    # Kind of `target` ("hf" | "local"); "" with a target: inferred (`ModelTarget.from_stored`)
+    { name = "target_type", section = "parameters", type = "str", default = "" },
     { name = "cfg", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "speed", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "num_step", section = "parameters", type = "int", default = -1, sentinel = -1 },
@@ -1060,6 +1066,8 @@ max = 2.0
 id = "qwen3tts_local"
 settings = [
     { name = "target", section = "parameters", type = "str", default = "" },
+    # Kind of `target` ("hf" | "local"); "" with a target: inferred (`ModelTarget.from_stored`)
+    { name = "target_type", section = "parameters", type = "str", default = "" },
     { name = "model_type", section = "parameters", type = "str", default = "" },
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "transcript", section = "voice_references", type = "list[str]", default = [] },
@@ -1110,6 +1118,8 @@ id = "vibevoice_local"
 settings = [
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "target", section = "parameters", type = "str", default = "" },
+    # Kind of `target` ("hf" | "local"); "" with a target: inferred (`ModelTarget.from_stored`)
+    { name = "target_type", section = "parameters", type = "str", default = "" },
     { name = "cfg", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "steps", section = "parameters", type = "int", default = -1, sentinel = -1 },
     { name = "batch_size", section = "orchestration", type = "int", default = 1 },

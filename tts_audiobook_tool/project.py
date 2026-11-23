@@ -10,6 +10,7 @@ from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSa
 from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, MinSegmentSentenceSilence, NormalizationType, RoomReverb, RoomReverbStereo, RoomTone, SegmentationStrategy, StreamEndCallback, Strictness
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.app_types.model_target import TARGET_FIELD, TARGET_TYPE_FIELD, ModelTarget
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_types.voice import Voice, ensure_voice_slot
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
@@ -206,6 +207,25 @@ class Project(BaseModel):
             REGISTRY.assign(self.model_settings, binding, value, reset=True)
         else:
             REGISTRY.assign(self.model_settings, binding, value)
+
+    def get_model_target(self, model_id: str) -> ModelTarget | None:
+        """A model's custom target (its `target` / `target_type` pair), or None for its
+        default. An untyped stored target comes back with an inferred kind
+        (`ModelTarget.from_stored`)."""
+        return ModelTarget.from_stored(
+            self.get_model_setting(model_id, TARGET_FIELD),
+            self.get_model_setting(model_id, TARGET_TYPE_FIELD),
+        )
+
+    def set_model_target(self, model_id: str, target: ModelTarget | None) -> None:
+        """Writes (or, for None, clears) a model's `target` / `target_type` pair together."""
+        if target is None:
+            self.set_model_setting(model_id, TARGET_FIELD, "", reset=True)
+            self.set_model_setting(model_id, TARGET_TYPE_FIELD, "", reset=True)
+            return
+        value, kind = target.to_stored()
+        self.set_model_setting(model_id, TARGET_FIELD, value)
+        self.set_model_setting(model_id, TARGET_TYPE_FIELD, kind)
 
     language_code: str = PROJECT_DEFAULT_LANGUAGE
 

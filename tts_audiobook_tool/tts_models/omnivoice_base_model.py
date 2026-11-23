@@ -5,6 +5,7 @@ from tts_audiobook_tool import util
 from tts_audiobook_tool.tts_models.model_support import VoiceLoraMode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -21,6 +22,7 @@ class OmniVoiceBaseModel(TtsBaseModel):
     INFO = TtsModelType.require_by_id("omnivoice_local").value
 
     DEFAULT_REPO_ID = "k2-fsa/OmniVoice"
+    DEFAULT_TARGET = ModelTarget.hf(DEFAULT_REPO_ID)
     # Speed, CFG and steps defaults and bounds (`[models.local.parameters]`); see `LOCAL.resolve()`
     LOCAL = require_local_definition("omnivoice_local")
 
@@ -28,11 +30,12 @@ class OmniVoiceBaseModel(TtsBaseModel):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        if not project.get_model_setting('omnivoice_local', 'target') or project.get_model_setting('omnivoice_local', 'target') == OmniVoiceBaseModel.DEFAULT_REPO_ID:
+        model_target = project.get_model_target('omnivoice_local')
+        if model_target is None or model_target == OmniVoiceBaseModel.DEFAULT_TARGET:
             s = cls.INFO.ui.get("proper_name") or ""
         else:
             s = cls.INFO.ui.get("short_name") or ""
-            target = util.ellipsize_path_for_menu(project.get_model_setting('omnivoice_local', 'target'))
+            target = util.ellipsize_path_for_menu(model_target.value)
             s += f" {COL_DIM}({target})"
         return s
 

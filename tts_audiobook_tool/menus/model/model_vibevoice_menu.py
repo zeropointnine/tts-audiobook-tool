@@ -1,5 +1,6 @@
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
@@ -19,8 +20,8 @@ class ModelVibeVoiceMenu:
         def make_model_target_label(_) -> str:
             return ModelMenuShared.make_target_label(
                 label_prefix="Select model",
-                target=project.get_model_setting('vibevoice_local', 'target'),
-                default_target=VibeVoiceBaseModel.DEFAULT_REPO_ID,
+                target=project.get_model_target('vibevoice_local'),
+                default_target=VibeVoiceBaseModel.DEFAULT_TARGET,
             )
 
         def make_items(_: State) -> list[MenuItem]:
@@ -34,7 +35,7 @@ class ModelVibeVoiceMenu:
                     lambda _, __: target_submenu(state),
                 )
             )
-            if state.project.get_model_setting('vibevoice_local', 'target'):
+            if state.project.get_model_target('vibevoice_local'):
                 items.append(
                     MenuItem("Clear custom model", lambda _, __: clear_custom_model(state))
                 )
@@ -56,9 +57,9 @@ def target_submenu(state: State) -> None:
     ModelMenuShared.target_submenu(
         state=state,
         heading="Select VibeVoice model",
-        preset_targets=VibeVoiceBaseModel.PRESET_REPO_IDS,
-        current_target=state.project.get_model_setting('vibevoice_local', 'target'),
-        default_target=VibeVoiceBaseModel.DEFAULT_REPO_ID,
+        preset_targets=VibeVoiceBaseModel.PRESET_TARGETS,
+        current_target=state.project.get_model_target('vibevoice_local'),
+        default_target=VibeVoiceBaseModel.DEFAULT_TARGET,
         ask_custom_target=lambda: ask_model_target(state),
         apply_target=lambda target: apply_model_and_validate(state, target),
     )
@@ -69,29 +70,30 @@ def ask_model_target(state: State) -> None:
     model_name = project.get_tts_model_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"vibevoice/VibeVoice-7B\"; \"/path/to/checkpoint\""
-    if project.get_model_setting('vibevoice_local', 'target'):
-        prompt += f"\n{COL_DIM}(currently: {project.get_model_setting('vibevoice_local', 'target')})"
+    current = project.get_model_target('vibevoice_local')
+    if current:
+        prompt += f"\n{COL_DIM}(currently: {current.value})"
 
     ModelMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.get_model_setting('vibevoice_local', 'target'),
-        callback=lambda _, target: apply_model_and_validate(state, target)
+        current_target=current.value if current else "",
+        callback=lambda _, target: apply_model_and_validate(state, ModelTarget.infer(target))
     )
 
-def apply_model_and_validate(state: State, target: str) -> None:
+def apply_model_and_validate(state: State, target: ModelTarget) -> None:
     project = state.project
 
-    previous_target = project.get_model_setting('vibevoice_local', 'target')
-    project.set_model_setting('vibevoice_local', 'target', target)
+    previous_target = project.get_model_target('vibevoice_local')
+    project.set_model_target('vibevoice_local', target)
     _ = ModelWorker.clear_models_if_running_blocking()
 
     # Preset targets are known-good repos with a single fixed architecture,
     # so there is nothing to learn from loading the model here. Custom
     # targets are arbitrary repos/paths, so validate those by loading.
-    if target in VibeVoiceBaseModel.PRESET_REPO_IDS:
+    if target in VibeVoiceBaseModel.PRESET_TARGETS:
         project.save()
-        print_feedback("\nCustom model set:", target)
+        print_feedback("\nCustom model set:", target.value)
         return
 
     printt(f"{COL_DIM_ITALICS}Initializing model...")
@@ -99,17 +101,17 @@ def apply_model_and_validate(state: State, target: str) -> None:
 
     inspection, error = ModelWorker.inspect_tts_blocking(state)
     if error or inspection is None:
-        project.set_model_setting('vibevoice_local', 'target', previous_target)
+        project.set_model_target('vibevoice_local', previous_target)
         _ = ModelWorker.clear_models_if_running_blocking()
         ask.ask_error(f"\n{error}")
         return
 
     project.save()
-    print_feedback("\nCustom model set:", target)
+    print_feedback("\nCustom model set:", target.value)
 
 def clear_custom_model(state: State) -> None:
     project = state.project
-    project.set_model_setting('vibevoice_local', 'target', "")
+    project.set_model_target('vibevoice_local', None)
     project.save()
     _ = ModelWorker.clear_models_if_running_blocking()
     print_feedback("Cleared, will use default model")

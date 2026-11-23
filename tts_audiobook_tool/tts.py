@@ -446,17 +446,17 @@ class Tts:
 
         return {
             "chatterbox_type": project.get_model_setting('chatterbox_local', 'type'),
-            "dots_target": project.get_model_setting('dots_local', 'target'),
+            "dots_target": project.get_model_target('dots_local'),
             "dots_compile": project.get_model_setting('dots_local', 'compile'),
-            "vibevoice_target": project.get_model_setting('vibevoice_local', 'target'),
+            "vibevoice_target": project.get_model_target('vibevoice_local'),
             "indextts2_use_fp16": resolve("indextts2_local", "use_fp16"),
             "glm_sr": resolve("glm_local", "sr"),
-            "moss_target": project.get_model_setting('moss_local', 'target'),
-            "qwen3_target": project.get_model_setting('qwen3tts_local', 'target'),
+            "moss_target": project.get_model_target('moss_local'),
+            "qwen3_target": project.get_model_target('qwen3tts_local'),
             "fish_s1_compile_enabled": resolve("fish_s1_local", "compile_enabled"),
             "fish_s2_compile_enabled": resolve("fish_s2_local", "compile_enabled"),
             "pocket_model_code": project.get_model_setting('pocket_local', 'model_code'),
-            "omnivoice_target": project.get_model_setting('omnivoice_local', 'target'),
+            "omnivoice_target": project.get_model_target('omnivoice_local'),
         }
 
     @staticmethod
@@ -474,17 +474,17 @@ class Tts:
 
         dirty = False
         dirty |= new_params.get("chatterbox_type", "") != old_params.get("chatterbox_type", "")
-        dirty |= new_params.get("dots_target", "") != old_params.get("dots_target", "")
+        dirty |= new_params.get("dots_target") != old_params.get("dots_target")
         dirty |= new_params.get("dots_compile", False) != old_params.get("dots_compile", False)
-        dirty |= new_params.get("vibevoice_target", "") != old_params.get("vibevoice_target", "")
+        dirty |= new_params.get("vibevoice_target") != old_params.get("vibevoice_target")
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
-        dirty |= new_params.get("moss_target", "") != old_params.get("moss_target", "")
-        dirty |= new_params.get("qwen3_target", "") != old_params.get("qwen3_target", "")
+        dirty |= new_params.get("moss_target") != old_params.get("moss_target")
+        dirty |= new_params.get("qwen3_target") != old_params.get("qwen3_target")
         dirty |= new_params.get("fish_s1_compile_enabled", False) != old_params.get("fish_s1_compile_enabled", False)
         dirty |= new_params.get("fish_s2_compile_enabled", False) != old_params.get("fish_s2_compile_enabled", False)
         dirty |= new_params.get("pocket_model_code", "") != old_params.get("pocket_model_code", "")
-        dirty |= new_params.get("omnivoice_target", "") != old_params.get("omnivoice_target", "")
+        dirty |= new_params.get("omnivoice_target") != old_params.get("omnivoice_target")
         if dirty and current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:
             Tts.clear_tts_model()
 
@@ -754,7 +754,7 @@ class Tts:
         require_model_owner("TTS")
         if not Tts._dots:
             device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("dots_local"))
-            target = Tts._model_params.get("dots_target", "") or DotsBaseModel.DEFAULT_REPO_ID
+            target = Tts._model_params.get("dots_target") or DotsBaseModel.DEFAULT_TARGET
             from tts_audiobook_tool.tts_models.dots_base_model import DotsCompileMode
             compile_enabled = Tts._model_params.get(
                 "dots_compile", DotsCompileMode.default().enabled
@@ -870,11 +870,9 @@ class Tts:
         require_model_owner("TTS")
         if not Tts._moss:
             device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("moss_local"))
-            target = Tts._model_params.get("moss_target", "") or MossConfigs.get_default_repo_id()
-
-            looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
-            if looks_like_path and not os.path.exists(target):
-                raise ValueError(f"MOSS model path not found: '{target}'")
+            target = Tts._model_params.get("moss_target") or MossConfigs.get_default_target()
+            if target.is_local and not os.path.isdir(target.value):
+                raise ValueError(f"MOSS model directory not found: '{target.value}'")
 
             from tts_audiobook_tool.tts_models.moss_model import MossModel
             Tts._moss = MossModel(device=device_type, model_target=target)
@@ -886,8 +884,7 @@ class Tts:
         require_model_owner("TTS")
         if not Tts._omnivoice:
             device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("omnivoice_local"))
-            model_target = Tts._model_params.get("omnivoice_target", "") \
-                        or OmniVoiceBaseModel.DEFAULT_REPO_ID
+            model_target = Tts._model_params.get("omnivoice_target") or OmniVoiceBaseModel.DEFAULT_TARGET
             from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
             Tts._omnivoice = OmniVoiceModel(
                 device=device_type,
@@ -918,18 +915,16 @@ class Tts:
         if not Tts._qwen3:
 
             device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("qwen3tts_local"))
-            target = Tts._model_params["qwen3_target"] or Qwen3BaseModel.DEFAULT_REPO_ID
-
-            looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
-            if looks_like_path and not os.path.exists(target):
-                raise ValueError(f"Qwen3 model path not found: '{target}'")
+            target = Tts._model_params.get("qwen3_target") or Qwen3BaseModel.DEFAULT_TARGET
+            if target.is_local and not os.path.isdir(target.value):
+                raise ValueError(f"Qwen3 model directory not found: '{target.value}'")
 
             from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
             try:
                 Tts._qwen3 = Qwen3Model(target, device_type)
             except Exception as e:
                 Tts._qwen3 = None
-                raise RuntimeError(f"Failed to load Qwen3 model from '{target}': {e}") from e
+                raise RuntimeError(f"Failed to load Qwen3 model from '{target.value}': {e}") from e
             printt()
 
         return Tts._qwen3
@@ -941,7 +936,7 @@ class Tts:
         if not Tts._vibevoice:
 
             device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("vibevoice_local"))
-            target = Tts._model_params.get("vibevoice_target", "") or VibeVoiceBaseModel.DEFAULT_REPO_ID
+            target = Tts._model_params.get("vibevoice_target") or VibeVoiceBaseModel.DEFAULT_TARGET
 
             from tts_audiobook_tool.tts_models.vibe_voice_model import VibeVoiceModel
             # Per-voice LoRAs are switched in place per call (`Voice.loras`), not load parameters

@@ -234,20 +234,21 @@ def test_model_loading_and_base_restores_share_one_resolved_snapshot(
         tmp_path, monkeypatch, use_repo, device_name, expected_dtype):
     # Resolve a hub target once before loading; local checkpoints need no download.
     pytest.importorskip("omnivoice")
+    import huggingface_hub
     from tts_audiobook_tool.app_types import DeviceType
     from tts_audiobook_tool.tts_models import omnivoice_model
 
     downloaded, loaded, sources = [], [], []
-    monkeypatch.setattr(omnivoice_model, "snapshot_download", lambda target: downloaded.append(target) or str(tmp_path))
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda repo_id, **_: downloaded.append(repo_id) or str(tmp_path))
     model = make_model()
     monkeypatch.setattr(omnivoice_model.OmniVoice, "from_pretrained",
                         lambda path, **kwargs: loaded.append((path, kwargs)) or model)
     sentinel = object()
     monkeypatch.setattr(omnivoice_model.OmniVoiceModel, "_make_lora_switcher",
                         staticmethod(lambda value, path: sources.append((value, str(path))) or sentinel))
-    target = "owner/base" if use_repo else str(tmp_path)
+    target = ModelTarget.hf("owner/base") if use_repo else ModelTarget.local(str(tmp_path))
     wrapper = omnivoice_model.OmniVoiceModel(target, DeviceType[device_name])
-    assert downloaded == ([target] if use_repo else [])
+    assert downloaded == (["owner/base"] if use_repo else [])
     assert loaded == [(str(tmp_path), {"device_map": "cuda:0" if use_repo else "cpu", "dtype": expected_dtype})]
     assert sources == [(model, str(tmp_path))]
     assert wrapper._loras is sentinel

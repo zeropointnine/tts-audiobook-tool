@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 
 import tts_audiobook_tool.tts as tts_module
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.menus.menu_util import MenuItem, get_string_from
 from tts_audiobook_tool.menus.model.model_dots_menu import ModelDotsMenu
@@ -264,10 +265,11 @@ def test_dots_target_submenu_has_only_presets_and_invalidates_worker(monkeypatch
     ModelDotsMenu.target_submenu(state)
 
     assert captured["labels"] == DotsBaseModel.PRESET_REPO_IDS
-    assert captured["values"] == DotsBaseModel.PRESET_REPO_IDS
+    assert captured["values"] == DotsBaseModel.PRESET_TARGETS
     assert len(captured["sublabels"]) == 4
-    captured["on_select"](DotsBaseModel.MF_REPO_ID)  # type: ignore[operator]
+    captured["on_select"](ModelTarget.hf(DotsBaseModel.MF_REPO_ID))  # type: ignore[operator]
     assert get_setting(state.project, "dots_target") == DotsBaseModel.MF_REPO_ID
+    assert state.project.get_model_target("dots_local") == ModelTarget.hf(DotsBaseModel.MF_REPO_ID)
     assert saves == [True]
     assert clears == [True]
 

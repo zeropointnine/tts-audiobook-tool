@@ -1,4 +1,3 @@
-import os
 import random
 from typing import cast
 
@@ -12,6 +11,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.qwen3_language import QWEN3_AUTO_LANGUAGE
@@ -19,25 +19,16 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
-def resolve_model_dir(model_target: str) -> str:
+def resolve_model_dir(model_target: ModelTarget) -> str:
     """
-    Resolve a "target" (hf repo id or local dir path) to a local model directory.
+    Resolve a target to a local model directory.
 
     Resolving via snapshot_download before handing off to qwen_tts/transformers
     lets offline machines load from the hf cache without any network access.
     (qwen_tts ultimately calls AutoModel/AutoProcessor.from_pretrained(), which
     otherwise HEAD-requests huggingface.co on every load, even when cached.)
     """
-
-    if os.path.isdir(model_target):
-        return model_target
-
-    import huggingface_hub
-    return huggingface_hub.snapshot_download(
-        repo_id=model_target,
-        cache_dir=huggingface_hub.constants.HF_HUB_CACHE,
-        local_files_only=False,
-    )
+    return model_target.resolve_local_dir()
 
 
 class Qwen3Model(Qwen3BaseModel):
@@ -46,7 +37,7 @@ class Qwen3Model(Qwen3BaseModel):
 
     RETAINS_MULTIPLE_VOICE_CLONES = True
 
-    def __init__(self, model_target: str, device: DeviceType):
+    def __init__(self, model_target: ModelTarget, device: DeviceType):
 
         self._model_target = model_target
         self._voice_info: tuple[str, str] | None = None
@@ -84,7 +75,7 @@ class Qwen3Model(Qwen3BaseModel):
         self._model = None # type: ignore
 
     @property
-    def model_target(self) -> str:
+    def model_target(self) -> ModelTarget:
         return self._model_target
 
     @property

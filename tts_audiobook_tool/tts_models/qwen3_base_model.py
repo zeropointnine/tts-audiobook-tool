@@ -2,6 +2,7 @@ from __future__ import annotations
 from enum import Enum
 
 from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution
@@ -27,6 +28,8 @@ class Qwen3BaseModel(TtsBaseModel):
         "zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer"
     ]
     DEFAULT_REPO_ID = PRESET_REPO_IDS[0]
+    PRESET_TARGETS = [ModelTarget.hf(repo_id) for repo_id in PRESET_REPO_IDS]
+    DEFAULT_TARGET = PRESET_TARGETS[0]
 
     TEMPERATURE_FALLBACK_DEFAULT = 0.9 # (Real default is embedded in the loaded model)
     TEMPERATURE_MIN = 0.01
@@ -41,7 +44,7 @@ class Qwen3BaseModel(TtsBaseModel):
         ...
 
     @property
-    def model_target(self) -> str:
+    def model_target(self) -> ModelTarget:
         ...
 
     @property
@@ -192,7 +195,7 @@ class Qwen3BaseModel(TtsBaseModel):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
 ) -> str:
-        s = project.get_model_setting('qwen3tts_local', 'target') or Qwen3BaseModel.DEFAULT_REPO_ID
+        s = (project.get_model_target('qwen3tts_local') or Qwen3BaseModel.DEFAULT_TARGET).value
         s = s.removeprefix("Qwen/")
         s = ellipsize_path_for_menu(s)
         s = f"{cls.INFO.ui['proper_name']} {COL_DIM}({s})"

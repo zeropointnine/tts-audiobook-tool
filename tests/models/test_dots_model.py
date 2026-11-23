@@ -6,6 +6,7 @@ import torch
 
 pytest.importorskip("dots_tts")
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models import dots_model
@@ -44,10 +45,19 @@ class FakeRuntime:
         yield from self.stream_chunks
 
 
+
+@pytest.fixture(autouse=True)
+def offline_hf_resolution(monkeypatch):
+    # The constructor resolves hf targets to a local snapshot first; this stub's
+    # "snapshot" is the repo id itself, so the runtime sees the same string
+    import huggingface_hub
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda repo_id, **_: repo_id)
+
+
 def make_model(runtime: FakeRuntime, target: str = DotsBaseModel.SOAR_REPO_ID) -> DotsModel:
     model = DotsModel.__new__(DotsModel)
     model._runtime = runtime
-    model._model_target = target
+    model._model_target = ModelTarget.hf(target)
     model._device_type = DeviceType.CPU
     return model
 
@@ -68,7 +78,7 @@ def test_dots_constructor_uses_device_precision_and_cuda_optimization(monkeypatc
     )
 
     monkeypatch.setattr(dots_model.torch.cuda, "is_available", lambda: False)
-    cpu_model = DotsModel(DotsBaseModel.SOAR_REPO_ID, DeviceType.CPU)
+    cpu_model = DotsModel(ModelTarget.hf(DotsBaseModel.SOAR_REPO_ID), DeviceType.CPU)
     assert calls[-1] == (
         DotsBaseModel.SOAR_REPO_ID,
         {
@@ -82,7 +92,7 @@ def test_dots_constructor_uses_device_precision_and_cuda_optimization(monkeypatc
 
     monkeypatch.setattr(dots_model.torch.cuda, "is_available", lambda: True)
     cuda_model = DotsModel(
-        DotsBaseModel.MF_REPO_ID,
+        ModelTarget.hf(DotsBaseModel.MF_REPO_ID),
         DeviceType.CUDA,
     )
     assert calls[-1] == (
@@ -100,7 +110,7 @@ def test_dots_constructor_uses_device_precision_and_cuda_optimization(monkeypatc
 def test_dots_constructor_rejects_forced_cpu_and_bad_sample_rate(monkeypatch):
     monkeypatch.setattr(dots_model.torch.cuda, "is_available", lambda: True)
     with pytest.raises(RuntimeError, match="cannot force CPU"):
-        DotsModel(DotsBaseModel.SOAR_REPO_ID, DeviceType.CPU)
+        DotsModel(ModelTarget.hf(DotsBaseModel.SOAR_REPO_ID), DeviceType.CPU)
 
     monkeypatch.setattr(dots_model.torch.cuda, "is_available", lambda: False)
     monkeypatch.setattr(
@@ -109,7 +119,7 @@ def test_dots_constructor_rejects_forced_cpu_and_bad_sample_rate(monkeypatch):
         lambda *args, **kwargs: FakeRuntime(sample_rate=24_000),
     )
     with pytest.raises(ValueError, match="Unexpected dots.tts output sample rate"):
-        DotsModel(DotsBaseModel.SOAR_REPO_ID, DeviceType.CPU)
+        DotsModel(ModelTarget.hf(DotsBaseModel.SOAR_REPO_ID), DeviceType.CPU)
 
 
 def test_dots_constructor_compile_setting_gates_cuda_optimization(monkeypatch):
@@ -126,7 +136,7 @@ def test_dots_constructor_compile_setting_gates_cuda_optimization(monkeypatch):
 
     monkeypatch.setattr(dots_model.torch.cuda, "is_available", lambda: True)
     DotsModel(
-        DotsBaseModel.SOAR_REPO_ID,
+        ModelTarget.hf(DotsBaseModel.SOAR_REPO_ID),
         DeviceType.CUDA,
         compile_enabled=False,
     )
@@ -134,7 +144,7 @@ def test_dots_constructor_compile_setting_gates_cuda_optimization(monkeypatch):
 
     monkeypatch.setattr(dots_model.torch.cuda, "is_available", lambda: False)
     DotsModel(
-        DotsBaseModel.SOAR_REPO_ID,
+        ModelTarget.hf(DotsBaseModel.SOAR_REPO_ID),
         DeviceType.CPU,
         compile_enabled=True,
     )

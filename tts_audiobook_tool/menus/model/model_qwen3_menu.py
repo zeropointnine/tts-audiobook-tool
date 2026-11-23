@@ -3,6 +3,7 @@ from typing import Any
 
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import TtsInspected
@@ -32,7 +33,7 @@ class ModelQwen3Menu:
             value = metadata.get("generate_defaults", {})
             return value if isinstance(value, dict) else {}
 
-        def apply_target_and_refresh(target: str) -> None:
+        def apply_target_and_refresh(target: ModelTarget) -> None:
             def refresh(updated_inspection: TtsInspected) -> None:
                 nonlocal metadata
                 metadata = updated_inspection.metadata or {}
@@ -51,8 +52,8 @@ class ModelQwen3Menu:
             extra_suffix = f" {COL_DIM}(model type: {COL_ACCENT}{model_type}{COL_DIM})"
             return ModelMenuShared.make_target_label(
                 label_prefix="Select Qwen3-TTS model",
-                target=state.project.get_model_setting('qwen3tts_local', 'target'),
-                default_target=Qwen3BaseModel.DEFAULT_REPO_ID,
+                target=state.project.get_model_target('qwen3tts_local'),
+                default_target=Qwen3BaseModel.DEFAULT_TARGET,
                 remove_prefixes=["Qwen/"],
                 extra_suffix=extra_suffix,
             )
@@ -68,7 +69,7 @@ class ModelQwen3Menu:
                     lambda _, __: model_target_submenu(state, apply_target_and_refresh),
                 )
             )
-            if state.project.get_model_setting('qwen3tts_local', 'target'):
+            if state.project.get_model_target('qwen3tts_local'):
                 items.append(
                     MenuItem("Clear custom model", clear_target_and_refresh)
                 )
@@ -139,7 +140,7 @@ class ModelQwen3Menu:
 
 def model_target_submenu(
     state: State,
-    apply_target: Callable[[str], None] | None = None,
+    apply_target: Callable[[ModelTarget], None] | None = None,
 ) -> None:
     resolved_apply_target = apply_target
     if resolved_apply_target is None:
@@ -148,16 +149,16 @@ def model_target_submenu(
     ModelMenuShared.target_submenu(
         state=state,
         heading="Select Qwen3-TTS model",
-        preset_targets=Qwen3BaseModel.PRESET_REPO_IDS,
-        current_target=state.project.get_model_setting('qwen3tts_local', 'target'),
-        default_target=Qwen3BaseModel.DEFAULT_REPO_ID,
+        preset_targets=Qwen3BaseModel.PRESET_TARGETS,
+        current_target=state.project.get_model_target('qwen3tts_local'),
+        default_target=Qwen3BaseModel.DEFAULT_TARGET,
         ask_custom_target=lambda: ask_target(state, resolved_apply_target),
         apply_target=resolved_apply_target,
     )
 
 def ask_target(
     state: State,
-    apply_target: Callable[[str], None] | None = None,
+    apply_target: Callable[[ModelTarget], None] | None = None,
 ) -> None:
     project = state.project
     resolved_apply_target = apply_target
@@ -168,29 +169,30 @@ def ask_target(
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer\" or \"/path/to/checkpoint\""
 
+    current = project.get_model_target('qwen3tts_local')
     ModelMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.get_model_setting('qwen3tts_local', 'target'),
-        callback=lambda _, target: resolved_apply_target(target)
+        current_target=current.value if current else "",
+        callback=lambda _, target: resolved_apply_target(ModelTarget.infer(target))
     )
 
 def apply_model_and_validate(
     state: State,
-    target: str,
+    target: ModelTarget,
     on_applied: Callable[[TtsInspected], None] | None = None,
 ) -> None:
     project = state.project
 
-    previous_target = project.get_model_setting('qwen3tts_local', 'target')
+    previous_target = project.get_model_target('qwen3tts_local')
     previous_model_type = project.get_model_setting('qwen3tts_local', 'model_type')
 
     def revert() -> None:
-        project.set_model_setting('qwen3tts_local', 'target', previous_target)
+        project.set_model_target('qwen3tts_local', previous_target)
         project.set_model_setting('qwen3tts_local', 'model_type', previous_model_type)
         _ = ModelWorker.clear_models_if_running_blocking()
 
-    project.set_model_setting('qwen3tts_local', 'target', target)
+    project.set_model_target('qwen3tts_local', target)
     _ = ModelWorker.clear_models_if_running_blocking()
 
     printt(f"{COL_DIM_ITALICS}Initializing model...")
@@ -199,7 +201,7 @@ def apply_model_and_validate(
     inspection, error = ModelWorker.inspect_tts_blocking(state)
     if error or inspection is None:
         revert()
-        ask.ask_error(f"\nContents at {target} appear to be invalid:\n{error}")
+        ask.ask_error(f"\nContents at {target.value} appear to be invalid:\n{error}")
         return
 
     metadata = inspection.metadata or {}
@@ -215,11 +217,11 @@ def apply_model_and_validate(
     project.save()
     if on_applied is not None:
         on_applied(inspection)
-    print_feedback("Model set:", target)
+    print_feedback("Model set:", target.value)
     ask.ask_enter_to_continue()
 
 def on_clear_model_target(state: State, __: MenuItem) -> None:
-    state.project.set_model_setting('qwen3tts_local', 'target', "")
+    state.project.set_model_target('qwen3tts_local', None)
     state.project.set_model_setting('qwen3tts_local', 'model_type', "")
     state.project.save()
     _ = ModelWorker.clear_models_if_running_blocking()

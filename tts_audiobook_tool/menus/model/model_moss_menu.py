@@ -1,5 +1,6 @@
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.menus.model.model_moss_shared import ModelMossShared
@@ -21,8 +22,8 @@ class ModelMossMenu:
         def make_target_label(_) -> str:
             return ModelMenuShared.make_target_label(
                 label_prefix="Select MOSS-TTS model",
-                target=state.project.get_model_setting('moss_local', 'target'),
-                default_target=MossConfigs.get_default_repo_id(),
+                target=state.project.get_model_target('moss_local'),
+                default_target=MossConfigs.get_default_target(),
                 remove_prefixes=["OpenMOSS-Team/"],
             )
 
@@ -48,7 +49,7 @@ class ModelMossMenu:
             )
             items.append(item)
 
-            config = MossConfigs.get_by_target(state.project.get_model_setting('moss_local', 'target'))
+            config = MossConfigs.get_by_target(state.project.get_model_target('moss_local'))
 
             items.append(ModelMossShared.make_temperature_item(state, config))
 
@@ -70,9 +71,9 @@ def target_submenu(state: State) -> None:
     ModelMenuShared.target_submenu(
         state=state,
         heading="Select MOSS-TTS model",
-        preset_targets=[config.value.repo_id for config in configs],
-        current_target=state.project.get_model_setting('moss_local', 'target'),
-        default_target=MossConfigs.get_default_repo_id(),
+        preset_targets=[config.value.target for config in configs],
+        current_target=state.project.get_model_target('moss_local'),
+        default_target=MossConfigs.get_default_target(),
         ask_custom_target=lambda: ask_target(state),
         apply_target=lambda target: apply_model_and_validate(state, target),
         sublabels=[config.preset_description for config in configs],
@@ -85,23 +86,24 @@ def ask_target(state: State) -> None:
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"OpenMOSS-Team/MOSS-TTS-v1.5\" or \"/path/to/checkpoint\""
 
+    current = project.get_model_target('moss_local')
     ModelMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.get_model_setting('moss_local', 'target'),
-        callback=lambda _, target: apply_model_and_validate(state, target)
+        current_target=current.value if current else "",
+        callback=lambda _, target: apply_model_and_validate(state, ModelTarget.infer(target))
     )
 
-def apply_model_and_validate(state: State, target: str) -> None:
+def apply_model_and_validate(state: State, target: ModelTarget) -> None:
     project = state.project
 
-    previous_target = project.get_model_setting('moss_local', 'target')
+    previous_target = project.get_model_target('moss_local')
 
     def revert() -> None:
-        project.set_model_setting('moss_local', 'target', previous_target)
+        project.set_model_target('moss_local', previous_target)
         _ = ModelWorker.clear_models_if_running_blocking()
 
-    project.set_model_setting('moss_local', 'target', target)
+    project.set_model_target('moss_local', target)
     _ = ModelWorker.clear_models_if_running_blocking()
 
     # Preset targets are pinned, known-good repos whose runtime properties
@@ -110,7 +112,7 @@ def apply_model_and_validate(state: State, target: str) -> None:
     # Custom targets run arbitrary remote code, so validate those by loading.
     if MossConfigs.get_preset_by_target(target) is not None:
         project.save()
-        print_feedback("Model set:", target)
+        print_feedback("Model set:", target.value)
         return
 
     printt(f"{COL_DIM_ITALICS}Initializing model...")
@@ -119,15 +121,15 @@ def apply_model_and_validate(state: State, target: str) -> None:
     inspection, error = ModelWorker.inspect_tts_blocking(state)
     if error or inspection is None:
         revert()
-        ask.ask_error(f"\nContents at {target} appear to be invalid:\n{error}")
+        ask.ask_error(f"\nContents at {target.value} appear to be invalid:\n{error}")
         return
 
     project.save()
-    print_feedback("Model set:", target)
+    print_feedback("Model set:", target.value)
     ask.ask_enter_to_continue()
 
 def on_clear_model_target(state: State, __: MenuItem) -> None:
-    state.project.set_model_setting('moss_local', 'target', "")
+    state.project.set_model_target('moss_local', None)
     state.project.save()
     _ = ModelWorker.clear_models_if_running_blocking()
     print_feedback("Cleared, will use default model")

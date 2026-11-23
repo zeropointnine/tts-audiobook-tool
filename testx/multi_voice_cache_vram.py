@@ -54,6 +54,7 @@ import time
 
 import torch
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
@@ -132,7 +133,7 @@ def print_voice_inventory(voices: list[tuple[str, str, str]]) -> None:
         )
 
 
-def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, str | None]:
+def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, ModelTarget | None]:
     """
     Instantiates the model class found in the current venv the same way
     Tts's lazy factory does (tts_audiobook_tool/tts.py), standalone: the
@@ -150,19 +151,19 @@ def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, str | None]:
             from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
             # The voice clone flow needs the 'base' variant; that is
             # determined by the model config, so pick a Base repo
-            target = Qwen3BaseModel.DEFAULT_REPO_ID
+            target = Qwen3BaseModel.DEFAULT_TARGET
             return Qwen3Model(target, DeviceType.CUDA), target
 
         case "omnivoice_local":
             from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
             from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
-            target = OmniVoiceBaseModel.DEFAULT_REPO_ID
+            target = OmniVoiceBaseModel.DEFAULT_TARGET
             return OmniVoiceModel(model_target=target, device=DeviceType.CUDA), target
 
         case "moss_local":
             from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
             from tts_audiobook_tool.tts_models.moss_model import MossModel
-            target = MossConfigs.get_default_repo_id()
+            target = MossConfigs.get_default_target()
             return MossModel(device=DeviceType.CUDA, model_target=target), target
 
         case "chatterbox_local":
@@ -235,7 +236,7 @@ def make_project(model_type: TtsModelType, voices: list[tuple[str, str, str]]):
     # LOCAL vs DELAY hyperparams; it must agree with what got loaded
     if model_type.id == "moss_local":
         from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
-        project.set_model_setting("moss_local", "target", MossConfigs.get_default_repo_id())
+        project.set_model_target("moss_local", MossConfigs.get_default_target())
 
     return project
 
@@ -311,7 +312,7 @@ def main() -> int:
     model, target = create_model(model_type)
     torch.cuda.synchronize()
     if target:
-        print(f"  target: {target}")
+        print(f"  target: {target.describe()}")
     print(
         f"Loaded in {time.perf_counter() - load_start:.1f}s | "
         f"allocated={gb(torch.cuda.memory_allocated()):.2f} GB | "
@@ -382,7 +383,7 @@ def main() -> int:
     print("\nSummary:")
     print(f"  model: {model_type.value.id} ({model_type.value.ui['proper_name']})")
     if target:
-        print(f"  target: {target}")
+        print(f"  target: {target.describe()}")
     print(f"  multi-voice cache: {multi_voice}")
     print(f"  generation calls: {total_calls}")
     print(f"  cache entries: {cache_count} (expected {expected_cache})")

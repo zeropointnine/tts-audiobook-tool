@@ -2,6 +2,7 @@
 from typing import Callable
 
 from tts_audiobook_tool import ask, target_util
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.constants_hints import *
@@ -416,13 +417,13 @@ class ModelMenuShared:
     @staticmethod
     def make_target_label(
             label_prefix: str,
-            target: str,
-            default_target: str,
+            target: ModelTarget | None,
+            default_target: ModelTarget,
             remove_prefixes: list[str] | None = None,
             extra_suffix: str = "",
     ) -> str:
-        value = target or default_target
-        default_value = default_target
+        value = (target or default_target).value
+        default_value = default_target.value
 
         for prefix in remove_prefixes or []:
             value = value.removeprefix(prefix)
@@ -437,11 +438,11 @@ class ModelMenuShared:
     def target_submenu(
             state: State,
             heading: str,
-            preset_targets: list[str],
-            current_target: str,
-            default_target: str,
+            preset_targets: list[ModelTarget],
+            current_target: ModelTarget | None,
+            default_target: ModelTarget,
             ask_custom_target: Callable[[], None],
-            apply_target: Callable[[str], None],
+            apply_target: Callable[[ModelTarget], None],
             sublabels: list[str] | None = None,
             custom_label: str = "Enter custom hf repo id or local path",
             breadcrumb: str | None = None,
@@ -449,8 +450,8 @@ class ModelMenuShared:
         if sublabels and len(sublabels) != len(preset_targets):
             raise ValueError("sublabels and preset_targets lists must have same size")
 
-        def make_preset_label(target: str) -> str:
-            label = target
+        def make_preset_label(target: ModelTarget) -> str:
+            label = target.value
             if target == default_target:
                 label += f" {COL_DIM}(default)"
             if target == current_target:
@@ -459,16 +460,17 @@ class ModelMenuShared:
 
         def make_custom_label() -> str:
             label = custom_label
-            is_custom = bool(current_target) and not any(
-                target_util.is_same_target(current_target, target) for target in preset_targets
+            is_custom = current_target is not None and not any(
+                current_target.is_same(target) for target in preset_targets
             )
             if is_custom:
-                value = ellipsize_path_for_menu(current_target)
+                assert current_target is not None
+                value = ellipsize_path_for_menu(current_target.value)
                 label += f" {COL_DIM}(currently: {COL_ACCENT}{value}{COL_DIM})"
             return label
 
-        def apply_preset_if_changed(target: str) -> None:
-            if target_util.is_same_target(current_target, target):
+        def apply_preset_if_changed(target: ModelTarget) -> None:
+            if target.is_same(current_target):
                 return
             apply_target(target)
 

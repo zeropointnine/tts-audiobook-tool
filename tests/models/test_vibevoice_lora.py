@@ -168,11 +168,12 @@ def test_model_loading_and_base_restores_share_one_resolved_snapshot(tmp_path, m
     # A hub target is resolved once, and the processor, the model and the base-weight
     # source all read that one directory; LoRAs are no longer a constructor argument.
     pytest.importorskip("vibevoice")
+    import huggingface_hub
     from tts_audiobook_tool.app_types import DeviceType
     from tts_audiobook_tool.tts_models import vibe_voice_model
 
     downloaded, loaded, sources = [], [], []
-    monkeypatch.setattr(vibe_voice_model, "snapshot_download", lambda target: downloaded.append(target) or str(tmp_path))
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda repo_id, **_: downloaded.append(repo_id) or str(tmp_path))
     monkeypatch.setattr(vibe_voice_model.VibeVoiceProcessor, "from_pretrained",
                         lambda path: loaded.append(("processor", path)) or object())
     model = make_model()
@@ -181,7 +182,7 @@ def test_model_loading_and_base_restores_share_one_resolved_snapshot(tmp_path, m
     sentinel = object()
     monkeypatch.setattr(vibe_voice_model.VibeVoiceModel, "_make_lora_switcher",
                         staticmethod(lambda value, path: sources.append((value, str(path))) or sentinel))
-    wrapper = vibe_voice_model.VibeVoiceModel(DeviceType.CPU, model_target="owner/base")
+    wrapper = vibe_voice_model.VibeVoiceModel(DeviceType.CPU, model_target=ModelTarget.hf("owner/base"))
     assert downloaded == ["owner/base"]
     assert loaded == [("processor", str(tmp_path)), ("model", str(tmp_path))]
     assert sources == [(model, str(tmp_path))]

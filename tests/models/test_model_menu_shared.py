@@ -3,6 +3,7 @@ from typing import cast
 
 import pytest
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.model import model_menu_shared
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
@@ -166,7 +167,7 @@ def test_rolling_continuation_subheading_preserves_paragraph_spacing(monkeypatch
 def test_target_submenu_only_applies_changed_preset(monkeypatch) -> None:
     state = cast(State, SimpleNamespace())
     captured_items = []
-    applied_targets: list[str] = []
+    applied_targets: list[ModelTarget] = []
 
     def capture_menu(**kwargs) -> None:
         captured_items.extend(kwargs["items"])
@@ -176,9 +177,9 @@ def test_target_submenu_only_applies_changed_preset(monkeypatch) -> None:
     ModelMenuShared.target_submenu(
         state=state,
         heading="Model",
-        preset_targets=["repo/current", "repo/other"],
-        current_target="repo/current",
-        default_target="repo/current",
+        preset_targets=[ModelTarget.hf("repo/current"), ModelTarget.hf("repo/other")],
+        current_target=ModelTarget.hf("repo/current"),
+        default_target=ModelTarget.hf("repo/current"),
         ask_custom_target=lambda: None,
         apply_target=applied_targets.append,
     )
@@ -186,6 +187,6 @@ def test_target_submenu_only_applies_changed_preset(monkeypatch) -> None:
     captured_items[0].handler(state, captured_items[0])
     captured_items[1].handler(state, captured_items[1])
 
-    assert applied_targets == ["repo/other"]
+    assert applied_targets == [ModelTarget.hf("repo/other")]
 
 

@@ -26,7 +26,7 @@ def test_per_voice_loras_do_not_change_model_load_params():
     before = Tts.get_model_params_using_project(project)
     project.voice_references = [Voice(loras={MODEL_ID: VoiceLora(ModelTarget.hf("owner/adapter"), 0.5)})]
     assert Tts.get_model_params_using_project(project) == before
-    assert before["omnivoice_target"] == "owner/custom-base"
+    assert before["omnivoice_target"] == ModelTarget.hf("owner/custom-base")
     assert "omnivoice_lora_target" not in before
     assert OmniVoiceBaseModel.voice_lora_mode(project) == "merged"
 

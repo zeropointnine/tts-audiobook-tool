@@ -1,5 +1,6 @@
 from tts_audiobook_tool.project_support.model_settings import SettingRef
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
@@ -16,17 +17,17 @@ class ModelOmniVoiceMenu:
     def menu(state: State) -> None:
 
         def make_target_label(_) -> str:
-            target = state.project.get_model_setting('omnivoice_local', 'target') or OmniVoiceBaseModel.DEFAULT_REPO_ID
-            is_default = (target == OmniVoiceBaseModel.DEFAULT_REPO_ID)
+            target = state.project.get_model_target('omnivoice_local') or OmniVoiceBaseModel.DEFAULT_TARGET
+            is_default = (target == OmniVoiceBaseModel.DEFAULT_TARGET)
             if is_default:
                 label = f"{COL_DIM}(optional)"
             else:
-                value = ellipsize_path_for_menu(target)
+                value = ellipsize_path_for_menu(target.value)
                 label = make_currently_string(value)
             return f"Custom model {label}"
 
         def on_clear_model_target(s: State, __: MenuItem) -> None:
-            s.project.set_model_setting('omnivoice_local', 'target', "")
+            s.project.set_model_target('omnivoice_local', None)
             s.project.save()
             Tts.set_model_params_using_project(s.project)
             _ = ModelWorker.clear_models_if_running_blocking()
@@ -38,7 +39,7 @@ class ModelOmniVoiceMenu:
             items.append(
                 MenuItem(make_target_label, lambda _, __: ask_target(state))
             )
-            if state.project.get_model_setting('omnivoice_local', 'target'):
+            if state.project.get_model_target('omnivoice_local'):
                 items.append(MenuItem("Clear custom model", on_clear_model_target))
 
             for name, label in (("num_step", "Steps"), ("speed", "Speed"), ("cfg", "CFG")):
@@ -59,22 +60,23 @@ def ask_target(state: State) -> None:
     model_name = project.get_tts_model_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"k2-fsa/OmniVoice\" or \"/path/to/local/checkpoint\""
+    current = project.get_model_target('omnivoice_local')
     ModelMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.get_model_setting('omnivoice_local', 'target'),
-        callback=lambda _, target: apply_target(state, target)
+        current_target=current.value if current else "",
+        callback=lambda _, target: apply_target(state, ModelTarget.infer(target))
     )
 
-def apply_target(state: State, target: str) -> None:
+def apply_target(state: State, target: ModelTarget) -> None:
     project = state.project
-    previous_target = project.get_model_setting('omnivoice_local', 'target')
+    previous_target = project.get_model_target('omnivoice_local')
 
     def revert() -> None:
-        project.set_model_setting('omnivoice_local', 'target', previous_target)
+        project.set_model_target('omnivoice_local', previous_target)
         _ = ModelWorker.clear_models_if_running_blocking()
 
-    project.set_model_setting('omnivoice_local', 'target', target)
+    project.set_model_target('omnivoice_local', target)
     _ = ModelWorker.clear_models_if_running_blocking()
 
     inspection, error = ModelWorker.inspect_tts_blocking(state)
@@ -84,4 +86,4 @@ def apply_target(state: State, target: str) -> None:
         return
 
     project.save()
-    print_feedback("Model set:", target)
+    print_feedback("Model set:", target.value)

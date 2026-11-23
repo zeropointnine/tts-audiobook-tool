@@ -5,10 +5,9 @@ from importlib import util as importlib_util
 
 import numpy as np
 import torch
-import huggingface_hub
 
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool import app_support, target_util
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import SEED_MAX
@@ -16,6 +15,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.moss_attention import configure_moss_local_v15_attention
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.moss_base_model import MossArchType, MossConfigs, MossBaseModel
 from tts_audiobook_tool.util import *
 
@@ -29,8 +29,10 @@ class MossModel(MossBaseModel):
     # voices can be kept at once.
     RETAINS_MULTIPLE_VOICE_CLONES = True
 
-    def __init__(self, device: DeviceType, model_target: str = MossConfigs.get_default_repo_id()):
+    def __init__(self, device: DeviceType, model_target: ModelTarget | None = None):
 
+        if model_target is None:
+            model_target = MossConfigs.get_default_target()
         self._device_type = device
         self.model_target = model_target
         self.dtype = self.resolve_dtype()
@@ -48,22 +50,12 @@ class MossModel(MossBaseModel):
         attn_implementation = self.resolve_attn_implementation()
         printt(f"Attention implementation: {attn_implementation}")
 
-        if target_util.is_hf_repo_id_syntax(model_target):
-
-            # TODO: Should not derive revision by repo id. Should pass revision into ctor.
-            preset = MossConfigs.get_preset_by_target(model_target)
-            revision = preset.value.revision if preset else None
-            if revision:
-                printt(f"Using pinned MOSS-TTS revision: {revision[:12]}")
-
-            local_path = huggingface_hub.snapshot_download(
-                repo_id=model_target,
-                revision=revision,
-                cache_dir=huggingface_hub.constants.HF_HUB_CACHE,
-                local_files_only=False,
-            )
-        else:
-            local_path = model_target
+        # TODO: Should not derive revision by repo id. Should pass revision into ctor.
+        preset = MossConfigs.get_preset_by_target(model_target)
+        revision = preset.value.revision if preset else None
+        if revision:
+            printt(f"Using pinned MOSS-TTS revision: {revision[:12]}")
+        local_path = model_target.resolve_local_dir(revision=revision)
 
         # Due to transformers bug, can't simply use hf repo id here bc on Windows,
         # it mangles the repo id (uses backslash instead of forward slash)
@@ -342,8 +334,7 @@ class MossModel(MossBaseModel):
         else:
             voice_path = ""
 
-        target = project.get_model_setting('moss_local', 'target')
-        config = MossConfigs.get_by_target(target)
+        config = MossConfigs.get_by_target(project.get_model_target('moss_local'))
 
         temperature, audio_top_p, audio_top_k = self.get_generation_params(project, config)
 

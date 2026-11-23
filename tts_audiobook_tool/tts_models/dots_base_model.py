@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from tts_audiobook_tool.constants import SEED_MAX as APP_SEED_MAX
 from tts_audiobook_tool.text_ops.language_util import normalize_language_code
 from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution, resolve_unverified
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.local_definition import require_local_definition
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -72,6 +73,8 @@ class DotsBaseModel(TtsBaseModel):
         MF_1STEP_REPO_ID,
     ]
     DEFAULT_REPO_ID = SOAR_REPO_ID
+    PRESET_TARGETS = [ModelTarget.hf(repo_id) for repo_id in PRESET_REPO_IDS]
+    DEFAULT_TARGET = ModelTarget.hf(DEFAULT_REPO_ID)
 
     # Fixed maximum audio length a single dots.tts request may produce. The
     # budget covers the voice-clone reference (its transcript and audio)
@@ -104,15 +107,20 @@ class DotsBaseModel(TtsBaseModel):
     GUIDANCE_SCALE_MAX = LOCAL.number("guidance_scale").max
 
     @classmethod
-    def resolve_target(cls, target: str) -> str:
-        return target or cls.DEFAULT_REPO_ID
+    def resolve_target(cls, target: ModelTarget | None) -> ModelTarget:
+        return target or cls.DEFAULT_TARGET
 
     @classmethod
-    def is_meanflow_target(cls, target: str) -> bool:
-        return cls.resolve_target(target) == cls.MF_REPO_ID
+    def _is_preset(cls, target: ModelTarget | None, *repo_ids: str) -> bool:
+        resolved = cls.resolve_target(target)
+        return resolved.is_hf and resolved.value in repo_ids
 
     @classmethod
-    def get_num_steps_config(cls, target: str) -> tuple[str, str]:
+    def is_meanflow_target(cls, target: ModelTarget | None) -> bool:
+        return cls._is_preset(target, cls.MF_REPO_ID)
+
+    @classmethod
+    def get_num_steps_config(cls, target: ModelTarget | None) -> tuple[str, str]:
         """
         Returns the num-steps setting that applies to the given target, as
         (setting/parameter name, variant label)
@@ -123,18 +131,15 @@ class DotsBaseModel(TtsBaseModel):
 
     @classmethod
     def resolve_num_steps(cls, project: Project) -> int:
-        name, _ = cls.get_num_steps_config(project.get_model_setting('dots_local', 'target'))
+        name, _ = cls.get_num_steps_config(project.get_model_target('dots_local'))
         return cls.LOCAL.resolve_int(project, name)
 
     @classmethod
-    def is_sampling_locked_target(cls, target: str) -> bool:
-        return cls.resolve_target(target) in {
-            cls.MF_2STEPS_REPO_ID,
-            cls.MF_1STEP_REPO_ID,
-        }
+    def is_sampling_locked_target(cls, target: ModelTarget | None) -> bool:
+        return cls._is_preset(target, cls.MF_2STEPS_REPO_ID, cls.MF_1STEP_REPO_ID)
 
     @classmethod
-    def is_cfg_configurable_target(cls, target: str) -> bool:
+    def is_cfg_configurable_target(cls, target: ModelTarget | None) -> bool:
         """
         Whether the target's solver actually consumes a guidance scale.
 
@@ -152,7 +157,7 @@ class DotsBaseModel(TtsBaseModel):
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        target = cls.resolve_target(project.get_model_setting('dots_local', 'target'))
+        target = cls.resolve_target(project.get_model_target('dots_local')).value
         target = ellipsize_path_for_menu(target.removeprefix("dots-studio/"))
         return f"{cls.INFO.ui['proper_name']} {COL_DIM}({target})"
 

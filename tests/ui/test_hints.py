@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint
@@ -103,6 +104,9 @@ class _MossProject:
 
     def get_model_setting(self, _model_id: str, _key: str):
         return "some/repo"
+
+    def get_model_target(self, _model_id: str):
+        return ModelTarget.hf("some/repo")
 
 
 @pytest.fixture

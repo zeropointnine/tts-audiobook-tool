@@ -41,8 +41,8 @@ def show_pre_inference_hints(prefs: Prefs, project: Project, start_prompt: str =
             if project.get_model_setting('dots_local', 'compile'):
                 hints.show_hint_if_necessary(prefs, HINT_DOTS_FIRST_COMPILE, and_prompt=True)
         case "moss_local":
-            target = project.get_model_setting('moss_local', 'target') or MossConfigs.get_default().value.repo_id
-            target = "huggingface repo id: " + target
+            model_target = project.get_model_target('moss_local') or MossConfigs.get_default_target()
+            target = f"{model_target.kind.label}: {model_target.value}"
             hint = Hint.make_using(HINT_MOSS_REMOTE_CODE, target)
             if not prefs.get_hint(hint.key):
                 confirm_hint = hint
