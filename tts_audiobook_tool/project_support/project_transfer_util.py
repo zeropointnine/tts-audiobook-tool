@@ -223,8 +223,8 @@ class ProjectTransferUtil:
         # Per-voice LoRA targets (`Voice.loras`) are the same kind of opaque path-or-repo value
         for index, voice in enumerate(project.voice_references):
             for model_id, lora in voice.loras.items():
-                if path_norm.looks_foreign(lora.target):
-                    result.append((f"voice_{index + 1}_lora_{model_id}", lora.target))
+                if path_norm.looks_foreign(lora.target.value):
+                    result.append((f"voice_{index + 1}_lora_{model_id}", lora.target.value))
         return result
 
     @staticmethod

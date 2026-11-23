@@ -41,6 +41,7 @@ import tempfile
 
 import torch
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.omnivoice_lora import load_lora, resolve_adapter_dir
 
 DEFAULT_ADAPTERS = ["My-Weird-Prompts/Herman-LoRA-V3", "wjcwqc/PaigeVoice/lora"]
@@ -84,7 +85,7 @@ def release(model) -> None:
 
 def merged_manually(adapter_dir: str) -> State:
     model = load_model()
-    print(f"manual merge: {load_lora(model, adapter_dir).describe()}")
+    print(f"manual merge: {load_lora(model, ModelTarget.local(adapter_dir)).describe()}")
     state = snapshot(model)
     release(model)
     return state
@@ -202,7 +203,7 @@ def main() -> None:
 
     results = []
     for target in args.adapters:
-        adapter_dir = resolve_adapter_dir(target)
+        adapter_dir = resolve_adapter_dir(ModelTarget.infer(target))
         config = json.load(open(os.path.join(adapter_dir, "adapter_config.json")))
         cases = [(f"{target} (r={config['r']}, alpha={config['lora_alpha']})", adapter_dir)]
         scratch = tempfile.mkdtemp(prefix="omnivoice-lora-parity-")

@@ -25,6 +25,7 @@ import torch
 from huggingface_hub import snapshot_download
 
 from tts_audiobook_tool.app_types import DeviceType
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.lora_switch import SafetensorsBaseWeights
@@ -55,7 +56,7 @@ def generate(model: VibeVoiceModel, project: Project, index: int, label: str) ->
 
 
 def main() -> None:
-    adapter = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_ADAPTER
+    adapter = ModelTarget.infer(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_ADAPTER)
     base_target = sys.argv[2] if len(sys.argv) > 2 else VibeVoiceBaseModel.DEFAULT_REPO_ID
     model = VibeVoiceModel(DeviceType.CUDA, model_target=base_target, max_new_tokens=VibeVoiceBaseModel.MAX_TOKENS)
     assert model.model is not None and model._loras is not None

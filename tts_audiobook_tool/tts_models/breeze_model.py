@@ -94,8 +94,7 @@ class BreezeModel(BreezeBaseModel):
                 continue
             error = self._loras.prepare(lora)
             if error:
-                from tts_audiobook_tool.target_util import make_target_display_name
-                problems.append(f"Voice {index + 1} LoRA ({make_target_display_name(lora.target)}): {error}")
+                problems.append(f"Voice {index + 1} LoRA ({lora.target.display_name()}): {error}")
         return problems
 
     def validate_voice_lora(self, lora: VoiceLora) -> str:

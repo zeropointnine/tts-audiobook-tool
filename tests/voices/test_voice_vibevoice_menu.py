@@ -5,6 +5,7 @@ from typing import cast
 
 import pytest
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
 from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
@@ -22,7 +23,7 @@ def make_state(dir_path: Path) -> State:
     # Isolate storage even if a menu handler unexpectedly saves.
     project = Project(dir_path=str(dir_path), tts_model_type=MODEL_ID, voice_references=[
         Voice("voice-1.flac", "First."),
-        Voice(loras={MODEL_ID: VoiceLora("vibevoice-community/klett", 0.5)}),
+        Voice(loras={MODEL_ID: VoiceLora(ModelTarget.hf("vibevoice-community/klett"), 0.5)}),
     ])
     return cast(State, SimpleNamespace(project=project))
 
@@ -75,7 +76,7 @@ def test_vibevoice_menu_wires_per_voice_lora_controls(monkeypatch, tmp_path):
     [(received_state, spec, index, target)] = validated
     assert received_state is state
     assert spec.model_id == MODEL_ID
-    assert (index, target) == (1, "new-lora")
+    assert (index, target) == (1, ModelTarget.hf("new-lora"))
     assert not (tmp_path / "project.json").exists()
 
 
@@ -89,6 +90,6 @@ def test_selecting_a_vibevoice_lora_probes_the_resident_model_without_reloading(
                         lambda: pytest.fail("Changing a voice's LoRA must not reload the model"))
     monkeypatch.setattr(ModelWorker, "inspect_tts_blocking", lambda _state, probe_lora: probes.append(probe_lora)
                         or (SimpleNamespace(metadata={"lora_probe_error": ""}), ""))
-    lora_items.validate_and_set_voice_lora(state, menu.make_lora_spec(), 1, "owner/new-speaker")
-    assert probes == [VoiceLora("owner/new-speaker", 0.5)]
-    assert state.project.voice_references[1].lora_for(MODEL_ID) == VoiceLora("owner/new-speaker", 0.5)
+    lora_items.validate_and_set_voice_lora(state, menu.make_lora_spec(), 1, ModelTarget.hf("owner/new-speaker"))
+    assert probes == [VoiceLora(ModelTarget.hf("owner/new-speaker"), 0.5)]
+    assert state.project.voice_references[1].lora_for(MODEL_ID) == VoiceLora(ModelTarget.hf("owner/new-speaker"), 0.5)

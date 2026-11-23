@@ -19,6 +19,7 @@ import soundfile as sf
 import torch
 
 from tts_audiobook_tool.app_types import DeviceType
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.voice import VoiceLora
 from tts_audiobook_tool.tts_models.breeze_base_model import BreezeBaseModel, BreezeSampling
 from tts_audiobook_tool.tts_models.breeze_model import BreezeModel
@@ -43,7 +44,7 @@ def main() -> None:
     if args.no_pin:
         switcher.base._pin_policy = lambda *_: False
 
-    loras = [VoiceLora(target, args.strength) for target in args.adapters]
+    loras = [VoiceLora(ModelTarget.infer(target), args.strength) for target in args.adapters]
     for lora in loras:
         error = switcher.prepare(lora)
         if error:

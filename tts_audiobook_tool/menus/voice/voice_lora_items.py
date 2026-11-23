@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.voice import (
     LORA_STRENGTH_DEFAULT, LORA_STRENGTH_MAX, LORA_STRENGTH_MIN, VoiceLora,
 )
@@ -45,7 +46,7 @@ def make_voice_lora_items(state: State, spec: VoiceLoraMenuSpec, index: int) -> 
     if not 0 <= index < len(voices):
         return []
     lora = voices[index].lora_for(spec.model_id)
-    value = ellipsize_path_for_menu(lora.target) if lora else "none"
+    value = ellipsize_path_for_menu(lora.target.value) if lora else "none"
     items = [MenuItem(make_menu_label(LABEL_LORA, value), lambda s, _: ask_voice_lora_target(s, spec, index))]
     if lora:
         items.append(MenuItem(
@@ -64,18 +65,21 @@ def ask_voice_lora_target(state: State, spec: VoiceLoraMenuSpec, index: int) -> 
     ModelMenuShared.ask_target(
         project=state.project,
         prompt=spec.prompt,
-        current_target=current.target if current else "",
-        callback=lambda _, target: validate_and_set_voice_lora(state, spec, index, target),
+        current_target=current.target.value if current else "",
+        callback=lambda _, target: validate_and_set_voice_lora(
+            state, spec, index, ModelTarget.from_stored(target, None)),
         local_file_markers=spec.local_file_markers,
     )
 
 
-def validate_and_set_voice_lora(state: State, spec: VoiceLoraMenuSpec, index: int, target: str) -> None:
+def validate_and_set_voice_lora(state: State, spec: VoiceLoraMenuSpec, index: int, target: ModelTarget | None) -> None:
     """Validates the adapter against the loaded model (loading it if needed), then saves it
     on the voice, keeping the voice's current strength. Nothing is saved when it's rejected."""
     from tts_audiobook_tool.model_worker import ModelWorker
 
     current = state.project.voice_references[index].lora_for(spec.model_id)
+    if target is None:
+        return
     lora = VoiceLora(target=target, strength=current.strength if current else LORA_STRENGTH_DEFAULT)
 
     printt(f"{COL_DIM_ITALICS}Checking LoRA...")

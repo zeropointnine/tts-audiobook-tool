@@ -875,8 +875,7 @@ class VoiceMenuShared:
         # A per-voice LoRA, unless it's already the voice's value (a voice with only a LoRA)
         lora = ProjectVoiceUtil.active_voice_lora(project, voice)
         if lora is not None and source.kind != "lora":
-            from tts_audiobook_tool.target_util import make_target_display_name
-            parts.append(f"LoRA {make_target_display_name(lora.target)}")
+            parts.append(f"LoRA {lora.target.display_name()}")
         elif source.kind == "lora":
             parts.append(source.label)
         if not parts:

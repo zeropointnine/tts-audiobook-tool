@@ -3,25 +3,48 @@ import json
 
 import pytest
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget, TargetKind
 from tts_audiobook_tool.app_types.voice import LORA_STRENGTH_MAX, LORA_STRENGTH_MIN, Voice, VoiceLora
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 BREEZE = "breeze_tts_2_local"
-TARGET = "/runs/fw-leda/lora/checkpoint-step-000500"
+TARGET = ModelTarget.local("/runs/fw-leda/lora/checkpoint-step-000500")
+HF = ModelTarget.hf("owner/repo")
 
 
 def test_empty_map_and_default_strength_are_not_written():
     assert "loras" not in Voice("a.flac").to_dict()
     data = Voice("a.flac", loras={BREEZE: VoiceLora(TARGET)}).to_dict()
-    assert data["loras"] == {BREEZE: {"target": TARGET}}
+    assert data["loras"] == {BREEZE: {"target": TARGET.value, "target_type": "local"}}
 
 
 def test_loras_round_trip():
-    voice = Voice("a.flac", loras={BREEZE: VoiceLora(TARGET, 0.75), "other": VoiceLora("owner/repo")})
-    assert Voice.from_dict(voice.to_dict()) == voice
+    voice = Voice("a.flac", loras={BREEZE: VoiceLora(TARGET, 0.75), "other": VoiceLora(HF)})
+    loaded = Voice.from_dict(voice.to_dict())
+    assert loaded == voice
+    assert loaded is not None and not any(lora.target.inferred for lora in loaded.loras.values())
     assert voice.lora_for(BREEZE) == VoiceLora(TARGET, 0.75)
     assert voice.lora_for("missing") is None
+
+
+def test_untyped_entries_get_an_inferred_kind():
+    # Entries saved before target_type existed (or with an unknown one) are typed by
+    # the legacy rule and marked inferred, so the loader can announce the assignment
+    voice = Voice.from_dict({"file_name": "a.flac", "loras": {
+        "legacy_hf": {"target": "owner/repo/sub"},
+        "legacy_local": {"target": "/runs/x/lora"},
+        "unknown_kind": {"target": "owner/repo", "target_type": "s3"},
+        "typed": {"target": "owner/repo", "target_type": "local"},
+    }})
+    assert voice is not None
+    kinds = {model_id: (lora.target.kind, lora.target.inferred) for model_id, lora in voice.loras.items()}
+    assert kinds == {
+        "legacy_hf": (TargetKind.HF, True),
+        "legacy_local": (TargetKind.LOCAL, True),
+        "unknown_kind": (TargetKind.HF, True),
+        "typed": (TargetKind.LOCAL, False),
+    }
 
 
 @pytest.mark.parametrize("stored", [None, 3, ["x"], "owner/repo"])
@@ -36,19 +59,24 @@ def test_bad_entries_are_dropped_and_strength_is_defaulted_or_clamped():
         "no_target": {"strength": 0.5},
         "empty_target": {"target": "  "},
         "not_object": "owner/repo",
-        "bad_strength": {"target": "a", "strength": "high"},
-        "bool_strength": {"target": "b", "strength": True},
-        "too_low": {"target": "c", "strength": 0.0},
-        "too_high": {"target": "d", "strength": 9},
+        "bad_strength": {"target": "a/a", "target_type": "hf", "strength": "high"},
+        "bool_strength": {"target": "b/b", "target_type": "hf", "strength": True},
+        "too_low": {"target": "c/c", "target_type": "hf", "strength": 0.0},
+        "too_high": {"target": "d/d", "target_type": "hf", "strength": 9},
     }})
     assert voice is not None
     assert voice.loras == {
-        "bad_strength": VoiceLora("a"), "bool_strength": VoiceLora("b"),
-        "too_low": VoiceLora("c", LORA_STRENGTH_MIN), "too_high": VoiceLora("d", LORA_STRENGTH_MAX),
+        "bad_strength": VoiceLora(ModelTarget.hf("a/a")), "bool_strength": VoiceLora(ModelTarget.hf("b/b")),
+        "too_low": VoiceLora(ModelTarget.hf("c/c"), LORA_STRENGTH_MIN),
+        "too_high": VoiceLora(ModelTarget.hf("d/d"), LORA_STRENGTH_MAX),
     }
 
 
-@pytest.mark.parametrize("kwargs", [{"target": ""}, {"target": "a", "strength": 5.0}, {"target": "a", "strength": True}])
+@pytest.mark.parametrize("kwargs", [
+    {"target": "owner/repo"},  # a bare string is not a target
+    {"target": HF, "strength": 5.0},
+    {"target": HF, "strength": True},
+])
 def test_voice_lora_rejects_invalid_values(kwargs):
     with pytest.raises(ValueError):
         VoiceLora(**kwargs)
@@ -65,21 +93,22 @@ def test_voice_does_not_alias_caller_dict_and_stays_hashable():
 def test_set_voice_lora_changes_only_that_model_and_reverts_on_failed_save(monkeypatch, tmp_path):
     # Exercise real storage in a disposable project, including rollback after a failed save.
     project = Project(dir_path=str(tmp_path), tts_model_type=BREEZE,
-                      voice_references=[Voice("a.flac", loras={"other": VoiceLora("x")})])
+                      voice_references=[Voice("a.flac", loras={"other": VoiceLora(HF)})])
     stored_path = tmp_path / "project.json"
+    other_stored = {"target": "owner/repo", "target_type": "hf"}
     assert ProjectVoiceUtil.set_voice_lora_at_index_and_save(project, 0, BREEZE, VoiceLora(TARGET)) == ""
-    assert project.voice_references[0].loras == {"other": VoiceLora("x"), BREEZE: VoiceLora(TARGET)}
+    assert project.voice_references[0].loras == {"other": VoiceLora(HF), BREEZE: VoiceLora(TARGET)}
     assert json.loads(stored_path.read_text())["voice_references"][0]["loras"] == {
-        "other": {"target": "x"}, BREEZE: {"target": TARGET},
+        "other": other_stored, BREEZE: {"target": TARGET.value, "target_type": "local"},
     }
     assert ProjectVoiceUtil.set_voice_lora_at_index_and_save(project, 0, BREEZE, None) == ""
-    assert project.voice_references[0].loras == {"other": VoiceLora("x")}
-    assert json.loads(stored_path.read_text())["voice_references"][0]["loras"] == {"other": {"target": "x"}}
+    assert project.voice_references[0].loras == {"other": VoiceLora(HF)}
+    assert json.loads(stored_path.read_text())["voice_references"][0]["loras"] == {"other": other_stored}
     saved_bytes = stored_path.read_bytes()
 
     monkeypatch.setattr(Project, "save", lambda self: "disk full")
     assert ProjectVoiceUtil.set_voice_lora_at_index_and_save(project, 0, BREEZE, VoiceLora(TARGET)) == "disk full"
-    assert project.voice_references[0].loras == {"other": VoiceLora("x")}
+    assert project.voice_references[0].loras == {"other": VoiceLora(HF)}
     assert stored_path.read_bytes() == saved_bytes
 
 

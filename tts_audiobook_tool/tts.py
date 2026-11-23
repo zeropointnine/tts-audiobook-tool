@@ -150,8 +150,7 @@ class Tts:
         # A per-voice LoRA is the more salient identifier, even with a sample
         lora = ProjectVoiceUtil.active_voice_lora(project, voice)
         if lora is not None:
-            from tts_audiobook_tool.target_util import make_target_display_name
-            return ProjectVoiceUtil.make_voice_tag(make_target_display_name(lora.target))
+            return ProjectVoiceUtil.make_voice_tag(lora.target.display_name())
         # The tag identifies the voice entry, not the exact audio used: derive
         # it from the entry's stored sample name so an active crop (design-time
         # tuning of the same voice) does not read as a different voice in

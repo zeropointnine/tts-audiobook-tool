@@ -44,6 +44,7 @@ import os
 
 import torch
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 # Re-exported: callers and tests import these from here
 from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, apply_merge
 from tts_audiobook_tool.tts_models.lora_switch import PreparedLora
@@ -55,16 +56,15 @@ ADAPTER_FILE_NAMES = [ADAPTER_CONFIG_FILE_NAME, ADAPTER_WEIGHTS_FILE_NAME]
 _FOREIGN_KEY_HINT = "expected an adapter for the whole OmniVoice model, as written by OmniVoice's LoRA training"
 
 
-def resolve_adapter_dir(target: str) -> str:
-    """A local directory, an hf repo id, or `owner/repo/sub/dir`; downloads only the adapter files."""
-    from tts_audiobook_tool import target_util
+def resolve_adapter_dir(target: ModelTarget) -> str:
+    """A local directory, an hf repo, or a directory inside one; downloads only the adapter files."""
     try:
-        directory = target_util.resolve_to_local_dir(target, ADAPTER_FILE_NAMES)
+        directory = target.resolve_local_dir(ADAPTER_FILE_NAMES)
     except Exception as e:
-        raise LoraLoadError(f"Couldn't get adapter files for {target}: {e}") from e
+        raise LoraLoadError(f"Couldn't get adapter files for {target.value}: {e}") from e
     for name in ADAPTER_FILE_NAMES:
         if not os.path.isfile(os.path.join(directory, name)):
-            raise LoraLoadError(f"Missing {name} in {target}")
+            raise LoraLoadError(f"Missing {name} in {target.value}")
     return directory
 
 
@@ -73,17 +73,15 @@ def plan_merge(model: torch.nn.Module, adapter_dir: str, strength: float = 1.0) 
     return peft_lora.plan_merge(model, adapter_dir, strength, foreign_key_hint=_FOREIGN_KEY_HINT)
 
 
-def prepare_lora(model: torch.nn.Module, target: str, strength: float = 1.0) -> PreparedLora:
+def prepare_lora(model: torch.nn.Module, target: ModelTarget, strength: float = 1.0) -> PreparedLora:
     """Validates an adapter for per-voice switching, without changing the loaded weights."""
-    from tts_audiobook_tool.target_util import make_target_display_name
-
     directory = resolve_adapter_dir(target)
     plan = plan_merge(model, directory, strength)
     identity = peft_lora.make_identity(os.path.join(directory, ADAPTER_WEIGHTS_FILE_NAME), plan)
-    return PreparedLora(plan, identity, make_target_display_name(target))
+    return PreparedLora(plan, identity, target.display_name())
 
 
-def load_lora(model: torch.nn.Module, target: str, strength: float = 1.0) -> LoraMergePlan:
+def load_lora(model: torch.nn.Module, target: ModelTarget, strength: float = 1.0) -> LoraMergePlan:
     """
     Resolves, validates and merges an adapter into `model`, computing the delta as
     per-voice switching does (`lora_switch`). For checks and probes; the app

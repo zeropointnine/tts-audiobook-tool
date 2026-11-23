@@ -12,6 +12,7 @@ torch = pytest.importorskip("torch")
 pytest.importorskip("safetensors")
 from safetensors.torch import save_file
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models import omnivoice_lora
 from tts_audiobook_tool.tts_models.omnivoice_lora import LoraLoadError, load_lora
 
@@ -48,13 +49,13 @@ def adapter_tensors() -> dict:
     }
 
 
-def write_adapter(directory, tensors=None, **config_overrides) -> str:
+def write_adapter(directory, tensors=None, **config_overrides) -> ModelTarget:
     config = {"peft_type": "LORA", "r": RANK, "lora_alpha": 4, "use_rslora": False,
               "use_dora": False, "bias": "none", "lora_bias": False, "rank_pattern": {},
               "alpha_pattern": {}, "target_parameters": None, **config_overrides}
     (directory / "adapter_config.json").write_text(json.dumps(config))
     save_file(adapter_tensors() if tensors is None else tensors, str(directory / "adapter_model.safetensors"))
-    return str(directory)
+    return ModelTarget.local(str(directory))
 
 
 def state_of(model) -> dict:
@@ -121,7 +122,7 @@ def test_rejected_adapter_leaves_model_unchanged(tmp_path, config, edit, message
 def test_missing_adapter_file_is_a_load_error(tmp_path):
     (tmp_path / "adapter_config.json").write_text("{}")
     with pytest.raises(LoraLoadError, match="adapter_model.safetensors"):
-        omnivoice_lora.resolve_adapter_dir(str(tmp_path))
+        omnivoice_lora.resolve_adapter_dir(ModelTarget.local(str(tmp_path)))
 
 
 def test_strength_scales_the_lora_delta_and_blends_replacements_from_the_base(tmp_path):

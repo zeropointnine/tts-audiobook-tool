@@ -488,4 +488,4 @@ def test_find_foreign_path_targets_warns_without_changing_anything(tmp_path: Pat
     }
     # Per-voice adapters remain opaque path-or-repo values, just like base targets.
     lora = project.voice_references[0].lora_for('omnivoice_local')
-    assert lora is not None and lora.target == 'C:\\Users\\lee\\adapters\\speaker' and lora.strength == 0.5
+    assert lora is not None and lora.target.value == 'C:\\Users\\lee\\adapters\\speaker' and lora.strength == 0.5

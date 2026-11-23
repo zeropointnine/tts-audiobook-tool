@@ -43,6 +43,7 @@ from dataclasses import dataclass
 
 import torch
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, apply_merge
 from tts_audiobook_tool.tts_models.lora_switch import PreparedLora
 
@@ -197,27 +198,28 @@ def read_local_dir(directory: str) -> BreezeAdapterSource:
     raise LoraLoadError(UNRECOGNIZED_MESSAGE)
 
 
-def resolve_adapter(target: str) -> BreezeAdapterSource:
-    """A local directory (either form), or an hf repo / `owner/repo/sub/dir` holding a manifest.
+def resolve_adapter(target: ModelTarget) -> BreezeAdapterSource:
+    """A local directory (either form), or an hf repo (or a directory inside one) holding a manifest.
     Downloads only the manifest and the weights file it names."""
     try:
-        if os.path.isdir(target):
-            return read_local_dir(target)
-        from tts_audiobook_tool import target_util
+        if target.is_local:
+            if not os.path.isdir(target.value):
+                raise LoraLoadError(f"No such directory: {target.value}")
+            return read_local_dir(target.value)
         try:
-            directory = target_util.resolve_to_local_dir(target, [ADAPTER_CONFIG_FILE_NAME])
+            directory = target.resolve_local_dir([ADAPTER_CONFIG_FILE_NAME])
             if not os.path.isfile(os.path.join(directory, ADAPTER_CONFIG_FILE_NAME)):
-                raise LoraLoadError(f"No {ADAPTER_CONFIG_FILE_NAME} in {target} "
+                raise LoraLoadError(f"No {ADAPTER_CONFIG_FILE_NAME} in {target.value} "
                                     "(only adapter exports can be loaded from huggingface)")
             file_name = _read_json_object(
                 os.path.join(directory, ADAPTER_CONFIG_FILE_NAME), ADAPTER_CONFIG_FILE_NAME
             ).get("adapter", {}).get("file")
             if isinstance(file_name, str) and os.path.basename(file_name) == file_name:
-                directory = target_util.resolve_to_local_dir(target, [ADAPTER_CONFIG_FILE_NAME, file_name])
+                directory = target.resolve_local_dir([ADAPTER_CONFIG_FILE_NAME, file_name])
         except LoraLoadError:
             raise
         except Exception as e:
-            raise LoraLoadError(f"Couldn't get adapter files for {target}: {e}") from e
+            raise LoraLoadError(f"Couldn't get adapter files for {target.value}: {e}") from e
         return read_manifest_dir(directory)
     except LoraLoadError:
         raise
@@ -302,12 +304,11 @@ def _plan_merge(model: torch.nn.Module, source: BreezeAdapterSource, strength: f
     return plan
 
 
-def prepare_lora(model: torch.nn.Module, model_dir: str, target: str, strength: float = 1.0) -> PreparedLora:
+def prepare_lora(model: torch.nn.Module, model_dir: str, target: ModelTarget, strength: float = 1.0) -> PreparedLora:
     """
     Resolves and validates an adapter against `model` and its base files (`model_dir`) without changing
     the model, for `lora_switch.LoraSwitcher`. Raises `LoraLoadError` when the adapter can't be used.
     """
-    from tts_audiobook_tool.target_util import make_target_display_name
     source = resolve_adapter(target)
     if source.base_files:
         verify_base(model_dir, source)
@@ -315,11 +316,11 @@ def prepare_lora(model: torch.nn.Module, model_dir: str, target: str, strength: 
     # Rank/alpha live in JSON, not the tensor file; changing them must invalidate
     # an already merged adapter too. Strength is tracked separately in LoraKey.
     identity = f"{source.weights_sha256}:{source.rank}:{source.alpha!r}"
-    return PreparedLora(plan=plan, identity=identity, display=make_target_display_name(target))
+    return PreparedLora(plan=plan, identity=identity, display=target.display_name())
 
 
 def load_lora(
-        model: torch.nn.Module, model_dir: str, target: str, strength: float = 1.0
+        model: torch.nn.Module, model_dir: str, target: ModelTarget, strength: float = 1.0
 ) -> tuple[LoraMergePlan, BreezeAdapterSource]:
     """
     Resolves, validates and merges an adapter into `model` (`model_dir`: the loaded base model's files,

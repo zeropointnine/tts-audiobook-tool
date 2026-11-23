@@ -32,6 +32,7 @@ import soundfile as sf
 import torch
 from omnivoice import OmniVoice  # type: ignore
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models.omnivoice_lora import load_lora
 
 DEFAULT_ADAPTER = "My-Weird-Prompts/Herman-LoRA-V3"
@@ -51,7 +52,7 @@ def main() -> None:
     adapter = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_ADAPTER
     model = OmniVoice.from_pretrained("k2-fsa/OmniVoice", device_map="cuda:0", dtype=torch.float16)
     generate(model, "/tmp/omnivoice_lora_poc_base.wav")
-    print(f"merged {load_lora(model, adapter).describe()}")
+    print(f"merged {load_lora(model, ModelTarget.infer(adapter)).describe()}")
     generate(model, "/tmp/omnivoice_lora_poc_lora.wav")
 
 

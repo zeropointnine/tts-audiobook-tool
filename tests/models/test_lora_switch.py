@@ -7,6 +7,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.voice import VoiceLora
 from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, apply_merge
 from tts_audiobook_tool.tts_models.lora_switch import (
@@ -14,6 +15,11 @@ from tts_audiobook_tool.tts_models.lora_switch import (
 )
 
 RANK = 2
+
+
+def make_lora(name: str, strength: float = 1.0) -> VoiceLora:
+    """A LoRA whose (local) target value names one of the `PLANS`."""
+    return VoiceLora(ModelTarget.local(name), strength)
 
 
 class Tiny(torch.nn.Module):
@@ -75,8 +81,8 @@ def make_switcher(model, *, pin=False, identities=None, planner_error=None, empt
     def planner(lora: VoiceLora) -> PreparedLora:
         if planner_error:
             raise LoraLoadError(planner_error)
-        return PreparedLora(make_plan(strength=lora.strength, **PLANS[lora.target]),
-                            identities.get(lora.target, lora.target), lora.target)
+        return PreparedLora(make_plan(strength=lora.strength, **PLANS[lora.target.value]),
+                            identities.get(lora.target.value, lora.target.value), lora.target.value)
 
     return LoraSwitcher(model, cache, planner, log=logs.append), base, source, logs
 
@@ -98,15 +104,15 @@ def test_switching_is_exact_in_any_order():
     model = make_model()
     switcher, base, _, _ = make_switcher(model)
     for name in ["a", "b", "a", "c", None, "b", "b"]:
-        assert switcher.activate(VoiceLora(name) if name else None) == ""
+        assert switcher.activate(make_lora(name) if name else None) == ""
         assert_weights(model, fresh_merge(name) if name else base)
 
 
 def test_strength_is_part_of_the_lora():
     model = make_model()
     switcher, _, _, _ = make_switcher(model)
-    switcher.activate(VoiceLora("a", 1.0))
-    switcher.activate(VoiceLora("a", 0.5))
+    switcher.activate(make_lora("a", 1.0))
+    switcher.activate(make_lora("a", 0.5))
     assert_weights(model, fresh_merge("a", 0.5))
 
 
@@ -116,17 +122,17 @@ def test_parameters_are_written_in_place():
     pointers = {name: p.data_ptr() for name, p in model.named_parameters()}
     switcher, _, _, _ = make_switcher(model, pin=True)
     for name in ["a", "b", None]:
-        switcher.activate(VoiceLora(name) if name else None)
+        switcher.activate(make_lora(name) if name else None)
     assert {name: p.data_ptr() for name, p in model.named_parameters()} == pointers
 
 
 def test_reactivating_the_active_lora_reads_and_writes_nothing():
     model = make_model()
     switcher, _, source, logs = make_switcher(model)
-    switcher.activate(VoiceLora("a"))
+    switcher.activate(make_lora("a"))
     # The first merge onto pristine weights needs no base copy
     assert source.reads == [] and len(logs) == 1
-    switcher.activate(VoiceLora("a"))
+    switcher.activate(make_lora("a"))
     switcher.activate(None)
     switcher.activate(None)
     assert sorted(source.reads) == ["k.weight", "q.weight"] and len(logs) == 2
@@ -137,13 +143,13 @@ def test_rewritten_adapter_is_merged_again_after_a_run():
     model = make_model()
     identities = {"a": "sha-1"}
     switcher, _, source, _ = make_switcher(model, identities=identities)
-    switcher.activate(VoiceLora("a"))
+    switcher.activate(make_lora("a"))
     switcher.end_run()
-    switcher.activate(VoiceLora("a"))
+    switcher.activate(make_lora("a"))
     assert source.reads == []
     switcher.end_run()
     identities["a"] = "sha-2"
-    switcher.activate(VoiceLora("a"))
+    switcher.activate(make_lora("a"))
     assert sorted(source.reads) == ["k.weight", "q.weight"]
     assert_weights(model, fresh_merge("a"))
 
@@ -151,8 +157,8 @@ def test_rewritten_adapter_is_merged_again_after_a_run():
 def test_rejected_adapter_leaves_weights_unchanged():
     model = make_model()
     switcher, base, _, _ = make_switcher(model, planner_error="Not a Breeze LoRA")
-    assert switcher.prepare(VoiceLora("a")) == "Not a Breeze LoRA"
-    assert switcher.activate(VoiceLora("a")) == "Not a Breeze LoRA"
+    assert switcher.prepare(make_lora("a")) == "Not a Breeze LoRA"
+    assert switcher.activate(make_lora("a")) == "Not a Breeze LoRA"
     assert_weights(model, base)
     assert not switcher.broken
 
@@ -169,10 +175,10 @@ def test_end_run_discards_cached_planning_errors(error_type):
         calls.append(lora)
         if error is not None:
             raise error
-        return PreparedLora(make_plan(**PLANS[lora.target]), "repaired", lora.target)
+        return PreparedLora(make_plan(**PLANS[lora.target.value]), "repaired", lora.target.value)
 
     switcher = LoraSwitcher(model, BaseWeightCache(MemorySource(state_of(model))), planner, log=lambda _: None)
-    lora = VoiceLora("a")
+    lora = make_lora("a")
     assert "checksum mismatch" in switcher.prepare(lora)
     error = None
     assert "checksum mismatch" in switcher.prepare(lora)
@@ -188,14 +194,14 @@ def test_failed_restore_breaks_the_switcher():
     # Weights may be half-written, so every later switch fails until the model is reloaded
     model = make_model()
     switcher, _, source, _ = make_switcher(model)
-    switcher.activate(VoiceLora("a"))
+    switcher.activate(make_lora("a"))
 
     def fail(params, names):
         raise OSError("disk gone")
         yield  # pragma: no cover
 
     source.read = fail
-    error = switcher.activate(VoiceLora("b"))
+    error = switcher.activate(make_lora("b"))
     assert "unknown state" in error and switcher.broken
     assert switcher.activate(None) == error
 
@@ -204,14 +210,14 @@ def test_pinned_cache_reads_files_once_and_release_resets_it():
     model = make_model()
     emptied: list[bool] = []
     switcher, _, source, _ = make_switcher(model, pin=True, emptied=emptied)
-    switcher.prepare(VoiceLora("b"))
-    switcher.activate(VoiceLora("a"))
-    switcher.activate(VoiceLora("b"))
+    switcher.prepare(make_lora("b"))
+    switcher.activate(make_lora("a"))
+    switcher.activate(make_lora("b"))
     # Pinned at the first restore: the active adapter's targets plus every prepared one's
     assert switcher.base.mode == "pinned"
     assert sorted(source.reads) == ["head.weight", "k.weight", "q.weight"]
-    switcher.activate(VoiceLora("a"))
-    switcher.activate(VoiceLora("c"))
+    switcher.activate(make_lora("a"))
+    switcher.activate(make_lora("c"))
     assert len(source.reads) == 3
     switcher.end_run()
     assert switcher.base.mode == "undecided" and switcher.base.pinned_bytes == 0
@@ -227,11 +233,11 @@ def test_adapter_with_unrestorable_targets_is_rejected_before_merging():
     model = make_model()
     switcher, base, _, _ = make_switcher(model)
     del switcher.base._source.base["head.weight"]
-    error = switcher.activate(VoiceLora("b"))
+    error = switcher.activate(make_lora("b"))
     assert "Can't restore" in error and "head.weight" in error
     assert not switcher.broken and switcher.active_key is None
     assert_weights(model, base)
-    assert switcher.activate(VoiceLora("a")) == ""
+    assert switcher.activate(make_lora("a")) == ""
 
 
 def test_pin_policy_is_sized_by_the_allocators_power_of_two_blocks():
@@ -240,9 +246,9 @@ def test_pin_policy_is_sized_by_the_allocators_power_of_two_blocks():
     sizes = []
     cache = BaseWeightCache(MemorySource(state_of(model)), pin_policy=lambda n, *_: sizes.append(n) or False,
                             ram_info=lambda: None)
-    switcher = LoraSwitcher(model, cache, lambda lora: PreparedLora(make_plan(**PLANS[lora.target]), "x", "x"),
+    switcher = LoraSwitcher(model, cache, lambda lora: PreparedLora(make_plan(**PLANS[lora.target.value]), "x", "x"),
                             log=lambda _: None)
-    switcher.activate(VoiceLora("a"))
+    switcher.activate(make_lora("a"))
     switcher.activate(None)
     assert sizes == [2 * 64]
 
@@ -251,7 +257,7 @@ def test_unpinned_cache_reads_on_every_restore():
     model = make_model()
     switcher, _, source, _ = make_switcher(model, pin=False)
     for name in ["a", "c", "a"]:
-        switcher.activate(VoiceLora(name))
+        switcher.activate(make_lora(name))
     assert switcher.base.mode == "files"
     assert source.reads == ["k.weight", "q.weight", "k.weight"]
 
@@ -261,9 +267,9 @@ def test_failed_pin_falls_back_to_files():
     base = state_of(model)
     cache = BaseWeightCache(MemorySource(base), pin_policy=lambda *_: True, ram_info=lambda: None,
                             pin=lambda tensor: (_ for _ in ()).throw(RuntimeError("cudaHostAlloc failed")))
-    switcher = LoraSwitcher(model, cache, lambda lora: PreparedLora(make_plan(**PLANS[lora.target]), "x", "x"),
+    switcher = LoraSwitcher(model, cache, lambda lora: PreparedLora(make_plan(**PLANS[lora.target.value]), "x", "x"),
                             log=lambda _: None)
-    switcher.activate(VoiceLora("a"))
+    switcher.activate(make_lora("a"))
     assert switcher.activate(None) == ""
     assert cache.mode == "files" and "pinning failed" in cache.mode_reason
     assert_weights(model, base)

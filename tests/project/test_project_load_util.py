@@ -18,6 +18,7 @@ import soundfile as sf
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_SOUND_SEGMENTS_SUBDIR, PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from project_settings_test_support import get_setting
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.voice import VoiceLora
 
 
@@ -196,8 +197,8 @@ def test_load_drops_a_project_wide_omnivoice_lora_but_keeps_voice_loras(
     # Retirement must not overwrite existing voice adapters or assign the old
     # project-wide adapter to an unconfigured voice. Empty old targets are silent.
     voice_loras = {
-        "omnivoice_local": {"target": "trainer/voice-lora", "strength": 0.8},
-        "breeze_tts_2_local": {"target": "trainer/breeze-lora", "strength": 1.2},
+        "omnivoice_local": {"target": "trainer/voice-lora", "target_type": "hf", "strength": 0.8},
+        "breeze_tts_2_local": {"target": "trainer/breeze-lora", "target_type": "hf", "strength": 1.2},
     }
     dir_path = make_project_dir(tmp_path, {
         "version": 5,
@@ -259,11 +260,12 @@ def test_load_moves_a_project_wide_vibevoice_lora_onto_voices_without_their_own(
     saved = read_saved(dir_path)
     parameters = saved["model_settings"]["models"]["vibevoice_local"]["parameters"]
     assert "lora_target" not in parameters and parameters["cfg"] == 3.0
-    migrated = {"target": "vibevoice-community/klett"}
+    # Saving also records each target's (inferred) kind
+    migrated = {"target": "vibevoice-community/klett", "target_type": "hf"}
     assert [voice.get("loras") for voice in saved["voice_references"]] == [
         {"vibevoice_local": migrated},
-        {"vibevoice_local": own},
-        {"omnivoice_local": {"target": "trainer/omni"}, "vibevoice_local": migrated},
+        {"vibevoice_local": {**own, "target_type": "hf"}},
+        {"omnivoice_local": {"target": "trainer/omni", "target_type": "hf"}, "vibevoice_local": migrated},
     ]
     assert [voice.to_dict().get("loras") for voice in project.voice_references] == [
         voice.get("loras") for voice in saved["voice_references"]]
@@ -289,9 +291,9 @@ def test_load_moves_a_pre_v3_flat_vibevoice_lora_onto_the_voice(
 
     assert "has been assigned to its voice" in capsys.readouterr().out
     assert [voice.loras for voice in project.voice_references] == [
-        {"vibevoice_local": VoiceLora("/runs/klett/lora")}]
+        {"vibevoice_local": VoiceLora(ModelTarget.local("/runs/klett/lora"))}]
     saved = read_saved(dir_path)
-    assert saved["voice_references"][0]["loras"] == {"vibevoice_local": {"target": "/runs/klett/lora"}}
+    assert saved["voice_references"][0]["loras"] == {"vibevoice_local": {"target": "/runs/klett/lora", "target_type": "local"}}
     assert "lora_target" not in saved["model_settings"]["models"].get("vibevoice_local", {}).get("parameters", {})
     project.kill()
 
@@ -313,5 +315,5 @@ def test_load_drops_a_vibevoice_lora_when_every_voice_has_its_own(
     project = load(dir_path)
 
     assert "every voice already has its own VibeVoice LoRA" in capsys.readouterr().out
-    assert read_saved(dir_path)["voice_references"][0]["loras"] == {"vibevoice_local": own}
+    assert read_saved(dir_path)["voice_references"][0]["loras"] == {"vibevoice_local": {**own, "target_type": "hf"}}
     project.kill()

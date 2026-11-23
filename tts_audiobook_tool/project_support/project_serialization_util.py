@@ -951,6 +951,7 @@ class ProjectSerializationUtil:
         gets one, to hold it. The notice is also what saves the migrated project.
         """
         from dataclasses import replace
+        from tts_audiobook_tool.app_types.model_target import ModelTarget
         from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
         from tts_audiobook_tool.project_support.model_settings_compat import MIGRATED_PROJECT_WIDE_LORAS
         from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
@@ -959,7 +960,10 @@ class ProjectSerializationUtil:
         if not voices:
             voices = [Voice()]
         for model_id, target in migrated:
-            lora = VoiceLora(target)
+            # The old setting was untyped: its kind is inferred (and announced on load)
+            model_target = ModelTarget.from_stored(target, None)
+            assert model_target is not None  # non-empty, per take_migrated_project_loras
+            lora = VoiceLora(model_target)
             assigned: list[int] = []
             for index, voice in enumerate(voices):
                 if voice.lora_for(model_id) is None:

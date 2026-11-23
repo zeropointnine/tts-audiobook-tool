@@ -14,6 +14,7 @@ torch = pytest.importorskip("torch")
 pytest.importorskip("safetensors")
 from safetensors.torch import save_file
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models import breeze_lora
 from tts_audiobook_tool.tts_models.breeze_lora import LoraLoadError, load_lora
 
@@ -115,7 +116,7 @@ def test_merge_adds_scaled_delta_rounded_once(tmp_path, form, strength):
     before = state_of(model)
     tensors = adapter_tensors()
 
-    plan, source = load_lora(model, base_dir, target, strength)
+    plan, source = load_lora(model, base_dir, ModelTarget.local(target), strength)
 
     assert source.kind == form
     scale = strength * ALPHA / RANK
@@ -158,7 +159,7 @@ def test_rejected_tensors_leave_model_unchanged(tmp_path, edit, message):
     model = make_model()
     before = state_of(model)
     with pytest.raises(LoraLoadError, match=message):
-        load_lora(model, base_dir, target)
+        load_lora(model, base_dir, ModelTarget.local(target))
     after = state_of(model)
     assert all(torch.equal(after[name], value) for name, value in before.items())
 
@@ -179,13 +180,13 @@ def test_invalid_manifest_is_rejected(tmp_path, overrides, message):
     base_dir = make_base_dir(tmp_path)
     target = write_manifest_dir(tmp_path / "export", base_dir, **overrides)
     with pytest.raises(LoraLoadError, match=message):
-        load_lora(make_model(), base_dir, target)
+        load_lora(make_model(), base_dir, ModelTarget.local(target))
 
 
 def test_peft_adapter_is_named_as_unsupported(tmp_path):
     (tmp_path / "adapter_config.json").write_text(json.dumps({"peft_type": "LORA", "r": 8}))
     with pytest.raises(LoraLoadError, match="PEFT"):
-        breeze_lora.resolve_adapter(str(tmp_path))
+        breeze_lora.resolve_adapter(ModelTarget.local(str(tmp_path)))
 
 
 @pytest.mark.parametrize("kwargs,message", [
@@ -196,7 +197,7 @@ def test_peft_adapter_is_named_as_unsupported(tmp_path):
 def test_invalid_checkpoint_is_rejected(tmp_path, kwargs, message):
     target = write_checkpoint_dir(tmp_path / "run", **kwargs)
     with pytest.raises(LoraLoadError, match=message):
-        breeze_lora.resolve_adapter(target)
+        breeze_lora.resolve_adapter(ModelTarget.local(target))
 
 
 def test_modified_checkpoint_weights_are_rejected(tmp_path):
@@ -204,28 +205,28 @@ def test_modified_checkpoint_weights_are_rejected(tmp_path):
     target = write_checkpoint_dir(tmp_path / "run")
     save_file({f"{Q}.lora_A": torch.zeros(RANK, 4)}, os.path.join(target, "adapter.safetensors"))
     with pytest.raises(LoraLoadError, match="doesn't match the checkpoint receipt"):
-        breeze_lora.resolve_adapter(target)
+        breeze_lora.resolve_adapter(ModelTarget.local(target))
 
 
 def test_unrecognized_directory_names_both_forms(tmp_path):
     (tmp_path / "latest.json").write_text("{}")
     with pytest.raises(LoraLoadError, match="adapter_config.json.*checkpoint-receipt.json"):
-        breeze_lora.resolve_adapter(str(tmp_path))
+        breeze_lora.resolve_adapter(ModelTarget.local(str(tmp_path)))
 
 
 def test_base_mismatch_and_missing_file_are_rejected(tmp_path):
     # Fails closed when a pinned base file differs or is absent; the revision string isn't compared
     base_dir = make_base_dir(tmp_path)
     target = write_manifest_dir(tmp_path / "export", base_dir, base_model__revision="different-revision")
-    load_lora(make_model(), base_dir, target)  # revision alone doesn't matter
+    load_lora(make_model(), base_dir, ModelTarget.local(target))  # revision alone doesn't matter
 
     (tmp_path / "base" / "config.json").write_text('{"model": "changed"}')
     with pytest.raises(LoraLoadError, match="different Breeze TTS 2 base"):
-        load_lora(make_model(), base_dir, target)
+        load_lora(make_model(), base_dir, ModelTarget.local(target))
 
     os.remove(tmp_path / "base" / "config.json")
     with pytest.raises(LoraLoadError, match="missing"):
-        load_lora(make_model(), base_dir, target)
+        load_lora(make_model(), base_dir, ModelTarget.local(target))
 
 
 def test_hf_cache_blob_name_stands_in_for_the_hash(tmp_path):
@@ -256,9 +257,9 @@ def test_prepare_lora_validates_without_merging(tmp_path, form):
               else write_checkpoint_dir(tmp_path / "run"))
     model = make_model()
     before = state_of(model)
-    prepared = breeze_lora.prepare_lora(model, base_dir, target, 0.5)
+    prepared = breeze_lora.prepare_lora(model, base_dir, ModelTarget.local(target), 0.5)
     assert all(torch.equal(state_of(model)[name], value) for name, value in before.items())
-    assert prepared.identity == breeze_lora.prepare_lora(model, base_dir, target, 0.5).identity
+    assert prepared.identity == breeze_lora.prepare_lora(model, base_dir, ModelTarget.local(target), 0.5).identity
     assert prepared.plan.scale == pytest.approx(0.5 * ALPHA / RANK)
     assert prepared.plan.target_names == {f"{Q}.weight", "lm_head.weight"}
 
@@ -282,8 +283,8 @@ def test_alpha_only_change_is_remerged_after_a_run(tmp_path, form):
         lambda lora: breeze_lora.prepare_lora(model, base_dir, lora.target, lora.strength),
         log=lambda _: None,
     )
-    lora = VoiceLora(target)
-    old = breeze_lora.prepare_lora(model, base_dir, target)
+    lora = VoiceLora(ModelTarget.local(target))
+    old = breeze_lora.prepare_lora(model, base_dir, ModelTarget.local(target))
     weights_sha = sha256(os.path.join(target, "adapter.safetensors"))
     assert switcher.activate(lora) == ""
     switcher.end_run()
@@ -297,7 +298,7 @@ def test_alpha_only_change_is_remerged_after_a_run(tmp_path, form):
         metadata["alpha"] *= 2
     metadata_path.write_text(json.dumps(metadata))
 
-    updated = breeze_lora.prepare_lora(model, base_dir, target)
+    updated = breeze_lora.prepare_lora(model, base_dir, ModelTarget.local(target))
     assert sha256(os.path.join(target, "adapter.safetensors")) == weights_sha
     assert updated.identity != old.identity
     assert switcher.activate(lora) == ""
@@ -323,11 +324,11 @@ def test_breeze_model_reports_each_voices_rejected_lora(tmp_path):
     model._loras = BreezeModel._make_lora_switcher(model._model, Path(base_dir))
     model_id = "breeze_tts_2_local"
     project = Project(tts_model_type=model_id, voice_references=[
-        Voice(), Voice(loras={model_id: VoiceLora(good)}), Voice(loras={model_id: VoiceLora(str(tmp_path / "base"))}),
+        Voice(), Voice(loras={model_id: VoiceLora(ModelTarget.local(good))}), Voice(loras={model_id: VoiceLora(ModelTarget.local(str(tmp_path / "base")))}),
     ])
     problems = model.prepare_voice_loras(project, [0, 1, 2])
     assert len(problems) == 1 and problems[0].startswith("Voice 3 LoRA") and "Not a Breeze LoRA" in problems[0]
-    assert model.validate_voice_lora(VoiceLora(good)) == ""
+    assert model.validate_voice_lora(VoiceLora(ModelTarget.local(good))) == ""
 
 
 def test_breeze_menu_validation_rechecks_a_repaired_or_changed_adapter(tmp_path):
@@ -346,7 +347,7 @@ def test_breeze_menu_validation_rechecks_a_repaired_or_changed_adapter(tmp_path)
     save_file(state_of(model._model), os.path.join(base_dir, "model.safetensors"))
     model._loras = BreezeModel._make_lora_switcher(model._model, Path(base_dir))
     before = state_of(model._model)
-    lora = VoiceLora(target)
+    lora = VoiceLora(ModelTarget.local(target))
     assert "checksum" in model.validate_voice_lora(lora)
 
     manifest_path = Path(target) / "adapter_config.json"

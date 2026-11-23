@@ -34,6 +34,7 @@ from typing import Callable, Iterable, Iterator, Literal, Protocol
 
 import torch
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.voice import VoiceLora
 from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, apply_merge
 
@@ -43,7 +44,7 @@ PIN_MARGIN_MIN_BYTES = 4 * GIB
 PIN_MARGIN_FRACTION = 0.15
 
 BaseCacheMode = Literal["undecided", "pinned", "files"]
-LoraKey = tuple[str, float]
+LoraKey = tuple[ModelTarget, float]
 
 
 def should_pin_base_weights(nbytes: int, device_type: str, ram: tuple[int, int] | None) -> bool:

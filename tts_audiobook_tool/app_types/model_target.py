@@ -157,6 +157,15 @@ class ModelTarget:
                 pass
         return ModelTarget(infer_legacy_kind(value), value, inferred=True)
 
+    @staticmethod
+    def infer(value: str) -> ModelTarget:
+        """A target typed by `infer_legacy_kind`, for untyped input such as a command-line
+        argument. Raises ValueError for a blank value."""
+        result = ModelTarget.from_stored(value, None)
+        if result is None:
+            raise ValueError("Target must be a non-empty string")
+        return result
+
     def to_stored(self) -> tuple[str, str]:
         """The stored (`target`, `target_type`) pair."""
         return self.value, self.kind.value

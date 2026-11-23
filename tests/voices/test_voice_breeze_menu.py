@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
 from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
@@ -19,7 +20,7 @@ from tts_audiobook_tool.text_util import strip_ansi_codes
 from tts_audiobook_tool.tts_models.breeze_lora import LOCAL_FILE_MARKERS
 
 MODEL_ID = "breeze_tts_2_local"
-LEDA = "/runs/fw-leda/lora/checkpoint-step-000500"
+LEDA = ModelTarget.local("/runs/fw-leda/lora/checkpoint-step-000500")
 
 
 def make_state(dir_path: Path, lora: VoiceLora | None = None) -> State:
@@ -77,11 +78,11 @@ def test_lora_select_strength_and_clear(monkeypatch, tmp_path, lora):
     assert len(items) == (3 if lora else 1)
     assert labels[0].startswith("LoRA")
     items[0].handler(state, items[0])
-    assert asked["current_target"] == (lora.target if lora else "")
+    assert asked["current_target"] == (lora.target.value if lora else "")
     assert asked["local_file_markers"] == LOCAL_FILE_MARKERS
     assert "Instavar" in asked["prompt"]
     asked["callback"](state.project, "new-lora")
-    assert [args[3] for args in validated] == ["new-lora"]
+    assert [args[3] for args in validated] == [ModelTarget.hf("new-lora")]
     if lora:
         assert labels[1].startswith("LoRA strength") and "0.50" in labels[1]
         items[2].handler(state, items[2])
@@ -100,7 +101,7 @@ def test_lora_select_strength_and_clear(monkeypatch, tmp_path, lora):
 ])
 def test_lora_is_saved_only_when_the_model_accepts_it(monkeypatch, tmp_path, inspection, error, expected_error):
     # The unsaved LoRA is sent to the worker as a probe, keeping the voice's strength
-    state = make_state(tmp_path, VoiceLora("old-lora", 0.5))
+    state = make_state(tmp_path, VoiceLora(ModelTarget.hf("old-lora"), 0.5))
     probes, errors = [], []
 
     def inspect(_state, probe_lora=None):
@@ -110,17 +111,17 @@ def test_lora_is_saved_only_when_the_model_accepts_it(monkeypatch, tmp_path, ins
     monkeypatch.setattr("tts_audiobook_tool.model_worker.ModelWorker.inspect_tts_blocking", inspect)
     monkeypatch.setattr(lora_items.ask, "ask_error", errors.append)
     monkeypatch.setattr(lora_items, "print_feedback", lambda *_, **__: None)
-    lora_items.validate_and_set_voice_lora(state, menu.make_lora_spec(), 0, "new-lora")
-    assert probes == [VoiceLora("new-lora", 0.5)]
+    lora_items.validate_and_set_voice_lora(state, menu.make_lora_spec(), 0, ModelTarget.hf("new-lora"))
+    assert probes == [VoiceLora(ModelTarget.hf("new-lora"), 0.5)]
     assert state.project.voice_references[0].lora_for(MODEL_ID) == VoiceLora(
-        "old-lora" if expected_error else "new-lora", 0.5)
+        ModelTarget.hf("old-lora" if expected_error else "new-lora"), 0.5)
     assert errors == ([expected_error] if expected_error else [])
     stored_path = tmp_path / "project.json"
     if expected_error:
         assert not stored_path.exists()
     else:
         assert json.loads(stored_path.read_text())["voice_references"][0]["loras"] == {
-            MODEL_ID: {"target": "new-lora", "strength": 0.5},
+            MODEL_ID: {"target": "new-lora", "target_type": "hf", "strength": 0.5},
         }
 
 
@@ -140,7 +141,7 @@ def test_strength_prompt_validates_and_saves(monkeypatch, tmp_path, entered, exp
     stored_path = tmp_path / "project.json"
     if expected != 0.5:
         assert json.loads(stored_path.read_text())["voice_references"][0]["loras"] == {
-            MODEL_ID: {"target": LEDA, "strength": expected},
+            MODEL_ID: {"target": LEDA.value, "target_type": "local", "strength": expected},
         }
     else:
         assert not stored_path.exists()

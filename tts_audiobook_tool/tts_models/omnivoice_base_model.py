@@ -49,8 +49,7 @@ class OmniVoiceBaseModel(TtsBaseModel):
         lora = ProjectVoiceUtil.active_voice_lora(project, voices[0]) if voices else None
         if lora is None:
             return super().get_voice_tag(project)
-        from tts_audiobook_tool.target_util import make_target_display_name
-        return ProjectVoiceUtil.make_voice_tag(make_target_display_name(lora.target))
+        return ProjectVoiceUtil.make_voice_tag(lora.target.display_name())
 
     @classmethod
     def resolve_language(cls, project: Project, instance: TtsBaseModel | None = None) -> LanguageResolution:

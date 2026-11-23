@@ -876,8 +876,7 @@ class ProjectVoiceUtil:
                 return VoiceSource("instructions", ProjectVoiceUtil.make_instructions_preview(instructions))
             lora = ProjectVoiceUtil.active_voice_lora(project, voice)
             if lora is not None and not requires_sample:
-                from tts_audiobook_tool.target_util import make_target_display_name
-                return VoiceSource("lora", f"LoRA {make_target_display_name(lora.target)}")
+                return VoiceSource("lora", f"LoRA {lora.target.display_name()}")
         if requires_preset or requires_sample:
             return VoiceSource("missing")
         return VoiceSource("builtin")

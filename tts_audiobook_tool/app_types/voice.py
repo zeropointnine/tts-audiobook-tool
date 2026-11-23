@@ -22,9 +22,10 @@ On disk an entry is a flat JSON object:
                                             # written only when non-empty
         "instructions": {"<model id>": "..."},  # optional per-TTS-model voice instructions for
                                             # "instruct" models; written only when non-empty
-        "loras": {"<model id>": {"target": "...", "strength": 0.8}}
-                                            # optional per-TTS-model LoRA adapter (target: local dir
-                                            # or hf repo id; strength written only when not 1);
+        "loras": {"<model id>": {"target": "...", "target_type": "hf", "strength": 0.8}}
+                                            # optional per-TTS-model LoRA adapter (a `ModelTarget`:
+                                            # target is a local dir or hf repo id, target_type "local"
+                                            # or "hf"; strength written only when not 1);
                                             # written only when non-empty
     }
 
@@ -38,6 +39,7 @@ import math
 from typing import Any
 
 from tts_audiobook_tool.app_types import RoomReverb
+from tts_audiobook_tool.app_types.model_target import TARGET_FIELD, TARGET_TYPE_FIELD, ModelTarget
 
 # Managed crop files live in this subdirectory of the project's voice dir.
 VOICE_CROP_SUBDIR = "crops"
@@ -53,7 +55,8 @@ VOLUME_FIELD = "volume"
 PRESETS_FIELD = "presets"
 INSTRUCTIONS_FIELD = "instructions"
 LORAS_FIELD = "loras"
-LORA_TARGET_FIELD = "target"
+LORA_TARGET_FIELD = TARGET_FIELD
+LORA_TARGET_TYPE_FIELD = TARGET_TYPE_FIELD
 LORA_STRENGTH_FIELD = "strength"
 NAME_FIELD = "name"
 
@@ -133,16 +136,16 @@ class VoiceCrop:
 @dataclass(frozen=True)
 class VoiceLora:
     """A voice's LoRA adapter for one TTS model: `target` (local directory or hf
-    repo id, opaque here) and `strength` (multiplier on the adapter's change to the
+    repo) and `strength` (multiplier on the adapter's change to the
     weights; how a model applies it is model-specific, eg `omnivoice_lora`).
     Voices with the same target but different strengths are different LoRAs."""
 
-    target: str
+    target: ModelTarget
     strength: float = LORA_STRENGTH_DEFAULT
 
     def __post_init__(self) -> None:
-        if not isinstance(self.target, str) or not self.target.strip():
-            raise ValueError("LoRA target must be a non-empty string")
+        if not isinstance(self.target, ModelTarget):
+            raise ValueError("LoRA target must be a ModelTarget")
         if isinstance(self.strength, bool) or not isinstance(self.strength, (int, float)):
             raise ValueError("LoRA strength must be a number")
         strength = float(self.strength)
@@ -151,7 +154,8 @@ class VoiceLora:
         object.__setattr__(self, "strength", strength)
 
     def to_dict(self) -> dict[str, Any]:
-        result: dict[str, Any] = {LORA_TARGET_FIELD: self.target}
+        value, kind = self.target.to_stored()
+        result: dict[str, Any] = {LORA_TARGET_FIELD: value, LORA_TARGET_TYPE_FIELD: kind}
         if self.strength != LORA_STRENGTH_DEFAULT:
             result[LORA_STRENGTH_FIELD] = self.strength
         return result
@@ -339,7 +343,9 @@ def _parse_loras(raw: dict, where: str, index: int) -> dict[str, VoiceLora]:
     """A model id -> `VoiceLora` map. Empty when absent or not a map (the latter
     with a warning). An entry with a non-string key, a non-object value, or a
     missing / empty / non-string target is dropped (with a warning). A missing
-    or malformed strength loads as the default; an out-of-range one is clamped."""
+    or invalid target_type is inferred (`ModelTarget.from_stored`; the target is
+    then marked `inferred`). A missing or malformed strength loads as the default;
+    an out-of-range one is clamped."""
     from tts_audiobook_tool.l import L
 
     value = raw.get(LORAS_FIELD, {})
@@ -348,8 +354,10 @@ def _parse_loras(raw: dict, where: str, index: int) -> dict[str, VoiceLora]:
         return {}
     result: dict[str, VoiceLora] = {}
     for model_id, entry in value.items():
-        target = entry.get(LORA_TARGET_FIELD) if isinstance(entry, dict) else None
-        if not isinstance(model_id, str) or not isinstance(target, str) or not target.strip():
+        target = ModelTarget.from_stored(
+            entry.get(LORA_TARGET_FIELD), entry.get(LORA_TARGET_TYPE_FIELD)
+        ) if isinstance(entry, dict) else None
+        if not isinstance(model_id, str) or target is None:
             L.w(f"{where}[{index}]: invalid {LORAS_FIELD} entry {model_id!r}: {entry!r}; dropping")
             continue
         assert isinstance(entry, dict)

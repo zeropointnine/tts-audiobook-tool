@@ -6,6 +6,7 @@ import pytest
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot, RemoteTtsIssue
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
 from tts_audiobook_tool.menus.main_menu import make_voice_label
 from tts_audiobook_tool.menus.menu_status import _make_stt_text
@@ -220,14 +221,14 @@ def test_qwen_voice_design_status_counts_instructions(voices, expected):
 
 
 @pytest.mark.parametrize("model_id, voices, expected", [
-    ("breeze_tts_2_local", [Voice(loras={"breeze_tts_2_local": VoiceLora("/runs/fw-leda/lora/checkpoint-step-000500")})],
+    ("breeze_tts_2_local", [Voice(loras={"breeze_tts_2_local": VoiceLora(ModelTarget.local("/runs/fw-leda/lora/checkpoint-step-000500"))})],
      "LoRA fw-leda-checkpoint-step-000500"),
-    ("omnivoice_local", [Voice(loras={"omnivoice_local": VoiceLora("owner/repo/sub/dir")})], "LoRA repo"),
-    ("omnivoice_local", [Voice("first.flac"), Voice(loras={"omnivoice_local": VoiceLora("owner/repo")})],
+    ("omnivoice_local", [Voice(loras={"omnivoice_local": VoiceLora(ModelTarget.hf("owner/repo/sub/dir"))})], "LoRA repo"),
+    ("omnivoice_local", [Voice("first.flac"), Voice(loras={"omnivoice_local": VoiceLora(ModelTarget.hf("owner/repo"))})],
      "first, +1 more, +LoRA"),
-    ("breeze_tts_2_local", [Voice("first.flac"), Voice(loras={"other_model": VoiceLora("owner/repo")})], "first, +1 more"),
-    ("vibevoice_local", [Voice(loras={"vibevoice_local": VoiceLora("vibevoice-community/klett")})], "LoRA klett"),
-    ("vibevoice_local", [Voice("first.flac"), Voice(loras={"vibevoice_local": VoiceLora("owner/repo")})],
+    ("breeze_tts_2_local", [Voice("first.flac"), Voice(loras={"other_model": VoiceLora(ModelTarget.hf("owner/repo"))})], "first, +1 more"),
+    ("vibevoice_local", [Voice(loras={"vibevoice_local": VoiceLora(ModelTarget.hf("vibevoice-community/klett"))})], "LoRA klett"),
+    ("vibevoice_local", [Voice("first.flac"), Voice(loras={"vibevoice_local": VoiceLora(ModelTarget.hf("owner/repo"))})],
      "first, +1 more, +LoRA"),
 ])
 def test_voices_status_shows_per_voice_lora(model_id, voices, expected):

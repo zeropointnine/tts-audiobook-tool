@@ -12,6 +12,7 @@ torch = pytest.importorskip("torch")
 pytest.importorskip("safetensors")
 from safetensors.torch import save_file
 
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models import vibevoice_lora
 from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, apply_merge
 
@@ -52,7 +53,7 @@ def adapter_tensors(scale: float = 1.0) -> dict:
     }
 
 
-def write_adapter(directory, tensors=None, *, bin_format=False) -> str:
+def write_adapter(directory, tensors=None, *, bin_format=False) -> ModelTarget:
     directory.mkdir(parents=True, exist_ok=True)
     config = {"peft_type": "LORA", "r": RANK, "lora_alpha": 4, "use_rslora": False,
               "use_dora": False, "bias": "none", "target_modules": ["q_proj"]}
@@ -62,7 +63,7 @@ def write_adapter(directory, tensors=None, *, bin_format=False) -> str:
         torch.save(tensors, str(directory / "adapter_model.bin"))
     else:
         save_file(tensors, str(directory / "adapter_model.safetensors"))
-    return str(directory)
+    return ModelTarget.local(str(directory))
 
 
 def state_of(model) -> dict:
@@ -83,7 +84,7 @@ def test_language_model_adapter_merges_under_the_language_model(tmp_path, subdir
     write_adapter(tmp_path / subdir if subdir else tmp_path, bin_format=bin_format)
     model = make_model()
     before = state_of(model)
-    plan = vibevoice_lora.load_lora(model, str(tmp_path), 0.5)
+    plan = vibevoice_lora.load_lora(model, ModelTarget.local(str(tmp_path)), 0.5)
     assert plan.target_names == {Q}
     after = state_of(model)
     assert torch.equal(after[Q], expected_q(before, adapter_tensors(), 0.5))
@@ -95,7 +96,7 @@ def test_directory_without_an_adapter_is_a_load_error(tmp_path):
     (tmp_path / "lora").mkdir()
     (tmp_path / "lora" / "adapter_config.json").write_text("{}")
     with pytest.raises(LoraLoadError, match="adapter_model.safetensors"):
-        vibevoice_lora.resolve_adapter(str(tmp_path))
+        vibevoice_lora.resolve_adapter(ModelTarget.local(str(tmp_path)))
 
 
 def test_whole_model_adapter_is_rejected_unchanged(tmp_path):
@@ -134,8 +135,8 @@ def test_vibevoice_activates_each_selected_voices_lora_before_generation(tmp_pat
     write_adapter(tmp_path / "adapter" / "lora")
     bad = write_adapter(tmp_path / "bad", {"base_model.model.layers.0.self_attn.q_proj.lora_A.weight": torch.ones(RANK, 4)})
     project = Project(tts_model_type=MODEL_ID, voice_references=[
-        Voice(loras={MODEL_ID: VoiceLora(str(tmp_path / "adapter"))}), Voice(),
-        Voice(loras={MODEL_ID: VoiceLora(str(tmp_path / "adapter"), 0.5)}),
+        Voice(loras={MODEL_ID: VoiceLora(ModelTarget.local(str(tmp_path / "adapter")))}), Voice(),
+        Voice(loras={MODEL_ID: VoiceLora(ModelTarget.local(str(tmp_path / "adapter")), 0.5)}),
         Voice(loras={MODEL_ID: VoiceLora(bad)}),
     ])
     calls = []

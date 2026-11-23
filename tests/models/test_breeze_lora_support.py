@@ -1,5 +1,6 @@
 """Breeze TTS 2 per-voice LoRA project support: no load-time LoRA params, per-voice voice tags,
 variation notes, run pre-flight and LoRA-aware scheduling keys (no model library)."""
+from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
 from tts_audiobook_tool.generate_util import get_voice_lora_blocker_text, get_voice_switch_keys
@@ -9,10 +10,10 @@ from tts_audiobook_tool.tts_models.breeze_base_model import BreezeBaseModel
 from tts_audiobook_tool.tts_models.voice_variation_warning import get_voice_variation_warnings
 
 MODEL_ID = "breeze_tts_2_local"
-LEDA = "/runs/fw-leda/lora/checkpoint-step-000500"
+LEDA = ModelTarget.local("/runs/fw-leda/lora/checkpoint-step-000500")
 
 
-def lora_voice(target: str = LEDA, strength: float = 1.0, **kwargs) -> Voice:
+def lora_voice(target: ModelTarget = LEDA, strength: float = 1.0, **kwargs) -> Voice:
     return Voice(loras={MODEL_ID: VoiceLora(target, strength)}, **kwargs)
 
 
@@ -57,7 +58,7 @@ def test_lora_preflight_checks_only_the_jobs_lora_voices(monkeypatch):
             return ["Voice 2 LoRA (x): bad"]
 
     monkeypatch.setattr(Tts, "get_instance", staticmethod(lambda: Instance()))
-    project = make_project(Voice(), lora_voice(), lora_voice("other"), voice_of_line=(0, 1, 0))
+    project = make_project(Voice(), lora_voice(), lora_voice(ModelTarget.local("other")), voice_of_line=(0, 1, 0))
     assert get_voice_lora_blocker_text(project, [0, 1, 2]) == "Voice 2 LoRA (x): bad"
     assert checked == [[1]]
     assert get_voice_lora_blocker_text(project, [0]) == ""
