@@ -16,7 +16,10 @@ adapter file contents) does nothing; the first merge onto pristine weights reads
 
 The base copy (`BaseWeightCache`) is built lazily, at the first restore. It is pinned in RAM when there
 appears to be enough memory (`should_pin_base_weights`), otherwise read from the model's files on every
-restore. `end_run()` releases it (and the prepared plans); the next restore rebuilds it.
+restore. `end_run()` releases it (and the prepared plans), including PyTorch's cached pinned host blocks;
+the next restore rebuilds it. An adapter is accepted only if every weight it writes can be restored
+(`BaseWeightSource.check`), so a missing or rewritten base file rejects it up front rather than
+breaking the model at its first switch.
 
 Merges always compute the delta on the weight's device (`apply_merge(delta_device="target")`), so a
 voice's weights don't depend on the order of switches.
@@ -57,18 +60,52 @@ def _param_nbytes(param: torch.Tensor) -> int:
     return param.numel() * param.element_size()
 
 
+def _pinned_block_nbytes(param: torch.Tensor) -> int:
+    """RAM a pinned copy of `param` actually takes: PyTorch's caching host allocator rounds each block
+    up to a power of two (eg a 141 MiB tensor takes 256 MiB)."""
+    nbytes = _param_nbytes(param)
+    return 1 << (nbytes - 1).bit_length() if nbytes > 1 else nbytes
+
+
+def empty_pinned_host_cache() -> None:
+    """Returns PyTorch's cached, unused pinned host blocks to the OS. Freed pinned tensors otherwise stay
+    reserved (page-locked) for the life of the process, even after the model is unloaded."""
+    empty = getattr(torch._C, "_host_emptyCache", None)
+    if empty is not None and torch.cuda.is_available() and torch.cuda.is_initialized():
+        empty()
+
+
 class BaseWeightSource(Protocol):
     def read(self, params: dict[str, torch.nn.Parameter], names: Iterable[str]) -> Iterator[tuple[str, torch.Tensor]]:
         """Yields (name, CPU tensor) for each name: the base value, cast to the parameter's dtype.
         Raises if a name can't be found or doesn't match the parameter's shape."""
         ...
 
+    def check(self, params: dict[str, torch.nn.Parameter], names: Iterable[str]) -> str:
+        """Why `read()` couldn't restore all of `names` (eg a weight missing from the checkpoint), or ""."""
+        ...
+
+
+_Fingerprint = tuple[int, int] | None
+
+
+def _fingerprint(path: str) -> _Fingerprint:
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_size, stat.st_mtime_ns
+
 
 class SafetensorsBaseWeights:
     """Base weights read from the model's own safetensors files: sharded (`model.safetensors.index.json`)
     or a single `model.safetensors`. `key_for_param` maps a model parameter name to its checkpoint key
     (identity by default). Values are cast to the parameter's dtype, as loading did (eg OmniVoice's fp32
-    checkpoint loads as fp16 on CUDA); the cast is deterministic, so the restore is exact."""
+    checkpoint loads as fp16 on CUDA); the cast is deterministic, so the restore is exact.
+
+    Construct it right after loading the model: the checkpoint files' size and mtime are recorded then,
+    and a file that has changed since (eg a local checkpoint directory that is being trained into) is
+    refused rather than restoring weights the model wasn't loaded with."""
 
     INDEX_FILE_NAME = "model.safetensors.index.json"
     SINGLE_FILE_NAME = "model.safetensors"
@@ -76,20 +113,65 @@ class SafetensorsBaseWeights:
     def __init__(self, model_dir: str, key_for_param: Callable[[str], str] | None = None):
         self._model_dir = model_dir
         self._key_for_param = key_for_param or (lambda name: name)
-        self._weight_map: dict[str, str] | None = None
-
-    def _file_for_key(self, key: str) -> str:
-        if self._weight_map is None:
-            index_path = os.path.join(self._model_dir, self.INDEX_FILE_NAME)
+        self._error = ""
+        self._weight_map: dict[str, str] = {}
+        index_path = os.path.join(model_dir, self.INDEX_FILE_NAME)
+        try:
             if os.path.isfile(index_path):
                 with open(index_path, encoding="utf-8") as f:
                     self._weight_map = dict(json.load(f)["weight_map"])
-            else:
-                self._weight_map = {}
+        except Exception as e:
+            self._error = f"Couldn't read {self.INDEX_FILE_NAME}: {type(e).__name__}: {e}"
+        file_names = set(self._weight_map.values()) if self._weight_map else {self.SINGLE_FILE_NAME}
+        self._fingerprints: dict[str, _Fingerprint] = {
+            path: _fingerprint(path) for path in (os.path.join(model_dir, name) for name in file_names)
+        }
+        # Per file: checkpoint key -> shape (read from the header, on demand)
+        self._shapes: dict[str, dict[str, tuple[int, ...]]] = {}
+
+    def _file_for_key(self, key: str) -> str:
+        if self._error:
+            raise ValueError(self._error)
         file_name = self._weight_map.get(key) if self._weight_map else self.SINGLE_FILE_NAME
         if file_name is None:
             raise KeyError(f"Base weight {key} isn't in the model's checkpoint index")
         return os.path.join(self._model_dir, file_name)
+
+    def _file_problem(self, path: str) -> str:
+        recorded = self._fingerprints.get(path)
+        if recorded is None:
+            return f"The model's checkpoint has no {os.path.basename(path)} in {self._model_dir}"
+        if _fingerprint(path) != recorded:
+            return f"{path} has changed since the model was loaded"
+        return ""
+
+    def _shapes_in(self, path: str) -> dict[str, tuple[int, ...]]:
+        if path not in self._shapes:
+            from safetensors import safe_open
+            with safe_open(path, "pt", device="cpu") as f:
+                self._shapes[path] = {key: tuple(f.get_slice(key).get_shape()) for key in f.keys()}
+        return self._shapes[path]
+
+    def check(self, params: dict[str, torch.nn.Parameter], names: Iterable[str]) -> str:
+        for name in sorted(set(names)):
+            key = self._key_for_param(name)
+            try:
+                path = self._file_for_key(key)
+            except (KeyError, ValueError) as e:
+                return str(e.args[0]) if e.args else str(e)
+            problem = self._file_problem(path)
+            if problem:
+                return problem
+            try:
+                shapes = self._shapes_in(path)
+            except Exception as e:
+                return f"Couldn't read {path}: {type(e).__name__}: {e}"
+            if key not in shapes:
+                return f"Base weight {key} isn't in {os.path.basename(path)}"
+            if shapes[key] != tuple(params[name].shape):
+                return (f"Base weight {name} has shape {shapes[key]} in the checkpoint, "
+                        f"model has {tuple(params[name].shape)}")
+        return ""
 
     def read(self, params: dict[str, torch.nn.Parameter], names: Iterable[str]) -> Iterator[tuple[str, torch.Tensor]]:
         from safetensors import safe_open
@@ -98,6 +180,9 @@ class SafetensorsBaseWeights:
         for name in names:
             by_file.setdefault(self._file_for_key(self._key_for_param(name)), []).append(name)
         for path, file_names in by_file.items():
+            problem = self._file_problem(path)
+            if problem:
+                raise ValueError(problem)
             with safe_open(path, "pt", device="cpu") as f:
                 for name in file_names:
                     tensor = f.get_tensor(self._key_for_param(name))
@@ -115,7 +200,8 @@ class BaseWeightCache:
     prepared adapter's targets) and kept until `release()`:
         "pinned"  read once into pinned RAM; names first needed later are pinned too while RAM allows
         "files"   read from `source` on every restore (the OS file cache usually keeps that fast)
-    A failed pin falls back to "files".
+    A failed pin falls back to "files". Pinning is sized as PyTorch's host allocator reserves it
+    (power-of-two blocks), and `release()` hands those blocks back to the OS (`empty_pinned_cache`).
     """
 
     def __init__(
@@ -125,11 +211,13 @@ class BaseWeightCache:
             pin_policy: Callable[[int, str, tuple[int, int] | None], bool] = should_pin_base_weights,
             ram_info: Callable[[], tuple[int, int] | None] | None = None,
             pin: Callable[[torch.Tensor], torch.Tensor] | None = None,
+            empty_pinned_cache: Callable[[], None] = empty_pinned_host_cache,
     ):
         self._source = source
         self._pin_policy = pin_policy
         self._ram_info = ram_info or _default_ram_info
         self._pin = pin or (lambda tensor: tensor.pin_memory())
+        self._empty_pinned_cache = empty_pinned_cache
         self._pinned: dict[str, torch.Tensor] = {}
         self.mode: BaseCacheMode = "undecided"
         self.mode_reason = ""
@@ -138,12 +226,18 @@ class BaseWeightCache:
     def pinned_bytes(self) -> int:
         return sum(_param_nbytes(tensor) for tensor in self._pinned.values())
 
+    def check(self, params: dict[str, torch.nn.Parameter], names: Iterable[str]) -> str:
+        """Why some of `names` couldn't be restored, or "" (`BaseWeightSource.check`)."""
+        return self._source.check(params, names)
+
     def _try_pin(self, params: dict[str, torch.nn.Parameter], names: list[str]) -> bool:
         pinned: dict[str, torch.Tensor] = {}
         try:
             for name, tensor in self._source.read(params, names):
                 pinned[name] = self._pin(tensor)
         except Exception as e:
+            pinned.clear()
+            self._empty_pinned_cache()
             if isinstance(e, (KeyError, ValueError)):
                 raise
             self.mode_reason = f"pinning failed ({type(e).__name__}: {e})"
@@ -161,7 +255,9 @@ class BaseWeightCache:
             wanted = sorted(set(names) | set(expected_names))
             nbytes = sum(_param_nbytes(params[name]) for name in wanted)
             device_type = params[names[0]].device.type
-            if self._pin_policy(nbytes, device_type, self._ram_info()):
+            # Sized as the allocator will reserve it, not by the tensors' own sizes
+            reserved = sum(_pinned_block_nbytes(params[name]) for name in wanted)
+            if self._pin_policy(reserved, device_type, self._ram_info()):
                 self.mode = "pinned" if self._try_pin(params, wanted) else "files"
                 if self.mode == "pinned":
                     self.mode_reason = f"{nbytes / GIB:.1f} GB pinned in RAM"
@@ -171,8 +267,8 @@ class BaseWeightCache:
         if self.mode == "pinned":
             missing = [name for name in names if name not in self._pinned]
             if missing:
-                nbytes = sum(_param_nbytes(params[name]) for name in missing)
-                if self._pin_policy(nbytes, params[missing[0]].device.type, self._ram_info()):
+                reserved = sum(_pinned_block_nbytes(params[name]) for name in missing)
+                if self._pin_policy(reserved, params[missing[0]].device.type, self._ram_info()):
                     self._try_pin(params, missing)
 
         from_files = [name for name in names if name not in self._pinned]
@@ -191,9 +287,13 @@ class BaseWeightCache:
             torch.cuda.synchronize()
 
     def release(self) -> None:
+        had_pinned = bool(self._pinned)
         self._pinned.clear()
         self.mode = "undecided"
         self.mode_reason = ""
+        if had_pinned:
+            # Dropping the tensors only returns their blocks to PyTorch's host cache
+            self._empty_pinned_cache()
 
 
 def _default_ram_info() -> tuple[int, int] | None:
@@ -220,7 +320,8 @@ class LoraSwitcher:
     The active per-voice LoRA of one loaded model (see the module docstring).
 
     `planner(lora)` reads and validates an adapter against the model without changing it; it raises
-    `LoraLoadError` (or anything else) for an unusable one. Plans and planning errors are cached per
+    `LoraLoadError` (or anything else) for an unusable one. An adapter whose targets `base` can't
+    restore (`BaseWeightCache.check`) is rejected too. Plans and planning errors are cached per
     (target, strength) until `end_run()`.
 
     A failure while restoring or merging leaves the weights in an unknown state: the switcher is then
@@ -266,12 +367,23 @@ class LoraSwitcher:
         if key in self._errors:
             return self._errors[key]
         try:
-            self._prepared[key] = self._planner(lora)
+            prepared = self._planner(lora)
         except LoraLoadError as e:
             self._errors[key] = str(e)
+            return self._errors[key]
         except Exception as e:
             self._errors[key] = f"Couldn't read adapter: {type(e).__name__}: {e}"
-        return self._errors.get(key, "")
+            return self._errors[key]
+        # Merging is only safe if the weights it writes can be put back for the next switch
+        try:
+            problem = self._base.check(dict(self._model.named_parameters()), prepared.plan.target_names)
+        except Exception as e:
+            problem = f"{type(e).__name__}: {e}"
+        if problem:
+            self._errors[key] = f"Can't restore the base weights this adapter changes: {problem}"
+            return self._errors[key]
+        self._prepared[key] = prepared
+        return ""
 
     def activate(self, lora: VoiceLora | None) -> str:
         """Makes `lora` (None: no LoRA) the merged adapter. Returns an error message or "";

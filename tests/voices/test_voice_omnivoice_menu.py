@@ -1,93 +1,92 @@
-"""OmniVoice LoRA controls follow the VibeVoice pattern (tests/voices/test_voice_vibevoice_menu.py)."""
+"""OmniVoice delegates per-voice LoRA controls to the shared voice_lora_items machinery."""
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
 import pytest
 
+from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
 from tts_audiobook_tool.menus.menu_util import get_string_from
 from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
+from tts_audiobook_tool.menus.voice import voice_lora_items as lora_items
 from tts_audiobook_tool.menus.voice import voice_menu_shared
 from tts_audiobook_tool.menus.voice import voice_omnivoice_menu as menu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_util import strip_ansi_codes
 
+MODEL_ID = "omnivoice_local"
 
-def make_state(lora_target=""):
-    project = Project(tts_model_type="omnivoice_local", voice_references=[
-        {"file_name": "voice-1.flac", "transcript": "First."},
+
+def make_state(dir_path: Path) -> State:
+    # Isolate storage even if a menu handler unexpectedly saves.
+    project = Project(dir_path=str(dir_path), tts_model_type=MODEL_ID, voice_references=[
+        Voice("voice-1.flac", "First."),
+        Voice(loras={MODEL_ID: VoiceLora("owner/second-speaker", 0.5)}),
     ])
-    project.set_model_setting("omnivoice_local", "lora_target", lora_target)
     return cast(State, SimpleNamespace(project=project))
 
 
-def test_voices_menu_dispatches_to_the_omnivoice_menu(monkeypatch):
+def labels_of(state, items) -> list[str]:
+    return [strip_ansi_codes(get_string_from(state, item.label)) for item in items]
+
+
+def test_voices_menu_dispatches_to_the_omnivoice_menu(monkeypatch, tmp_path):
     shown = []
     monkeypatch.setattr(menu.VoiceOmniVoiceMenu, "menu", staticmethod(shown.append))
-    state = make_state()
+    state = make_state(tmp_path)
     voice_menu_shared.VoiceMenuShared.menu(state)
     assert shown == [state]
 
 
-@pytest.mark.parametrize("lora_target", ["", "wjcwqc/PaigeVoice/lora"])
-def test_lora_select_and_clear_follow_sample_controls(monkeypatch, lora_target):
-    state = make_state(lora_target)
-    captured, asked, applied, saved, cleared = {}, {}, [], [], []
-    monkeypatch.setattr(menu.VoiceMenuShared, "menu_wrapper",
-                        lambda state, items: captured.update(items=items))
+def test_omnivoice_menu_wires_per_voice_lora_controls(monkeypatch, tmp_path):
+    # The voice list has no global LoRA action. Voice 2's submenu uses its own
+    # LoRA/strength/clear controls, with Omni's adapter markers and speaker guidance.
+    state = make_state(tmp_path)
+    captured, opened, asked, validated = {}, {}, {}, []
+    monkeypatch.setattr(menu.VoiceMenuShared, "menu_wrapper", lambda state, items: captured.update(items=items))
+    monkeypatch.setattr(voice_menu_shared.VoiceMenuShared, "voice_sample_submenu",
+                        lambda s, tts_type, index, *_, **kwargs: opened.update(index=index, **kwargs))
     monkeypatch.setattr(ModelMenuShared, "ask_target", lambda **kwargs: asked.update(kwargs))
-    monkeypatch.setattr(menu, "apply_lora_and_validate", lambda *args: applied.append(args))
-    monkeypatch.setattr(Project, "save", lambda self: saved.append(self))
-    monkeypatch.setattr(menu.ModelWorker, "clear_models_if_running_blocking", lambda: cleared.append(True))
-    monkeypatch.setattr(menu.ModelWorker, "inspect_tts_blocking",
-                        lambda *_: pytest.fail("Opening voice controls must not load the model"))
+    monkeypatch.setattr(lora_items, "validate_and_set_voice_lora", lambda *args: validated.append(args))
+    monkeypatch.setattr("tts_audiobook_tool.model_worker.ModelWorker.inspect_tts_blocking",
+                        lambda *_, **__: pytest.fail("Opening voice controls must not load the model"))
+
     menu.VoiceOmniVoiceMenu.menu(state)
     items = captured["items"](state)
-    lora_items = [item for item in items if "LoRA" in strip_ansi_codes(get_string_from(state, item.label))]
+    labels = labels_of(state, items)
+    assert not any(label.startswith(("LoRA", "Select LoRA", "Clear LoRA")) for label in labels)
+    voice_2 = next(item for item, label in zip(items, labels) if label.startswith("Voice 2"))
+    voice_2.handler(state, voice_2)
+    assert opened["index"] == 1
+    extra = opened["voice_extra_items"](state, opened["index"])
+    labels = labels_of(state, extra)
+    assert len(extra) == 3
+    assert labels[0].startswith("LoRA") and "second-speaker" in labels[0]
+    assert labels[1].startswith("LoRA strength") and "0.50" in labels[1]
+    assert labels[2] == "Clear LoRA"
 
-    select = lora_items[0]
-    label = strip_ansi_codes(get_string_from(state, select.label))
-    # Unset invites selection; once set, the item just names the current LoRA
-    assert label.startswith("LoRA " if lora_target else "Select LoRA ")
-    assert (lora_target or "(optional)") in label
-    assert len(lora_items) == (2 if lora_target else 1)
-    select.handler(state, select)
-    assert asked["current_target"] == lora_target
+    extra[0].handler(state, extra[0])
+    assert asked["current_target"] == "owner/second-speaker"
+    assert asked["local_file_markers"] == ["adapter_config.json", "adapter_model.safetensors"]
     assert "OmniVoice LoRA" in asked["prompt"]
+    assert "owner/repo/sub/dir" in asked["prompt"]
+    assert "without a voice sample" in asked["prompt"]
     asked["callback"](state.project, "new-lora")
-    assert applied == [(state, "new-lora")]
-    if lora_target:
-        clear = lora_items[1]
-        clear.handler(state, clear)
-        assert state.project.get_model_setting("omnivoice_local", "lora_target") == ""
-        assert saved == [state.project]
-        assert cleared == [True]
+    [(received_state, spec, index, target)] = validated
+    assert received_state is state
+    assert spec.model_id == MODEL_ID
+    assert (index, target) == (1, "new-lora")
+    assert not (tmp_path / "project.json").exists()
 
 
-@pytest.mark.parametrize("inspection,error,expected_error", [
-    (SimpleNamespace(metadata={"has_lora": True}), "", None),
-    # The loader's reason is shown when the worker reports one
-    (SimpleNamespace(metadata={"has_lora": False, "lora_error": "Unsupported adapter feature: use_dora = True"}),
-     "", "Couldn't load LoRA: Unsupported adapter feature: use_dora = True"),
-    (SimpleNamespace(metadata={"has_lora": False}), "", "Couldn't load LoRA"),
-    (None, "Failed to initialize", "Failed to initialize"),
-])
-def test_lora_validation_saves_or_rolls_back(monkeypatch, inspection, error, expected_error):
-    state = make_state("old-lora")
-    saved, errors, inspected_targets = [], [], []
-    monkeypatch.setattr(Project, "save", lambda self: saved.append(self))
-    monkeypatch.setattr(menu.ModelWorker, "clear_models_if_running_blocking", lambda: None)
-
-    def inspect(current):
-        inspected_targets.append(current.project.get_model_setting("omnivoice_local", "lora_target"))
-        return inspection, error
-
-    monkeypatch.setattr(menu.ModelWorker, "inspect_tts_blocking", inspect)
-    monkeypatch.setattr(menu.ask, "ask_error", errors.append)
-    monkeypatch.setattr(menu.ask, "ask_enter_to_continue", lambda: None)
-    menu.apply_lora_and_validate(state, "new-lora")
-    assert inspected_targets == ["new-lora"]
-    assert state.project.get_model_setting("omnivoice_local", "lora_target") == (
-        "old-lora" if expected_error else "new-lora")
-    assert errors == ([expected_error] if expected_error else [])
-    assert saved == ([] if expected_error else [state.project])
+def test_replacing_an_omnivoice_lora_keeps_the_voices_strength(monkeypatch, tmp_path):
+    # The new adapter is validated and saved at the strength the voice already had.
+    from tts_audiobook_tool.model_worker import ModelWorker
+    state = make_state(tmp_path)
+    probes = []
+    monkeypatch.setattr(ModelWorker, "inspect_tts_blocking", lambda _state, probe_lora: probes.append(probe_lora)
+                        or (SimpleNamespace(metadata={"lora_probe_error": ""}), ""))
+    lora_items.validate_and_set_voice_lora(state, menu.make_lora_spec(), 1, "owner/new-speaker")
+    assert probes == [VoiceLora("owner/new-speaker", 0.5)]
+    assert state.project.voice_references[1].lora_for(MODEL_ID) == VoiceLora("owner/new-speaker", 0.5)

@@ -43,6 +43,7 @@ MOSS_LOCAL_SEED_ALIASES: tuple[str, ...] = ("delay_seed", "local_seed", "local_v
 # the loader warns (`find_retired_project_loras`).
 RETIRED_PROJECT_WIDE_LORAS: dict[str, str] = {
     "breeze_tts_2_local": "Breeze TTS 2",
+    "omnivoice_local": "OmniVoice",
 }
 
 

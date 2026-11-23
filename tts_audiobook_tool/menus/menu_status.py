@@ -415,7 +415,7 @@ def _make_server_tts_text(state: State) -> str:
     return text
 
 # Models with a model-wide LoRA setting (per-voice LoRAs: `ProjectVoiceUtil.active_voice_lora`)
-_LORA_MODEL_IDS = ("vibevoice_local", "omnivoice_local")
+_LORA_MODEL_IDS = ("vibevoice_local",)
 
 def _make_voices_text(state: State) -> str:
     """The first voice that has a value (preset, sample, or instructions; see
@@ -423,9 +423,9 @@ def _make_voices_text(state: State) -> str:
     other voice. With no such voice, error-colored "required" when the model
     requires a value, else (non-blocking, so not error-colored) what the voices
     lack, eg "no sample set"; see `ProjectVoiceUtil.make_no_voice_value_text`.
-    For a local model with a model-wide LoRA set (VibeVoice, OmniVoice), ", +LoRA" is
+    For a local model with a model-wide LoRA set (VibeVoice), ", +LoRA" is
     appended last, or with no voice, "LoRA (<ellipsized LoRA target>)". With per-voice
-    LoRAs (Breeze TTS 2), ", +LoRA" is appended when any voice has one; a voice with
+    LoRAs (Breeze TTS 2, OmniVoice), ", +LoRA" is appended when any voice has one; a voice with
     only a LoRA shows as "LoRA <name>"."""
     project = state.project
     lora_target = (project.get_model_setting(project.tts_model_type, 'lora_target')

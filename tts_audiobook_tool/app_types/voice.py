@@ -88,7 +88,7 @@ def volume_to_db(volume: int) -> float:
     return 20 * math.log10(volume / 100)
 
 
-# Per-voice LoRA strength: a multiplier on the adapter's alpha / rank
+# Per-voice LoRA strength: a multiplier on the adapter's change to the weights
 LORA_STRENGTH_MIN = 0.1
 LORA_STRENGTH_MAX = 2.0
 LORA_STRENGTH_DEFAULT = 1.0
@@ -133,7 +133,8 @@ class VoiceCrop:
 @dataclass(frozen=True)
 class VoiceLora:
     """A voice's LoRA adapter for one TTS model: `target` (local directory or hf
-    repo id, opaque here) and `strength` (multiplier on the adapter's alpha / rank).
+    repo id, opaque here) and `strength` (multiplier on the adapter's change to the
+    weights; how a model applies it is model-specific, eg `omnivoice_lora`).
     Voices with the same target but different strengths are different LoRAs."""
 
     target: str

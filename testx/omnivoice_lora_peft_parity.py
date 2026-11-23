@@ -11,10 +11,10 @@ test suite) merges each adapter both ways into the production configuration
   replacements (`audio_embeddings`, `audio_heads`), which both sides simply
   round from the adapter's F32 values to fp16
 - LoRA-merged weights may differ by at most 1 fp16 ulp. The manual merge
-  computes `W + scale * B @ A` in fp32 and rounds once; peft's matmul runs on
-  the GPU and may round differently, so an off-by-one-ulp element is expected,
-  anything larger is a real discrepancy. In practice (peft 0.22.0, which
-  upcasts the adapter to fp32 and also rounds once) they are bit-identical
+  (`load_lora`, the same arithmetic as per-voice switching) computes
+  `W + scale * B @ A` in fp32 on the GPU with TF32 off and rounds once; peft's
+  matmul may round differently, so an off-by-one-ulp element is expected,
+  anything larger is a real discrepancy
 - the merge must actually change the base weights (guards against comparing
   two no-ops)
 

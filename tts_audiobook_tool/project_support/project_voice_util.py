@@ -886,13 +886,19 @@ class ProjectVoiceUtil:
     def make_no_voice_value_text(project: Project) -> str:
         """What a voice with no value lacks under the current model and settings
         (non-blocking: the model falls back to its built-in voice): "no sample set",
-        or "no instructions set" when the model can't clone but uses instructions."""
+        or "no instructions set" when the model can't clone but uses instructions.
+        For a model with per-voice LoRAs (`voice_lora_mode`), " or LoRA" is added,
+        eg "no sample or LoRA set", since a LoRA alone also gives the voice a speaker."""
         from tts_audiobook_tool.tts import Tts
 
         support = Tts.get_model_support(project)
         if support.can_voice_clone(project) or not support.can_instructions(project):
-            return "no sample set"
-        return "no instructions set"
+            lacks = "sample"
+        else:
+            lacks = "instructions"
+        if support.voice_lora_mode(project) != "none":
+            lacks += " or LoRA"
+        return f"no {lacks} set"
 
     @staticmethod
     def has_any_active_voice_preset(project: Project) -> bool:

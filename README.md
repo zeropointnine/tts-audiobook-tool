@@ -708,7 +708,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Music detection/rejection (for MOSS-TTS-Local-Transformer)
 
 **OmniVoice**
-- LoRA support (Train with [OmniVoice's LoRA finetuning recipe](https://github.com/k2-fsa/OmniVoice/blob/master/docs/lora_finetuning.md)).
+- LoRA support, set per voice, with strength setting; voices with different LoRAs can be mixed in one project (Train with [OmniVoice's LoRA finetuning recipe](https://github.com/k2-fsa/OmniVoice/blob/master/docs/lora_finetuning.md)).
 - Voice design
 - Steps, speed, CFG, seed
 
@@ -727,7 +727,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature, seed
 
 **VibeVoice**
-- LoRA support (Train with [voicepowered-ai/VibeVoice-finetuning](https://github.com/voicepowered-ai/VibeVoice-finetuning)).
+- Model-wide LoRA support (Train with [voicepowered-ai/VibeVoice-finetuning](https://github.com/voicepowered-ai/VibeVoice-finetuning)).
 - Alternate VibeVoice models (eg, VibeVoice-7B or custom finetunes)
 - Batch processing support
 - Streaming support (for the stand-alone server and LLM chat mode)
@@ -893,9 +893,13 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-11-22**
+**2026-11-23**
 
-- Added **LoRA support for Breeze TTS 2** (See [instavar/breeze-tts2-finetuning](https://github.com/instavar/breeze-tts2-finetuning)). LoRAs are set per voice, so different voices can use different LoRAs.
+- LoRAs are now assignable on a per-voice basis (Breeze, OmniVoice, VibeVoice)
+
+**2026-11-21**
+
+- Added **LoRA support for Breeze TTS 2** (See [instavar/breeze-tts2-finetuning](https://github.com/instavar/breeze-tts2-finetuning)).
 - **Updated Pocket TTS** to v4.0.1, which adds new and retrained models: `english_2026-10` (recommended), some very small English language variants, Dutch, and 6-layer French, German and Spanish.
 
 **2026-11-19**

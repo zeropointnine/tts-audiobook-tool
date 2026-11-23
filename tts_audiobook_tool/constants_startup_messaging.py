@@ -13,7 +13,7 @@ version that has this feature) are not shown any messages.
 
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT
 
-STARTUP_VERSION_CODE = 6
+STARTUP_VERSION_CODE = 7
 
 # (version code, message), ascending by version code
 STARTUP_VERSION_MESSAGES: list[tuple[int, str]] = [
@@ -40,5 +40,9 @@ STARTUP_VERSION_MESSAGES: list[tuple[int, str]] = [
     (
         6,
         "Added per-voice volume control."
-    )
+    ),
+    (
+        7,
+        "Added per-voice LoRA support for Breeze TTS 2, OmniVoice, and VibeVoice."
+    ),
 ]

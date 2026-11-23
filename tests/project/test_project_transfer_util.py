@@ -475,8 +475,17 @@ def test_find_foreign_path_targets_warns_without_changing_anything(tmp_path: Pat
         'vibevoice_target': 'C:\\Users\\lee\\models\\VibeVoice',
         'qwen3_target': 'microsoft/Qwen3-TTS',
         'omnivoice_target': '/home/lee/models/omnivoice',
+        'voice_references': [{'file_name': '', 'loras': {
+            'omnivoice_local': {'target': 'C:\\Users\\lee\\adapters\\speaker', 'strength': 0.5},
+        }}],
     })
 
     found = dict(ProjectTransferUtil.find_foreign_path_targets(project))
 
-    assert found == {'vibevoice_local_target': 'C:\\Users\\lee\\models\\VibeVoice'}
+    assert found == {
+        'vibevoice_local_target': 'C:\\Users\\lee\\models\\VibeVoice',
+        'voice_1_lora_omnivoice_local': 'C:\\Users\\lee\\adapters\\speaker',
+    }
+    # Per-voice adapters remain opaque path-or-repo values, just like base targets.
+    lora = project.voice_references[0].lora_for('omnivoice_local')
+    assert lora is not None and lora.target == 'C:\\Users\\lee\\adapters\\speaker' and lora.strength == 0.5

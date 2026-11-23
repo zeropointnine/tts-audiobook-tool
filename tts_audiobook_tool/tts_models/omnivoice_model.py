@@ -1,4 +1,8 @@
 import random
+from collections.abc import Iterable
+from pathlib import Path
+
+from huggingface_hub import snapshot_download
 
 import numpy as np
 import torch
@@ -10,10 +14,12 @@ from omnivoice.models.omnivoice import VoiceClonePrompt  # type: ignore
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types.voice import VoiceLora
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
+from tts_audiobook_tool.tts_models.lora_switch import BaseWeightCache, LoraSwitcher, SafetensorsBaseWeights
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
@@ -43,6 +49,11 @@ class OmniVoiceModel(OmniVoiceBaseModel):
     """
     App wrapper for `omnivoice.OmniVoice`
     Supports Voice Cloning, Voice Design and Auto Voice modes.
+
+    Per-voice LoRAs (`Voice.loras`, PEFT format, `omnivoice_lora`) are merged into the weights and
+    switched in place before each call that needs a different one (`lora_switch.LoraSwitcher`).
+    A voice's LoRA strength scales the adapter's whole change, its embedding/head replacements
+    included (`omnivoice_lora`).
     """
 
     # Effectively disable OmniVoice's own long-text chunker
@@ -52,10 +63,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
     # several voices can be kept at once.
     RETAINS_MULTIPLE_VOICE_CLONES = True
 
-    _has_lora = False
-    _lora_error = ""
-
-    def __init__(self, model_target: str, device: DeviceType, lora_target: str = ""):
+    def __init__(self, model_target: str, device: DeviceType):
 
         self._model_target = model_target
         self._device_type = device
@@ -70,45 +78,68 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         else:
             dtype = torch.float32
 
+        # Resolve once so base-weight restores use the exact checkpoint that was loaded.
+        model_dir = Path(model_target) if os.path.isdir(model_target) else Path(snapshot_download(model_target))
         self._model: OmniVoice = OmniVoice.from_pretrained(
-            model_target,
+            str(model_dir),
             device_map=device_map,
             dtype=dtype,
         )
 
-        if lora_target:
-            self._load_lora(lora_target)
+        self._loras: LoraSwitcher | None = self._make_lora_switcher(self._model, model_dir)
 
-    def _load_lora(self, lora_target: str) -> None:
-        """
-        Merges the adapter into the weights. A rejected adapter leaves the base
-        model usable (generation is then blocked by `get_blocking_issues`, as
-        for VibeVoice); a failure mid-merge propagates, since the weights may
-        be half-merged.
-        """
-        from tts_audiobook_tool.tts_models.omnivoice_lora import LoraLoadError, load_lora
-        printt()
-        printt(f"Loading LoRA adapter: {lora_target}")
+    @staticmethod
+    def _make_lora_switcher(model: torch.nn.Module, model_dir: Path) -> LoraSwitcher:
+        from tts_audiobook_tool.tts_models.omnivoice_lora import prepare_lora
+
+        def planner(lora: VoiceLora):
+            return prepare_lora(model, lora.target, lora.strength)
+
+        # OmniVoice's parameter names match its checkpoint keys. The source casts
+        # fp32 checkpoint values to the loaded dtype (fp16 on CUDA) before restoring.
+        return LoraSwitcher(model, BaseWeightCache(SafetensorsBaseWeights(str(model_dir))), planner)
+
+    def prepare_voice_loras(self, project: Project, voice_indices: Iterable[int]) -> list[str]:
+        if self._loras is None:
+            return []
+        problems = []
+        voices = project.voice_references
+        for index in sorted(set(voice_indices)):
+            if not 0 <= index < len(voices):
+                continue
+            lora = ProjectVoiceUtil.active_voice_lora(project, voices[index])
+            if lora is None:
+                continue
+            error = self._loras.prepare(lora)
+            if error:
+                from tts_audiobook_tool.target_util import make_target_display_name
+                problems.append(f"Voice {index + 1} LoRA ({make_target_display_name(lora.target)}): {error}")
+        return problems
+
+    def validate_voice_lora(self, lora: VoiceLora) -> str:
+        if self._loras is None:
+            return "Logic error - model not initialized"
+        # Menu probes have their own preparation scope, never a stale run's cache.
+        self._loras.end_run()
         try:
-            plan = load_lora(self._model, lora_target)
-        except LoraLoadError as e:
-            self._lora_error = str(e)
-            printt(f"{COL_ERROR}Couldn't load LoRA: {e}")
-            printt()
-            return
-        self._has_lora = True
-        printt(f"{COL_DIM}Merged {plan.describe()}")
-        printt()
+            return self._loras.prepare(lora)
+        finally:
+            self._loras.end_run()
 
-    @property
-    def has_lora(self) -> bool:
-        return self._has_lora
+    def end_generation_run(self) -> None:
+        if self._loras is not None:
+            self._loras.end_run()
 
-    @property
-    def lora_error(self) -> str:
-        return self._lora_error
+    def release_inference_memory(self) -> None:
+        # Chat only ever uses voice 1, so it switches LoRA at most once: drop the base copy, but keep
+        # the plan, so later chat lines don't re-resolve and re-hash the adapter (as Breeze).
+        if self._loras is not None:
+            self._loras.release_base()
+        _release_cached_vram_if_large()
 
     def kill(self) -> None:
+        self.end_generation_run()
+        self._loras = None
         model = self._model
 
         try:
@@ -165,6 +196,15 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         # Instructions belong to the selected voice, keyed by model id.
         voice = ProjectVoiceUtil.current_voice(project, model_type, voice_selection_index)
         instruct = voice.instructions.get(model_type.id, "") if voice is not None else ""
+        lora = ProjectVoiceUtil.active_voice_lora(project, voice)
+        if self._loras is None:
+            return "Logic error - model not initialized"
+        error = self._loras.activate(lora)
+        if error:
+            return f"Couldn't apply voice {voice_selection_index + 1}'s LoRA: {error}"
+        lora_display = self._loras.active_display if lora is not None else ""
+        lora_strength = lora.strength if lora is not None else 1.0
+
         cfg      = self.LOCAL.resolve_float(project, "cfg")
         speed    = self.LOCAL.resolve_float(project, "speed")
         steps    = self.LOCAL.resolve_int(project, "num_step")
@@ -196,6 +236,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 seed=seed,
                 generation_config=generation_config,
                 print_params=print_params,
+                lora=lora_display,
+                lora_strength=lora_strength,
             )
         elif has_instruct:
             return self._generate_voice_design(
@@ -206,6 +248,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 seed=seed,
                 generation_config=generation_config,
                 print_params=print_params,
+                lora=lora_display,
+                lora_strength=lora_strength,
             )
         else:
             return self._generate_auto_voice(
@@ -215,6 +259,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 seed=seed,
                 generation_config=generation_config,
                 print_params=print_params,
+                lora=lora_display,
+                lora_strength=lora_strength,
             )
 
     def _create_voice_clone(self, source_path: str, transcript: str) -> VoiceClonePrompt:
@@ -261,6 +307,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             generation_config: OmniVoiceGenerationConfig,
             language: str | None,
             print_params: bool = False,
+            lora: str = "",
+            lora_strength: float = 1.0,
     ) -> list[Sound] | str:
 
         locals_snapshot = locals()
@@ -320,6 +368,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             generation_config: OmniVoiceGenerationConfig,
             language: str | None,
             print_params: bool = False,
+            lora: str = "",
+            lora_strength: float = 1.0,
     ) -> list[Sound] | str:
 
         if print_params:
@@ -360,6 +410,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             generation_config: OmniVoiceGenerationConfig,
             language: str | None,
             print_params: bool = False,
+            lora: str = "",
+            lora_strength: float = 1.0,
     ) -> list[Sound] | str:
 
         if print_params:
@@ -396,4 +448,6 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
         d["num_step"] = config.num_step
         d["guidance_scale"] = config.guidance_scale
-        TtsBaseModel.print_params(d, keys_blacklist=["generation_config"])
+        # The LoRA (and its strength) only when the voice has one
+        blacklist = ["generation_config"] if d.get("lora") else ["generation_config", "lora", "lora_strength"]
+        TtsBaseModel.print_params(d, keys_blacklist=blacklist)

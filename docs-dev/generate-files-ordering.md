@@ -11,7 +11,7 @@ Related documents:
 
 ## The hard constraint
 
-A single model call can use exactly **one voice** — one `Voice` slot of the project's `voice_references` list (project spec v5). Everything generation-relevant about a voice is per slot and is resolved by the model from the call's `voice_selection_index`: sample/crop, transcript, per-model `instructions` (eg Qwen3-TTS VoiceDesign/CustomVoice, OmniVoice) and per-model `loras` (Breeze TTS 2). So "same slot index" is exactly "same generation settings", and the slot index is the sub-batch key. (`pan` and `room_reverb` are per voice too but are applied at playback/export, not at generation, so they don't constrain batching.) A line's voice is fixed per line (its phrase group's `voice_index`, clamped), so one call can never mix lines from different voices. Everything below is built around that constraint.
+A single model call can use exactly **one voice** — one `Voice` slot of the project's `voice_references` list (project spec v5). Everything generation-relevant about a voice is per slot and is resolved by the model from the call's `voice_selection_index`: sample/crop, transcript, per-model `instructions` (eg Qwen3-TTS VoiceDesign/CustomVoice, OmniVoice) and per-model `loras` (local Breeze TTS 2 and local OmniVoice). So "same slot index" is exactly "same generation settings", and the slot index is the sub-batch key. (`pan` and `room_reverb` are per voice too but are applied at playback/export, not at generation, so they don't constrain batching.) A line's voice is fixed per line (its phrase group's `voice_index`, clamped), so one call can never mix lines from different voices. Everything below is built around that constraint.
 
 ## Scheduling vocabulary
 
@@ -50,7 +50,7 @@ model has a voice binding  AND  (batch_size > 1  OR  switch keys)?
           make_single_voice_rounds(items, batch_size)
 ```
 
-Switch keys (`get_voice_switch_keys`) exist only for a model whose per-voice LoRAs are merged into the weights (`voice_lora_mode` "merged", Breeze TTS 2) and only when the job's voices have more than one distinct key (a voice's (target, strength), or None for no LoRA). See [Expensive voice switches](#expensive-voice-switches).
+Switch keys (`get_voice_switch_keys`) exist only for a model whose per-voice LoRAs are merged into the weights (`voice_lora_mode` "merged", local Breeze TTS 2 and local OmniVoice) and only when the job's voices have more than one distinct key (a voice's (target, strength), or None for no LoRA). See [Expensive voice switches](#expensive-voice-switches).
 
 The gate is `ProjectVoiceUtil.get_voice_values()` being non-empty, ie the model has a voice binding (every batchable model does); the voice list is never empty (`ensure_voice_slot`), and it has one entry per slot whether or not that slot has a sample. Sample-less voices therefore still get per-voice sub-batches — required, since they can differ by instructions alone (eg several Qwen3-TTS VoiceDesign voices).
 

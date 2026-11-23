@@ -45,6 +45,10 @@ class MemorySource:
             self.reads.append(name)
             yield name, self.base[name].clone()
 
+    def check(self, params, names):
+        missing = sorted(set(names) - set(self.base))
+        return f"no base value for {missing[0]}" if missing else ""
+
 
 def make_plan(seed: int, targets=("q", "k"), strength: float = 1.0, replace_head: bool = False) -> LoraMergePlan:
     g = torch.Generator().manual_seed(seed)
@@ -59,11 +63,12 @@ def make_plan(seed: int, targets=("q", "k"), strength: float = 1.0, replace_head
 PLANS = {"a": dict(seed=1), "b": dict(seed=2, targets=("q",), replace_head=True), "c": dict(seed=3, targets=("k",))}
 
 
-def make_switcher(model, *, pin=False, identities=None, planner_error=None):
+def make_switcher(model, *, pin=False, identities=None, planner_error=None, emptied=None):
     base = state_of(model)
     source = MemorySource(base)
     cache = BaseWeightCache(source, pin_policy=lambda *_: pin, ram_info=lambda: (64 * GIB, 64 * GIB),
-                            pin=lambda tensor: tensor.clone())
+                            pin=lambda tensor: tensor.clone(),
+                            empty_pinned_cache=(lambda: emptied.append(True)) if emptied is not None else lambda: None)
     identities = identities if identities is not None else {}
     logs: list[str] = []
 
@@ -197,7 +202,8 @@ def test_failed_restore_breaks_the_switcher():
 
 def test_pinned_cache_reads_files_once_and_release_resets_it():
     model = make_model()
-    switcher, _, source, _ = make_switcher(model, pin=True)
+    emptied: list[bool] = []
+    switcher, _, source, _ = make_switcher(model, pin=True, emptied=emptied)
     switcher.prepare(VoiceLora("b"))
     switcher.activate(VoiceLora("a"))
     switcher.activate(VoiceLora("b"))
@@ -209,6 +215,36 @@ def test_pinned_cache_reads_files_once_and_release_resets_it():
     assert len(source.reads) == 3
     switcher.end_run()
     assert switcher.base.mode == "undecided" and switcher.base.pinned_bytes == 0
+    # Freed pinned tensors stay reserved in PyTorch's host cache until it's emptied
+    assert emptied == [True]
+    switcher.end_run()
+    assert emptied == [True]
+
+
+def test_adapter_with_unrestorable_targets_is_rejected_before_merging():
+    # A merge whose targets couldn't be put back would break the model at the next
+    # switch, so preparation refuses it and the weights are never touched
+    model = make_model()
+    switcher, base, _, _ = make_switcher(model)
+    del switcher.base._source.base["head.weight"]
+    error = switcher.activate(VoiceLora("b"))
+    assert "Can't restore" in error and "head.weight" in error
+    assert not switcher.broken and switcher.active_key is None
+    assert_weights(model, base)
+    assert switcher.activate(VoiceLora("a")) == ""
+
+
+def test_pin_policy_is_sized_by_the_allocators_power_of_two_blocks():
+    # A 6x4 bf16 weight is 48 bytes but takes a 64-byte pinned block
+    model = make_model()
+    sizes = []
+    cache = BaseWeightCache(MemorySource(state_of(model)), pin_policy=lambda n, *_: sizes.append(n) or False,
+                            ram_info=lambda: None)
+    switcher = LoraSwitcher(model, cache, lambda lora: PreparedLora(make_plan(**PLANS[lora.target]), "x", "x"),
+                            log=lambda _: None)
+    switcher.activate(VoiceLora("a"))
+    switcher.activate(None)
+    assert sizes == [2 * 64]
 
 
 def test_unpinned_cache_reads_on_every_restore():
@@ -273,3 +309,29 @@ def test_safetensors_base_weights(tmp_path, sharded):
     if sharded:
         with pytest.raises(KeyError, match="index"):
             list(SafetensorsBaseWeights(str(tmp_path)).read({**params, "nope": params["k.weight"]}, ["nope"]))
+
+
+def test_safetensors_base_weights_check_finds_unrestorable_weights(tmp_path):
+    # check() reports, before any merge, what read() would fail on later: a key the
+    # checkpoint lacks, a shape mismatch, a missing file, or a file rewritten after
+    # the model was loaded (whose values the model was never loaded with)
+    import os
+    pytest.importorskip("safetensors")
+    from safetensors.torch import save_file
+
+    model = make_model()
+    params = dict(model.named_parameters())
+    tensors = {name: p.detach().float().clone() for name, p in params.items()}
+    save_file({k: v for k, v in tensors.items() if k != "head.weight"}, str(tmp_path / "model.safetensors"))
+    source = SafetensorsBaseWeights(str(tmp_path))
+    assert source.check(params, ["q.weight", "k.weight"]) == ""
+    assert "head.weight" in source.check(params, ["q.weight", "head.weight"])
+    assert "shape" in source.check({**params, "q.weight": torch.nn.Parameter(torch.zeros(2, 2))}, ["q.weight"])
+
+    stat = os.stat(tmp_path / "model.safetensors")
+    os.utime(tmp_path / "model.safetensors", ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
+    assert "changed since the model was loaded" in source.check(params, ["q.weight"])
+    with pytest.raises(ValueError, match="changed"):
+        list(source.read(params, ["q.weight"]))
+
+    assert "no model.safetensors" in SafetensorsBaseWeights(str(tmp_path / "missing")).check(params, ["q.weight"])

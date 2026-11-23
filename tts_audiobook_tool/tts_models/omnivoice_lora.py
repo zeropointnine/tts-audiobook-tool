@@ -14,19 +14,32 @@ Tensor keys are relative to the whole `OmniVoice` module:
     base_model.model.audio_embeddings.weight                          (full replacements,
     base_model.model.audio_heads.weight                                PEFT modules_to_save)
 
-Merging computes `W + (alpha / r) * B @ A` (alpha / sqrt(r) for rsLoRA) in fp32
-and rounds once to the model dtype, and copies the replacements over.
+Merging computes `W + strength * (alpha / r) * B @ A` (alpha / sqrt(r) for
+rsLoRA) in fp32 on the weight's device (TF32 off) and rounds once to the model
+dtype. Replacements are copied over at strength 1, else blended from the base:
+`W + strength * (R - W)`.
 
 Everything is validated before any weight changes, so an adapter that is
 rejected (`LoraLoadError`) leaves the model untouched. Only plain LoRA as the
 upstream recipe writes it is supported; anything else (DoRA, per-module rank or
 alpha patterns, LoRA biases, embedding LoRA, other PEFT types, adapters for
-another base) is rejected rather than merged approximately. The merge cannot be
-undone in place: applying a different adapter requires reloading the model.
+another base) is rejected rather than merged approximately. Per-voice adapters
+are switched by restoring clean base weights and remerging (`lora_switch`), not
+by subtracting a rounded delta.
+
+Strength (`VoiceLora.strength`, 1 when the project has none) scales the adapter's
+whole change to the weights: the low-rank delta, and the full-rank change each
+modules_to_save replacement implies (`R - W`; the upstream recipe also retrains
+the audio embeddings and heads). Scaling only the LoRA would pair a partial
+low-rank change with fully fine-tuned embeddings and heads, which were trained
+together. The replacements' implied change is only meaningful against the base
+the adapter was trained on; PEFT adapters don't record which (a trainer-local
+`base_model_name_or_path`, no checksums), so that can't be verified.
 The format-independent parts live in `lora_merge`.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -35,6 +48,7 @@ import torch
 
 # Re-exported: callers and tests import these from here
 from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, apply_merge
+from tts_audiobook_tool.tts_models.lora_switch import PreparedLora
 
 ADAPTER_CONFIG_FILE_NAME = "adapter_config.json"
 ADAPTER_WEIGHTS_FILE_NAME = "adapter_model.safetensors"
@@ -76,18 +90,23 @@ def resolve_adapter_dir(target: str) -> str:
     return directory
 
 
-def plan_merge(model: torch.nn.Module, adapter_dir: str) -> LoraMergePlan:
-    """Reads and validates an adapter against `model` without changing it."""
+def plan_merge(model: torch.nn.Module, adapter_dir: str, strength: float = 1.0) -> LoraMergePlan:
+    """Reads and validates an adapter without changing `model`."""
     try:
-        return _plan_merge(model, adapter_dir)
+        return _plan_merge(model, adapter_dir, strength)
     except LoraLoadError:
         raise
     except Exception as e:
         raise LoraLoadError(f"Couldn't read adapter: {e}") from e
 
 
-def _plan_merge(model: torch.nn.Module, adapter_dir: str) -> LoraMergePlan:
+def _plan_merge(model: torch.nn.Module, adapter_dir: str, strength: float) -> LoraMergePlan:
     from safetensors.torch import load_file
+
+    if (isinstance(strength, bool) or not isinstance(strength, (int, float))
+            or not math.isfinite(strength) or strength <= 0):
+        raise LoraLoadError(f"Invalid LoRA strength: {strength!r}")
+    strength = float(strength)
 
     with open(os.path.join(adapter_dir, ADAPTER_CONFIG_FILE_NAME), encoding="utf-8") as f:
         config = json.load(f)
@@ -107,10 +126,10 @@ def _plan_merge(model: torch.nn.Module, adapter_dir: str) -> LoraMergePlan:
     if not isinstance(alpha, (int, float)) or isinstance(alpha, bool) or not math.isfinite(alpha):
         raise LoraLoadError(f"Invalid lora_alpha in adapter config: {alpha!r}")
     alpha = float(alpha)
-    scale = alpha / (math.sqrt(rank) if config.get("use_rslora") else rank)
+    scale = strength * alpha / (math.sqrt(rank) if config.get("use_rslora") else rank)
 
     params = dict(model.named_parameters())
-    plan = LoraMergePlan(rank=rank, alpha=alpha, scale=scale)
+    plan = LoraMergePlan(rank=rank, alpha=alpha, scale=scale, replacement_strength=strength)
     halves: dict[str, dict[str, torch.Tensor]] = {}
     for key, value in load_file(os.path.join(adapter_dir, ADAPTER_WEIGHTS_FILE_NAME)).items():
         if not key.startswith(_KEY_PREFIX):
@@ -132,7 +151,9 @@ def _plan_merge(model: torch.nn.Module, adapter_dir: str) -> LoraMergePlan:
                 f"Shape mismatch for {name}: adapter {tuple(value.shape)}, model {tuple(target.shape)}")
         if not value.is_floating_point():
             raise LoraLoadError(f"Non-float adapter tensor: {key}")
-        plan.replacements[name] = value
+        # A copied replacement is rounded now, as the merge would (halving an fp32 one's RAM while
+        # the plan is cached); a blended one keeps its precision, so the blend rounds only once
+        plan.replacements[name] = value.to(target.dtype) if strength == 1.0 else value
 
     for name, half in halves.items():
         if "A" not in half or "B" not in half:
@@ -157,13 +178,31 @@ def _plan_merge(model: torch.nn.Module, adapter_dir: str) -> LoraMergePlan:
     return plan
 
 
-def load_lora(model: torch.nn.Module, target: str) -> LoraMergePlan:
+def prepare_lora(model: torch.nn.Module, target: str, strength: float = 1.0) -> PreparedLora:
+    """Validates an adapter for per-voice switching, without changing the loaded weights."""
+    from tts_audiobook_tool.target_util import make_target_display_name
+
+    directory = resolve_adapter_dir(target)
+    plan = plan_merge(model, directory, strength)
+    digest = hashlib.sha256()
+    with open(os.path.join(directory, ADAPTER_WEIGHTS_FILE_NAME), "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    # Scaling metadata lives outside the tensor file (including rsLoRA's sqrt(r));
+    # remerge when any of it changes even if the weights file is unchanged.
+    identity = f"{digest.hexdigest()}:{plan.rank}:{plan.alpha!r}:{plan.scale!r}:{plan.replacement_strength!r}"
+    return PreparedLora(plan, identity, make_target_display_name(target))
+
+
+def load_lora(model: torch.nn.Module, target: str, strength: float = 1.0) -> LoraMergePlan:
     """
-    Resolves, validates and merges an adapter into `model`. Raises `LoraLoadError`
-    (model unchanged) when the adapter can't be used; any other exception means
-    the merge failed partway and the model must be discarded.
+    Resolves, validates and merges an adapter into `model`, computing the delta as
+    per-voice switching does (`lora_switch`). For checks and probes; the app
+    switches adapters with `prepare_lora`. Raises `LoraLoadError` (model unchanged)
+    when the adapter can't be used; any other exception means the merge failed
+    partway and the model must be discarded.
     """
-    plan = plan_merge(model, resolve_adapter_dir(target))
-    apply_merge(model, plan)
+    plan = plan_merge(model, resolve_adapter_dir(target), strength)
+    apply_merge(model, plan, delta_device="target")
     return plan
 

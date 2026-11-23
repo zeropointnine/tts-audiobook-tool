@@ -184,3 +184,45 @@ def test_load_drops_a_project_wide_breeze_lora_with_a_warning(
     assert parameters["temperature"] == 0.7
     assert project.voice_references[0].loras == {}
     project.kill()
+
+
+@pytest.mark.parametrize("target", ["trainer/legacy-omnivoice-lora", ""])
+def test_load_drops_a_project_wide_omnivoice_lora_but_keeps_voice_loras(
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        target: str,
+) -> None:
+    # Retirement must not overwrite existing voice adapters or assign the old
+    # project-wide adapter to an unconfigured voice. Empty old targets are silent.
+    voice_loras = {
+        "omnivoice_local": {"target": "trainer/voice-lora", "strength": 0.8},
+        "breeze_tts_2_local": {"target": "trainer/breeze-lora", "strength": 1.2},
+    }
+    dir_path = make_project_dir(tmp_path, {
+        "version": 5,
+        "tts_model_type": "omnivoice_local",
+        "voice_references": [
+            {"file_name": "", "transcript": "", "room_reverb": "off", "loras": voice_loras},
+            {"file_name": "", "transcript": "", "room_reverb": "off"},
+        ],
+        "model_settings": {"models": {"omnivoice_local": {"parameters": {
+            "lora_target": target, "lora_strength": 0.5, "cfg": 1.5,
+        }}}, "shared": {}},
+    })
+
+    project = load(dir_path)
+
+    out = capsys.readouterr().out
+    if target:
+        assert "OmniVoice" in out and "per-voice" in out and target in out
+    else:
+        assert "per-voice" not in out
+    saved = read_saved(dir_path)
+    parameters = saved["model_settings"]["models"]["omnivoice_local"]["parameters"]
+    assert "lora_target" not in parameters and "lora_strength" not in parameters
+    assert parameters["cfg"] == 1.5
+    assert project.voice_references[0].to_dict()["loras"] == voice_loras
+    assert saved["voice_references"][0]["loras"] == voice_loras
+    assert project.voice_references[1].loras == {}
+    assert "loras" not in saved["voice_references"][1]
+    project.kill()

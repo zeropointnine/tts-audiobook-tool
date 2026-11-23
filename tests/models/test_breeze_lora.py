@@ -318,6 +318,8 @@ def test_breeze_model_reports_each_voices_rejected_lora(tmp_path):
     good = write_manifest_dir(tmp_path / "export", base_dir)
     model = BreezeModel.__new__(BreezeModel)
     model._model = make_model()  # type: ignore[assignment]
+    # The switcher only accepts adapters whose targets it can restore from the base checkpoint
+    save_file(state_of(model._model), os.path.join(base_dir, "model.safetensors"))
     model._loras = BreezeModel._make_lora_switcher(model._model, Path(base_dir))
     model_id = "breeze_tts_2_local"
     project = Project(tts_model_type=model_id, voice_references=[
@@ -340,6 +342,8 @@ def test_breeze_menu_validation_rechecks_a_repaired_or_changed_adapter(tmp_path)
     target = write_manifest_dir(tmp_path / "export", base_dir, adapter__sha256="0" * 64)
     model = BreezeModel.__new__(BreezeModel)
     model._model = make_model()  # type: ignore[assignment]
+    # The switcher only accepts adapters whose targets it can restore from the base checkpoint
+    save_file(state_of(model._model), os.path.join(base_dir, "model.safetensors"))
     model._loras = BreezeModel._make_lora_switcher(model._model, Path(base_dir))
     before = state_of(model._model)
     lora = VoiceLora(target)

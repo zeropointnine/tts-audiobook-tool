@@ -82,7 +82,6 @@ class ProjectTransferUtil:
         ('dots_local', 'target'),
         ('moss_local', 'target'),
         ('omnivoice_local', 'target'),
-        ('omnivoice_local', 'lora_target'),
         ('pocket_local', 'model_code'),
         ('qwen3tts_local', 'target'),
         ('vibevoice_local', 'target'),

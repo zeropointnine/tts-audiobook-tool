@@ -14,6 +14,7 @@ from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.app_types.voice import Voice
 from tts_audiobook_tool.tts_models import omnivoice_model
 from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from voice_cache_test_support import cache_key_prefix, write_voice_file
 
 
@@ -76,6 +77,7 @@ def make_model() -> OmniVoiceModel:
     model._model_target = "fake"
     model._device_type = DeviceType.CPU
     model._model = FakeOmniVoice()
+    model._loras = SimpleNamespace(activate=lambda lora: "", end_run=lambda: None)
     return model
 
 
@@ -227,6 +229,7 @@ def test_omnivoice_project_language_reaches_generate(tmp_path, monkeypatch, mode
     settings = {"cfg": -1, "speed": -1, "num_step": -1, "seed": 1}
     project = SimpleNamespace(
         language_code=language,
+        get_tts_model_type=lambda: TtsModelType.require_by_id("omnivoice_local"),
         get_model_setting=lambda model_id, name: settings[name],
     )
     monkeypatch.setattr(
