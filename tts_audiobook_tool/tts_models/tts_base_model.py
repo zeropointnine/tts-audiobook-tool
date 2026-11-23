@@ -16,6 +16,9 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+    from collections.abc import Iterable
+    from tts_audiobook_tool.app_types.voice import VoiceLora
+    from tts_audiobook_tool.tts_models.model_support import VoiceLoraMode
 else:
     Project = object
 
@@ -232,6 +235,26 @@ class TtsBaseModel(ABC):
         can override this to reset model-specific cached text/audio state at
         caller-defined boundaries, such as paragraph or section breaks.
         """
+        pass
+
+    def prepare_voice_loras(self, project: Project, voice_indices: Iterable[int]) -> list[str]:
+        """
+        Validates (without applying) the active per-voice LoRAs of these voice slots
+        (`ProjectVoiceUtil.active_voice_lora`) before a run, so an unusable adapter
+        blocks the run up front rather than failing partway. Returns one message per
+        problem. Default: no per-voice LoRAs, so nothing to check.
+        """
+        return []
+
+    def validate_voice_lora(self, lora: VoiceLora) -> str:
+        """Checks whether this loaded model can use `lora` (eg before the voice menu
+        saves it); returns an error message or ""."""
+        return "This model doesn't support per-voice LoRAs"
+
+    def end_generation_run(self) -> None:
+        """Called when a generation or realtime run ends (also on interrupt or error),
+        so a model can release memory held only to speed up the run (eg Breeze's base
+        weight copy for LoRA swaps). Persistent weights stay loaded. Default does nothing."""
         pass
 
     def release_inference_memory(self) -> None:
@@ -537,6 +560,17 @@ class TtsBaseModel(ABC):
         rather than read the spec field directly.
         """
         return cls.INFO.can_voice_clone
+
+    @classmethod
+    def voice_lora_mode(cls, project: Project) -> VoiceLoraMode:
+        """
+        How the model applies per-voice LoRAs (`Voice.loras`, keyed by model id):
+            "none"     not supported (the default)
+            "merged"   merged into the weights; switching between voices with different LoRAs
+                       is expensive (restore + re-merge), so scheduling groups voices by LoRA
+            "runtime"  applied per call (eg PEFT adapters); switching is cheap
+        """
+        return "none"
 
     @classmethod
     def has_fixed_default_voice(cls, project: Project) -> bool:

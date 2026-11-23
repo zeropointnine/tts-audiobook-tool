@@ -11,7 +11,7 @@ Related documents:
 
 ## The hard constraint
 
-A single model call can use exactly **one voice** — one `Voice` slot of the project's `voice_references` list (project spec v5). Everything generation-relevant about a voice is per slot and is resolved by the model from the call's `voice_selection_index`: sample/crop, transcript, and per-model `instructions` (eg Qwen3-TTS VoiceDesign/CustomVoice, OmniVoice). So "same slot index" is exactly "same generation settings", and the slot index is the sub-batch key. (`pan` and `room_reverb` are per voice too but are applied at playback/export, not at generation, so they don't constrain batching.) A line's voice is fixed per line (its phrase group's `voice_index`, clamped), so one call can never mix lines from different voices. Everything below is built around that constraint.
+A single model call can use exactly **one voice** — one `Voice` slot of the project's `voice_references` list (project spec v5). Everything generation-relevant about a voice is per slot and is resolved by the model from the call's `voice_selection_index`: sample/crop, transcript, per-model `instructions` (eg Qwen3-TTS VoiceDesign/CustomVoice, OmniVoice) and per-model `loras` (Breeze TTS 2). So "same slot index" is exactly "same generation settings", and the slot index is the sub-batch key. (`pan` and `room_reverb` are per voice too but are applied at playback/export, not at generation, so they don't constrain batching.) A line's voice is fixed per line (its phrase group's `voice_index`, clamped), so one call can never mix lines from different voices. Everything below is built around that constraint.
 
 ## Scheduling vocabulary
 
@@ -40,14 +40,17 @@ trigger transcript repair. See [Project Spec v5](<project-spec-v5.md>).
 
 ## Queue construction
 
-`generate_files()` starts from `items`: the queued indices sorted in book order, each with retry count 0 ([generate_files()](../tts_audiobook_tool/generate_util.py:111)). It then picks one of two builders:
+`generate_files()` starts from `items`: the queued indices sorted in book order, each with retry count 0 ([generate_files()](../tts_audiobook_tool/generate_util.py:111)). `build_generation_queue()` then picks one of two builders:
 
 ```
-batch_size > 1  AND  model has a voice binding?
-├── yes → make_multi_voice_rounds(items, ..., voice_of_index, sort_by_words = not is_cjk)
+model has a voice binding  AND  (batch_size > 1  OR  switch keys)?
+├── yes → make_multi_voice_rounds(items, ..., voice_of_index,
+│                                 sort_by_words = not is_cjk and batch_size > 1, switch_keys)
 └── no  → bucket_items(items, ...)            # only if batch_size > 1 and not CJK
           make_single_voice_rounds(items, batch_size)
 ```
+
+Switch keys (`get_voice_switch_keys`) exist only for a model whose per-voice LoRAs are merged into the weights (`voice_lora_mode` "merged", Breeze TTS 2) and only when the job's voices have more than one distinct key (a voice's (target, strength), or None for no LoRA). See [Expensive voice switches](#expensive-voice-switches).
 
 The gate is `ProjectVoiceUtil.get_voice_values()` being non-empty, ie the model has a voice binding (every batchable model does); the voice list is never empty (`ensure_voice_slot`), and it has one entry per slot whether or not that slot has a sample. Sample-less voices therefore still get per-voice sub-batches — required, since they can differ by instructions alone (eg several Qwen3-TTS VoiceDesign voices).
 
@@ -69,6 +72,16 @@ The gate is `ProjectVoiceUtil.get_voice_values()` being non-empty, ie the model 
 4. **Chunk.** Each pile is cut into sub-batches of `batch_size`, each stamped with its voice sample index. The round is the concatenation of all piles' sub-batches.
 
 Because sub-batches execute sequentially within a round, **all of voice A's sub-batches run before any of voice B's** in a given round (subject to the pile order). That grouping is a consequence of the one-voice-per-call constraint, not an optimization: it cannot be removed, and the first-appearance pile order is the cheap book-order-favoring choice for it.
+
+### Expensive voice switches
+
+Switching between voices with different merged LoRAs costs a weight restore and re-merge (about a second), so with switch keys:
+
+- Lines are grouped into per-voice piles even at **batch size 1** (no word-count sort there, so each pile stays in book order). Without this, alternating dialog lines would switch on nearly every line.
+- Each round's piles are ordered by key (`order_voices_by_switch_key`): keys in first-appearance order with same-key voices adjacent, rotated so the round **starts with the key the previous round ended on**. A round then costs at most (distinct keys − 1) switches, and none at the round boundary.
+- Retry rounds group voices the same way, starting with the key in effect (the last sub-batch's).
+
+Windows, FIFO order between windows and the bounded out-of-orderness are unchanged.
 
 ## Execution loop
 
@@ -118,7 +131,7 @@ The design contract in one sentence: *worst case is bounded by the window width,
 
 ## Invariants worth preserving
 
-- `batch_size == 1` or a model without a voice binding take the `bucket_items` + `make_single_voice_rounds` path, which reproduces the pre-multi-voice flat queue byte-for-byte. Changes to the multi-voice path must not leak into that one. A project with no voice samples is *not* on that path when the model has a voice binding (its slots may carry distinct instructions); with a single distinct voice the multi-voice path produces the same order as the flat path anyway (next invariant).
+- Without switch keys, `batch_size == 1` or a model without a voice binding take the `bucket_items` + `make_single_voice_rounds` path, which reproduces the pre-multi-voice flat queue byte-for-byte. Changes to the multi-voice path must not leak into that one. A project with no voice samples is *not* on that path when the model has a voice binding (its slots may carry distinct instructions); with a single distinct voice the multi-voice path produces the same order as the flat path anyway (next invariant).
 - The sub-batch key is the voice slot index alone. If a future per-voice property affects generation, it must be resolved from `voice_selection_index` inside the model call (as `instructions` is), never per line, or batches would stop being homogeneous.
 - `make_multi_voice_rounds()` returns `[]` for empty input; with one distinct voice it is equivalent to the single-voice path (window collapses to `batch_size × 5`).
 - `voice_of_index` is computed once up front from the *queued* indices, so a line's voice for the whole run — including retry rounds — is fixed at queue-build time.

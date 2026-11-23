@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Hashable, Iterable
 from dataclasses import dataclass
 import os
 import time
@@ -39,6 +40,7 @@ from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -101,6 +103,23 @@ class GenerateUtil:
             staging_dir: str = "",
     ) -> bool:
         """
+        Runs `_generate_files()`, then lets the model release run-scoped memory
+        (`Tts.end_generation_run`), however the run ends.
+        """
+        try:
+            return GenerateUtil._generate_files(state, indices_set, batch_size, is_regen, staging_dir)
+        finally:
+            end_generation_run_safely()
+
+    @staticmethod
+    def _generate_files(
+            state: State,
+            indices_set: set[int],
+            batch_size: int,
+            is_regen: bool,
+            staging_dir: str = "",
+    ) -> bool:
+        """
         Subroutine for doing a series of audio generations to files
         Prints feedback at end of each item, and summary at end of loop.
 
@@ -140,6 +159,12 @@ class GenerateUtil:
             ask.ask_error(err)
             return True
 
+        # Per-voice LoRAs of the voices this run uses, validated up front
+        err = get_voice_lora_blocker_text(project, indices_set)
+        if err:
+            ask.ask_error(err)
+            return True
+
         # Print warnings if any, including the voice-variation note for this run's voices
         warnings = get_run_warnings(state.project, Tts.get_instance(), indices_set)
         if warnings:
@@ -164,28 +189,16 @@ class GenerateUtil:
         # "batch of batches"); each sub-batch is sent to the model as a single
         # call that can use only one voice sample.
         #
-        # When batching with voice samples, lines are grouped into per-voice
-        # sub-batches by their assigned voice (see make_multi_voice_rounds).
-        # Otherwise the queue degenerates to the single-voice shape: a flat,
-        # optionally word-count-bucketed list of items chunked into
-        # sub-batches of batch_size, and generate() resolves each voice.
+        # See build_generation_queue. With switch keys (voices whose per-voice
+        # LoRAs are expensive to switch between), lines are grouped by voice and
+        # same-LoRA voices kept adjacent, to minimize switches.
         is_cjk = language_util.is_cjk(state.project.language_code)
-        voice_of_index: dict[int, int] | None = None
-        if batch_size > 1:
-            voice_values = ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())
-            if voice_values:
-                voice_of_index = effective_voice_indices(
-                    project.phrase_groups, sorted_indices, len(voice_values)
-                )
-        if voice_of_index is not None:
-            queue = make_multi_voice_rounds(
-                items, project.phrase_groups, voice_of_index, batch_size,
-                sort_by_words=not is_cjk,
-            )
-        else:
-            if batch_size > 1 and not is_cjk:
-                items = bucket_items(items, project.phrase_groups, batch_size)
-            queue = make_single_voice_rounds(items, batch_size)
+        switch_keys = get_voice_switch_keys(project, sorted_indices)
+        queue, voice_of_index = build_generation_queue(
+            items, project.phrase_groups,
+            len(ProjectVoiceUtil.get_voice_values(project, project.get_tts_model_type())),
+            batch_size, is_cjk, switch_keys,
+        )
 
         # Metrics-related variables
         num_errored = 0
@@ -238,7 +251,10 @@ class GenerateUtil:
             # Start a new round if needed (retries take priority over the queue)
             if not current_round:
                 if pending_retries:
-                    current_round = make_retry_round(pending_retries, voice_of_index, batch_size)
+                    current_round = make_retry_round(
+                        pending_retries, voice_of_index, batch_size, switch_keys=switch_keys,
+                        current_key=switch_keys.get(last_voice) if switch_keys and last_voice is not None else None,
+                    )
                     pending_retries = []
                 elif queue:
                     current_round = queue.pop(0)
@@ -1195,6 +1211,114 @@ def effective_voice_indices(
         for index in indices
     }
 
+def end_generation_run_safely() -> None:
+    """`Tts.end_generation_run()`, logging (not raising) a failure, so it can't mask a run's own outcome."""
+    try:
+        Tts.end_generation_run()
+    except Exception as e:
+        L.e(f"end_generation_run failed: {type(e).__name__}: {e}")
+
+
+def get_voice_lora_blocker_text(project: Project, phrase_indices: Iterable[int] | None) -> str:
+    """Problems with the per-voice LoRAs of the voices these lines use
+    (`TtsBaseModel.prepare_voice_loras`), as one message, or ""."""
+    if Tts.get_model_support(project).voice_lora_mode(project) == "none":
+        return ""
+    voice_indices = [
+        index for index in ProjectVoiceUtil.get_job_voice_indices(project, phrase_indices)
+        if ProjectVoiceUtil.active_voice_lora(project, project.voice_references[index]) is not None
+    ]
+    if not voice_indices:
+        return ""
+    problems = Tts.get_instance().prepare_voice_loras(project, voice_indices)
+    return "\n".join(problems)
+
+
+SwitchKeys = dict[int, Hashable]
+
+
+def get_voice_switch_keys(project: Project, phrase_indices: Iterable[int]) -> SwitchKeys | None:
+    """
+    For a model whose per-voice LoRAs are expensive to switch between (`voice_lora_mode`
+    "merged"), each voice slot's switch key: its active LoRA's (target, strength), or None
+    for no LoRA. None (no reordering) unless the job's voices have more than one distinct key.
+    """
+    support = Tts.get_model_support(project)
+    if support.voice_lora_mode(project) != "merged":
+        return None
+    voices = project.voice_references
+    keys: SwitchKeys = {}
+    for index, voice in enumerate(voices):
+        lora = ProjectVoiceUtil.active_voice_lora(project, voice)
+        keys[index] = (lora.target, lora.strength) if lora is not None else None
+    job_voices = ProjectVoiceUtil.get_job_voice_indices(project, phrase_indices)
+    if len({keys[index] for index in job_voices if index in keys}) < 2:
+        return None
+    return keys
+
+
+def build_generation_queue(
+        items: list[tuple[int, int]],
+        phrase_groups: list[PhraseGroup],
+        num_voice_values: int,
+        batch_size: int,
+        is_cjk: bool,
+        switch_keys: SwitchKeys | None = None,
+) -> tuple[list[list[SubBatch]], dict[int, int] | None]:
+    """
+    Builds the queue of rounds, and the line -> voice map used for retries (None when
+    voices are resolved per line in `generate()`). A "round" is a group of sub-batches
+    (a "batch of batches"); each sub-batch is sent to the model as a single call that
+    can use only one voice sample.
+
+    When batching with voice samples, lines are grouped into per-voice sub-batches by
+    their assigned voice (see make_multi_voice_rounds). With `switch_keys`
+    (get_voice_switch_keys), lines are grouped by voice even at batch size 1 (in book
+    order within a voice), and voices are ordered to minimize switches between keys.
+    Otherwise the queue degenerates to the single-voice shape: a flat, optionally
+    word-count-bucketed list of items chunked into sub-batches of batch_size, and
+    generate() resolves each voice.
+    """
+    voice_of_index: dict[int, int] | None = None
+    if num_voice_values and (batch_size > 1 or switch_keys is not None):
+        voice_of_index = effective_voice_indices(
+            phrase_groups, [index for index, _ in items], num_voice_values
+        )
+    if voice_of_index is not None:
+        queue = make_multi_voice_rounds(
+            items, phrase_groups, voice_of_index, batch_size,
+            sort_by_words=not is_cjk and batch_size > 1,
+            switch_keys=switch_keys,
+        )
+    else:
+        if batch_size > 1 and not is_cjk:
+            items = bucket_items(items, phrase_groups, batch_size)
+        queue = make_single_voice_rounds(items, batch_size)
+    return queue, voice_of_index
+
+
+def order_voices_by_switch_key(
+        voice_order: list[int], switch_keys: SwitchKeys, first_key: Hashable | None = None, has_first: bool = False,
+) -> list[int]:
+    """
+    Reorders voices so voices with the same switch key are adjacent: keys in order of
+    first appearance (voices keep their order within a key), except that `first_key`,
+    when `has_first` and present, goes first (the key already in effect).
+    """
+    key_order: list[Hashable] = []
+    by_key: dict[Hashable, list[int]] = {}
+    for voice in voice_order:
+        key = switch_keys.get(voice)
+        if key not in by_key:
+            by_key[key] = []
+            key_order.append(key)
+        by_key[key].append(voice)
+    if has_first and first_key in by_key:
+        key_order.remove(first_key)
+        key_order.insert(0, first_key)
+    return [voice for key in key_order for voice in by_key[key]]
+
+
 def make_single_voice_rounds(
         items: list[tuple[int, int]],
         batch_size: int,
@@ -1216,9 +1340,11 @@ def make_multi_voice_rounds(
         voice_of_index: dict[int, int],
         batch_size: int,
         sort_by_words: bool,
+        switch_keys: SwitchKeys | None = None,
 ) -> list[list[SubBatch]]:
     """
-    Builds a queue of rounds for a batched project with voice samples.
+    Builds a queue of rounds for a batched project with voice samples
+    (or, with `switch_keys`, any project with voice values).
     Each round is a group of per-voice sub-batches ("batches of batches");
     each sub-batch holds at most `batch_size` items that all share one voice
     sample, so each can be sent to the model as a single call.
@@ -1236,6 +1362,10 @@ def make_multi_voice_rounds(
         voice_of_index: map from index to voice sample index (see
             effective_voice_indices)
         sort_by_words: False for CJK projects (no word-count sorting)
+        switch_keys: voice -> key of an expensive model-side switch (eg a merged
+            per-voice LoRA). Each round's voices are then grouped by key, starting
+            with the key the previous round ended on (order_voices_by_switch_key),
+            so a round costs at most (distinct keys - 1) switches beyond its first.
     """
     if not items:
         return []
@@ -1245,6 +1375,8 @@ def make_multi_voice_rounds(
 
     rounds: list[list[SubBatch]] = []
     is_descending = True
+    last_key: Hashable | None = None
+    has_last_key = False
 
     for i in range(0, len(items), window_size):
         window = items[i:i + window_size]
@@ -1259,6 +1391,10 @@ def make_multi_voice_rounds(
                 by_voice[voice] = []
                 voice_order.append(voice)
             by_voice[voice].append(item)
+
+        if switch_keys is not None:
+            voice_order = order_voices_by_switch_key(voice_order, switch_keys, last_key, has_last_key)
+            last_key, has_last_key = switch_keys.get(voice_order[-1]), True
 
         sub_batches: list[SubBatch] = []
         for voice in voice_order:
@@ -1279,12 +1415,16 @@ def make_retry_round(
         items: list[tuple[int, int]],
         voice_of_index: dict[int, int] | None,
         batch_size: int,
+        switch_keys: SwitchKeys | None = None,
+        current_key: Hashable | None = None,
 ) -> list[SubBatch]:
     """
     Builds a single round from pending retries (re-added items). Items keep
     the order they were produced in and are grouped by voice sample (when
     `voice_of_index` is set); no word-count re-bucketing is
     done, matching the single-speaker behavior of processing re-adds promptly.
+    With `switch_keys`, voices are grouped by key, starting with `current_key`
+    (the one in effect; see order_voices_by_switch_key).
     """
     if voice_of_index is None:
         groups: list[tuple[int | None, list[tuple[int, int]]]] = [(None, list(items))]
@@ -1292,7 +1432,10 @@ def make_retry_round(
         by_voice: dict[int, list[tuple[int, int]]] = {}
         for item in items:
             by_voice.setdefault(voice_of_index[item[0]], []).append(item)
-        groups = [(voice, by_voice[voice]) for voice in sorted(by_voice)]
+        voices = sorted(by_voice)
+        if switch_keys is not None:
+            voices = order_voices_by_switch_key(voices, switch_keys, current_key, True)
+        groups = [(voice, by_voice[voice]) for voice in voices]
 
     sub_batches: list[SubBatch] = []
     for voice, group in groups:

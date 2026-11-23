@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.tts_models.model_support import VoiceLoraMode
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.tts_models.local_definition import require_local_definition
@@ -54,40 +54,19 @@ class BreezeBaseModel(TtsBaseModel):
             cfg=local.resolve_float(project, "cfg"),
         )
 
-    @staticmethod
-    def resolve_lora_strength(project: Project) -> float:
-        return BreezeBaseModel.LOCAL.resolve_float(project, "lora_strength")
-
-    @property
-    def has_lora(self) -> bool:
-        """Whether the LoRA set in the project was merged into this instance (see `breeze_lora`)."""
-        return False
-
-    @property
-    def lora_error(self) -> str:
-        """Why the project's LoRA couldn't be loaded, or empty."""
-        return ""
-
     @classmethod
-    def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:
-        issues = super().get_blocking_issues(project, instance)
-        if instance and project.get_model_setting('breeze_tts_2_local', 'lora_target'):
-            assert isinstance(instance, BreezeBaseModel)
-            if not instance.has_lora:
-                issues.append(ReadinessIssue("valid LoRA", "Couldn't load LoRA"))
-        return issues
-
-    @classmethod
-    def has_fixed_default_voice(cls, project: Project) -> bool:
-        # A LoRA gives sample-less voices a fixed speaker (voice_variation_warning)
-        return bool(project.get_model_setting('breeze_tts_2_local', 'lora_target'))
+    def voice_lora_mode(cls, project: Project) -> VoiceLoraMode:
+        # Per-voice Instavar LoRAs, merged and switched in place (`BreezeModel`, `lora_switch`)
+        return "merged"
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:
-        # As for OmniVoice, a LoRA is the more salient identifier, even with a sample
-        lora_target = project.get_model_setting('breeze_tts_2_local', 'lora_target')
-        if not lora_target:
-            return super().get_voice_tag(project)
+        # Voice 1's LoRA, when set, is the more salient identifier, even with a sample
+        # (per voice: `Tts.get_voice_tag_for_selection_index`)
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+        voices = project.voice_references
+        lora = ProjectVoiceUtil.active_voice_lora(project, voices[0]) if voices else None
+        if lora is None:
+            return super().get_voice_tag(project)
         from tts_audiobook_tool.target_util import make_target_display_name
-        return ProjectVoiceUtil.make_voice_tag(make_target_display_name(lora_target))
+        return ProjectVoiceUtil.make_voice_tag(make_target_display_name(lora.target))

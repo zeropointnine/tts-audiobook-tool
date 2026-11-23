@@ -1166,6 +1166,8 @@ def _model_worker_main(
                     if hasattr(instance, attribute):
                         value = getattr(instance, attribute)
                         metadata[attribute] = value() if callable(value) else value
+                if command.probe_lora is not None:
+                    metadata["lora_probe_error"] = instance.validate_voice_lora(command.probe_lora)
                 supported_languages_multi = getattr(
                     instance, "supported_languages_multi", None
                 )
@@ -1876,7 +1878,10 @@ class ModelWorker:
         console_handler: ConsoleEventHandler | None = None,
         warm_models: bool = False,
         warm_stt: bool = False,
+        probe_lora: Any = None,
     ) -> tuple[TtsInspected | None, str]:
+        """`probe_lora` (a `VoiceLora`): also validate it against the loaded model;
+        see `InspectTtsCommand.probe_lora`."""
         from tts_audiobook_tool.tts import Tts
 
         error = cls._start_with_console_handler(console_handler)
@@ -1899,6 +1904,7 @@ class ModelWorker:
                     Tts.get_model_params_using_project(state.project),
                     warm_models,
                     warm_stt,
+                    probe_lora,
                 )
             )
         result = cls._wait_for_blocking_result_with_handler(

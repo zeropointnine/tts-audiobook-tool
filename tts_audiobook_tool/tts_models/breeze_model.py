@@ -1,5 +1,5 @@
 import random
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
@@ -15,11 +15,13 @@ from breeze_tts.infer.templates import get_template, prepare_inputs, select_temp
 from breeze_tts.models.logits_process import GeneratedTokenRepetitionPenaltyLogitsProcessor # type: ignore
 
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types.voice import VoiceLora
 from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_MAX
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.seed_util import get_random_seed_max
 from tts_audiobook_tool.tts_models.breeze_base_model import BreezeBaseModel, BreezeSampling
+from tts_audiobook_tool.tts_models.lora_switch import BaseWeightCache, LoraSwitcher, SafetensorsBaseWeights
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
@@ -37,16 +39,18 @@ class BreezeModel(BreezeBaseModel):
 
     CFG (instruction templates only) decodes the depth decoder with upstream's batch-API CUDA graph
     (`BatchDepthDecoder`, as `api.py` `_generate_batch_pcm`); see `_prepare_cfg_depth_graph()`.
+
+    Per-voice LoRAs (`Voice.loras`, Instavar format, `breeze_lora`) are merged into the weights and switched
+    in place before each call that needs a different one (`lora_switch.LoraSwitcher`): the targeted base
+    weights are restored (from a pinned RAM copy when there's room, else from the model's safetensors files)
+    and the next adapter merged. Generation speed is unaffected; a switch costs about a second.
     """
 
     # Upstream's eager CFG depth loop reruns the whole codebook prefix twice per codebook, without a KV cache
     # (about half the speed of non-CFG generation). False only for comparison probes.
     USE_CFG_DEPTH_GRAPH = True
 
-    _has_lora = False
-    _lora_error = ""
-
-    def __init__(self, device: DeviceType, lora_target: str = "", lora_strength: float = 1.0):
+    def __init__(self, device: DeviceType):
         if device != DeviceType.CUDA:
             raise ValueError(f"{self.INFO.ui['proper_name']} requires CUDA")
         self._device_type = device
@@ -65,41 +69,54 @@ class BreezeModel(BreezeBaseModel):
         self._batch_depth_decoder: BatchDepthDecoder | None = None
         # The fp32 codebooks-head weight the captured graph reads (see `_prepare_cfg_depth_graph()`)
         self._graph_head_weight: torch.Tensor | None = None
-        self._lora_strength = lora_strength
-        # Before any CUDA graph capture (the CFG depth graph is captured lazily), so graphs read merged weights
-        if lora_target:
-            self._load_lora(model_dir, lora_target, lora_strength)
+        self._loras: LoraSwitcher | None = BreezeModel._make_lora_switcher(self._model, model_dir)
 
-    def _load_lora(self, model_dir: Path, lora_target: str, strength: float) -> None:
-        """
-        Merges the adapter into the weights (`breeze_lora`). A rejected adapter leaves the base
-        model usable (generation is then blocked by `get_blocking_issues`, as for OmniVoice);
-        a failure mid-merge propagates, since the weights may be half-merged.
-        """
-        from tts_audiobook_tool.tts_models.breeze_lora import LoraLoadError, load_lora
-        assert self._model is not None
-        printt()
-        printt(f"Loading LoRA adapter: {lora_target}")
+    @staticmethod
+    def _make_lora_switcher(model: torch.nn.Module, model_dir: Path) -> "LoraSwitcher":
+        from tts_audiobook_tool.tts_models.breeze_lora import prepare_lora
+
+        def planner(lora: VoiceLora):
+            return prepare_lora(model, str(model_dir), lora.target, lora.strength)
+
+        # Breeze's parameter names are its checkpoint keys, and checkpoint and model are both bf16
+        return LoraSwitcher(model, BaseWeightCache(SafetensorsBaseWeights(str(model_dir))), planner)
+
+    def prepare_voice_loras(self, project: Project, voice_indices: Iterable[int]) -> list[str]:
+        if self._loras is None:
+            return []
+        problems = []
+        voices = project.voice_references
+        for index in sorted(set(voice_indices)):
+            if not 0 <= index < len(voices):
+                continue
+            lora = ProjectVoiceUtil.active_voice_lora(project, voices[index])
+            if lora is None:
+                continue
+            error = self._loras.prepare(lora)
+            if error:
+                from tts_audiobook_tool.target_util import make_target_display_name
+                problems.append(f"Voice {index + 1} LoRA ({make_target_display_name(lora.target)}): {error}")
+        return problems
+
+    def validate_voice_lora(self, lora: VoiceLora) -> str:
+        if self._loras is None:
+            return "Logic error - model not initialized"
+        # Explicit menu probes are outside generation runs. Reread even a previously
+        # rejected adapter, and don't leave plans/errors cached for the next probe or run.
+        self._loras.end_run()
         try:
-            plan, source = load_lora(self._model, str(model_dir), lora_target, strength)
-        except LoraLoadError as e:
-            self._lora_error = str(e)
-            printt(f"{COL_ERROR}Couldn't load LoRA: {e}")
-            printt()
-            return
-        self._has_lora = True
-        printt(f"{COL_DIM}Merged {plan.describe()} from {source.kind}, strength {strength:g}")
-        printt()
+            return self._loras.prepare(lora)
+        finally:
+            self._loras.end_run()
 
-    @property
-    def has_lora(self) -> bool:
-        return self._has_lora
-
-    @property
-    def lora_error(self) -> str:
-        return self._lora_error
+    def end_generation_run(self) -> None:
+        if self._loras is not None:
+            self._loras.end_run()
 
     def kill(self) -> None:
+        if self._loras is not None:
+            self._loras.end_run()
+        self._loras = None
         self.clear_voice_clone_cache()
         self._batch_depth_decoder = None
         self._graph_head_weight = None
@@ -108,7 +125,10 @@ class BreezeModel(BreezeBaseModel):
         self._audio_tokenizer = None
 
     def release_inference_memory(self) -> None:
-        """Trim unused PyTorch cache after an idle chat synthesis (weights stay loaded), as GLM."""
+        """Trim unused PyTorch cache after an idle chat synthesis (weights stay loaded), as GLM.
+        Chat only ever uses voice 1, so it switches LoRA at most once: no base copy is kept."""
+        if self._loras is not None:
+            self._loras.release_base()
         from tts_audiobook_tool.app_support import app_memory
         app_memory.gc_ram_vram()
 
@@ -141,6 +161,14 @@ class BreezeModel(BreezeBaseModel):
         voice = ProjectVoiceUtil.current_voice(project, model_type, voice_selection_index)
         instructions = (voice.instructions.get(model_type.id, "") if voice is not None else "").strip()
 
+        # The voice's LoRA, or none: switched in place when it differs from the merged one
+        lora = ProjectVoiceUtil.active_voice_lora(project, voice)
+        if self._loras is None:
+            return "Logic error - model not initialized"
+        error = self._loras.activate(lora)
+        if error:
+            return f"Couldn't apply voice {voice_selection_index + 1}'s LoRA: {error}"
+
         sampling = BreezeBaseModel.resolve_sampling(project)
 
         seed = -1 if force_random_seed else project.get_model_setting("breeze_tts_2_local", "seed")
@@ -157,8 +185,9 @@ class BreezeModel(BreezeBaseModel):
             }
             if instructions:
                 params["cfg"] = sampling.cfg
-            if self._has_lora:
-                params["lora_strength"] = self._lora_strength
+            if lora is not None:
+                params["lora"] = self._loras.active_display
+                params["lora_strength"] = lora.strength
             BreezeBaseModel.print_params(params)
 
         # The prompts arrive as one batch (orchestration `batch_size`, one voice per batch)

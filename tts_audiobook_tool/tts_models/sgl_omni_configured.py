@@ -22,6 +22,9 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+    from collections.abc import Iterable
+    from tts_audiobook_tool.app_types.voice import VoiceLora
+    from tts_audiobook_tool.tts_models.model_support import VoiceLoraMode
 
 
 class ConfiguredSettings:
@@ -223,6 +226,9 @@ class ConfiguredModelSupport:
     def has_fixed_default_voice(self, project: Project) -> bool:
         return False
 
+    def voice_lora_mode(self, project: Project) -> VoiceLoraMode:
+        return "none"
+
     def can_voice_presets(self, project: Project, instance: object = None) -> bool:
         return False
 
@@ -254,6 +260,15 @@ class SglOmniBackendAdapter:
         pass
 
     def clear_continuation(self) -> None:
+        pass
+
+    def prepare_voice_loras(self, project: Project, voice_indices: Iterable[int]) -> list[str]:
+        return []
+
+    def validate_voice_lora(self, lora: VoiceLora) -> str:
+        return "This model doesn't support per-voice LoRAs"
+
+    def end_generation_run(self) -> None:
         pass
 
     def release_inference_memory(self) -> None:

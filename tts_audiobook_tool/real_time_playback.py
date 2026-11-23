@@ -20,6 +20,8 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import (
     GenerateUtil,
     TtsModelError,
+    end_generation_run_safely,
+    get_voice_lora_blocker_text,
     make_consecutive_model_errors_reset_message,
     make_oom_reset_message,
 )
@@ -106,6 +108,7 @@ def start(
             # Realtime runs share the resident worker/model with later jobs;
             # continuation state must not survive failures or teardown errors.
             Tts.clear_continuation()
+            end_generation_run_safely()
 
 
 def _start_impl(
@@ -144,6 +147,12 @@ def _start_impl(
     # Print warnings if any, including the voice-variation note for the played lines'
     # voices (the same one-based inclusive range and start clamp as the pre-flight)
     played_indices = range(max(line_range[0] - 1, 0), line_range[1])
+
+    # Per-voice LoRAs of the played lines' voices, validated up front
+    err = get_voice_lora_blocker_text(state.project, played_indices)
+    if err:
+        ask.ask_error(err)
+        return RealTimePlaybackRunResult(RealTimePlaybackRunStatus.FAILED, err)
     warnings = get_run_warnings(state.project, Tts.get_instance(), played_indices)
     if warnings:
         # The TUI parses each console line independently, so style every line.

@@ -876,6 +876,20 @@ class ProjectSerializationUtil:
             if value is not None:
                 legacy_values[attr] = value
 
+        if warnings is not None:
+            from tts_audiobook_tool.project_support.model_settings_compat import (
+                RETIRED_PROJECT_WIDE_LORAS, find_retired_project_loras,
+            )
+            source = d.get("model_settings")
+            if isinstance(source, ModelSettings):
+                source = source.to_dict()
+            for model_id, target in find_retired_project_loras(source):
+                s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}This project's {RETIRED_PROJECT_WIDE_LORAS[model_id]} "
+                s += f"LoRA ({target}) has been dropped.\n"
+                s += "LoRAs are now configured on a per-voice basis (Voices > voice > LoRA)."
+                s += "\n"
+                warnings.append(s)
+
         reconciliation_failed = False
         try:
             settings = REGISTRY.reconcile(d.get("model_settings"), legacy=legacy_values or None)

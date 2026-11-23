@@ -1,7 +1,7 @@
 """Non-runtime model capabilities shared by class-based and configured providers."""
 from __future__ import annotations
 
-from typing import Protocol, TYPE_CHECKING
+from typing import Literal, Protocol, TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec
@@ -9,6 +9,10 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
     from tts_audiobook_tool.tts_models.language_resolution import LanguageResolution
+
+
+# See `TtsBaseModel.voice_lora_mode`
+VoiceLoraMode = Literal["none", "merged", "runtime"]
 
 
 class ModelSupport(Protocol):
@@ -33,6 +37,8 @@ class ModelSupport(Protocol):
     # Whether a voice without a sample still gets a fixed speaker (eg a VibeVoice LoRA),
     # so the "voices may vary" run note does not apply.
     def has_fixed_default_voice(self, project: Project) -> bool: ...
+    # How per-voice LoRAs (Voice.loras) are applied: "none" | "merged" (expensive switch) | "runtime"
+    def voice_lora_mode(self, project: Project) -> VoiceLoraMode: ...
     # Checks user-entered Voice.instructions; returns an error message or "".
     def validate_instructions(self, value: str) -> str: ...
     # Whether an instruction-less voice gets an arbitrary voice (non-blocking hint only).

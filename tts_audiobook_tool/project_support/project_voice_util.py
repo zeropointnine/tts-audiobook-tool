@@ -12,7 +12,7 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_DEFAULT, PROJECT_BATCH_SIZE_MAX
 from tts_audiobook_tool.constants import PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.app_support import app_text, path_norm
-from tts_audiobook_tool.app_types.voice import VOICE_CROP_SUBDIR, Voice, VoiceCrop, ensure_voice_slot, normalize_crop_file_name
+from tts_audiobook_tool.app_types.voice import VOICE_CROP_SUBDIR, Voice, VoiceCrop, VoiceLora, ensure_voice_slot, normalize_crop_file_name
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
@@ -43,7 +43,7 @@ VOICE_NAME_ONE_WORD_ERROR = "Name must be one word (no spaces)"
 VOICE_NAME_TOO_LONG_ERROR = f"Name must be at most {VOICE_NAME_MAX_LENGTH} characters"
 VOICE_NAME_UNIQUE_ERROR = "Name must be unique"
 
-VoiceSourceKind = Literal["preset", "sample", "instructions", "builtin", "missing"]
+VoiceSourceKind = Literal["preset", "sample", "instructions", "lora", "builtin", "missing"]
 
 
 @dataclass(frozen=True)
@@ -55,11 +55,13 @@ class VoiceSource:
         "preset"        an active preset voice id (eg a Pocket predefined voice)
         "sample"        a voice clone sample
         "instructions"  free-text voice instructions (eg AuK's voice description)
+        "lora"          no sample or instructions, but a LoRA that fixes the speaker
         "builtin"       no value; the model falls back to its built-in voice
         "missing"       no value, but the model requires one (sample or preset)
 
     `label` is short display text for the value ("" when there is none): the
-    preset id, the hyperlinked sample name, or the quoted, ellipsized instructions.
+    preset id, the hyperlinked sample name, the quoted, ellipsized instructions, or
+    the LoRA's display name.
     """
 
     kind: VoiceSourceKind
@@ -68,7 +70,7 @@ class VoiceSource:
     @property
     def has_value(self) -> bool:
         """Whether the voice has a value the model uses (is "valid")."""
-        return self.kind in ("preset", "sample", "instructions")
+        return self.kind in ("preset", "sample", "instructions", "lora")
 
 
 class ProjectVoiceUtil:
@@ -793,6 +795,46 @@ class ProjectVoiceUtil:
         return preset if Tts.get_model_support(project).can_voice_presets(project) else ""
 
     @staticmethod
+    def active_voice_lora(project: Project, voice: Voice | None) -> VoiceLora | None:
+        """The voice's LoRA for the project's current model when that model
+        takes per-voice LoRAs (`voice_lora_mode` other than "none"), else None."""
+        if voice is None:
+            return None
+        lora = voice.lora_for(project.get_tts_model_type().id)
+        if lora is None:
+            return None
+        from tts_audiobook_tool.tts import Tts
+        return lora if Tts.get_model_support(project).voice_lora_mode(project) != "none" else None
+
+    @staticmethod
+    def has_any_active_voice_lora(project: Project) -> bool:
+        return any(ProjectVoiceUtil.active_voice_lora(project, voice) for voice in project.voice_references)
+
+    @staticmethod
+    def set_voice_lora_at_index_and_save(
+            project: Project, index: int, model_id: str, lora: VoiceLora | None,
+    ) -> str:
+        """Set one voice's model-specific LoRA; None removes only that key."""
+        if not 0 <= index < len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        voice = project.voice_references[index]
+        loras = dict(voice.loras)
+        if lora is None:
+            loras.pop(model_id, None)
+        else:
+            loras[model_id] = lora
+        if loras == voice.loras:
+            return ""
+        previous = project.voice_references
+        entries = list(previous)
+        entries[index] = replace(voice, loras=loras)
+        project.voice_references = entries
+        error = project.save()
+        if error:
+            project.voice_references = previous
+        return error
+
+    @staticmethod
     def make_instructions_preview(instructions: str) -> str:
         """Eg '"A calm, low male voice…"': whitespace-collapsed, ellipsized, quoted."""
         return f"\"{ellipsize(' '.join(instructions.split()), INSTRUCTIONS_PREVIEW_LENGTH)}\""
@@ -806,7 +848,8 @@ class ProjectVoiceUtil:
 
         Precedence: an active preset, then the sample (when the model can clone
         under the current settings), then the instructions (when the model uses
-        them and does not require a sample). A model that requires a preset
+        them and does not require a sample), then an active LoRA (which fixes the
+        speaker; see `active_voice_lora`). A model that requires a preset
         (eg Qwen3-TTS CustomVoice) accepts nothing else.
 
         The catalog's `requires_voice` is model-wide; a sample is required only
@@ -831,6 +874,10 @@ class ProjectVoiceUtil:
             instructions = voice.instructions.get(model_type.id, "")
             if instructions.strip() and not requires_sample and support.can_instructions(project):
                 return VoiceSource("instructions", ProjectVoiceUtil.make_instructions_preview(instructions))
+            lora = ProjectVoiceUtil.active_voice_lora(project, voice)
+            if lora is not None and not requires_sample:
+                from tts_audiobook_tool.target_util import make_target_display_name
+                return VoiceSource("lora", f"LoRA {make_target_display_name(lora.target)}")
         if requires_preset or requires_sample:
             return VoiceSource("missing")
         return VoiceSource("builtin")

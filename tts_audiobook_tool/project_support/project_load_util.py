@@ -193,7 +193,7 @@ class ProjectLoadUtil:
             s += "They have been left as saved, but the model that uses them will not find them.\n"
             for attr_name, value in foreign_targets:
                 s += f"- {COL_ACCENT}{attr_name}{COL_DEFAULT}: {value}\n"
-            s += "Re-enter the path in this menu's model settings to fix it."
+            s += "Re-enter the path in this menu's model settings (or, for a voice's LoRA, the voice's settings) to fix it."
             pending_warnings.append(s)
 
         if pending_warnings:

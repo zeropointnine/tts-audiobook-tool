@@ -222,6 +222,11 @@ class ProjectTransferUtil:
             value = project.get_model_setting(model_id, name)
             if isinstance(value, str) and value and path_norm.looks_foreign(value):
                 result.append((f"{model_id}_{name}", value))
+        # Per-voice LoRA targets (`Voice.loras`) are the same kind of opaque path-or-repo value
+        for index, voice in enumerate(project.voice_references):
+            for model_id, lora in voice.loras.items():
+                if path_norm.looks_foreign(lora.target):
+                    result.append((f"voice_{index + 1}_lora_{model_id}", lora.target))
         return result
 
     @staticmethod

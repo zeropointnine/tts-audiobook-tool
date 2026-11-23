@@ -414,7 +414,8 @@ def _make_server_tts_text(state: State) -> str:
         text += f" {COL_ERROR}({binding_issue_status(Tts._binding_issue)})"
     return text
 
-_LORA_MODEL_IDS = ("vibevoice_local", "omnivoice_local", "breeze_tts_2_local")
+# Models with a model-wide LoRA setting (per-voice LoRAs: `ProjectVoiceUtil.active_voice_lora`)
+_LORA_MODEL_IDS = ("vibevoice_local", "omnivoice_local")
 
 def _make_voices_text(state: State) -> str:
     """The first voice that has a value (preset, sample, or instructions; see
@@ -422,13 +423,16 @@ def _make_voices_text(state: State) -> str:
     other voice. With no such voice, error-colored "required" when the model
     requires a value, else (non-blocking, so not error-colored) what the voices
     lack, eg "no sample set"; see `ProjectVoiceUtil.make_no_voice_value_text`.
-    For a local model with a LoRA set (VibeVoice, OmniVoice, Breeze TTS 2), ", +LoRA" is
-    appended last, or with no voice, "LoRA (<ellipsized LoRA target>)"."""
+    For a local model with a model-wide LoRA set (VibeVoice, OmniVoice), ", +LoRA" is
+    appended last, or with no voice, "LoRA (<ellipsized LoRA target>)". With per-voice
+    LoRAs (Breeze TTS 2), ", +LoRA" is appended when any voice has one; a voice with
+    only a LoRA shows as "LoRA <name>"."""
     project = state.project
     lora_target = (project.get_model_setting(project.tts_model_type, 'lora_target')
                    if project.tts_model_type in _LORA_MODEL_IDS else "")
     has_lora = bool(lora_target)
-    lora_suffix = ", +LoRA" if has_lora else ""
+    has_voice_lora = ProjectVoiceUtil.has_any_active_voice_lora(project)
+    lora_suffix = ", +LoRA" if has_lora or has_voice_lora else ""
     voices = project.voice_references
     sources = [ProjectVoiceUtil.resolve_voice_source(project, voice) for voice in voices]
     first = next((source for source in sources if source.has_value), None)
@@ -446,6 +450,9 @@ def _make_voices_text(state: State) -> str:
     value = first.label
     if len(voices) > 1:
         value += f", +{len(voices) - 1} more"
+    elif first.kind == "lora":
+        # The label already says LoRA
+        return value
     return value + lora_suffix
 
 

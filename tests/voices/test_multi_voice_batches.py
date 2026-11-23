@@ -1,3 +1,5 @@
+import pytest
+
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.generate_util import (
     BATCH_ITERATIONS_PER_GROUP,
@@ -138,3 +140,67 @@ def test_effective_voice_indices_defaults_stale_and_unassigned_to_first() -> Non
     ]
 
     assert effective_voice_indices(groups, [0, 1, 2, 3], 2) == {0: 0, 1: 0, 2: 1, 3: 0}
+
+# --- Expensive-switch scheduling (switch_keys, eg merged per-voice LoRAs) ---
+
+from tts_audiobook_tool.generate_util import build_generation_queue, order_voices_by_switch_key
+
+
+def count_key_switches(subs: list[SubBatch], keys: dict) -> int:
+    sequence = [keys[sub.voice_selection_index] for sub in subs]
+    return sum(1 for a, b in zip(sequence, sequence[1:]) if a != b)
+
+
+@pytest.mark.parametrize("batch_size", [1, 3])
+@pytest.mark.parametrize("is_cjk", [False, True])
+def test_queue_without_switch_keys_is_unchanged(batch_size, is_cjk) -> None:
+    # The extracted builder reproduces both pre-existing paths exactly
+    items = [(i, 0) for i in range(23)]
+    groups = [make_phrase_group(1 + (i * 5) % 9, voice_index=i % 3) for i in range(23)]
+    queue, voice_of_index = build_generation_queue(items, groups, 3, batch_size, is_cjk)
+    if batch_size == 1:
+        assert voice_of_index is None
+        assert queue == make_single_voice_rounds(items, batch_size)
+    else:
+        expected_voices = effective_voice_indices(groups, list(range(23)), 3)
+        assert voice_of_index == expected_voices
+        assert queue == make_multi_voice_rounds(items, groups, expected_voices, batch_size, sort_by_words=not is_cjk)
+
+
+def test_switch_keys_group_batch_size_one_by_voice_in_book_order() -> None:
+    # Alternating voices with different LoRAs would switch on every line; grouped
+    # per window, each voice's lines stay in book order
+    items = [(i, 0) for i in range(20)]
+    groups = [make_phrase_group(1 + i % 4, voice_index=i % 2) for i in range(20)]
+    keys = {0: None, 1: ("lora", 1.0)}
+    queue, voice_of_index = build_generation_queue(items, groups, 2, 1, False, keys)
+    assert voice_of_index == {i: i % 2 for i in range(20)}
+    subs = flatten(queue)
+    assert all(len(sub.items) == 1 for sub in subs)
+    for voice in (0, 1):
+        order = [sub.items[0][0] for sub in subs if sub.voice_selection_index == voice]
+        assert order == sorted(order)
+    # Window of 10 lines -> 2 rounds, one switch within each; the second round starts
+    # with the key the first ended on, so there's no switch between them
+    assert len(queue) == 2
+    assert count_key_switches(subs, keys) == 2
+    assert keys[queue[0][-1].voice_selection_index] == keys[queue[1][0].voice_selection_index]
+
+
+def test_voices_sharing_a_key_are_adjacent_and_the_current_key_goes_first() -> None:
+    keys = {0: "a", 1: "b", 2: "a", 3: None}
+    assert order_voices_by_switch_key([0, 1, 2, 3], keys) == [0, 2, 1, 3]
+    assert order_voices_by_switch_key([0, 1, 2, 3], keys, "b", True) == [1, 0, 2, 3]
+    # None is a real key (no LoRA), distinct from "no current key"
+    assert order_voices_by_switch_key([0, 1, 3], keys, None, True) == [3, 0, 1]
+    assert order_voices_by_switch_key([0, 1, 3], keys, None, False) == [0, 1, 3]
+
+
+def test_retry_round_starts_with_the_current_key() -> None:
+    items = [(0, 1), (1, 1), (2, 1), (3, 1)]
+    voice_of_index = {0: 0, 1: 1, 2: 2, 3: 1}
+    keys = {0: "a", 1: "b", 2: "a"}
+    subs = make_retry_round(items, voice_of_index, batch_size=2, switch_keys=keys, current_key="b")
+    assert [sub.voice_selection_index for sub in subs] == [1, 0, 2]
+    # Without keys, voice order is unchanged
+    assert [sub.voice_selection_index for sub in make_retry_round(items, voice_of_index, 2)] == [0, 1, 2]

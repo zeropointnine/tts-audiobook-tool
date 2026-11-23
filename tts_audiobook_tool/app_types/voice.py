@@ -20,8 +20,12 @@ On disk an entry is a flat JSON object:
         "presets": {"<model id>": "alba"},  # optional per-TTS-model preset voice ids (eg a Pocket
                                             # predefined voice, a Qwen3-TTS CustomVoice speaker);
                                             # written only when non-empty
-        "instructions": {"<model id>": "..."}  # optional per-TTS-model voice instructions for
+        "instructions": {"<model id>": "..."},  # optional per-TTS-model voice instructions for
                                             # "instruct" models; written only when non-empty
+        "loras": {"<model id>": {"target": "...", "strength": 0.8}}
+                                            # optional per-TTS-model LoRA adapter (target: local dir
+                                            # or hf repo id; strength written only when not 1);
+                                            # written only when non-empty
     }
 
 In memory the four crop keys are one optional `VoiceCrop`. Instances are
@@ -48,6 +52,9 @@ PAN_FIELD = "pan"
 VOLUME_FIELD = "volume"
 PRESETS_FIELD = "presets"
 INSTRUCTIONS_FIELD = "instructions"
+LORAS_FIELD = "loras"
+LORA_TARGET_FIELD = "target"
+LORA_STRENGTH_FIELD = "strength"
 NAME_FIELD = "name"
 
 
@@ -79,6 +86,12 @@ def volume_label(volume: int) -> str:
 def volume_to_db(volume: int) -> float:
     """Gain in dB of a volume percent (100 -> 0 dB, 50 -> -6.0 dB)."""
     return 20 * math.log10(volume / 100)
+
+
+# Per-voice LoRA strength: a multiplier on the adapter's alpha / rank
+LORA_STRENGTH_MIN = 0.1
+LORA_STRENGTH_MAX = 2.0
+LORA_STRENGTH_DEFAULT = 1.0
 
 
 def normalize_crop_file_name(value: Any) -> str | None:
@@ -118,14 +131,42 @@ class VoiceCrop:
 
 
 @dataclass(frozen=True)
+class VoiceLora:
+    """A voice's LoRA adapter for one TTS model: `target` (local directory or hf
+    repo id, opaque here) and `strength` (multiplier on the adapter's alpha / rank).
+    Voices with the same target but different strengths are different LoRAs."""
+
+    target: str
+    strength: float = LORA_STRENGTH_DEFAULT
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target, str) or not self.target.strip():
+            raise ValueError("LoRA target must be a non-empty string")
+        if isinstance(self.strength, bool) or not isinstance(self.strength, (int, float)):
+            raise ValueError("LoRA strength must be a number")
+        strength = float(self.strength)
+        if not (math.isfinite(strength) and LORA_STRENGTH_MIN <= strength <= LORA_STRENGTH_MAX):
+            raise ValueError(f"LoRA strength must be between {LORA_STRENGTH_MIN:g} and {LORA_STRENGTH_MAX:g}")
+        object.__setattr__(self, "strength", strength)
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {LORA_TARGET_FIELD: self.target}
+        if self.strength != LORA_STRENGTH_DEFAULT:
+            result[LORA_STRENGTH_FIELD] = self.strength
+        return result
+
+
+@dataclass(frozen=True)
 class Voice:
     """A project voice: optional user-facing `name` (a convenience name only;
     never affects generation), reference sample, its transcript, optional crop, room reverb,
     stereo position (`pan`, -1 full left to 1 full right, 0 centered), model
     preset voice ids (`presets`, keyed by TTS model id, for models with
     built-in voices), voice `instructions` keyed by TTS model id (for
-    "instruct" models), and `volume` (percent, `VOLUME_MIN` to `VOLUME_MAX`,
-    applied after loudness leveling). Empty strings / empty maps mean unused;
+    "instruct" models), `loras` keyed by TTS model id (a per-voice LoRA adapter,
+    for models with `voice_lora_mode` other than "none"), and `volume` (percent,
+    `VOLUME_MIN` to `VOLUME_MAX`, applied after loudness leveling). Empty strings
+    / empty maps mean unused;
     an empty `file_name` means the voice has no sample. `Voice()` is the
     default voice."""
 
@@ -140,6 +181,8 @@ class Voice:
     instructions: dict[str, str] = field(default_factory=dict, hash=False)
     name: str = ""
     volume: int = VOLUME_DEFAULT
+    # TTS model id -> LoRA adapter. Treat as read-only; excluded from hashing.
+    loras: dict[str, VoiceLora] = field(default_factory=dict, hash=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str):
@@ -158,6 +201,10 @@ class Voice:
                 raise ValueError(f"{name} must be a dict of model id to string")
             # Own a copy so the caller's dict cannot mutate this instance.
             object.__setattr__(self, name, dict(value))
+        if not isinstance(self.loras, dict) or not all(
+                isinstance(key, str) and isinstance(item, VoiceLora) for key, item in self.loras.items()):
+            raise ValueError("loras must be a dict of model id to VoiceLora")
+        object.__setattr__(self, "loras", dict(self.loras))
 
     @property
     def has_sample(self) -> bool:
@@ -172,6 +219,10 @@ class Voice:
         """This voice's preset voice id for a TTS model, or ""."""
         return self.presets.get(model_id, "")
 
+    def lora_for(self, model_id: str) -> VoiceLora | None:
+        """This voice's LoRA for a TTS model, or None."""
+        return self.loras.get(model_id)
+
     @property
     def crop_range(self) -> tuple[float, float] | None:
         return (self.crop.start, self.crop.end) if self.crop is not None else None
@@ -182,8 +233,8 @@ class Voice:
 
     def to_dict(self) -> dict[str, Any]:
         """The on-disk form. `room_reverb` is always written; `pan` only when nonzero;
-        `volume` only when not the default; `name`, `presets` and `instructions`
-        only when non-empty."""
+        `volume` only when not the default; `name`, `presets`, `instructions` and
+        `loras` only when non-empty."""
         result: dict[str, Any] = {}
         if self.name:
             result[NAME_FIELD] = self.name
@@ -203,6 +254,8 @@ class Voice:
             result[PRESETS_FIELD] = dict(self.presets)
         if self.instructions:
             result[INSTRUCTIONS_FIELD] = dict(self.instructions)
+        if self.loras:
+            result[LORAS_FIELD] = {model_id: lora.to_dict() for model_id, lora in self.loras.items()}
         return result
 
     @staticmethod
@@ -225,7 +278,9 @@ class Voice:
         missing or non-numeric `volume` loads as the default, and an
         out-of-range one is clamped (a fractional one is rounded). A missing or
         non-object `presets` / `instructions` (including a legacy plain string)
-        loads as an empty map. A missing or non-string `name` loads as "".
+        loads as an empty map. A missing or non-object `loras` loads as an empty
+        map; see `_parse_loras` for its entries. A missing or non-string `name`
+        loads as "".
         """
         from tts_audiobook_tool.app_support import path_norm
         from tts_audiobook_tool.l import L
@@ -257,6 +312,7 @@ class Voice:
             instructions=_parse_str_map(raw, INSTRUCTIONS_FIELD, where, index),
             name=_parse_name(raw, where, index),
             volume=_parse_volume(raw, where, index),
+            loras=_parse_loras(raw, where, index),
         )
 
 
@@ -276,6 +332,34 @@ def _parse_str_map(raw: dict, field: str, where: str, index: int) -> dict[str, s
         L.w(f"{where}[{index}]: invalid {field} ({value!r}); using empty")
         return {}
     return {key: item for key, item in value.items() if isinstance(key, str) and isinstance(item, str)}
+
+
+def _parse_loras(raw: dict, where: str, index: int) -> dict[str, VoiceLora]:
+    """A model id -> `VoiceLora` map. Empty when absent or not a map (the latter
+    with a warning). An entry with a non-string key, a non-object value, or a
+    missing / empty / non-string target is dropped (with a warning). A missing
+    or malformed strength loads as the default; an out-of-range one is clamped."""
+    from tts_audiobook_tool.l import L
+
+    value = raw.get(LORAS_FIELD, {})
+    if not isinstance(value, dict):
+        L.w(f"{where}[{index}]: invalid {LORAS_FIELD} ({value!r}); using empty")
+        return {}
+    result: dict[str, VoiceLora] = {}
+    for model_id, entry in value.items():
+        target = entry.get(LORA_TARGET_FIELD) if isinstance(entry, dict) else None
+        if not isinstance(model_id, str) or not isinstance(target, str) or not target.strip():
+            L.w(f"{where}[{index}]: invalid {LORAS_FIELD} entry {model_id!r}: {entry!r}; dropping")
+            continue
+        assert isinstance(entry, dict)
+        strength = entry.get(LORA_STRENGTH_FIELD, LORA_STRENGTH_DEFAULT)
+        if isinstance(strength, bool) or not isinstance(strength, (int, float)) or not math.isfinite(strength):
+            L.w(f"{where}[{index}]: invalid {LORAS_FIELD}.{model_id} strength ({strength!r}); "
+                f"using {LORA_STRENGTH_DEFAULT:g}")
+            strength = LORA_STRENGTH_DEFAULT
+        strength = min(max(float(strength), LORA_STRENGTH_MIN), LORA_STRENGTH_MAX)
+        result[model_id] = VoiceLora(target=target, strength=strength)
+    return result
 
 
 def _parse_name(raw: dict, where: str, index: int) -> str:

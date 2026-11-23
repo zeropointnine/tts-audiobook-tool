@@ -6,7 +6,7 @@ import pytest
 from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot, RemoteTtsIssue
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.app_types.voice import Voice
+from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
 from tts_audiobook_tool.menus.main_menu import make_voice_label
 from tts_audiobook_tool.menus.menu_status import _make_stt_text
 from tts_audiobook_tool.menus.menu_status import MenuStatus
@@ -235,6 +235,22 @@ def test_voices_status_shows_lora(model_id, voices, expected):
     assert text_util.strip_ansi_codes(text) == expected
     if expected.startswith("LoRA ("):
         assert f"LoRA {QUALIFIER_COLOR}(" in text
+
+
+@pytest.mark.parametrize("voices, expected", [
+    ([Voice(loras={"breeze_tts_2_local": VoiceLora("/runs/fw-leda/lora/checkpoint-step-000500")})],
+     "LoRA fw-leda-checkpoint-step-000500"),
+    ([Voice("first.flac"), Voice(loras={"breeze_tts_2_local": VoiceLora("owner/repo")})], "first, +1 more, +LoRA"),
+    ([Voice("first.flac"), Voice(loras={"other_model": VoiceLora("owner/repo")})], "first, +1 more"),
+])
+def test_voices_status_shows_per_voice_lora(voices, expected):
+    # Breeze TTS 2 LoRAs are per voice: a voice with only a LoRA shows it as its
+    # value; any voice's LoRA (for this model) adds a terse "+LoRA"
+    from tts_audiobook_tool.menus.menu_status import _make_voices_text
+
+    state = make_state(TtsModelType.require_by_id("breeze_tts_2_local"))
+    state.project.voice_references = voices
+    assert text_util.strip_ansi_codes(_make_voices_text(state)) == expected
 
 
 def test_voices_status_lora_path_is_ellipsized_like_menus():

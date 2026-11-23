@@ -152,3 +152,35 @@ def test_load_ignores_a_dir_path_written_by_another_os(tmp_path: Path) -> None:
         PROJECT_SOUND_SEGMENTS_SUBDIR,
     ]
     project.kill()
+
+
+@pytest.mark.parametrize("target", ["/runs/fw-leda/lora/checkpoint-step-000500", ""])
+def test_load_drops_a_project_wide_breeze_lora_with_a_warning(
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        target: str,
+) -> None:
+    """
+    Breeze TTS 2 LoRAs moved from the model settings to the voices. The old
+    value isn't migrated: it's dropped (and the drop saved), and the user is
+    told that LoRAs are now set per voice. An empty old value says nothing.
+    """
+    dir_path = make_project_dir(tmp_path, {
+        "version": 5,
+        "tts_model_type": "breeze_tts_2_local",
+        "voice_references": [{"file_name": "", "transcript": "", "room_reverb": "off"}],
+        "model_settings": {"models": {"breeze_tts_2_local": {"parameters": {
+            "lora_target": target, "lora_strength": 0.5, "temperature": 0.7,
+        }}}, "shared": {}},
+    })
+
+    project = load(dir_path)
+
+    out = capsys.readouterr().out
+    assert ("per-voice" in out and target in out) == bool(target)
+    saved = read_saved(dir_path)["model_settings"]["models"].get("breeze_tts_2_local", {})
+    parameters = saved.get("parameters", {})
+    assert "lora_target" not in parameters and "lora_strength" not in parameters
+    assert parameters["temperature"] == 0.7
+    assert project.voice_references[0].loras == {}
+    project.kill()

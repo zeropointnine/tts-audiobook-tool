@@ -5,7 +5,8 @@ each voice in play for the run (`ProjectVoiceUtil.get_job_voice_indices`) that
 generates without a fixed speaker, ie without a sample or preset
 (`ProjectVoiceUtil.resolve_voice_source` kind "instructions" or "builtin"),
 when the current settings can generate without one and have no fixed default
-voice (`has_fixed_default_voice`, eg a VibeVoice LoRA). Instruction-defined voices
+voice (`has_fixed_default_voice`, eg a VibeVoice LoRA). A voice with its own LoRA
+(`ProjectVoiceUtil.active_voice_lora`) has a fixed speaker too. Instruction-defined voices
 (eg Qwen3-TTS VoiceDesign) are eligible even when sample cloning is inactive.
 
 A model may declare `[models.spec.ui].instructions_voice_variation_note` for
@@ -61,6 +62,8 @@ def get_voice_variation_warnings(project: Project, voice_indices: Iterable[int])
     unset: list[int] = []
     for index in sorted(set(voice_indices)):
         if not 0 <= index < len(voices):
+            continue
+        if ProjectVoiceUtil.active_voice_lora(project, voices[index]) is not None:
             continue
         kind = ProjectVoiceUtil.resolve_voice_source(project, voices[index]).kind
         if kind == "instructions" and instructions_note:

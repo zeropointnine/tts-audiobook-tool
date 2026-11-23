@@ -147,6 +147,11 @@ class Tts:
         preset = ProjectVoiceUtil.active_voice_preset(project, voice)
         if preset:
             return support.get_voice_tag_for_preset(preset)
+        # A per-voice LoRA is the more salient identifier, even with a sample
+        lora = ProjectVoiceUtil.active_voice_lora(project, voice)
+        if lora is not None:
+            from tts_audiobook_tool.target_util import make_target_display_name
+            return ProjectVoiceUtil.make_voice_tag(make_target_display_name(lora.target))
         # The tag identifies the voice entry, not the exact audio used: derive
         # it from the entry's stored sample name so an active crop (design-time
         # tuning of the same voice) does not read as a different voice in
@@ -455,8 +460,6 @@ class Tts:
             "pocket_model_code": project.get_model_setting('pocket_local', 'model_code'),
             "omnivoice_target": project.get_model_setting('omnivoice_local', 'target'),
             "omnivoice_lora_target": project.get_model_setting('omnivoice_local', 'lora_target'),
-            "breeze_lora_target": project.get_model_setting('breeze_tts_2_local', 'lora_target'),
-            "breeze_lora_strength": resolve("breeze_tts_2_local", "lora_strength"),
         }
 
     @staticmethod
@@ -487,8 +490,6 @@ class Tts:
         dirty |= new_params.get("pocket_model_code", "") != old_params.get("pocket_model_code", "")
         dirty |= new_params.get("omnivoice_target", "") != old_params.get("omnivoice_target", "")
         dirty |= new_params.get("omnivoice_lora_target", "") != old_params.get("omnivoice_lora_target", "")
-        dirty |= new_params.get("breeze_lora_target", "") != old_params.get("breeze_lora_target", "")
-        dirty |= new_params.get("breeze_lora_strength", 1.0) != old_params.get("breeze_lora_strength", 1.0)
         if dirty and current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:
             Tts.clear_tts_model()
 
@@ -706,6 +707,13 @@ class Tts:
             instance.clear_continuation()
 
     @staticmethod
+    def end_generation_run() -> None:
+        """Lets the loaded model release run-scoped memory (`TtsBaseModel.end_generation_run`)."""
+        instance = Tts.get_instance_if_exists()
+        if instance is not None:
+            instance.end_generation_run()
+
+    @staticmethod
     def clear_continuation_if_reason(reason: Reason) -> None:
         if reason in { Reason.PARAGRAPH, Reason.HEADING_END, Reason.SPACE_BREAK, Reason.SECTION_BREAK }:
             Tts.clear_continuation()
@@ -848,11 +856,8 @@ class Tts:
         if not Tts._breeze:
             device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("breeze_tts_2_local"))
             from tts_audiobook_tool.tts_models.breeze_model import BreezeModel
-            Tts._breeze = BreezeModel(
-                device_type,
-                lora_target=Tts._model_params.get("breeze_lora_target", ""),
-                lora_strength=Tts._model_params.get("breeze_lora_strength", 1.0),
-            )
+            # Per-voice LoRAs are switched in place per call (`Voice.loras`), not load parameters
+            Tts._breeze = BreezeModel(device_type)
             printt()
         return Tts._breeze
 

@@ -37,6 +37,31 @@ PRIVATE_FIELDS: dict[str, set[str]] = {
 MOSS_LOCAL_SEED_ALIASES: tuple[str, ...] = ("delay_seed", "local_seed", "local_v15_seed")
 
 
+# Models whose project-wide `parameters.lora_target` (and `lora_strength`) were retired
+# in favor of per-voice LoRAs (`Voice.loras`); model ID -> display name. Old values
+# aren't migrated onto voices: reconciliation drops them as unknown parameters, and
+# the loader warns (`find_retired_project_loras`).
+RETIRED_PROJECT_WIDE_LORAS: dict[str, str] = {
+    "breeze_tts_2_local": "Breeze TTS 2",
+}
+
+
+def find_retired_project_loras(source: Any) -> list[tuple[str, str]]:
+    """(model ID, target) for each non-empty retired project-wide LoRA in a raw
+    `model_settings` object, in `RETIRED_PROJECT_WIDE_LORAS` order."""
+    models = source.get("models") if isinstance(source, dict) else None
+    if not isinstance(models, dict):
+        return []
+    found: list[tuple[str, str]] = []
+    for model_id in RETIRED_PROJECT_WIDE_LORAS:
+        obj = models.get(model_id)
+        params = obj.get("parameters") if isinstance(obj, dict) else None
+        target = params.get("lora_target") if isinstance(params, dict) else None
+        if isinstance(target, str) and target.strip():
+            found.append((model_id, target))
+    return found
+
+
 def legacy_bindings() -> dict[str, Binding]:
     """Frozen pre-v3 field conversion; never initializes current storage."""
     from tts_audiobook_tool.project_support.model_settings import Binding

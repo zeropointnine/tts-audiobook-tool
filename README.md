@@ -654,7 +654,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 ### Locally generated using dedicated venv
 
 **Breeze TTS 2**
-- LoRA support, with strength setting (Train with [instavar/breeze-tts2-finetuning](https://github.com/instavar/breeze-tts2-finetuning)).
+- LoRA support, set per voice, with strength setting; voices with different LoRAs can be mixed in one project (Train with [instavar/breeze-tts2-finetuning](https://github.com/instavar/breeze-tts2-finetuning)).
 - Voice clone, voice direction (voice sample + instructions) and voice design (instructions only)
 - Batch processing support
 - Audio tags
@@ -893,9 +893,9 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-11-21**
+**2026-11-22**
 
-- Added **LoRA support for Breeze TTS 2** (See [instavar/breeze-tts2-finetuning](https://github.com/instavar/breeze-tts2-finetuning)).
+- Added **LoRA support for Breeze TTS 2** (See [instavar/breeze-tts2-finetuning](https://github.com/instavar/breeze-tts2-finetuning)). LoRAs are set per voice, so different voices can use different LoRAs.
 - **Updated Pocket TTS** to v4.0.1, which adds new and retrained models: `english_2026-10` (recommended), some very small English language variants, Dutch, and 6-layer French, German and Spanish.
 
 **2026-11-19**

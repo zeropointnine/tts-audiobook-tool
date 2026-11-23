@@ -31,6 +31,19 @@ def get_system_ram() -> tuple[int, int] | None:
         return None
 
 
+def get_available_ram() -> tuple[int, int] | None:
+    """
+    Returns available and total RAM in bytes ("available" counts reclaimable
+    cache as free), or None if unknown
+    """
+    try:
+        import psutil
+        memory = psutil.virtual_memory()
+        return int(memory.available), int(memory.total)
+    except Exception:
+        return None
+
+
 def get_nv_vram() -> tuple[int, int] | None:
     """
     Returns VRAM bytes used, bytes total from NVIDIA GPU (*device 0 only*),

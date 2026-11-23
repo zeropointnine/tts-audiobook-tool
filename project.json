@@ -1,0 +1,399 @@
+{
+    "dir_path": "",
+    "version": 5,
+    "tts_model_type": "breeze_tts_2_local",
+    "audio_cpp_model_id": "",
+    "last_audio_cpp_model_type": "",
+    "last_audio_cpp_model_id": "",
+    "voice_references": [
+        {
+            "file_name": "voice-1.flac",
+            "transcript": "First.",
+            "room_reverb": "off",
+            "loras": {
+                "breeze_tts_2_local": {
+                    "target": "/runs/fw-leda/lora/checkpoint-step-000500",
+                    "strength": 1.5
+                }
+            }
+        },
+        {
+            "file_name": "",
+            "transcript": "",
+            "room_reverb": "off"
+        }
+    ],
+    "language_code": "en",
+    "segmentation_strategy": "normal",
+    "max_words": 40,
+    "dialog_segmentation": false,
+    "word_substitutions_json_string": "{}",
+    "generate_range": "",
+    "create_files": "",
+    "markers": [],
+    "subdivide_phrases": false,
+    "export_type": "m4a",
+    "use_break_sound_effect": false,
+    "normalization_type": "default",
+    "high_shelf": "disabled",
+    "reason_pauses": "normal",
+    "use_upsampler": false,
+    "realtime_save": false,
+    "realtime_line_range": null,
+    "limit_silence_gaps": false,
+    "limit_silence_gaps_duration": 1.0,
+    "min_segment_sentence_silence": "disabled",
+    "room_tone": "off",
+    "room_reverb_stereo": "mono",
+    "gen_auto_concat": false,
+    "streaming_chat": true,
+    "strictness": "low",
+    "max_retries": 2,
+    "chapter_mode": "files",
+    "none_voice_file_name": "",
+    "model_settings": {
+        "models": {
+            "breeze_tts_2_local": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "repetition_penalty": null,
+                    "cfg": null,
+                    "seed": null
+                }
+            },
+            "chatterbox_local": {
+                "parameters": {
+                    "type": null,
+                    "temperature": null,
+                    "cfg": null,
+                    "exaggeration": null,
+                    "top_p": null,
+                    "turbo_top_k": null,
+                    "ml_v2_repetition_penalty": null,
+                    "ml_v3_repetition_penalty": null,
+                    "turbo_repetition_penalty": null,
+                    "seed": null
+                }
+            },
+            "dots_local": {
+                "parameters": {
+                    "target": null,
+                    "seed": null,
+                    "speaker_scale": null,
+                    "num_steps_soar": null,
+                    "num_steps_mf": null,
+                    "guidance_scale": null,
+                    "compile": null
+                }
+            },
+            "fish_s1_local": {
+                "parameters": {
+                    "compile_enabled": null,
+                    "temperature": null,
+                    "top_p": null,
+                    "repetition_penalty": null,
+                    "seed": null
+                }
+            },
+            "fish_s2_local": {
+                "parameters": {
+                    "rolling_cont": null,
+                    "compile_enabled": null,
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "seed": null
+                }
+            },
+            "glm_local": {
+                "parameters": {
+                    "sr": null,
+                    "seed": null
+                }
+            },
+            "higgs_v2_local": {
+                "parameters": {
+                    "temperature": null,
+                    "top_k": null,
+                    "top_p": null,
+                    "seed": null
+                }
+            },
+            "indextts2_local": {
+                "parameters": {
+                    "temperature": null,
+                    "use_fp16": null,
+                    "emo_alpha": null,
+                    "emo_vector": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "seed": null
+                }
+            },
+            "mira_local": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "repetition_penalty": null,
+                    "seed": null
+                }
+            },
+            "moss_local": {
+                "parameters": {
+                    "target": null,
+                    "rolling_cont": null,
+                    "delay_temperature": null,
+                    "delay_top_p": null,
+                    "delay_top_k": null,
+                    "delay_seed": null,
+                    "local_temperature": null,
+                    "local_top_p": null,
+                    "local_top_k": null,
+                    "local_seed": null,
+                    "local_v15_temperature": null,
+                    "local_v15_top_p": null,
+                    "local_v15_top_k": null,
+                    "local_v15_seed": null
+                }
+            },
+            "omnivoice_local": {
+                "parameters": {
+                    "target": null,
+                    "lora_target": null,
+                    "cfg": null,
+                    "speed": null,
+                    "num_step": null,
+                    "seed": null
+                }
+            },
+            "pocket_local": {
+                "parameters": {
+                    "model_code": null,
+                    "temperature": null,
+                    "seed": null
+                }
+            },
+            "qwen3tts_local": {
+                "parameters": {
+                    "target": null,
+                    "model_type": null,
+                    "rolling_cont": null,
+                    "temperature": null,
+                    "top_k": null,
+                    "top_p": null,
+                    "repetition_penalty": null,
+                    "seed": null
+                }
+            },
+            "vibevoice_local": {
+                "parameters": {
+                    "target": null,
+                    "lora_target": null,
+                    "cfg": null,
+                    "steps": null,
+                    "seed": null
+                }
+            },
+            "auk_sglomni": {
+                "parameters": {
+                    "speed": null,
+                    "seed": null
+                }
+            },
+            "auk_flash_sglomni": {
+                "parameters": {
+                    "speed": null,
+                    "seed": null
+                }
+            },
+            "cosyvoice3_sglomni": {
+                "parameters": {
+                    "template_name": null,
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "repetition_penalty": null
+                }
+            },
+            "fish_s2_sglomni": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null
+                }
+            },
+            "higgs_v3_sglomni": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "seed": null
+                }
+            },
+            "moss_delay_sglomni": {
+                "parameters": {
+                    "delay_temperature": null,
+                    "delay_top_p": null,
+                    "delay_top_k": null,
+                    "seed": null
+                }
+            },
+            "moss_local_sglomni": {
+                "parameters": {
+                    "local_temperature": null,
+                    "local_top_p": null,
+                    "local_top_k": null,
+                    "seed": null
+                }
+            },
+            "qwen3tts_sglomni": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "repetition_penalty": null,
+                    "seed": null
+                }
+            },
+            "zonos2_sglomni": {
+                "parameters": {
+                    "temperature": null,
+                    "top_k": null,
+                    "repetition_penalty": null
+                }
+            },
+            "breeze_tts_2_audiocpp": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "guidance_scale": null,
+                    "seed": null
+                }
+            },
+            "chatterbox_audiocpp": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "repetition_penalty": null,
+                    "guidance_scale": null,
+                    "exaggeration": null,
+                    "seed": null
+                }
+            },
+            "cosyvoice3_audiocpp": {
+                "parameters": {
+                    "template_name": null,
+                    "top_k": null,
+                    "num_inference_steps": null,
+                    "seed": null
+                }
+            },
+            "dots_audiocpp": {
+                "parameters": {
+                    "num_inference_steps": null,
+                    "guidance_scale": null,
+                    "speaker_scale": null,
+                    "seed": null
+                }
+            },
+            "echo_tts_audiocpp": {
+                "parameters": {
+                    "num_inference_steps": null,
+                    "text_guidance_scale": null,
+                    "speaker_guidance_scale": null,
+                    "seed": null
+                }
+            },
+            "fireredtts3_audiocpp": {
+                "parameters": {
+                    "num_inference_steps": null,
+                    "guidance_scale": null,
+                    "stop_threshold": null,
+                    "seed": null
+                }
+            },
+            "fish_drama3_audiocpp": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "seed": null
+                }
+            },
+            "fish_s2_audiocpp": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "seed": null
+                }
+            },
+            "glm_tts_audiocpp": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "num_inference_steps": null,
+                    "flow_guidance_scale": null,
+                    "seed": null
+                }
+            },
+            "higgs_v3_audiocpp": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "seed": null
+                }
+            },
+            "indextts2_audiocpp": {
+                "parameters": {
+                    "temperature": null,
+                    "top_p": null,
+                    "top_k": null,
+                    "duration_factor": null,
+                    "seed": null
+                }
+            },
+            "moss_delay_audiocpp": {
+                "parameters": {
+                    "delay_temperature": null,
+                    "delay_top_p": null,
+                    "delay_top_k": null,
+                    "seed": null
+                }
+            },
+            "moss_local_audiocpp": {
+                "parameters": {
+                    "local_temperature": null,
+                    "local_top_p": null,
+                    "local_top_k": null,
+                    "seed": null
+                }
+            },
+            "omnivoice_audiocpp": {
+                "parameters": {
+                    "num_inference_steps": null,
+                    "guidance_scale": null,
+                    "speed": null,
+                    "seed": null
+                }
+            },
+            "qwen3tts_audiocpp": {
+                "parameters": {
+                    "model_type": null,
+                    "temperature": null,
+                    "top_k": null,
+                    "top_p": null,
+                    "repetition_penalty": null,
+                    "seed": null
+                }
+            }
+        },
+        "shared": {}
+    }
+}

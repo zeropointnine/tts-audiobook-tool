@@ -106,6 +106,8 @@ VOICE_SAMPLE_MIN_DURATION_S = 2.0
 # Supplies a model's preset choices for a voice's preset item (may inspect the
 # model). None means unavailable; the provider has already told the user why.
 PresetChoices = Callable[[State], "list[str] | None"]
+# Model-specific items for one voice's submenu: (state, voice index) -> items
+VoiceExtraItems = Callable[[State, int], "list[MenuItem]"]
 
 
 def get_preset_label(tts_type: TtsModelType) -> str:
@@ -594,6 +596,7 @@ class VoiceMenuShared:
             on_clear_callback: Callable | None = None,
             preset_choices: PresetChoices | None = None,
             allow_custom_preset: bool = False,
+            voice_extra_items: VoiceExtraItems | None = None,
     ) -> list[MenuItem]:
         """Make the voice list (each opening its own submenu) and Add.
         The selection controls close the menu; `menu_wrapper` adds them.
@@ -607,6 +610,8 @@ class VoiceMenuShared:
         removal leaves no voice with a sample. `preset_choices` enables each
         voice's preset item (while the model uses presets, `can_voice_presets`).
         `allow_custom_preset` additionally offers free-form preset names.
+        `voice_extra_items(state, index)` adds model-specific items to each
+        voice's submenu (eg a per-voice LoRA; see voice_sample_submenu).
         """
         def open_submenu(s: State, index: int) -> None:
             VoiceMenuShared.voice_sample_submenu(
@@ -615,6 +620,7 @@ class VoiceMenuShared:
                 on_set_callback=on_set_callback,
                 preset_choices=preset_choices,
                 allow_custom_preset=allow_custom_preset,
+                voice_extra_items=voice_extra_items,
             )
 
         def add_voice(s: State, _: MenuItem) -> None:
@@ -866,6 +872,13 @@ class VoiceMenuShared:
                 # Non-blocking hint (so not error-colored), eg Qwen3-TTS VoiceDesign
                 # would get an arbitrary voice
                 parts.append("no instructions set")
+        # A per-voice LoRA, unless it's already the voice's value (a voice with only a LoRA)
+        lora = ProjectVoiceUtil.active_voice_lora(project, voice)
+        if lora is not None and source.kind != "lora":
+            from tts_audiobook_tool.target_util import make_target_display_name
+            parts.append(f"LoRA {make_target_display_name(lora.target)}")
+        elif source.kind == "lora":
+            parts.append(source.label)
         if not parts:
             # Eg Qwen3-TTS CustomVoice without instructions: the speaker's default delivery
             parts.append(f"{COL_DIM}{ProjectVoiceUtil.make_no_voice_value_text(project)}{COL_DEFAULT}")
@@ -909,9 +922,11 @@ class VoiceMenuShared:
             on_set_callback: Callable | None = None,
             preset_choices: PresetChoices | None = None,
             allow_custom_preset: bool = False,
+            voice_extra_items: VoiceExtraItems | None = None,
     ) -> None:
         """Options for one voice. Follows the voice when it is moved; exits when it is removed.
-        `preset_choices` enables the voice's preset item (see make_voice_sample_items)."""
+        `preset_choices` enables the voice's preset item (see make_voice_sample_items).
+        `voice_extra_items(state, index)` items follow the instructions items."""
         current = [index]  # Updated on move
 
         def get_voice(s: State) -> Voice | None:
@@ -1055,6 +1070,8 @@ class VoiceMenuShared:
                 ))
                 if instructions:
                     items.append(MenuItem(LABEL_CLEAR_INSTRUCTIONS, on_clear_instructions))
+            if voice_extra_items is not None:
+                items.extend(voice_extra_items(s, i))
             if len(s.project.voice_references) > 1:
                 items.append(MenuItem(LABEL_MOVE_VOICE_SAMPLE, on_move))
                 items.append(MenuItem(LABEL_REMOVE_VOICE_SAMPLE, on_remove))

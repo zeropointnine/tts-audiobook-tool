@@ -247,19 +247,113 @@ def test_hf_cache_blob_name_stands_in_for_the_hash(tmp_path):
             base_files={"model-00001-of-00002.safetensors": "cd" * 32}))
 
 
-def test_breeze_model_keeps_base_model_when_lora_is_rejected(tmp_path):
-    # A rejected adapter is reported (has_lora False + reason) instead of
-    # failing the model load; generation is then blocked by get_blocking_issues
+@pytest.mark.parametrize("form", ["manifest", "checkpoint"])
+def test_prepare_lora_validates_without_merging(tmp_path, form):
+    # The switcher's planner validates without changing weights and gives unchanged
+    # tensor contents and merge metadata a stable identity.
+    base_dir = make_base_dir(tmp_path)
+    target = (write_manifest_dir(tmp_path / "export", base_dir) if form == "manifest"
+              else write_checkpoint_dir(tmp_path / "run"))
+    model = make_model()
+    before = state_of(model)
+    prepared = breeze_lora.prepare_lora(model, base_dir, target, 0.5)
+    assert all(torch.equal(state_of(model)[name], value) for name, value in before.items())
+    assert prepared.identity == breeze_lora.prepare_lora(model, base_dir, target, 0.5).identity
+    assert prepared.plan.scale == pytest.approx(0.5 * ALPHA / RANK)
+    assert prepared.plan.target_names == {f"{Q}.weight", "lm_head.weight"}
+
+
+@pytest.mark.parametrize("form", ["manifest", "checkpoint"])
+def test_alpha_only_change_is_remerged_after_a_run(tmp_path, form):
+    # Alpha lives outside the tensor file; changing only that metadata must still
+    # restore and remerge the adapter rather than reusing the previous scale.
+    from pathlib import Path
+    from tts_audiobook_tool.app_types.voice import VoiceLora
+    from tts_audiobook_tool.tts_models.lora_merge import apply_merge
+    from tts_audiobook_tool.tts_models.lora_switch import BaseWeightCache, LoraSwitcher, SafetensorsBaseWeights
+
+    base_dir = make_base_dir(tmp_path)
+    target = (write_manifest_dir(tmp_path / "export", base_dir) if form == "manifest"
+              else write_checkpoint_dir(tmp_path / "run"))
+    model = make_model()
+    save_file(state_of(model), os.path.join(base_dir, "model.safetensors"))
+    switcher = LoraSwitcher(
+        model, BaseWeightCache(SafetensorsBaseWeights(base_dir)),
+        lambda lora: breeze_lora.prepare_lora(model, base_dir, lora.target, lora.strength),
+        log=lambda _: None,
+    )
+    lora = VoiceLora(target)
+    old = breeze_lora.prepare_lora(model, base_dir, target)
+    weights_sha = sha256(os.path.join(target, "adapter.safetensors"))
+    assert switcher.activate(lora) == ""
+    switcher.end_run()
+
+    metadata_path = (Path(target) / "adapter_config.json" if form == "manifest"
+                     else Path(target).parent / "run-config.json")
+    metadata = json.loads(metadata_path.read_text())
+    if form == "manifest":
+        metadata["lora"]["alpha"] *= 2
+    else:
+        metadata["alpha"] *= 2
+    metadata_path.write_text(json.dumps(metadata))
+
+    updated = breeze_lora.prepare_lora(model, base_dir, target)
+    assert sha256(os.path.join(target, "adapter.safetensors")) == weights_sha
+    assert updated.identity != old.identity
+    assert switcher.activate(lora) == ""
+    expected = make_model()
+    apply_merge(expected, updated.plan, delta_device="target")
+    assert all(torch.equal(state_of(model)[name], value) for name, value in state_of(expected).items())
+
+
+def test_breeze_model_reports_each_voices_rejected_lora(tmp_path):
+    # Pre-flight names the voice and the reason; voices without a LoRA aren't checked
     pytest.importorskip("breeze_tts")
     from pathlib import Path
+    from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
+    from tts_audiobook_tool.project import Project
     from tts_audiobook_tool.tts_models.breeze_model import BreezeModel
 
     base_dir = make_base_dir(tmp_path)
+    good = write_manifest_dir(tmp_path / "export", base_dir)
     model = BreezeModel.__new__(BreezeModel)
     model._model = make_model()  # type: ignore[assignment]
-    model._load_lora(Path(base_dir), str(tmp_path / "base"), 1.0)
-    assert not model.has_lora
-    assert "Not a Breeze LoRA" in model.lora_error
+    model._loras = BreezeModel._make_lora_switcher(model._model, Path(base_dir))
+    model_id = "breeze_tts_2_local"
+    project = Project(tts_model_type=model_id, voice_references=[
+        Voice(), Voice(loras={model_id: VoiceLora(good)}), Voice(loras={model_id: VoiceLora(str(tmp_path / "base"))}),
+    ])
+    problems = model.prepare_voice_loras(project, [0, 1, 2])
+    assert len(problems) == 1 and problems[0].startswith("Voice 3 LoRA") and "Not a Breeze LoRA" in problems[0]
+    assert model.validate_voice_lora(VoiceLora(good)) == ""
 
-    model._load_lora(Path(base_dir), write_manifest_dir(tmp_path / "export", base_dir), 1.0)
-    assert model.has_lora
+
+def test_breeze_menu_validation_rechecks_a_repaired_or_changed_adapter(tmp_path):
+    # Repeated explicit menu checks must see on-disk repairs and later corruption,
+    # without applying any weights during validation.
+    pytest.importorskip("breeze_tts")
+    from pathlib import Path
+    from tts_audiobook_tool.app_types.voice import VoiceLora
+    from tts_audiobook_tool.tts_models.breeze_model import BreezeModel
+
+    base_dir = make_base_dir(tmp_path)
+    target = write_manifest_dir(tmp_path / "export", base_dir, adapter__sha256="0" * 64)
+    model = BreezeModel.__new__(BreezeModel)
+    model._model = make_model()  # type: ignore[assignment]
+    model._loras = BreezeModel._make_lora_switcher(model._model, Path(base_dir))
+    before = state_of(model._model)
+    lora = VoiceLora(target)
+    assert "checksum" in model.validate_voice_lora(lora)
+
+    manifest_path = Path(target) / "adapter_config.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["adapter"]["sha256"] = sha256(os.path.join(target, "adapter.safetensors"))
+    manifest_path.write_text(json.dumps(manifest))
+    assert model.validate_voice_lora(lora) == ""
+
+    manifest["adapter"]["sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest))
+    # The successful probe must not seed a stale plan for subsequent generation either.
+    assert "checksum" in model._loras.prepare(lora)
+    assert "checksum" in model.validate_voice_lora(lora)
+    assert all(torch.equal(state_of(model._model)[name], value) for name, value in before.items())

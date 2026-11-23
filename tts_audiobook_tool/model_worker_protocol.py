@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.generation_events import GenerationEvent
 from tts_audiobook_tool.real_time_playback_events import RealTimePlaybackEvent
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.app_types.voice import VoiceLora
 
 
 # Elapsed wait time after which an STT operation is considered suspicious:
@@ -146,6 +150,9 @@ class InspectTtsCommand:
     # mode is the microphone, so the STT model's init output happens at init
     # time (relayed to the chat UI) instead of on the first transcription.
     warm_stt: bool = False
+    # A per-voice LoRA to validate against the loaded model (`validate_voice_lora`)
+    # before the voice menu saves it; the result is metadata["lora_probe_error"].
+    probe_lora: VoiceLora | None = None
 
 
 @dataclass(frozen=True)

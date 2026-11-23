@@ -25,7 +25,12 @@ string is not compared: the hub revision can move on without the weights changin
 checkpoint pins nothing, so only its keys and shapes are checked against the model.
 
 Everything is validated before any weight changes, so a rejected adapter (`LoraLoadError`) leaves the
-model untouched. Must not import `breeze_tts`. Merging must happen before any CUDA graph capture.
+model untouched. Must not import `breeze_tts`.
+
+Per-voice switching (`lora_switch`) restores and re-merges weights in place, so it is safe after the CFG
+depth graph has been captured: parameter storage never moves, and the graph's fp32 copy of
+`depth_decoder.codebooks_head` can't go stale because that head (a `BreezeCodebooksHead`, not a
+linear layer) is never a valid LoRA target.
 """
 from __future__ import annotations
 
@@ -39,6 +44,7 @@ from dataclasses import dataclass
 import torch
 
 from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, apply_merge
+from tts_audiobook_tool.tts_models.lora_switch import PreparedLora
 
 ADAPTER_CONFIG_FILE_NAME = "adapter_config.json"
 CHECKPOINT_WEIGHTS_FILE_NAME = "adapter.safetensors"
@@ -69,6 +75,8 @@ class BreezeAdapterSource:
     alpha: float
     # Base model file name -> sha256 (manifest only)
     base_files: dict[str, str] | None = None
+    # The verified checksum of the weights file
+    weights_sha256: str = ""
 
 
 def sha256_file(path: str) -> str:
@@ -148,6 +156,7 @@ def read_manifest_dir(directory: str) -> BreezeAdapterSource:
     return BreezeAdapterSource(
         kind="manifest", weights_path=weights_path, rank=rank, alpha=alpha,
         base_files={str(name): str(digest).lower() for name, digest in base_files.items()},
+        weights_sha256=expected.lower(),
     )
 
 
@@ -174,7 +183,8 @@ def read_checkpoint_dir(directory: str) -> BreezeAdapterSource:
                             "(export the checkpoint as an adapter instead)")
     run_config = _read_json_object(run_config_path, RUN_CONFIG_FILE_NAME)
     rank, alpha = _rank_and_alpha(run_config.get("rank"), run_config.get("alpha"), RUN_CONFIG_FILE_NAME)
-    return BreezeAdapterSource(kind="checkpoint", weights_path=weights_path, rank=rank, alpha=alpha)
+    return BreezeAdapterSource(kind="checkpoint", weights_path=weights_path, rank=rank, alpha=alpha,
+                               weights_sha256=expected.lower())
 
 
 def read_local_dir(directory: str) -> BreezeAdapterSource:
@@ -290,6 +300,22 @@ def _plan_merge(model: torch.nn.Module, source: BreezeAdapterSource, strength: f
     if not plan.pairs:
         raise LoraLoadError("Adapter has no tensors")
     return plan
+
+
+def prepare_lora(model: torch.nn.Module, model_dir: str, target: str, strength: float = 1.0) -> PreparedLora:
+    """
+    Resolves and validates an adapter against `model` and its base files (`model_dir`) without changing
+    the model, for `lora_switch.LoraSwitcher`. Raises `LoraLoadError` when the adapter can't be used.
+    """
+    from tts_audiobook_tool.target_util import make_target_display_name
+    source = resolve_adapter(target)
+    if source.base_files:
+        verify_base(model_dir, source)
+    plan = plan_merge(model, source, strength)
+    # Rank/alpha live in JSON, not the tensor file; changing them must invalidate
+    # an already merged adapter too. Strength is tracked separately in LoraKey.
+    identity = f"{source.weights_sha256}:{source.rank}:{source.alpha!r}"
+    return PreparedLora(plan=plan, identity=identity, display=make_target_display_name(target))
 
 
 def load_lora(
