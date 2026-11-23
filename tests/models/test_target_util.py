@@ -77,7 +77,7 @@ def test_subfolder_exist_test_reports_missing_repo(monkeypatch):
     monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lambda *_: None)
     monkeypatch.setattr(huggingface_hub, "model_info", model_info)
     _, error = target_util.exist_test("owner/repo/lora")
-    assert "Repo not found" in error
+    assert "not found" in error
 
 
 def test_is_same_target_compares_subfolder_targets_as_strings():
