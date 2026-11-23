@@ -188,7 +188,11 @@ def test_hf_exist_test_reports_missing_repo(monkeypatch):
 
 @pytest.mark.parametrize("target,expected", [
     (ModelTarget.hf("My-Weird-Prompts/Herman-LoRA-V3"), "Herman-LoRA-V3"),
-    (ModelTarget.hf("wjcwqc/PaigeVoice/lora"), "PaigeVoice"),
+    # A directory inside a repo is qualified by the repo, as by a parent directory,
+    # so that two directories of one repo get different names
+    (ModelTarget.hf("wjcwqc/PaigeVoice/lora"), "PaigeVoice-lora"),
+    (ModelTarget.hf("owner/repo/voices/herman"), "repo-herman"),
+    (ModelTarget.hf("owner/repo/adapters/checkpoint-900"), "repo-checkpoint-900"),
     (ModelTarget.local("/exp/herman/checkpoint-900"), "herman-checkpoint-900"),
     (ModelTarget.local("/exp/herman_v3"), "herman_v3"),
     # A generic parent (as Instavar's run layout) is skipped for the nearest meaningful ancestor

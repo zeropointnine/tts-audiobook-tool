@@ -238,15 +238,23 @@ class ModelTarget:
 
     def display_name(self) -> str:
         """
-        Short name: the repo name for hf targets, else the directory name, qualified
-        by its parent when it is a training checkpoint directory (eg `checkpoint-900`)
-        or a generic name like `lora`. A generic parent is skipped for the nearest
-        non-generic ancestor
+        Short name: the directory name, qualified by its parent when it is a training
+        checkpoint directory (eg `checkpoint-900`) or a generic name like `lora`. A
+        generic parent is skipped for the nearest non-generic ancestor
         (eg `fw-leda/lora/checkpoint-step-000500` -> `fw-leda-checkpoint-step-000500`).
+        For hf targets: the repo name, and for a directory inside the repo, the repo
+        name joined with that directory's name by the same rules, so that two
+        directories in one repo get different names
+        (eg `owner/repo/voices/herman` -> `repo-herman`, `owner/PaigeVoice/lora` -> `PaigeVoice-lora`).
         """
-        if self.is_hf:
-            return self.repo_id.split("/")[-1]
-        return _qualified_dir_name(self.value)
+        if self.is_local:
+            return _qualified_dir_name(self.value)
+        repo_name = self.repo_id.split("/")[-1]
+        if not self.subfolder:
+            return repo_name
+        # The repo is the topmost ancestor, so a generic or checkpoint name is qualified by it
+        name = _qualified_dir_name(f"{repo_name}/{self.subfolder}")
+        return name if name.startswith(f"{repo_name}-") else f"{repo_name}-{name}"
 
     def resolve_local_dir(self, file_names: list[str] | None = None, revision: str | None = None) -> str:
         """

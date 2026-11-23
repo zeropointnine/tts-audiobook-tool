@@ -223,7 +223,7 @@ def test_qwen_voice_design_status_counts_instructions(voices, expected):
 @pytest.mark.parametrize("model_id, voices, expected", [
     ("breeze_tts_2_local", [Voice(loras={"breeze_tts_2_local": VoiceLora(ModelTarget.local("/runs/fw-leda/lora/checkpoint-step-000500"))})],
      "LoRA fw-leda-checkpoint-step-000500"),
-    ("omnivoice_local", [Voice(loras={"omnivoice_local": VoiceLora(ModelTarget.hf("owner/repo/sub/dir"))})], "LoRA repo"),
+    ("omnivoice_local", [Voice(loras={"omnivoice_local": VoiceLora(ModelTarget.hf("owner/repo/sub/dir"))})], "LoRA repo-dir"),
     ("omnivoice_local", [Voice("first.flac"), Voice(loras={"omnivoice_local": VoiceLora(ModelTarget.hf("owner/repo"))})],
      "first, +1 more, +LoRA"),
     ("breeze_tts_2_local", [Voice("first.flac"), Voice(loras={"other_model": VoiceLora(ModelTarget.hf("owner/repo"))})], "first, +1 more"),

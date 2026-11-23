@@ -87,7 +87,7 @@ def test_is_same_target_compares_subfolder_targets_as_strings():
 
 @pytest.mark.parametrize("target,expected", [
     ("My-Weird-Prompts/Herman-LoRA-V3", "Herman-LoRA-V3"),
-    ("wjcwqc/PaigeVoice/lora", "PaigeVoice"),
+    ("wjcwqc/PaigeVoice/lora", "PaigeVoice-lora"),
     ("/exp/herman/checkpoint-900", "herman-checkpoint-900"),
     ("/exp/herman_v3", "herman_v3"),
     # A generic parent (as Instavar's run layout) is skipped for the nearest meaningful ancestor
