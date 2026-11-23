@@ -36,7 +36,7 @@ LANGUAGE_MODEL_PREFIX = "model.language_model."
 
 _WEIGHTS_FILE_NAMES = [ADAPTER_WEIGHTS_FILE_NAME, ADAPTER_WEIGHTS_BIN_FILE_NAME]
 _FILE_NAMES = [ADAPTER_CONFIG_FILE_NAME, *_WEIGHTS_FILE_NAMES]
-# Files that make a local directory (or hf repo) acceptable (`target_util.exist_test` markers)
+# Files that make a local directory (or hf repo) acceptable (`ModelTarget.exist_test` markers)
 LOCAL_FILE_MARKERS = [ADAPTER_CONFIG_FILE_NAME, f"{LORA_SUBDIR}/{ADAPTER_CONFIG_FILE_NAME}"]
 
 _FOREIGN_KEY_HINT = ("expected a language model adapter, as written by VibeVoice-finetuning "

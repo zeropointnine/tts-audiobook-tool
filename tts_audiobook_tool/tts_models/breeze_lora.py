@@ -51,7 +51,7 @@ ADAPTER_CONFIG_FILE_NAME = "adapter_config.json"
 CHECKPOINT_WEIGHTS_FILE_NAME = "adapter.safetensors"
 CHECKPOINT_RECEIPT_FILE_NAME = "checkpoint-receipt.json"
 RUN_CONFIG_FILE_NAME = "run-config.json"
-# Files that make a local directory look like either form (`target_util.exist_test` markers)
+# Files that make a local directory look like either form (`ModelTarget.exist_test` markers)
 LOCAL_FILE_MARKERS = [ADAPTER_CONFIG_FILE_NAME, CHECKPOINT_WEIGHTS_FILE_NAME]
 
 BASE_MODEL_ID = "BreezeBlue/Breeze-TTS-2"

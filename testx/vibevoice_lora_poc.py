@@ -16,13 +16,11 @@ id, or `owner/repo/sub/dir`. Default: vibevoice-community/klett.
 Outputs go to /tmp/vibevoice_lora_poc_*.wav.
 """
 
-import os
 import sys
 import time
 
 import soundfile as sf
 import torch
-from huggingface_hub import snapshot_download
 
 from tts_audiobook_tool.app_types import DeviceType
 from tts_audiobook_tool.app_types.model_target import ModelTarget
@@ -57,7 +55,7 @@ def generate(model: VibeVoiceModel, project: Project, index: int, label: str) ->
 
 def main() -> None:
     adapter = ModelTarget.infer(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_ADAPTER)
-    base_target = sys.argv[2] if len(sys.argv) > 2 else VibeVoiceBaseModel.DEFAULT_REPO_ID
+    base_target = ModelTarget.infer(sys.argv[2]) if len(sys.argv) > 2 else VibeVoiceBaseModel.DEFAULT_TARGET
     model = VibeVoiceModel(DeviceType.CUDA, model_target=base_target, max_new_tokens=VibeVoiceBaseModel.MAX_TOKENS)
     assert model.model is not None and model._loras is not None
     project = Project(tts_model_type=MODEL_ID, voice_references=[
@@ -78,7 +76,7 @@ def main() -> None:
     gib = sum(params[name].numel() * params[name].element_size() for name in names) / 1024 ** 3
     print(f"adapter targets: {len(names)} tensors, {gib:.2f} GiB; base copy: {model._loras.base.mode_reason}")
     assert model._loras.activate(None) == ""
-    model_dir = base_target if os.path.isdir(base_target) else snapshot_download(base_target)
+    model_dir = base_target.resolve_local_dir()
     source = SafetensorsBaseWeights(model_dir)
     bad = [n for n, t in source.read(params, sorted(names)) if not torch.equal(params[n].detach().cpu(), t)]
     print(f"restored weights differing from the checkpoint: {len(bad)}")

@@ -48,7 +48,7 @@ def main() -> None:
     for lora in loras:
         error = switcher.prepare(lora)
         if error:
-            raise SystemExit(f"LoRA not usable: {lora.target}: {error}")
+            raise SystemExit(f"LoRA not usable: {lora.target.value}: {error}")
 
     local = BreezeBaseModel.LOCAL
     sampling = BreezeSampling(
