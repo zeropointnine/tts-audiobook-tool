@@ -1,9 +1,9 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 
-from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.local_definition import require_local_definition
+from tts_audiobook_tool.tts_models.model_support import VoiceLoraMode
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
@@ -43,47 +43,25 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         s = f"{cls.INFO.ui['proper_name']} {COL_DIM}({target})"
         return s
 
-    @property
-    @abstractmethod
-    def has_lora(self) -> bool:
-        ...
-
     @classmethod
     def can_hallucinate_music(cls, project: Project, instance: TtsBaseModel | None=None) -> bool:
         return True
 
     @classmethod
-    def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:
-        errors = []
-        if instance:
-            assert isinstance(instance, VibeVoiceBaseModel)
-            if project.get_model_setting('vibevoice_local', 'lora_target') and not instance.has_lora:
-                errors.append( ReadinessIssue("valid LoRA", "Couldn't load LoRA") )
-        return errors
-
-    @classmethod
-    def has_fixed_default_voice(cls, project: Project) -> bool:
-        # A LoRA gives sample-less voices a fixed speaker, so the "voices may vary"
-        # run note (voice_variation_warning) does not apply
-        return bool(project.get_model_setting('vibevoice_local', 'lora_target'))
+    def voice_lora_mode(cls, project: Project) -> VoiceLoraMode:
+        # PEFT-format per-voice language model adapters, merged and switched in place (vibevoice_lora)
+        return "merged"
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:
-
-        def get_lora_value() -> str:
-            value = Path(project.get_model_setting('vibevoice_local', 'lora_target')).stem
-            return ProjectVoiceUtil.make_voice_tag(value)
-
-        match (bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.require_by_id("vibevoice_local"))), bool(project.get_model_setting('vibevoice_local', 'lora_target'))):
-            case (False, False):
-                return "none"
-            case (True, True):
-                # use lora as the more 'relevant' identifier
-                return get_lora_value()
-            case (True, False):
-                return super().get_voice_tag(project)
-            case (False, True):
-                return get_lora_value()
+        # The project-level tag follows voice 1, whose LoRA is the more salient identifier,
+        # even with a sample; per-line tags follow each voice's adapter
+        voices = project.voice_references
+        lora = ProjectVoiceUtil.active_voice_lora(project, voices[0]) if voices else None
+        if lora is None:
+            return super().get_voice_tag(project)
+        from tts_audiobook_tool.target_util import make_target_display_name
+        return ProjectVoiceUtil.make_voice_tag(make_target_display_name(lora.target))
 
 # ---
 

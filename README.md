@@ -727,7 +727,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Temperature, seed
 
 **VibeVoice**
-- Model-wide LoRA support (Train with [voicepowered-ai/VibeVoice-finetuning](https://github.com/voicepowered-ai/VibeVoice-finetuning)).
+- LoRA support, set per voice, with strength setting; voices with different LoRAs can be mixed in one project (Train with [voicepowered-ai/VibeVoice-finetuning](https://github.com/voicepowered-ai/VibeVoice-finetuning)). A project's earlier model-wide LoRA is moved onto each of its voices when the project is opened.
 - Alternate VibeVoice models (eg, VibeVoice-7B or custom finetunes)
 - Batch processing support
 - Streaming support (for the stand-alone server and LLM chat mode)
@@ -895,7 +895,8 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 **2026-11-23**
 
-- LoRAs are now assignable on a per-voice basis (Breeze, OmniVoice, VibeVoice)
+- LoRAs are now assignable on a per-voice basis (Breeze, OmniVoice, VibeVoice).
+- VibeVoice LoRAs are now merged into the model weights, resulting in ~30% faster generations than previously.
 
 **2026-11-21**
 

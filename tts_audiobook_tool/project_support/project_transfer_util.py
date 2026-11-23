@@ -85,7 +85,6 @@ class ProjectTransferUtil:
         ('pocket_local', 'model_code'),
         ('qwen3tts_local', 'target'),
         ('vibevoice_local', 'target'),
-        ('vibevoice_local', 'lora_target'),
     )
 
     # Supporting files that many valid projects never have (eg the EPUB copy

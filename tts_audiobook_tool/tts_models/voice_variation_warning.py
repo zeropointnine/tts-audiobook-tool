@@ -4,8 +4,7 @@ One model-agnostic check, so every model gets the same rule: a note applies to
 each voice in play for the run (`ProjectVoiceUtil.get_job_voice_indices`) that
 generates without a fixed speaker, ie without a sample or preset
 (`ProjectVoiceUtil.resolve_voice_source` kind "instructions" or "builtin"),
-when the current settings can generate without one and have no fixed default
-voice (`has_fixed_default_voice`, eg a VibeVoice LoRA). A voice with its own LoRA
+when the current settings can generate without one. A voice with its own LoRA
 (`ProjectVoiceUtil.active_voice_lora`) has a fixed speaker too. Instruction-defined voices
 (eg Qwen3-TTS VoiceDesign) are eligible even when sample cloning is inactive.
 
@@ -53,8 +52,7 @@ def get_voice_variation_warnings(project: Project, voice_indices: Iterable[int])
     # VoiceDesign uses instructions without a fixed speaker, even though its
     # family requires samples in Base mode. Resolve active sources below: missing
     # required samples/presets belong to validation, not a variation warning.
-    if (not (support.can_voice_clone(project) or support.expects_voice_instructions(project))
-            or support.has_fixed_default_voice(project)):
+    if not (support.can_voice_clone(project) or support.expects_voice_instructions(project)):
         return []
     voices = project.voice_references
     instructions_note = model_type.value.ui.get("instructions_voice_variation_note") or ""

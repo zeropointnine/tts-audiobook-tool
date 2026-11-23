@@ -450,7 +450,6 @@ class Tts:
             "dots_target": project.get_model_setting('dots_local', 'target'),
             "dots_compile": project.get_model_setting('dots_local', 'compile'),
             "vibevoice_target": project.get_model_setting('vibevoice_local', 'target'),
-            "vibevoice_lora_path": project.get_model_setting('vibevoice_local', 'lora_target'),
             "indextts2_use_fp16": resolve("indextts2_local", "use_fp16"),
             "glm_sr": resolve("glm_local", "sr"),
             "moss_target": project.get_model_setting('moss_local', 'target'),
@@ -479,7 +478,6 @@ class Tts:
         dirty |= new_params.get("dots_target", "") != old_params.get("dots_target", "")
         dirty |= new_params.get("dots_compile", False) != old_params.get("dots_compile", False)
         dirty |= new_params.get("vibevoice_target", "") != old_params.get("vibevoice_target", "")
-        dirty |= new_params.get("vibevoice_lora_path", "") != old_params.get("vibevoice_lora_path", "")
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
         dirty |= new_params.get("moss_target", "") != old_params.get("moss_target", "")
@@ -945,13 +943,12 @@ class Tts:
 
             device_type = Tts.get_best_supported_device_type(TtsModelType.require_by_id("vibevoice_local"))
             target = Tts._model_params.get("vibevoice_target", "") or VibeVoiceBaseModel.DEFAULT_REPO_ID
-            lora_path = Tts._model_params.get("vibevoice_lora_path", "")
 
             from tts_audiobook_tool.tts_models.vibe_voice_model import VibeVoiceModel
+            # Per-voice LoRAs are switched in place per call (`Voice.loras`), not load parameters
             Tts._vibevoice = VibeVoiceModel(
                 device=device_type,
                 model_target=target,
-                lora_path=lora_path,
                 max_new_tokens=VibeVoiceBaseModel.MAX_TOKENS
             )
             printt()

@@ -158,14 +158,6 @@ to maximize throughput. For projects that assign multiple voices to lines,
 even more so."""
 )
 
-HINT_VIBEVOICE_LORA = Hint(
-    "vibevoice_lora",
-    "LoRA support is experimental",
-"""Current tips:
-- Train your LoRA using https://github.com/voicepowered-ai/VibeVoice-finetuning with parameter \"voice_prompt_drop_rate 1\"
-- Avoid using a LoRA and a voice clone sample at the same time"""
-)
-
 HINT_DELETE_SEGMENTS = Hint(
     "delete_segments",
     "Tip",

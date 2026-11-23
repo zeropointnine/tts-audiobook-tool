@@ -1121,7 +1121,7 @@ def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
     project = Project(dir_path=str(tmp_path))
     assert project.save() == ""
     project.tts_model_type = "vibevoice_local"
-    set_setting(project, "vibevoice_lora_target", "vibevoice-community/unsaved-adapter")
+    set_setting(project, "vibevoice_target", "/models/unsaved-vibevoice")
     state = SimpleNamespace(
         project=project,
         prefs=Prefs(project_dir=str(tmp_path), stt_variant=SttVariant.DISABLED),
@@ -1152,7 +1152,7 @@ def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
     assert len(commands) == 1
     command = commands[0]
     assert isinstance(command, InspectTtsCommand)
-    assert command.model_params["vibevoice_lora_path"] == get_setting(project, "vibevoice_lora_target")
+    assert command.model_params["vibevoice_target"] == get_setting(project, "vibevoice_target")
     assert command.settings.tts_model_type_id == "vibevoice_local"
     assert command.warm_models is False
     assert command.warm_stt is False
@@ -1647,7 +1647,7 @@ def test_worker_inspection_preserves_unsaved_params_after_selection_binding(tmp_
     instance = SimpleNamespace(
         get_device_type=lambda: None,
         get_warning_issues=lambda selected: [],
-        has_lora=lambda: True,
+        supported_languages=lambda: ["en"],
     )
     monkeypatch.setattr(model_runtime, "mark_model_worker", lambda: None)
     monkeypatch.setattr(model_worker_module.signal, "signal", lambda *args: None)
@@ -1675,7 +1675,7 @@ def test_worker_inspection_preserves_unsaved_params_after_selection_binding(tmp_
     command = InspectTtsCommand(
         "inspection", str(tmp_path),
         GenerationSettings("disabled", "cpu_int8_float32", False, "vibevoice_local", "", False),
-        {"vibevoice_lora_path": "unsaved-adapter"},
+        {"vibevoice_target": "/models/unsaved-vibevoice"},
     )
     commands = queue.Queue()
     commands.put(command)
@@ -1691,7 +1691,7 @@ def test_worker_inspection_preserves_unsaved_params_after_selection_binding(tmp_
     inspections = [event for event in emitted if isinstance(event, TtsInspected)]
     assert len(inspections) == 1
     assert inspections[0].tts_type_id == "vibevoice_local"
-    assert inspections[0].metadata["has_lora"] is True
+    assert inspections[0].metadata["supported_languages"] == ["en"]
 
 
 def test_release_chat_synthesis_state_clears_callbacks_and_transient_memory(

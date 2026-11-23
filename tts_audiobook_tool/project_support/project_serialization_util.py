@@ -876,13 +876,19 @@ class ProjectSerializationUtil:
             if value is not None:
                 legacy_values[attr] = value
 
+        from tts_audiobook_tool.project_support.model_settings_compat import (
+            RETIRED_PROJECT_WIDE_LORAS, find_retired_project_loras, take_migrated_project_loras,
+        )
+        source = d.get("model_settings")
+        if isinstance(source, ModelSettings):
+            source = source.to_dict()
+        migrated, source, remaining_legacy = take_migrated_project_loras(source, legacy_values)
+        legacy_values = remaining_legacy or {}
+        if migrated:
+            d["model_settings"] = source
+            ProjectSerializationUtil._move_project_wide_loras_to_voices(d, migrated, warnings)
+
         if warnings is not None:
-            from tts_audiobook_tool.project_support.model_settings_compat import (
-                RETIRED_PROJECT_WIDE_LORAS, find_retired_project_loras,
-            )
-            source = d.get("model_settings")
-            if isinstance(source, ModelSettings):
-                source = source.to_dict()
             for model_id, target in find_retired_project_loras(source):
                 s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}This project's {RETIRED_PROJECT_WIDE_LORAS[model_id]} "
                 s += f"LoRA ({target}) has been dropped.\n"
@@ -933,6 +939,50 @@ class ProjectSerializationUtil:
             removal_keys.update(aliases)
         for key in removal_keys:
             d.pop(key, None)
+
+    @staticmethod
+    def _move_project_wide_loras_to_voices(
+        d: dict, migrated: list[tuple[str, str]], warnings: list[str] | None,
+    ) -> None:
+        """
+        One-time migration of a model-wide LoRA (`MIGRATED_PROJECT_WIDE_LORAS`) onto the voices:
+        it applied to every voice, so every voice without its own LoRA for that model gets it,
+        at the default strength (the model-wide setting had none). A project without voices
+        gets one, to hold it. The notice is also what saves the migrated project.
+        """
+        from dataclasses import replace
+        from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
+        from tts_audiobook_tool.project_support.model_settings_compat import MIGRATED_PROJECT_WIDE_LORAS
+        from tts_audiobook_tool.project_support.voice_reference_migration import normalize_voice_references
+
+        voices = normalize_voice_references(d.get("voice_references", []))
+        if not voices:
+            voices = [Voice()]
+        for model_id, target in migrated:
+            lora = VoiceLora(target)
+            assigned: list[int] = []
+            for index, voice in enumerate(voices):
+                if voice.lora_for(model_id) is None:
+                    voices[index] = replace(voice, loras={**voice.loras, model_id: lora})
+                    assigned.append(index)
+            if warnings is None:
+                continue
+            name = MIGRATED_PROJECT_WIDE_LORAS[model_id][0]
+            s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}LoRAs are now configured on a per-voice basis "
+            s += "(Voices > voice > LoRA).\n"
+            if not assigned:
+                s += f"This project's {name} LoRA ({target}) has been dropped:\n"
+                s += f"every voice already has its own {name} LoRA."
+            elif len(assigned) == len(voices):
+                s += f"This project's {name} LoRA ({target}) has been assigned to "
+                s += "each of its voices." if len(voices) > 1 else "its voice."
+            else:
+                numbers = ", ".join(str(index + 1) for index in assigned)
+                s += f"This project's {name} LoRA ({target}) has been assigned to voice(s) {numbers};\n"
+                s += f"the other voices keep their own {name} LoRA."
+            s += "\n"
+            warnings.append(s)
+        d["voice_references"] = voices
 
     @staticmethod
     def canonicalize_project_local_paths(d: dict) -> None:

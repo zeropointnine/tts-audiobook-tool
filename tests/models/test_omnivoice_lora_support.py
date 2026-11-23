@@ -44,8 +44,8 @@ def test_voice_tags_follow_each_voices_lora_over_its_sample():
 
 
 def test_only_lora_voices_have_a_fixed_speaker_and_switch_keys():
-    # The shared variation and scheduling rules apply to OmniVoice without a
-    # model-wide fixed-default-voice flag suppressing notes for unrelated voices.
+    # The shared variation and scheduling rules apply to OmniVoice: only the LoRA
+    # voice has a fixed speaker, so the note still covers the voice without one.
     project = make_project(Voice(), Voice(loras={MODEL_ID: VoiceLora("owner/adapter", 0.5)}))
     project.phrase_groups = [
         PhraseGroup([Phrase("Hello.", Reason.SENTENCE)], voice_index=index)
@@ -65,7 +65,7 @@ def test_a_stored_omnivoice_lora_without_strength_loads_at_full_strength():
 @pytest.mark.parametrize("model_id, expected", [
     ("omnivoice_local", "no sample or LoRA set"),
     ("breeze_tts_2_local", "no sample or LoRA set"),
-    ("vibevoice_local", "no sample set"),  # its LoRA is model-wide, not a voice value
+    ("vibevoice_local", "no sample or LoRA set"),
 ])
 def test_a_voice_without_a_value_names_the_lora_as_an_option(model_id, expected):
     # With per-voice LoRAs a LoRA alone gives a voice its speaker, so the hint names both

@@ -12,7 +12,7 @@ from tts_audiobook_tool.project_support.model_settings import (
     Binding, ModelSettings, ModelSettingsRegistry, REGISTRY, normalize_paths,
     register_builtin_fields,
 )
-from tts_audiobook_tool.project_support.model_settings_compat import SHARED_MEMBERS
+from tts_audiobook_tool.project_support.model_settings_compat import MIGRATED_PROJECT_WIDE_LORAS, SHARED_MEMBERS
 from tts_audiobook_tool.project_support.model_settings_declarations import BUILTIN_LEGACY_FIELDS
 
 
@@ -267,6 +267,10 @@ def test_current_bindings_retain_frozen_legacy_storage_contracts() -> None:
             for name in ("delay_seed", "local_seed", "local_v15_seed"):
                 current = REGISTRY.get(legacy.model_id, name)
                 assert replace(current, name=legacy.name, group=legacy.group) == legacy, name
+            continue
+        if attr in {flat_field for _, flat_field in MIGRATED_PROJECT_WIDE_LORAS.values()}:
+            # A model-wide LoRA that moved onto the voices on load has no current storage.
+            assert (legacy.model_id, legacy.name) not in REGISTRY.bindings
             continue
         current = REGISTRY.get(legacy.model_id, legacy.name)
         if legacy.group:

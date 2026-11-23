@@ -572,15 +572,6 @@ class TtsBaseModel(ABC):
         """
         return "none"
 
-    @classmethod
-    def has_fixed_default_voice(cls, project: Project) -> bool:
-        """
-        Whether a voice without a sample still gets a fixed speaker under the
-        project's settings (eg a VibeVoice LoRA), so the "voices may vary" run
-        note does not apply.
-        """
-        return False
-
 
 _PARAMS_PRINT_BLACKLIST = [
     "TtsBaseModel", "self", "print_params",

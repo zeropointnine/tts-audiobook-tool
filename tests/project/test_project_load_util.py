@@ -18,6 +18,7 @@ import soundfile as sf
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_SOUND_SEGMENTS_SUBDIR, PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from project_settings_test_support import get_setting
+from tts_audiobook_tool.app_types.voice import VoiceLora
 
 
 def make_project_dir(tmp_path: Path, settings: dict[str, Any]) -> str:
@@ -225,4 +226,92 @@ def test_load_drops_a_project_wide_omnivoice_lora_but_keeps_voice_loras(
     assert saved["voice_references"][0]["loras"] == voice_loras
     assert project.voice_references[1].loras == {}
     assert "loras" not in saved["voice_references"][1]
+    project.kill()
+
+
+def test_load_moves_a_project_wide_vibevoice_lora_onto_voices_without_their_own(
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The old VibeVoice LoRA applied to every voice, so (unlike Breeze/OmniVoice's) it is
+    # migrated once: each voice without its own VibeVoice LoRA gets it at full strength,
+    # voices that have one keep theirs, and the project is saved without the old setting.
+    own = {"target": "trainer/voice-lora", "strength": 0.8}
+    dir_path = make_project_dir(tmp_path, {
+        "version": 5,
+        "tts_model_type": "vibevoice_local",
+        "voice_references": [
+            {"file_name": "", "transcript": "", "room_reverb": "off"},
+            {"file_name": "", "transcript": "", "room_reverb": "off", "loras": {"vibevoice_local": own}},
+            {"file_name": "", "transcript": "", "room_reverb": "off",
+             "loras": {"omnivoice_local": {"target": "trainer/omni"}}},
+        ],
+        "model_settings": {"models": {"vibevoice_local": {"parameters": {
+            "lora_target": "vibevoice-community/klett", "cfg": 3.0,
+        }}}, "shared": {}},
+    })
+
+    project = load(dir_path)
+
+    out = capsys.readouterr().out
+    assert "VibeVoice LoRA (vibevoice-community/klett)" in out and "voice(s) 1, 3" in out
+    assert "per-voice" in out
+    saved = read_saved(dir_path)
+    parameters = saved["model_settings"]["models"]["vibevoice_local"]["parameters"]
+    assert "lora_target" not in parameters and parameters["cfg"] == 3.0
+    migrated = {"target": "vibevoice-community/klett"}
+    assert [voice.get("loras") for voice in saved["voice_references"]] == [
+        {"vibevoice_local": migrated},
+        {"vibevoice_local": own},
+        {"omnivoice_local": {"target": "trainer/omni"}, "vibevoice_local": migrated},
+    ]
+    assert [voice.to_dict().get("loras") for voice in project.voice_references] == [
+        voice.get("loras") for voice in saved["voice_references"]]
+    project.kill()
+
+    # One-time: reopening finds nothing left to migrate
+    project = load(dir_path)
+    assert "VibeVoice LoRA" not in capsys.readouterr().out
+    project.kill()
+
+
+def test_load_moves_a_pre_v3_flat_vibevoice_lora_onto_the_voice(
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Pre-v3 projects stored it as a flat field (originally `vibevoice_lora_path`)
+    dir_path = make_project_dir(tmp_path, {
+        "tts_model_type": "vibevoice_local",
+        "vibevoice_lora_path": "/runs/klett/lora",
+    })
+
+    project = load(dir_path)
+
+    assert "has been assigned to its voice" in capsys.readouterr().out
+    assert [voice.loras for voice in project.voice_references] == [
+        {"vibevoice_local": VoiceLora("/runs/klett/lora")}]
+    saved = read_saved(dir_path)
+    assert saved["voice_references"][0]["loras"] == {"vibevoice_local": {"target": "/runs/klett/lora"}}
+    assert "lora_target" not in saved["model_settings"]["models"].get("vibevoice_local", {}).get("parameters", {})
+    project.kill()
+
+
+def test_load_drops_a_vibevoice_lora_when_every_voice_has_its_own(
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+) -> None:
+    own = {"target": "trainer/voice-lora"}
+    dir_path = make_project_dir(tmp_path, {
+        "version": 5,
+        "tts_model_type": "vibevoice_local",
+        "voice_references": [{"file_name": "", "transcript": "", "room_reverb": "off",
+                              "loras": {"vibevoice_local": own}}],
+        "model_settings": {"models": {"vibevoice_local": {"parameters": {"lora_target": "old/lora"}}},
+                           "shared": {}},
+    })
+
+    project = load(dir_path)
+
+    assert "every voice already has its own VibeVoice LoRA" in capsys.readouterr().out
+    assert read_saved(dir_path)["voice_references"][0]["loras"] == {"vibevoice_local": own}
     project.kill()

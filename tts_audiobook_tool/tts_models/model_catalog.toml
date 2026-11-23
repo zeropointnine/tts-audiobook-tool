@@ -1110,7 +1110,6 @@ id = "vibevoice_local"
 settings = [
     { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
     { name = "target", section = "parameters", type = "str", default = "" },
-    { name = "lora_target", section = "parameters", type = "str", default = "" },
     { name = "cfg", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
     { name = "steps", section = "parameters", type = "int", default = -1, sentinel = -1 },
     { name = "batch_size", section = "orchestration", type = "int", default = 1 },

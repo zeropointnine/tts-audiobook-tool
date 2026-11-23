@@ -19,7 +19,7 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
-from tts_audiobook_tool.util import COL_DIM, COL_ERROR, ellipsize, ellipsize_path_for_menu
+from tts_audiobook_tool.util import COL_DIM, COL_ERROR, ellipsize
 
 
 def make_state(model: TtsModelType = TtsModelType.require_by_id("none")) -> State:
@@ -219,24 +219,6 @@ def test_qwen_voice_design_status_counts_instructions(voices, expected):
     assert COL_ERROR not in text
 
 
-@pytest.mark.parametrize("voices, expected", [
-    ([Voice()], "LoRA (owner/repo/lora)"),
-    ([Voice("first.flac"), Voice()], "first, +1 more, +LoRA"),
-])
-def test_voices_status_shows_model_wide_lora(voices, expected):
-    # The LoRA supplies a fixed speaker, so with no sample the line shows the LoRA
-    # target in a dim qualifier; alongside a voice it stays a terse "+LoRA"
-    from tts_audiobook_tool.menus.menu_status import QUALIFIER_COLOR, _make_voices_text
-
-    state = make_state(TtsModelType.require_by_id("vibevoice_local"))
-    state.project.voice_references = voices
-    state.project.set_model_setting("vibevoice_local", "lora_target", "owner/repo/lora")
-    text = _make_voices_text(state)
-    assert text_util.strip_ansi_codes(text) == expected
-    if expected.startswith("LoRA ("):
-        assert f"LoRA {QUALIFIER_COLOR}(" in text
-
-
 @pytest.mark.parametrize("model_id, voices, expected", [
     ("breeze_tts_2_local", [Voice(loras={"breeze_tts_2_local": VoiceLora("/runs/fw-leda/lora/checkpoint-step-000500")})],
      "LoRA fw-leda-checkpoint-step-000500"),
@@ -244,27 +226,18 @@ def test_voices_status_shows_model_wide_lora(voices, expected):
     ("omnivoice_local", [Voice("first.flac"), Voice(loras={"omnivoice_local": VoiceLora("owner/repo")})],
      "first, +1 more, +LoRA"),
     ("breeze_tts_2_local", [Voice("first.flac"), Voice(loras={"other_model": VoiceLora("owner/repo")})], "first, +1 more"),
+    ("vibevoice_local", [Voice(loras={"vibevoice_local": VoiceLora("vibevoice-community/klett")})], "LoRA klett"),
+    ("vibevoice_local", [Voice("first.flac"), Voice(loras={"vibevoice_local": VoiceLora("owner/repo")})],
+     "first, +1 more, +LoRA"),
 ])
 def test_voices_status_shows_per_voice_lora(model_id, voices, expected):
-    # Breeze TTS 2 and OmniVoice use the same per-voice status policy: a LoRA-only
+    # Breeze TTS 2, OmniVoice and VibeVoice use the same per-voice status policy: a LoRA-only
     # voice has a value; any voice's active LoRA adds a terse "+LoRA" beside samples.
     from tts_audiobook_tool.menus.menu_status import _make_voices_text
 
     state = make_state(TtsModelType.require_by_id(model_id))
     state.project.voice_references = voices
     assert text_util.strip_ansi_codes(_make_voices_text(state)) == expected
-
-
-def test_voices_status_lora_path_is_ellipsized_like_menus():
-    # A long local path keeps its informative tail, as in the voice menu's LoRA item
-    from tts_audiobook_tool.menus.menu_status import _make_voices_text
-
-    target = "/d/p/omnivoice-lora/work/fw-fortuna/lora/checkpoint-500"
-    state = make_state(TtsModelType.require_by_id("vibevoice_local"))
-    state.project.voice_references = [Voice()]
-    state.project.set_model_setting("vibevoice_local", "lora_target", target)
-    assert text_util.strip_ansi_codes(_make_voices_text(state)) == f"LoRA ({ellipsize_path_for_menu(target)})"
-    assert ellipsize_path_for_menu(target).endswith("fw-fortuna/lora/checkpoint-500")
 
 
 def test_audio_cpp_omnivoice_voice_line_is_optional(monkeypatch):

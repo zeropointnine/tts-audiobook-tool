@@ -234,9 +234,6 @@ class AudioCppModelSupport:
             return self.INFO.can_voice_clone
         return self.behavior.can_voice_clone(values)
 
-    def has_fixed_default_voice(self, project: Project) -> bool:
-        return False
-
     def voice_lora_mode(self, project: Project) -> VoiceLoraMode:
         return "none"
 

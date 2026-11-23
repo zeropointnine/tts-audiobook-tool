@@ -128,10 +128,6 @@ def test_all_local_voice_menus_keep_sample_selection_group(
         assert emotion_labels[2].startswith("Emotion alpha (strength)")
         assert "0.65" in emotion_labels[2] and "default" in emotion_labels[2]
         items, labels = items[:-3], labels[:-3]
-    elif model_id == "vibevoice_local":  # Breeze/OmniVoice LoRAs are per voice (voice submenu)
-        assert labels[-1].startswith("Select LoRA")
-        assert items[-1].blank_line_before
-        items, labels = items[:-1], labels[:-1]
     # No samples still lists the project's one (sample-less) voice
     assert items[0].superlabel == voice_menu_shared.LABEL_VOICE_SAMPLES_SUPERLABEL
     assert all(not item.superlabel for item in items[1:])

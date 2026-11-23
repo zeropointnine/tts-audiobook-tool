@@ -47,6 +47,48 @@ RETIRED_PROJECT_WIDE_LORAS: dict[str, str] = {
 }
 
 
+# Models whose project-wide `parameters.lora_target` moved onto the voices (`Voice.loras`):
+# model ID -> (display name, pre-v3 flat field). Unlike the retired ones above, a non-empty
+# old value is migrated once, on load, onto every voice without its own LoRA for that model
+# (the old LoRA applied to every voice), with a notice (`take_migrated_project_loras`).
+MIGRATED_PROJECT_WIDE_LORAS: dict[str, tuple[str, str]] = {
+    "vibevoice_local": ("VibeVoice", "vibevoice_lora_target"),
+}
+
+
+def take_migrated_project_loras(
+    source: Any, legacy: dict[str, Any] | None,
+) -> tuple[list[tuple[str, str]], Any, dict[str, Any] | None]:
+    """
+    Takes the `MIGRATED_PROJECT_WIDE_LORAS` values out of a raw `model_settings` object and the
+    flat pre-v3 fields (`legacy`). Returns (model ID, target) for each non-empty one, plus the
+    source and legacy values without them (copies when changed; the inputs aren't mutated).
+
+    As in reconciliation, a supplied model object wins over the model's flat fields, even
+    when the object has no `lora_target`.
+    """
+    found: list[tuple[str, str]] = []
+    models = source.get("models") if isinstance(source, dict) else None
+    if not isinstance(models, dict):
+        models = {}
+    for model_id, (_, flat_field) in MIGRATED_PROJECT_WIDE_LORAS.items():
+        obj = models.get(model_id)
+        if model_id in models:
+            params = obj.get("parameters") if isinstance(obj, dict) else None
+            target = params.get("lora_target") if isinstance(params, dict) else None
+            if isinstance(params, dict) and "lora_target" in params:
+                source = deepcopy(source)
+                del source["models"][model_id]["parameters"]["lora_target"]
+                models = source["models"]
+        else:
+            target = (legacy or {}).get(flat_field)
+        if legacy and flat_field in legacy:
+            legacy = {attr: value for attr, value in legacy.items() if attr != flat_field}
+        if isinstance(target, str) and target.strip():
+            found.append((model_id, target))
+    return found, source, legacy
+
+
 def find_retired_project_loras(source: Any) -> list[tuple[str, str]]:
     """(model ID, target) for each non-empty retired project-wide LoRA in a raw
     `model_settings` object, in `RETIRED_PROJECT_WIDE_LORAS` order."""

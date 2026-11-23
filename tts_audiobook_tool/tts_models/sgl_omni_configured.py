@@ -223,9 +223,6 @@ class ConfiguredModelSupport:
     def can_voice_clone(self, project: Project, instance: object = None) -> bool:
         return self.INFO.can_voice_clone
 
-    def has_fixed_default_voice(self, project: Project) -> bool:
-        return False
-
     def voice_lora_mode(self, project: Project) -> VoiceLoraMode:
         return "none"
 

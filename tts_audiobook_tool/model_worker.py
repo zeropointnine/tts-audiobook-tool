@@ -1160,8 +1160,6 @@ def _model_worker_main(
                     "supported_speakers",
                     "generate_defaults",
                     "is_model_type_supported",
-                    "has_lora",
-                    "lora_error",
                 ):
                     if hasattr(instance, attribute):
                         value = getattr(instance, attribute)

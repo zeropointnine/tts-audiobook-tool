@@ -414,34 +414,21 @@ def _make_server_tts_text(state: State) -> str:
         text += f" {COL_ERROR}({binding_issue_status(Tts._binding_issue)})"
     return text
 
-# Models with a model-wide LoRA setting (per-voice LoRAs: `ProjectVoiceUtil.active_voice_lora`)
-_LORA_MODEL_IDS = ("vibevoice_local",)
-
 def _make_voices_text(state: State) -> str:
-    """The first voice that has a value (preset, sample, or instructions; see
+    """The first voice that has a value (preset, sample, instructions, or LoRA; see
     `ProjectVoiceUtil.resolve_voice_source`), then "+N more" counting every
     other voice. With no such voice, error-colored "required" when the model
     requires a value, else (non-blocking, so not error-colored) what the voices
     lack, eg "no sample set"; see `ProjectVoiceUtil.make_no_voice_value_text`.
-    For a local model with a model-wide LoRA set (VibeVoice), ", +LoRA" is
-    appended last, or with no voice, "LoRA (<ellipsized LoRA target>)". With per-voice
-    LoRAs (Breeze TTS 2, OmniVoice), ", +LoRA" is appended when any voice has one; a voice with
-    only a LoRA shows as "LoRA <name>"."""
+    With per-voice LoRAs (Breeze TTS 2, OmniVoice, VibeVoice), ", +LoRA" is appended
+    when any voice has one; a voice with only a LoRA shows as "LoRA <name>"."""
     project = state.project
-    lora_target = (project.get_model_setting(project.tts_model_type, 'lora_target')
-                   if project.tts_model_type in _LORA_MODEL_IDS else "")
-    has_lora = bool(lora_target)
-    has_voice_lora = ProjectVoiceUtil.has_any_active_voice_lora(project)
-    lora_suffix = ", +LoRA" if has_lora or has_voice_lora else ""
+    lora_suffix = ", +LoRA" if ProjectVoiceUtil.has_any_active_voice_lora(project) else ""
     voices = project.voice_references
     sources = [ProjectVoiceUtil.resolve_voice_source(project, voice) for voice in voices]
     first = next((source for source in sources if source.has_value), None)
     if first is None:
-        missing = any(source.kind == "missing" for source in sources)
-        if has_lora and not missing:
-            # The LoRA supplies a fixed speaker, so no voice is not a problem
-            return f"LoRA {QUALIFIER_COLOR}({ellipsize_path_for_menu(str(lora_target))})"
-        if missing:
+        if any(source.kind == "missing" for source in sources):
             text = COL_ERROR + "required"
             if lora_suffix:
                 text += VALUE_COLOR + lora_suffix
