@@ -314,3 +314,21 @@ def test_untyped_model_target_reads_with_an_inferred_kind() -> None:
     vibevoice = project.get_model_target("vibevoice_local")
     assert omnivoice is not None and (omnivoice.kind, omnivoice.inferred) == (TargetKind.HF, True)
     assert vibevoice is not None and (vibevoice.kind, vibevoice.inferred) == (TargetKind.LOCAL, True)
+
+
+def test_untyped_moss_target_keeps_the_old_hf_first_rule(tmp_path, monkeypatch) -> None:
+    # The old MOSS loader downloaded an `owner/repo` target even when an identically
+    # named relative directory existed; the other loaders used that directory
+    from tts_audiobook_tool.app_types.model_target import TargetKind
+
+    repo_id = "OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5"
+    (tmp_path / repo_id).mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    project = Project.model_validate({"model_settings": {"models": {
+        "moss_local": {"parameters": {"target": repo_id}},
+        "omnivoice_local": {"parameters": {"target": repo_id}},
+    }, "shared": {}}})
+    moss = project.get_model_target("moss_local")
+    omnivoice = project.get_model_target("omnivoice_local")
+    assert moss is not None and (moss.kind, moss.inferred) == (TargetKind.HF, True)
+    assert omnivoice is not None and (omnivoice.kind, omnivoice.inferred) == (TargetKind.LOCAL, True)

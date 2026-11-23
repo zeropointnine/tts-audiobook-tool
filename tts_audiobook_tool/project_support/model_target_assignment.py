@@ -27,6 +27,10 @@ MODEL_TARGET_MODEL_IDS = (
     "vibevoice_local",
 )
 
+# Models whose old loader read an untyped `owner/repo` target as hf even when an
+# identically named local directory existed (`infer_legacy_kind`'s `hf_first`)
+LEGACY_HF_FIRST_MODEL_IDS = ("moss_local",)
+
 
 @dataclass(frozen=True)
 class TargetAssignment:

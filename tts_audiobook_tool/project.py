@@ -15,6 +15,7 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_types.voice import Voice, ensure_voice_slot
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.model_settings import ModelSettings, REGISTRY
+from tts_audiobook_tool.project_support.model_target_assignment import LEGACY_HF_FIRST_MODEL_IDS
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.reason_pauses import ReasonPauses, ReasonPauseTypes
 from tts_audiobook_tool.util import *
@@ -211,10 +212,11 @@ class Project(BaseModel):
     def get_model_target(self, model_id: str) -> ModelTarget | None:
         """A model's custom target (its `target` / `target_type` pair), or None for its
         default. An untyped stored target comes back with an inferred kind
-        (`ModelTarget.from_stored`)."""
+        (`ModelTarget.from_stored`), decided by the model's old loader rule."""
         return ModelTarget.from_stored(
             self.get_model_setting(model_id, TARGET_FIELD),
             self.get_model_setting(model_id, TARGET_TYPE_FIELD),
+            hf_first=model_id in LEGACY_HF_FIRST_MODEL_IDS,
         )
 
     def set_model_target(self, model_id: str, target: ModelTarget | None) -> None:

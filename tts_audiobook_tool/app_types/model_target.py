@@ -13,7 +13,8 @@ On disk a target is a pair of sibling strings: `target` (the value) and
 `target_type` (the kind id, `"hf"` | `"local"`). A missing or invalid `target_type`
 is legacy data from before the kind was recorded; `ModelTarget.from_stored` then
 infers the kind the way the app used to decide it at runtime
-(`infer_legacy_kind`) and marks the result `inferred`.
+(`infer_legacy_kind`; MOSS used a different rule, see its `hf_first`) and marks
+the result `inferred`.
 
 Instances are immutable. `inferred` is transient: never serialized, and ignored by
 equality and hashing.
@@ -22,10 +23,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+import glob
 import os
 from pathlib import Path
 import re
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 
 TARGET_FIELD = "target"
@@ -98,27 +101,48 @@ def looks_like_local_path(s: str) -> bool:
     )
 
 
-_HF_URL_PREFIXES = ("https://huggingface.co/", "http://huggingface.co/", "huggingface.co/")
+_HF_URL_HOSTS = ("huggingface.co", "www.huggingface.co", "hf.co")
 _HF_PATH_PREFIX = "hf://"
+
+
+def _hf_url_path(value: str) -> str | None:
+    """
+    The decoded path of a Hugging Face URL (scheme optional, eg `huggingface.co/owner/repo`),
+    without its query and fragment. None when `value` isn't one.
+    """
+    lowered = value.lower()
+    if lowered.startswith(("https://", "http://")):
+        url = value
+    elif lowered.startswith(tuple(f"{host}/" for host in _HF_URL_HOSTS)):
+        url = f"https://{value}"
+    else:
+        return None
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return None
+    if parts.hostname not in _HF_URL_HOSTS:
+        return None
+    # `unquote`, not `unquote_plus`: a `+` in a path is literal
+    return unquote(parts.path)
 
 
 def parse_hf_input(text: str) -> tuple[str, str]:
     """
     An hf target value from user input, as (value, error): `owner/repo` or
     `owner/repo/sub/dir`, also accepting the same as a pasted `hf://` path or
-    huggingface.co URL (including a `/tree/main/sub/dir` directory URL).
+    huggingface.co URL (including a `/tree/main/sub/dir` directory URL). A URL's
+    query and fragment are dropped and its path is percent-decoded; other forms
+    are taken literally.
     Other revisions aren't supported: a target always uses the main branch.
     """
     value = text.strip().strip("\"'").strip()
-    lowered = value.lower()
-    is_url = False
-    if lowered.startswith(_HF_PATH_PREFIX):
+    url_path = _hf_url_path(value)
+    is_url = url_path is not None
+    if url_path is not None:
+        value = url_path.lstrip("/")
+    elif value.lower().startswith(_HF_PATH_PREFIX):
         value = value[len(_HF_PATH_PREFIX):].lstrip("/")
-    else:
-        for prefix in _HF_URL_PREFIXES:
-            if lowered.startswith(prefix):
-                value, is_url = value[len(prefix):].lstrip("/"), True
-                break
     # Only a trailing slash is dropped: a leading one makes an absolute path, never a repo id
     value = value.rstrip("/")
     if is_url:
@@ -136,13 +160,19 @@ def parse_hf_input(text: str) -> tuple[str, str]:
     return value, ""
 
 
-def infer_legacy_kind(value: str) -> TargetKind:
+def infer_legacy_kind(value: str, hf_first: bool = False) -> TargetKind:
     """
     The kind of an untyped (legacy) target string, decided the way the app used to
     decide it at runtime, so inferring never changes what a saved target loads:
     an existing local directory wins; otherwise hf syntax (plain or subfolder form)
     means hf; anything else is a local path.
+
+    `hf_first`: for loaders that used to check plain repo id syntax before the
+    filesystem (MOSS), so that `owner/repo` means hf even when an identically named
+    relative directory exists.
     """
+    if hf_first and is_hf_repo_id_syntax(value):
+        return TargetKind.HF
     if os.path.isdir(value):
         return TargetKind.LOCAL
     if is_hf_target_syntax(value):
@@ -178,12 +208,13 @@ class ModelTarget:
         return ModelTarget(TargetKind.LOCAL, path)
 
     @staticmethod
-    def from_stored(value: Any, kind: Any) -> ModelTarget | None:
+    def from_stored(value: Any, kind: Any, hf_first: bool = False) -> ModelTarget | None:
         """
         The target of a stored `target` / `target_type` pair. None when `value` is
         missing, not a string, or blank (ie, no target). A missing or invalid
         `kind`, or one that does not fit the value (eg "hf" for a Windows path), is
-        replaced by `infer_legacy_kind`, and the result is marked `inferred`.
+        replaced by `infer_legacy_kind` (passed `hf_first`), and the result is
+        marked `inferred`.
         """
         if not isinstance(value, str) or not value.strip():
             return None
@@ -193,7 +224,7 @@ class ModelTarget:
                 return ModelTarget(typed_kind, value)
             except ValueError:
                 pass
-        return ModelTarget(infer_legacy_kind(value), value, inferred=True)
+        return ModelTarget(infer_legacy_kind(value, hf_first), value, inferred=True)
 
     @staticmethod
     def infer(value: str) -> ModelTarget:
@@ -268,9 +299,10 @@ class ModelTarget:
         from huggingface_hub import snapshot_download
 
         subfolder = self.subfolder
-        prefix = f"{subfolder}/" if subfolder else ""
+        # allow_patterns are fnmatch globs: escape the literal names (eg a `[v2]` directory)
+        prefix = f"{glob.escape(subfolder)}/" if subfolder else ""
         if file_names is not None:
-            allow_patterns: list[str] | None = [prefix + name for name in file_names]
+            allow_patterns: list[str] | None = [prefix + glob.escape(name) for name in file_names]
         else:
             allow_patterns = [f"{prefix}*"] if subfolder else None
         kwargs: dict[str, Any] = {}

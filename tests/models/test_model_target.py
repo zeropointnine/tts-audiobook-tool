@@ -70,6 +70,17 @@ def test_infer_legacy_kind_follows_the_old_runtime_rule(tmp_path, monkeypatch):
         assert infer_legacy_kind(value) is TargetKind.LOCAL
 
 
+def test_infer_legacy_kind_hf_first_follows_the_old_moss_rule(tmp_path, monkeypatch):
+    # The old MOSS loader checked plain repo id syntax before the filesystem
+    (tmp_path / "owner" / "repo" / "sub").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    assert infer_legacy_kind("owner/repo", hf_first=True) is TargetKind.HF
+    # Only the plain form: anything else falls through to the usual rule
+    assert infer_legacy_kind("owner/repo/sub", hf_first=True) is TargetKind.LOCAL
+    assert infer_legacy_kind("other/repo/sub", hf_first=True) is TargetKind.HF
+    assert infer_legacy_kind("/missing/abs/dir", hf_first=True) is TargetKind.LOCAL
+
+
 @pytest.mark.parametrize("value,kind,expected_kind,inferred", [
     ("owner/repo", "hf", TargetKind.HF, False),
     ("/some/dir", "local", TargetKind.LOCAL, False),
@@ -132,6 +143,30 @@ def test_resolve_local_dir(tmp_path, monkeypatch):
         ("owner/repo", {"allow_patterns": ["a/*"], "revision": "abc"}),
         ("owner/repo", {}),
     ]
+
+
+def test_resolve_local_dir_matches_glob_metacharacters_literally(tmp_path, monkeypatch):
+    # allow_patterns are fnmatch globs, so an unescaped `[v2]` directory would be read
+    # as a one-character class and match none of its own files (or another directory)
+    from huggingface_hub.utils import filter_repo_objects
+
+    repo_files = [
+        "adapters/[v2]/adapter_config.json",
+        "adapters/[v2]/adapter_model.safetensors",
+        "adapters/v/adapter_config.json",
+    ]
+    downloaded = []
+
+    def snapshot_download(repo_id, **kwargs):
+        downloaded.append(list(filter_repo_objects(repo_files, allow_patterns=kwargs.get("allow_patterns"))))
+        return str(tmp_path)
+
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", snapshot_download)
+    target = ModelTarget.hf("owner/repo/adapters/[v2]")
+
+    assert target.resolve_local_dir(["adapter_config.json"]) == os.path.join(str(tmp_path), "adapters", "[v2]")
+    target.resolve_local_dir()
+    assert downloaded == [repo_files[:1], repo_files[:2]]
 
 
 def test_local_exist_test(tmp_path):
@@ -232,11 +267,39 @@ def test_parse_hf_input_accepts_ids_hf_paths_and_urls(text, expected):
     assert parse_hf_input(text) == expected
 
 
+@pytest.mark.parametrize("text,expected", [
+    # Browsers percent-encode spaces and non-ASCII names when a URL is copied
+    ("https://huggingface.co/owner/repo/tree/main/my%20adapter", "owner/repo/my adapter"),
+    ("https://huggingface.co/owner/repo/tree/main/caf%C3%A9", "owner/repo/café"),
+    # A `+` in a URL path is literal, not a space
+    ("https://huggingface.co/owner/repo/tree/main/a+b", "owner/repo/a+b"),
+    # Fragments (eg a model card heading anchor) and queries are not part of the target
+    ("https://huggingface.co/owner/repo#model-details", "owner/repo"),
+    ("https://huggingface.co/owner/repo?library=transformers", "owner/repo"),
+    ("https://huggingface.co/owner/repo/tree/main/adapter?x=1#files", "owner/repo/adapter"),
+    ("https://huggingface.co/owner/repo/tree/main?x=1", "owner/repo"),
+    # Scheme-less, mixed-case, `www.` and `hf.co` forms are the same URL
+    ("huggingface.co/owner/repo/tree/main/my%20adapter", "owner/repo/my adapter"),
+    ("HTTPS://HuggingFace.co/owner/repo", "owner/repo"),
+    ("https://www.huggingface.co/owner/repo", "owner/repo"),
+    ("https://hf.co/owner/repo", "owner/repo"),
+    # Only URLs are decoded: an hf:// path or a typed id is taken literally
+    ("hf://owner/repo/my%20adapter", "owner/repo/my%20adapter"),
+    ("owner/repo/my%20adapter", "owner/repo/my%20adapter"),
+])
+def test_parse_hf_input_parses_urls_as_urls(text, expected):
+    from tts_audiobook_tool.app_types.model_target import parse_hf_input
+    assert parse_hf_input(text) == (expected, "")
+
+
 @pytest.mark.parametrize("text,error", [
     ("https://huggingface.co/owner/repo/tree/v2/a", "main revision"),
     ("https://huggingface.co/owner/repo/blob/main/config.json", "not a file"),
     ("/home/lee/model", "Not a valid"),
     ("C:\\models\\x", "Not a valid"),
+    # Decoding can't smuggle in path traversal or an unsupported host
+    ("https://huggingface.co/owner/repo/tree/main/%2E%2E/x", "Not a valid"),
+    ("https://example.com/owner/repo", "Not a valid"),
 ])
 def test_parse_hf_input_rejects_other_revisions_files_and_paths(text, error):
     from tts_audiobook_tool.app_types.model_target import parse_hf_input
