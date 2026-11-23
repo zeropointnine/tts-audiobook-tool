@@ -9,6 +9,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.model_target_assignment import assign_inferred_targets, make_assignment_warning
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil, SupportingFilesCopyResult
 from tts_audiobook_tool.speaker_assign.speaker_assign_file_util import SpeakerAssignFileUtil
@@ -174,6 +175,11 @@ class ProjectNewMenu:
             except Exception as exc:
                 ask.ask_error(f"Invalid ABR project snapshot: {make_error_string(exc)}")
                 return False
+            # The new project is written with explicit target kinds, so it loads without a notice
+            assignments = assign_inferred_targets(snapshot_project)
+            if assignments:
+                printt(make_assignment_warning(assignments))
+                printt()
 
             err = State.prepare_new_project_directory(dest_dir)
             if err:

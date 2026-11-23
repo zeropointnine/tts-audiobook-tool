@@ -317,3 +317,57 @@ def test_load_drops_a_vibevoice_lora_when_every_voice_has_its_own(
     assert "every voice already has its own VibeVoice LoRA" in capsys.readouterr().out
     assert read_saved(dir_path)["voice_references"][0]["loras"] == {"vibevoice_local": {**own, "target_type": "hf"}}
     project.kill()
+
+
+def test_load_assigns_missing_target_kinds_once_with_a_notice(
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Targets saved without target_type are typed by the legacy rule, announced once,
+    # and saved typed, so the next load is silent
+    dir_path = make_project_dir(tmp_path, {
+        "version": 5,
+        "tts_model_type": "omnivoice_local",
+        "voice_references": [
+            {"file_name": "", "transcript": "", "room_reverb": "off",
+             "loras": {"omnivoice_local": {"target": "/runs/herman/lora"}}},
+        ],
+        "model_settings": {"models": {
+            "omnivoice_local": {"parameters": {"target": "owner/custom-base"}},
+            "qwen3tts_local": {"parameters": {"target": "Qwen/Qwen3-TTS-12Hz-1.7B-Base", "target_type": "hf"}},
+        }, "shared": {}},
+    })
+
+    project = load(dir_path)
+
+    out = capsys.readouterr().out
+    assert "assigned automatically" in out
+    assert "owner/custom-base (Hugging Face repo)" in out
+    assert "/runs/herman/lora (local directory)" in out
+    assert "Qwen3" not in out  # already typed
+    saved = read_saved(dir_path)
+    assert saved["model_settings"]["models"]["omnivoice_local"]["parameters"]["target_type"] == "hf"
+    assert saved["voice_references"][0]["loras"]["omnivoice_local"]["target_type"] == "local"
+    base = project.get_model_target("omnivoice_local")
+    assert base == ModelTarget.hf("owner/custom-base") and not base.inferred
+    project.kill()
+
+    project = load(dir_path)
+    assert "assigned automatically" not in capsys.readouterr().out
+    project.kill()
+
+
+def test_load_retypes_a_target_whose_kind_an_older_build_dropped(
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+) -> None:
+    # An older build prunes target_type on save; the target just reads as legacy again
+    dir_path = make_project_dir(tmp_path, {"version": 5, "model_settings": {"models": {
+        "vibevoice_local": {"parameters": {"target": "/models/vv"}},
+    }, "shared": {}}})
+
+    project = load(dir_path)
+
+    assert "/models/vv (local directory)" in capsys.readouterr().out
+    assert read_saved(dir_path)["model_settings"]["models"]["vibevoice_local"]["parameters"]["target_type"] == "local"
+    project.kill()

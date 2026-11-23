@@ -71,21 +71,6 @@ class ProjectTransferUtil:
         'word_substitutions',
     }
 
-    # Settings that hold a machine-local path the user typed, or that the app
-    # recorded on their behalf, as `(model ID, setting name)` references. The
-    # same setting may equally hold a model repository id, so these are treated
-    # as opaque user strings: nothing here rewrites them and a failed existence
-    # check never clears them. `looks_foreign` only produces a warning that the
-    # value cannot name a file on this machine, instead of letting the value
-    # fail obscurely later.
-    MACHINE_LOCAL_PATH_TARGETS = (
-        ('dots_local', 'target'),
-        ('moss_local', 'target'),
-        ('omnivoice_local', 'target'),
-        ('pocket_local', 'model_code'),
-        ('qwen3tts_local', 'target'),
-        ('vibevoice_local', 'target'),
-    )
 
     # Supporting files that many valid projects never have (eg the EPUB copy
     # only exists for EPUB imports), so their absence is not worth reporting.
@@ -209,21 +194,22 @@ class ProjectTransferUtil:
     @staticmethod
     def find_foreign_path_targets(project: Project) -> list[tuple[str, str]]:
         """
-        Machine-local path settings that cannot name a file on this machine.
+        Local-directory targets (base models' and per-voice LoRAs') that cannot
+        name a directory on this machine.
 
-        Returned for messaging only. The values are left untouched because the
-        same fields legitimately hold repository ids, and because a value that
+        Returned for messaging only. The values are left untouched: a value that
         is merely unresolvable right now may become resolvable later.
         """
+        from tts_audiobook_tool.project_support.model_target_assignment import MODEL_TARGET_MODEL_IDS
+
         result: list[tuple[str, str]] = []
-        for model_id, name in ProjectTransferUtil.MACHINE_LOCAL_PATH_TARGETS:
-            value = project.get_model_setting(model_id, name)
-            if isinstance(value, str) and value and path_norm.looks_foreign(value):
-                result.append((f"{model_id}_{name}", value))
-        # Per-voice LoRA targets (`Voice.loras`) are the same kind of opaque path-or-repo value
+        for model_id in MODEL_TARGET_MODEL_IDS:
+            target = project.get_model_target(model_id)
+            if target is not None and target.is_local and path_norm.looks_foreign(target.value):
+                result.append((f"{model_id}_target", target.value))
         for index, voice in enumerate(project.voice_references):
             for model_id, lora in voice.loras.items():
-                if path_norm.looks_foreign(lora.target.value):
+                if lora.target.is_local and path_norm.looks_foreign(lora.target.value):
                     result.append((f"voice_{index + 1}_lora_{model_id}", lora.target.value))
         return result
 
