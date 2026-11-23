@@ -8,7 +8,7 @@ from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseMode
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
-from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
+from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared, TargetPromptSpec
 
 class ModelVibeVoiceMenu:
 
@@ -68,17 +68,11 @@ def ask_model_target(state: State) -> None:
     project = state.project
 
     model_name = project.get_tts_model_type().value.ui["short_name"]
-    prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
-    prompt += f"\n{COL_DIM}Eg, \"vibevoice/VibeVoice-7B\"; \"/path/to/checkpoint\""
-    current = project.get_model_target('vibevoice_local')
-    if current:
-        prompt += f"\n{COL_DIM}(currently: {current.value})"
-
     ModelMenuShared.ask_target(
         project=project,
-        prompt=prompt,
-        current_target=current.value if current else "",
-        callback=lambda _, target: apply_model_and_validate(state, ModelTarget.infer(target))
+        spec=TargetPromptSpec(subject=f"{model_name} model", hf_example="vibevoice/VibeVoice-7B"),
+        current_target=project.get_model_target('vibevoice_local'),
+        callback=lambda _, target: apply_model_and_validate(state, target)
     )
 
 def apply_model_and_validate(state: State, target: ModelTarget) -> None:

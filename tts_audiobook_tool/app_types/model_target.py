@@ -98,6 +98,44 @@ def looks_like_local_path(s: str) -> bool:
     )
 
 
+_HF_URL_PREFIXES = ("https://huggingface.co/", "http://huggingface.co/", "huggingface.co/")
+_HF_PATH_PREFIX = "hf://"
+
+
+def parse_hf_input(text: str) -> tuple[str, str]:
+    """
+    An hf target value from user input, as (value, error): `owner/repo` or
+    `owner/repo/sub/dir`, also accepting the same as a pasted `hf://` path or
+    huggingface.co URL (including a `/tree/main/sub/dir` directory URL).
+    Other revisions aren't supported: a target always uses the main branch.
+    """
+    value = text.strip().strip("\"'").strip()
+    lowered = value.lower()
+    is_url = False
+    if lowered.startswith(_HF_PATH_PREFIX):
+        value = value[len(_HF_PATH_PREFIX):].lstrip("/")
+    else:
+        for prefix in _HF_URL_PREFIXES:
+            if lowered.startswith(prefix):
+                value, is_url = value[len(prefix):].lstrip("/"), True
+                break
+    # Only a trailing slash is dropped: a leading one makes an absolute path, never a repo id
+    value = value.rstrip("/")
+    if is_url:
+        parts = value.split("/")
+        if len(parts) >= 3 and parts[2] in ("tree", "blob", "resolve"):
+            if parts[2] != "tree":
+                return "", "Enter a repo or a directory in it, not a file"
+            if len(parts) < 4 or parts[3] != "main":
+                return "", "Only the main revision of a Hugging Face repo can be used"
+            value = "/".join(parts[:2] + parts[4:])
+    if not value:
+        return "", ""
+    if not is_hf_target_syntax(value):
+        return "", f"Not a valid Hugging Face repo id: {value}"
+    return value, ""
+
+
 def infer_legacy_kind(value: str) -> TargetKind:
     """
     The kind of an untyped (legacy) target string, decided the way the app used to

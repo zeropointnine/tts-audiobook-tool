@@ -1,8 +1,10 @@
 """Routing and shared controls for model settings menus."""
+from dataclasses import dataclass
+import os
 from typing import Callable
 
-from tts_audiobook_tool import ask, target_util
-from tts_audiobook_tool.app_types.model_target import ModelTarget
+from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_types.model_target import ModelTarget, looks_like_local_path, parse_hf_input
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.constants_hints import *
@@ -16,6 +18,23 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.menus.model.catalog_menu_source import ChoiceSetting
 from tts_audiobook_tool.tts_models.local_definition import get_local_definition
 from tts_audiobook_tool.util import *
+
+
+@dataclass(frozen=True)
+class TargetPromptSpec:
+    """What `ModelMenuShared.ask_target` shows for one kind of target."""
+    # Names the target in prompts, eg "OmniVoice model", "OmniVoice LoRA adapter"
+    subject: str
+    # An example repo id ("" for none)
+    hf_example: str = ""
+    # Shown only when entering a Hugging Face repo, eg a limitation of hf-hosted adapters
+    hf_hint: str = ""
+    # Shown only when selecting a local directory, eg the files it must contain
+    local_hint: str = ""
+    # Shown either way
+    note: str = ""
+    # Files that make a directory acceptable (`ModelTarget.exist_test`); None: the generic markers
+    local_file_markers: list[str] | None = None
 
 
 class ModelMenuShared:
@@ -386,33 +405,84 @@ class ModelMenuShared:
     @staticmethod
     def ask_target(
             project: Project,
-            prompt: str,
-            current_target: str,
-            callback: Callable[[Project, str], None],
-            local_file_markers: list[str] | None = None,
+            spec: TargetPromptSpec,
+            current_target: ModelTarget | None,
+            callback: Callable[[Project, ModelTarget], None],
     ) -> None:
         """
-        Gets line text input from user for a so-called "target" (ie, repo id or concrete file path).
-        `local_file_markers` overrides the files that make a local directory acceptable (`target_util.exist_test`).
+        Asks the user for a so-called "target": first its kind (a hotkey: L for a local
+        directory, H for a Hugging Face repo; any other key aborts), then a directory
+        (the app's directory request) or a repo id. Aborts on an empty entry or a
+        cancelled dialog. Calls back only with a target that differs from
+        `current_target` and passes its existence check (`ModelTarget.exist_test`,
+        with `spec.local_file_markers`).
         """
-        printt(prompt)
-        new_target = ask.ask_input(prefill=current_target, lower=False)
-        if not new_target:
+        line = spec.subject
+        if current_target is not None:
+            value = ellipsize_path_for_menu(current_target.value)
+            line += f" {COL_DIM}(currently: {COL_ACCENT}{value}{COL_DIM}, {current_target.kind.label})"
+        printt(line)
+        hotkey = ask.ask_hotkey(
+            f"Press {make_hotkey_string('L')} to select a local directory, "
+            f"or {make_hotkey_string('H')} to enter a Hugging Face repo id: "
+        )
+        printt()
+        if hotkey == "l":
+            new_target = ModelMenuShared._ask_local_target(spec, current_target)
+        elif hotkey == "h":
+            new_target = ModelMenuShared._ask_hf_target(spec, current_target)
+        else:
+            return
+        if new_target is None:
             return
 
-        if target_util.is_same_target(current_target, new_target):
+        if new_target.is_same(current_target):
             print_feedback("Already set")
             return
 
-        if local_file_markers is None:
-            _, err = target_util.exist_test(new_target)
-        else:
-            _, err = target_util.exist_test(new_target, local_file_markers=local_file_markers)
+        _, err = new_target.exist_test(spec.local_file_markers)
         if err:
             ask.ask_error(err)
             return
 
         callback(project, new_target)
+
+    @staticmethod
+    def _ask_local_target(spec: TargetPromptSpec, current_target: ModelTarget | None) -> ModelTarget | None:
+        # The dialog can't show hints, so they precede it on the console
+        for hint in (spec.local_hint, spec.note):
+            if hint:
+                printt(f"{COL_DIM}{hint}")
+        # Start beside the current directory, where sibling checkpoints usually are
+        initialdir = ""
+        if current_target is not None and current_target.is_local:
+            parent = os.path.dirname(os.path.normpath(current_target.value))
+            initialdir = parent if os.path.isdir(parent) else ""
+        path = ask.ask_dir_path(
+            console_message=f"Enter local directory path of {spec.subject}:",
+            dialog_title=f"Select {spec.subject} directory",
+            initialdir=initialdir,
+        )
+        return ModelTarget.local(path) if path else None
+
+    @staticmethod
+    def _ask_hf_target(spec: TargetPromptSpec, current_target: ModelTarget | None) -> ModelTarget | None:
+        printt(f"Enter Hugging Face repo id of {spec.subject}")
+        if spec.hf_example:
+            printt(f"{COL_DIM}Eg, \"{spec.hf_example}\"")
+        printt(f"{COL_DIM}For a subdirectory within the repo, append its path: \"owner/repo/sub/dir\"")
+        for hint in (spec.hf_hint, spec.note):
+            if hint:
+                printt(f"{COL_DIM}{hint}")
+        prefill = current_target.value if current_target is not None and current_target.is_hf else ""
+        entered = ask.ask_input(prefill=prefill, lower=False)
+        value, err = parse_hf_input(entered)
+        if err:
+            if looks_like_local_path(entered.strip().strip("\"'")):
+                err += f"\nFor a local directory, press {make_hotkey_string('L')} instead"
+            ask.ask_error(err)
+            return None
+        return ModelTarget.hf(value) if value else None
 
     @staticmethod
     def make_target_label(
@@ -444,7 +514,7 @@ class ModelMenuShared:
             ask_custom_target: Callable[[], None],
             apply_target: Callable[[ModelTarget], None],
             sublabels: list[str] | None = None,
-            custom_label: str = "Enter custom hf repo id or local path",
+            custom_label: str = "Enter custom model (local directory or Hugging Face repo)",
             breadcrumb: str | None = None,
     ) -> None:
         if sublabels and len(sublabels) != len(preset_targets):

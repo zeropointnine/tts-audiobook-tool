@@ -8,7 +8,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
+from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared, TargetPromptSpec
 
 class ModelMossMenu:
     """
@@ -83,15 +83,11 @@ def ask_target(state: State) -> None:
     project = state.project
 
     model_name = project.get_tts_model_type().value.ui["short_name"]
-    prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
-    prompt += f"\n{COL_DIM}Eg, \"OpenMOSS-Team/MOSS-TTS-v1.5\" or \"/path/to/checkpoint\""
-
-    current = project.get_model_target('moss_local')
     ModelMenuShared.ask_target(
         project=project,
-        prompt=prompt,
-        current_target=current.value if current else "",
-        callback=lambda _, target: apply_model_and_validate(state, ModelTarget.infer(target))
+        spec=TargetPromptSpec(subject=f"{model_name} model", hf_example="OpenMOSS-Team/MOSS-TTS-v1.5"),
+        current_target=project.get_model_target('moss_local'),
+        callback=lambda _, target: apply_model_and_validate(state, target)
     )
 
 def apply_model_and_validate(state: State, target: ModelTarget) -> None:

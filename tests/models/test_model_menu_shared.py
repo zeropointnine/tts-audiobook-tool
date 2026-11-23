@@ -190,3 +190,84 @@ def test_target_submenu_only_applies_changed_preset(monkeypatch) -> None:
     assert applied_targets == [ModelTarget.hf("repo/other")]
 
 
+
+
+# --- ask_target: the L/H kind step, then a directory or a repo id ---
+
+def run_ask_target(monkeypatch, *, hotkey, current=None, dir_path="", entered="", exist_error="",
+                   spec=None):
+    """Runs `ask_target` with stubbed input; returns (callbacks, errors, feedback, dialog kwargs)."""
+    from tts_audiobook_tool.app_types.model_target import ModelTarget
+    from tts_audiobook_tool.menus.model.model_menu_shared import TargetPromptSpec
+
+    callbacks, errors, feedback, dialogs = [], [], [], []
+    monkeypatch.setattr(model_menu_shared.ask, "ask_hotkey", lambda *_a, **_k: hotkey)
+    monkeypatch.setattr(model_menu_shared.ask, "ask_dir_path",
+                        lambda **kwargs: dialogs.append(kwargs) or dir_path)
+    monkeypatch.setattr(model_menu_shared.ask, "ask_input", lambda **_k: entered)
+    monkeypatch.setattr(model_menu_shared.ask, "ask_error", errors.append)
+    monkeypatch.setattr(model_menu_shared, "print_feedback", lambda *args, **_k: feedback.append(args))
+    monkeypatch.setattr(ModelTarget, "exist_test", lambda self, markers=None: ("", exist_error))
+    ModelMenuShared.ask_target(
+        project=cast(Project, None),
+        spec=spec or TargetPromptSpec(subject="Test model", hf_example="owner/repo"),
+        current_target=current,
+        callback=lambda _project, target: callbacks.append(target),
+    )
+    return callbacks, errors, feedback, dialogs
+
+
+def test_ask_target_local_uses_the_directory_request_and_types_the_result(monkeypatch, tmp_path):
+    # L opens the app's directory request, starting beside the current local target
+    from tts_audiobook_tool.app_types.model_target import ModelTarget
+    current = ModelTarget.local(str(tmp_path / "checkpoint-500"))
+    callbacks, errors, _, dialogs = run_ask_target(
+        monkeypatch, hotkey="l", current=current, dir_path=str(tmp_path / "checkpoint-900"))
+    assert callbacks == [ModelTarget.local(str(tmp_path / "checkpoint-900"))] and not errors
+    assert dialogs[0]["initialdir"] == str(tmp_path)
+
+
+def test_ask_target_hf_accepts_repo_ids_subfolders_and_pasted_urls(monkeypatch):
+    from tts_audiobook_tool.app_types.model_target import ModelTarget
+    entered = "https://huggingface.co/owner/repo/tree/main/sub/dir"
+    callbacks, errors, _, dialogs = run_ask_target(monkeypatch, hotkey="h", entered=entered)
+    assert callbacks == [ModelTarget.hf("owner/repo/sub/dir")] and not errors and not dialogs
+
+
+@pytest.mark.parametrize("hotkey,dir_path,entered", [
+    ("\r", "", ""),  # neither L nor H
+    ("x", "", ""),
+    ("\x03", "", ""),  # Ctrl-C
+    ("l", "", ""),  # cancelled dialog
+    ("h", "", ""),  # empty entry
+])
+def test_ask_target_aborts_quietly(monkeypatch, hotkey, dir_path, entered):
+    callbacks, errors, feedback, _ = run_ask_target(monkeypatch, hotkey=hotkey, dir_path=dir_path, entered=entered)
+    assert callbacks == [] and errors == [] and feedback == []
+
+
+def test_ask_target_hf_rejects_a_local_path_and_points_to_l(monkeypatch):
+    callbacks, errors, _, _ = run_ask_target(monkeypatch, hotkey="h", entered="/home/lee/models/x")
+    assert callbacks == []
+    assert len(errors) == 1 and "Not a valid Hugging Face repo id" in errors[0] and "local directory" in errors[0]
+
+
+def test_ask_target_same_kind_and_value_is_already_set(monkeypatch):
+    from tts_audiobook_tool.app_types.model_target import ModelTarget
+    callbacks, _, feedback, _ = run_ask_target(
+        monkeypatch, hotkey="h", current=ModelTarget.hf("owner/repo"), entered="owner/repo")
+    assert callbacks == [] and feedback == [("Already set",)]
+
+
+def test_ask_target_switching_kind_with_the_same_value_is_a_change(monkeypatch, tmp_path):
+    # A repo-shaped string chosen as a local directory is a different target
+    from tts_audiobook_tool.app_types.model_target import ModelTarget
+    callbacks, _, _, _ = run_ask_target(
+        monkeypatch, hotkey="l", current=ModelTarget.hf("owner/repo"), dir_path="owner/repo")
+    assert callbacks == [ModelTarget.local("owner/repo")]
+
+
+def test_ask_target_reports_a_failed_existence_check(monkeypatch):
+    callbacks, errors, _, _ = run_ask_target(monkeypatch, hotkey="h", entered="owner/repo",
+                                             exist_error="Hugging Face repo not found or gated: owner/repo")
+    assert callbacks == [] and errors == ["Hugging Face repo not found or gated: owner/repo"]

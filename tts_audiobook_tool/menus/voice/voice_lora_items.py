@@ -1,6 +1,6 @@
 """Per-voice LoRA items for a voice's submenu (`Voice.loras`), for models whose
 `voice_lora_mode` isn't "none". Model-agnostic: a model's voice menu supplies a
-`VoiceLoraMenuSpec` (its prompt and which local files mark an adapter directory).
+`VoiceLoraMenuSpec` (its target prompt, including which local files mark an adapter directory).
 
 Selecting a LoRA validates it against the loaded model (`ModelWorker.inspect_tts_blocking`
 with `probe_lora`) before saving; strength and clear save directly. None of these
@@ -9,6 +9,7 @@ reload the model: the LoRA is applied per call.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_types.model_target import ModelTarget
@@ -22,6 +23,9 @@ from tts_audiobook_tool.util import (
     COL_DIM_ITALICS, ellipsize_path_for_menu, make_menu_label, print_feedback, printt,
 )
 
+if TYPE_CHECKING:
+    from tts_audiobook_tool.menus.model.model_menu_shared import TargetPromptSpec
+
 LABEL_LORA = "LoRA"
 LABEL_LORA_STRENGTH = "LoRA strength"
 LABEL_CLEAR_LORA = "Clear LoRA"
@@ -30,10 +34,8 @@ LABEL_CLEAR_LORA = "Clear LoRA"
 @dataclass(frozen=True)
 class VoiceLoraMenuSpec:
     model_id: str
-    # Shown when asking for the target (local directory or hf repo id)
-    prompt: str
-    # Files that make a local directory acceptable (`target_util.exist_test`); None: the generic markers
-    local_file_markers: list[str] | None = None
+    # How the adapter is asked for (`ModelMenuShared.ask_target`)
+    target_prompt: TargetPromptSpec
 
 
 def format_lora_strength(strength: float) -> str:
@@ -64,22 +66,18 @@ def ask_voice_lora_target(state: State, spec: VoiceLoraMenuSpec, index: int) -> 
     current = state.project.voice_references[index].lora_for(spec.model_id)
     ModelMenuShared.ask_target(
         project=state.project,
-        prompt=spec.prompt,
-        current_target=current.target.value if current else "",
-        callback=lambda _, target: validate_and_set_voice_lora(
-            state, spec, index, ModelTarget.from_stored(target, None)),
-        local_file_markers=spec.local_file_markers,
+        spec=spec.target_prompt,
+        current_target=current.target if current else None,
+        callback=lambda _, target: validate_and_set_voice_lora(state, spec, index, target),
     )
 
 
-def validate_and_set_voice_lora(state: State, spec: VoiceLoraMenuSpec, index: int, target: ModelTarget | None) -> None:
+def validate_and_set_voice_lora(state: State, spec: VoiceLoraMenuSpec, index: int, target: ModelTarget) -> None:
     """Validates the adapter against the loaded model (loading it if needed), then saves it
     on the voice, keeping the voice's current strength. Nothing is saved when it's rejected."""
     from tts_audiobook_tool.model_worker import ModelWorker
 
     current = state.project.voice_references[index].lora_for(spec.model_id)
-    if target is None:
-        return
     lora = VoiceLora(target=target, strength=current.strength if current else LORA_STRENGTH_DEFAULT)
 
     printt(f"{COL_DIM_ITALICS}Checking LoRA...")

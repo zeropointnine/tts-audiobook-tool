@@ -11,7 +11,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
+from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared, TargetPromptSpec
 
 class ModelQwen3Menu:
     """
@@ -166,15 +166,12 @@ def ask_target(
         resolved_apply_target = lambda target: apply_model_and_validate(state, target)
 
     model_name = project.get_tts_model_type().value.ui["short_name"]
-    prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
-    prompt += f"\n{COL_DIM}Eg, \"zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer\" or \"/path/to/checkpoint\""
-
-    current = project.get_model_target('qwen3tts_local')
     ModelMenuShared.ask_target(
         project=project,
-        prompt=prompt,
-        current_target=current.value if current else "",
-        callback=lambda _, target: resolved_apply_target(ModelTarget.infer(target))
+        spec=TargetPromptSpec(
+            subject=f"{model_name} model", hf_example="zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer"),
+        current_target=project.get_model_target('qwen3tts_local'),
+        callback=lambda _, target: resolved_apply_target(target)
     )
 
 def apply_model_and_validate(

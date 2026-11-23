@@ -68,11 +68,11 @@ def test_vibevoice_menu_wires_per_voice_lora_controls(monkeypatch, tmp_path):
     assert labels[2] == "Clear LoRA"
 
     extra[0].handler(state, extra[0])
-    assert asked["current_target"] == "vibevoice-community/klett"
-    assert asked["local_file_markers"] == ["adapter_config.json", "lora/adapter_config.json"]
-    assert "VibeVoice LoRA" in asked["prompt"]
-    assert "without a voice sample" in asked["prompt"]
-    asked["callback"](state.project, "new-lora")
+    assert asked["current_target"] == ModelTarget.hf("vibevoice-community/klett")
+    assert asked["spec"].local_file_markers == ["adapter_config.json", "lora/adapter_config.json"]
+    assert "VibeVoice LoRA" in asked["spec"].subject
+    assert "without a voice sample" in asked["spec"].note
+    asked["callback"](state.project, ModelTarget.hf("new-lora"))
     [(received_state, spec, index, target)] = validated
     assert received_state is state
     assert spec.model_id == MODEL_ID

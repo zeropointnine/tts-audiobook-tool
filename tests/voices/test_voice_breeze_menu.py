@@ -78,10 +78,10 @@ def test_lora_select_strength_and_clear(monkeypatch, tmp_path, lora):
     assert len(items) == (3 if lora else 1)
     assert labels[0].startswith("LoRA")
     items[0].handler(state, items[0])
-    assert asked["current_target"] == (lora.target.value if lora else "")
-    assert asked["local_file_markers"] == LOCAL_FILE_MARKERS
-    assert "Instavar" in asked["prompt"]
-    asked["callback"](state.project, "new-lora")
+    assert asked["current_target"] == (lora.target if lora else None)
+    assert asked["spec"].local_file_markers == LOCAL_FILE_MARKERS
+    assert "Instavar" in asked["spec"].subject
+    asked["callback"](state.project, ModelTarget.hf("new-lora"))
     assert [args[3] for args in validated] == [ModelTarget.hf("new-lora")]
     if lora:
         assert labels[1].startswith("LoRA strength") and "0.50" in labels[1]

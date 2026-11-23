@@ -213,3 +213,28 @@ def test_display_name(target, expected):
 ])
 def test_looks_like_local_path(value, expected):
     assert looks_like_local_path(value) is expected
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("owner/repo", ("owner/repo", "")),
+    ("  'owner/repo/sub'  ", ("owner/repo/sub", "")),
+    ("hf://owner/repo/sub/dir", ("owner/repo/sub/dir", "")),
+    ("https://huggingface.co/owner/repo", ("owner/repo", "")),
+    ("https://huggingface.co/owner/repo/tree/main/a/b", ("owner/repo/a/b", "")),
+    ("", ("", "")),
+])
+def test_parse_hf_input_accepts_ids_hf_paths_and_urls(text, expected):
+    from tts_audiobook_tool.app_types.model_target import parse_hf_input
+    assert parse_hf_input(text) == expected
+
+
+@pytest.mark.parametrize("text,error", [
+    ("https://huggingface.co/owner/repo/tree/v2/a", "main revision"),
+    ("https://huggingface.co/owner/repo/blob/main/config.json", "not a file"),
+    ("/home/lee/model", "Not a valid"),
+    ("C:\\models\\x", "Not a valid"),
+])
+def test_parse_hf_input_rejects_other_revisions_files_and_paths(text, error):
+    from tts_audiobook_tool.app_types.model_target import parse_hf_input
+    value, message = parse_hf_input(text)
+    assert value == "" and error in message

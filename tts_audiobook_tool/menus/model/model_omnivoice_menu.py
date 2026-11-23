@@ -9,7 +9,7 @@ from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseMode
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
-from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared
+from tts_audiobook_tool.menus.model.model_menu_shared import ModelMenuShared, TargetPromptSpec
 
 class ModelOmniVoiceMenu:
 
@@ -58,14 +58,11 @@ class ModelOmniVoiceMenu:
 def ask_target(state: State) -> None:
     project = state.project
     model_name = project.get_tts_model_type().value.ui["short_name"]
-    prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
-    prompt += f"\n{COL_DIM}Eg, \"k2-fsa/OmniVoice\" or \"/path/to/local/checkpoint\""
-    current = project.get_model_target('omnivoice_local')
     ModelMenuShared.ask_target(
         project=project,
-        prompt=prompt,
-        current_target=current.value if current else "",
-        callback=lambda _, target: apply_target(state, ModelTarget.infer(target))
+        spec=TargetPromptSpec(subject=f"{model_name} model", hf_example=OmniVoiceBaseModel.DEFAULT_REPO_ID),
+        current_target=project.get_model_target('omnivoice_local'),
+        callback=lambda _, target: apply_target(state, target)
     )
 
 def apply_target(state: State, target: ModelTarget) -> None:

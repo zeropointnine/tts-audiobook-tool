@@ -3,23 +3,22 @@ from tts_audiobook_tool.menus.voice.voice_lora_items import VoiceLoraMenuSpec, m
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.util import COL_DIM
+from tts_audiobook_tool.menus.model.model_menu_shared import TargetPromptSpec
 
 MODEL_ID = "breeze_tts_2_local"
 INSTAVAR_URL = "https://github.com/instavar/breeze-tts2-finetuning"
 
 
-def make_lora_prompt() -> str:
-    prompt = "Enter local directory path or huggingface repo id of a Breeze TTS 2 LoRA (Instavar format)"
-    prompt += f"\n{COL_DIM}Eg, an exported adapter directory (with adapter_config.json),"
-    prompt += f"\n{COL_DIM}or a training checkpoint directory, eg \"/path/to/lora/checkpoint-step-000500\"."
-    prompt += f"\n{COL_DIM}Train one with {INSTAVAR_URL}."
-    return prompt
-
-
 def make_lora_spec() -> VoiceLoraMenuSpec:
     from tts_audiobook_tool.tts_models.breeze_lora import LOCAL_FILE_MARKERS
-    return VoiceLoraMenuSpec(model_id=MODEL_ID, prompt=make_lora_prompt(), local_file_markers=LOCAL_FILE_MARKERS)
+    return VoiceLoraMenuSpec(model_id=MODEL_ID, target_prompt=TargetPromptSpec(
+        subject="Breeze TTS 2 LoRA (Instavar format)",
+        hf_hint="Only an exported adapter (with adapter_config.json) can be loaded from Hugging Face.",
+        local_hint=("An exported adapter directory (with adapter_config.json),\n"
+                    "or a training checkpoint directory, eg lora/checkpoint-step-000500."),
+        note=f"Train one with {INSTAVAR_URL}.",
+        local_file_markers=LOCAL_FILE_MARKERS,
+    ))
 
 
 class VoiceBreezeMenu:
