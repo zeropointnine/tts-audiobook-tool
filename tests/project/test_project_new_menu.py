@@ -303,9 +303,9 @@ def test_abr_import_migrates_old_flat_settings_before_selecting(monkeypatch, tmp
     assert state.prefs.project_dir == str(tmp_path / "dest")
 
 
-def test_abr_import_assigns_missing_target_kinds_with_a_notice(monkeypatch, tmp_path, capsys):
-    # An imported snapshot's untyped targets get their kind once, at import: the
-    # notice is printed, and the new project is written (and reloads) typed
+def test_abr_import_silently_assigns_missing_target_kinds(monkeypatch, tmp_path, capsys):
+    # An imported snapshot's untyped targets get their kind at import, without a
+    # notice, and the new project is written (and reloads) typed
     from tts_audiobook_tool.app_types.model_target import ModelTarget
 
     state = _make_state()
@@ -319,9 +319,7 @@ def test_abr_import_assigns_missing_target_kinds_with_a_notice(monkeypatch, tmp_
     with _quiet_project_setter():
         assert ProjectNewMenu.make_new_project_using_abr(state) is True, errors
 
-    output = capsys.readouterr().out
-    assert output.count("assigned automatically") == 1
-    assert "/models/q3 (local directory)" in output and "owner/repo/lora (Hugging Face repo)" in output
+    assert "/models/q3" not in capsys.readouterr().out
     saved = json.loads((tmp_path / "dest" / "project.json").read_text())
     assert saved["model_settings"]["models"]["qwen3tts_local"]["parameters"]["target_type"] == "local"
     assert saved["voice_references"][0]["loras"]["omnivoice_local"]["target_type"] == "hf"

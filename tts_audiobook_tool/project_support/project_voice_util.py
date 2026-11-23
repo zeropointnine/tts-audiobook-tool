@@ -884,20 +884,25 @@ class ProjectVoiceUtil:
     @staticmethod
     def make_no_voice_value_text(project: Project) -> str:
         """What a voice with no value lacks under the current model and settings
-        (non-blocking: the model falls back to its built-in voice): "no sample set",
-        or "no instructions set" when the model can't clone but uses instructions.
-        For a model with per-voice LoRAs (`voice_lora_mode`), " or LoRA" is added,
-        eg "no sample or LoRA set", since a LoRA alone also gives the voice a speaker."""
+        (non-blocking: the model falls back to its built-in voice). Names the one
+        settable voice property, eg "no sample set" or "no instructions set"; when
+        several can give the voice a value (sample, instructions, preset, per-voice
+        LoRA), just "not configured", since listing them all gets too wordy."""
         from tts_audiobook_tool.tts import Tts
 
         support = Tts.get_model_support(project)
-        if support.can_voice_clone(project) or not support.can_instructions(project):
-            lacks = "sample"
-        else:
-            lacks = "instructions"
+        settable: list[str] = []
+        if support.can_voice_clone(project):
+            settable.append("sample")
+        if support.can_instructions(project):
+            settable.append("instructions")
+        if support.can_voice_presets(project):
+            settable.append(project.get_tts_model_type().value.ui.get("preset_label", "preset").lower())
         if support.voice_lora_mode(project) != "none":
-            lacks += " or LoRA"
-        return f"no {lacks} set"
+            settable.append("LoRA")
+        if len(settable) > 1:
+            return "not configured"
+        return f"no {settable[0] if settable else 'sample'} set"
 
     @staticmethod
     def has_any_active_voice_preset(project: Project) -> bool:

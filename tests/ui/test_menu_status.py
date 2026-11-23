@@ -109,9 +109,9 @@ def test_voices_status_summarizes_all_slots(monkeypatch, capsys, model_id, names
         expected = "required"
         assert COL_ERROR + expected in voice_line
     elif not any(names):
-        # Non-blocking: the model falls back to its built-in voice. OmniVoice takes
-        # per-voice LoRAs, which would also give a voice a speaker.
-        expected = "no sample or LoRA set" if model_id == "omnivoice_local" else "no sample set"
+        # Non-blocking: the model falls back to its built-in voice. OmniVoice can take
+        # a sample, instructions or a LoRA, so it's just "not configured".
+        expected = "not configured" if model_id == "omnivoice_local" else "no sample set"
         assert COL_ERROR not in voice_line
     else:
         assert COL_ERROR not in voice_line
@@ -172,10 +172,10 @@ def test_pocket_status_always_uses_the_voices_line(monkeypatch, capsys, voices, 
     ([Voice(), Voice(instructions={"auk_sglomni": "A calm voice"})], '"A calm voice", +1 more'),
     # A sample takes precedence over instructions
     ([Voice("first.flac", instructions={"auk_sglomni": "A calm voice"})], "first"),
-    # Blank instructions are no value
-    ([Voice(instructions={"auk_sglomni": "   "}), Voice()], "no sample set"),
+    # Blank instructions are no value (AuK takes a sample or a description: "not configured")
+    ([Voice(instructions={"auk_sglomni": "   "}), Voice()], "not configured"),
     # Instructions for another model are no value
-    ([Voice(instructions={"omnivoice_local": "male"})], "no sample set"),
+    ([Voice(instructions={"omnivoice_local": "male"})], "not configured"),
     ([Voice(instructions={"auk_sglomni": "word " * 20})], '"' + ellipsize("word " * 19 + "word", 40) + '"'),
 ])
 def test_voices_status_counts_instructions(monkeypatch, voices, expected):
@@ -253,7 +253,8 @@ def test_audio_cpp_omnivoice_voice_line_is_optional(monkeypatch):
 
     from tts_audiobook_tool.menus.menu_status import _make_voices_text
 
-    assert _make_voices_text(state) == "no sample set"
+    # Optional (not "required"); a sample or instructions can be set, so "not configured"
+    assert _make_voices_text(state) == "not configured"
     assert make_voice_label(state) == "Voices"
 
 

@@ -159,10 +159,11 @@ def test_instruction_label_and_prompt_use_catalog_override_or_default(monkeypatc
     assert printed == [menu.format_instructions_message(ui.get("instructions_message", menu.DEFAULT_INSTRUCTIONS_MESSAGE))]
 
 
-def test_instructions_message_dims_only_parenthesized_lines():
+def test_instructions_message_dims_lines_after_first():
+    # The first line is the prompt; every following line is a hint, parenthesized or not
     assert menu.format_instructions_message(menu.DEFAULT_INSTRUCTIONS_MESSAGE) == menu.DEFAULT_INSTRUCTIONS_MESSAGE
-    assert menu.format_instructions_message("Enter:\n(hint one)\n(hint two)") == (
-        f"Enter:\n{menu.COL_DIM}(hint one){menu.COL_DEFAULT}\n{menu.COL_DIM}(hint two){menu.COL_DEFAULT}"
+    assert menu.format_instructions_message("Enter:\n(hint one)\nhint two") == (
+        f"Enter:\n{menu.COL_DIM}(hint one){menu.COL_DEFAULT}\n{menu.COL_DIM}hint two{menu.COL_DEFAULT}"
     )
 
 

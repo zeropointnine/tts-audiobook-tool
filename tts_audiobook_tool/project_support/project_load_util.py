@@ -174,16 +174,12 @@ class ProjectLoadUtil:
                 return err
             L.i(f"Removed legacy applied text fields from {PROJECT_JSON_FILE_NAME}: {dir_path}")
 
-        # Record the kind of targets saved without one (persisted by the save below).
-        from tts_audiobook_tool.project_support.model_target_assignment import (
-            assign_inferred_targets, make_assignment_warning,
-        )
-        assignments = assign_inferred_targets(project)
-        if assignments:
-            pending_warnings.append(make_assignment_warning(assignments))
+        # Silently record the kind of targets saved without one (persisted by the save below).
+        from tts_audiobook_tool.project_support.model_target_assignment import assign_inferred_targets
+        assigned_target_kinds = assign_inferred_targets(project)
 
         # Persist path canonicalization and defaulted values.
-        if pending_warnings:
+        if pending_warnings or assigned_target_kinds:
             err = project.save()
             if err:
                 return err

@@ -71,11 +71,9 @@ DEFAULT_INSTRUCTIONS_MESSAGE = "Enter instructions for this voice:"
 
 
 def format_instructions_message(message: str) -> str:
-    """Dims the parenthesized hint lines of a catalog `instructions_message`."""
-    return "\n".join(
-        f"{COL_DIM}{line}{COL_DEFAULT}" if line.lstrip().startswith("(") else line
-        for line in message.split("\n")
-    )
+    """Dims the hint lines (everything after the first line) of a catalog `instructions_message`."""
+    first, *hints = message.split("\n")
+    return "\n".join([first, *(f"{COL_DIM}{line}{COL_DEFAULT}" for line in hints)])
 
 # Voices listed per page, both in the Voices menu and in the character voice
 # picker (speaker_assign/voices_menu.py), so page boundaries match. Fixed

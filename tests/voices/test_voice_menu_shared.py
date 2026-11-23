@@ -575,12 +575,12 @@ def test_voice_item_label_includes_current_model_instructions(monkeypatch):
     # OmniVoice does not require a voice clone sample, so a voice without
     # one is fine even when another voice has one
     assert plain(1) == 'Voice 2: "only instructions"'
-    # Neither a sample file nor instructions for the current model (OmniVoice takes
-    # per-voice LoRAs, so a LoRA would also have given the voice a speaker)
+    # Neither a sample file nor instructions for the current model (OmniVoice can take
+    # a sample, instructions or a LoRA, so the voice is just "not configured")
     project.voice_references.append(Voice("", instructions={"other_model": "ignored"}))
-    assert plain(2) == "Voice 3: no sample or LoRA set"
+    assert plain(2) == "Voice 3: not configured"
     label, _ = VoiceMenuShared.make_voice_sample_item_label(project, tts_type, 2)
-    assert label == f"Voice 3: {voice_menu_shared.COL_DIM}no sample or LoRA set{voice_menu_shared.COL_DEFAULT}"
+    assert label == f"Voice 3: {voice_menu_shared.COL_DIM}not configured{voice_menu_shared.COL_DEFAULT}"
 
 
 def test_voice_item_label_hides_instructions_when_mode_does_not_use_them(monkeypatch):

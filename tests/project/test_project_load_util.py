@@ -319,12 +319,12 @@ def test_load_drops_a_vibevoice_lora_when_every_voice_has_its_own(
     project.kill()
 
 
-def test_load_assigns_missing_target_kinds_once_with_a_notice(
+def test_load_silently_assigns_and_saves_missing_target_kinds(
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # Targets saved without target_type are typed by the legacy rule, announced once,
-    # and saved typed, so the next load is silent
+    # Targets saved without target_type are typed by the legacy rule and saved typed,
+    # without a notice (the inferred kind never changes what the target loads)
     dir_path = make_project_dir(tmp_path, {
         "version": 5,
         "tts_model_type": "omnivoice_local",
@@ -340,11 +340,7 @@ def test_load_assigns_missing_target_kinds_once_with_a_notice(
 
     project = load(dir_path)
 
-    out = capsys.readouterr().out
-    assert "assigned automatically" in out
-    assert "owner/custom-base (Hugging Face repo)" in out
-    assert "/runs/herman/lora (local directory)" in out
-    assert "Qwen3" not in out  # already typed
+    assert "owner/custom-base" not in capsys.readouterr().out
     saved = read_saved(dir_path)
     assert saved["model_settings"]["models"]["omnivoice_local"]["parameters"]["target_type"] == "hf"
     assert saved["voice_references"][0]["loras"]["omnivoice_local"]["target_type"] == "local"
@@ -352,22 +348,25 @@ def test_load_assigns_missing_target_kinds_once_with_a_notice(
     assert base == ModelTarget.hf("owner/custom-base") and not base.inferred
     project.kill()
 
-    project = load(dir_path)
-    assert "assigned automatically" not in capsys.readouterr().out
-    project.kill()
-
 
 def test_load_retypes_a_target_whose_kind_an_older_build_dropped(
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # An older build prunes target_type on save; the target just reads as legacy again
-    dir_path = make_project_dir(tmp_path, {"version": 5, "model_settings": {"models": {
-        "vibevoice_local": {"parameters": {"target": "/models/vv"}},
-    }, "shared": {}}})
+    # An older build prunes target_type on save; the target just reads as legacy again.
+    # The project is otherwise current (no load warnings), yet the kind is still saved
+    dir_path = make_project_dir(tmp_path, {"version": 5})
+    project = load(dir_path)
+    project.set_model_target("vibevoice_local", ModelTarget.local("/models/vv"))
+    assert not project.save()
+    project.kill()
+    saved = read_saved(dir_path)
+    del saved["model_settings"]["models"]["vibevoice_local"]["parameters"]["target_type"]
+    Path(dir_path, PROJECT_JSON_FILE_NAME).write_text(json.dumps(saved), encoding="utf-8")
+    capsys.readouterr()
 
     project = load(dir_path)
 
-    assert "/models/vv (local directory)" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
     assert read_saved(dir_path)["model_settings"]["models"]["vibevoice_local"]["parameters"]["target_type"] == "local"
     project.kill()

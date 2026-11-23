@@ -63,11 +63,24 @@ def test_a_stored_omnivoice_lora_without_strength_loads_at_full_strength():
     assert voice is not None and voice.lora_for(MODEL_ID) == VoiceLora(ModelTarget.hf("owner/adapter"), 1.0)
 
 
-@pytest.mark.parametrize("model_id, expected", [
-    ("omnivoice_local", "no sample or LoRA set"),
-    ("breeze_tts_2_local", "no sample or LoRA set"),
-    ("vibevoice_local", "no sample or LoRA set"),
+@pytest.mark.parametrize("model_id", ["omnivoice_local", "breeze_tts_2_local", "vibevoice_local"])
+def test_a_voice_without_a_value_is_not_configured_when_a_lora_is_also_an_option(model_id):
+    # A LoRA alone gives a voice its speaker, so with a sample also settable there are
+    # several options; the hint stops listing them and just says "not configured"
+    assert ProjectVoiceUtil.make_no_voice_value_text(Project(tts_model_type=model_id)) == "not configured"
+
+
+@pytest.mark.parametrize("model_id, setting, expected", [
+    # Only a sample is settable
+    ("chatterbox_local", None, "no sample set"),
+    # Base clones; VoiceDesign takes only instructions; CustomVoice a speaker plus instructions
+    ("qwen3tts_local", None, "no sample set"),
+    ("qwen3tts_local", "voice_design", "no instructions set"),
+    ("qwen3tts_local", "custom_voice", "not configured"),
 ])
-def test_a_voice_without_a_value_names_the_lora_as_an_option(model_id, expected):
-    # With per-voice LoRAs a LoRA alone gives a voice its speaker, so the hint names both
-    assert ProjectVoiceUtil.make_no_voice_value_text(Project(tts_model_type=model_id)) == expected
+def test_a_voice_without_a_value_names_the_only_settable_property(model_id, setting, expected):
+    # The specific hint is kept while there is a single thing to set
+    project = Project(tts_model_type=model_id)
+    if setting:
+        project.set_model_setting(model_id, "model_type", setting)
+    assert ProjectVoiceUtil.make_no_voice_value_text(project) == expected
