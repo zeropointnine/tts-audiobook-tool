@@ -40,9 +40,9 @@ class ModelQwen3Menu:
 
             apply_model_and_validate(state, target, on_applied=refresh)
 
-        def clear_target_and_refresh(_: State, item: MenuItem) -> None:
+        def clear_target_and_refresh() -> None:
             nonlocal metadata
-            on_clear_model_target(state, item)
+            on_clear_model_target(state)
             # The built-in default is a Base model. Discard metadata from the
             # previously inspected custom target before this menu rerenders.
             metadata = {"model_type": "base"}
@@ -62,17 +62,15 @@ class ModelQwen3Menu:
             generate_defaults = get_generate_defaults()
             items = []
 
-            # Model, clear model
+            # Model
             items.append(
                 MenuItem(
                     make_target_label,
-                    lambda _, __: model_target_submenu(state, apply_target_and_refresh),
+                    lambda _, __: model_target_submenu(
+                        state, apply_target_and_refresh, clear_target_and_refresh
+                    ),
                 )
             )
-            if state.project.get_model_target('qwen3tts_local'):
-                items.append(
-                    MenuItem("Clear custom model", clear_target_and_refresh)
-                )
 
             # Always show rolling cont setting even though requires type 'base' and batch 1
             item = MenuItem(
@@ -141,6 +139,7 @@ class ModelQwen3Menu:
 def model_target_submenu(
     state: State,
     apply_target: Callable[[ModelTarget], None] | None = None,
+    on_clear: Callable[[], None] | None = None,
 ) -> None:
     resolved_apply_target = apply_target
     if resolved_apply_target is None:
@@ -152,13 +151,14 @@ def model_target_submenu(
         preset_targets=Qwen3BaseModel.PRESET_TARGETS,
         current_target=state.project.get_model_target('qwen3tts_local'),
         default_target=Qwen3BaseModel.DEFAULT_TARGET,
-        ask_custom_target=lambda: ask_target(state, resolved_apply_target),
+        ask_custom_target=lambda: ask_target(state, resolved_apply_target, on_clear),
         apply_target=resolved_apply_target,
     )
 
 def ask_target(
     state: State,
     apply_target: Callable[[ModelTarget], None] | None = None,
+    on_clear: Callable[[], None] | None = None,
 ) -> None:
     project = state.project
     resolved_apply_target = apply_target
@@ -171,7 +171,11 @@ def ask_target(
         spec=TargetPromptSpec(
             subject=f"{model_name} model", hf_example="zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer"),
         current_target=project.get_model_target('qwen3tts_local'),
-        callback=lambda _, target: resolved_apply_target(target)
+        callback=lambda _, target: resolved_apply_target(target),
+        on_clear=on_clear if on_clear is not None else lambda: on_clear_model_target(state),
+        preset_targets=Qwen3BaseModel.PRESET_TARGETS,
+        # The "Select ... model" menu just above already names it
+        show_subject=False,
     )
 
 def apply_model_and_validate(
@@ -217,7 +221,7 @@ def apply_model_and_validate(
     print_feedback("Model set:", target.value)
     ask.ask_enter_to_continue()
 
-def on_clear_model_target(state: State, __: MenuItem) -> None:
+def on_clear_model_target(state: State) -> None:
     state.project.set_model_target('qwen3tts_local', None)
     state.project.set_model_setting('qwen3tts_local', 'model_type', "")
     state.project.save()

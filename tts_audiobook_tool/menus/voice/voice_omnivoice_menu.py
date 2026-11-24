@@ -28,10 +28,9 @@ def check_lora(project: Project, lora: VoiceLora) -> LoraCheck:
 def make_lora_spec() -> VoiceLoraMenuSpec:
     from tts_audiobook_tool.tts_models.omnivoice_lora_check import ADAPTER_FILE_NAMES
     return VoiceLoraMenuSpec(model_id=MODEL_ID, check=check_lora, target_prompt=TargetPromptSpec(
-        subject="OmniVoice LoRA adapter",
+        subject="OmniVoice LoRA",
         hf_example="My-Weird-Prompts/Herman-LoRA-V3",
         local_hint="An adapter directory (eg checkpoint-900) contains adapter_config.json and adapter_model.safetensors.",
-        note="A LoRA trained on one speaker works without a voice sample.",
         local_file_markers=ADAPTER_FILE_NAMES,
     ))
 

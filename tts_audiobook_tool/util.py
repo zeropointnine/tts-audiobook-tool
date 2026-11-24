@@ -44,7 +44,7 @@ def print_feedback(
 
     :param no_preformat: If True, doesn't apply the standard dim italic formatting
     :param skip_pause: If True, doesn't do the typical slight pause
-    :param long_pause: If True, pauses 2x longer
+    :param long_pause: If True, uses PRINT_FEEDBACK_LONG_PAUSE
     :param is_error: If True, prepends error color, forces long_pause to True, forces skip_pause to False, forces no_preformat to False
     """
     if is_error:
@@ -61,9 +61,7 @@ def print_feedback(
     if skip_pause:
         sleep_duration = 0.0
     else:
-        sleep_duration = PRINT_FEEDBACK_PAUSE
-        if long_pause:
-            sleep_duration *= 2
+        sleep_duration = PRINT_FEEDBACK_LONG_PAUSE if long_pause else PRINT_FEEDBACK_PAUSE
     time.sleep(sleep_duration)
 
     if extra_line:

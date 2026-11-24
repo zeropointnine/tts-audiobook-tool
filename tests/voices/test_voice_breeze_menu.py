@@ -1,4 +1,4 @@
-"""Breeze TTS 2 (local) per-voice LoRA controls: each voice's submenu has LoRA / strength / clear
+"""Breeze TTS 2 (local) per-voice LoRA controls: LoRA picker (including clear) and strength
 items (`voice_lora_items`); selecting a LoRA checks it without the model (`breeze_lora_check`) before saving."""
 import json
 from pathlib import Path
@@ -64,7 +64,7 @@ def test_breeze_menu_puts_lora_items_in_each_voice_submenu(monkeypatch, tmp_path
 
 @pytest.mark.parametrize("lora", [None, VoiceLora(LEDA, 0.5)])
 def test_lora_select_strength_and_clear(monkeypatch, tmp_path, lora):
-    # Strength and Clear appear only once the voice has a LoRA; selection accepts raw
+    # Strength appears only with a LoRA; clearing lives in the picker. Selection accepts raw
     # checkpoint directories (Breeze markers, not the generic hf ones); nothing loads the model
     state = make_state(tmp_path, lora)
     asked, validated = {}, []
@@ -76,7 +76,8 @@ def test_lora_select_strength_and_clear(monkeypatch, tmp_path, lora):
     spec = menu.make_lora_spec()
     items = lora_items.make_voice_lora_items(state, spec, 0)
     labels = labels_of(state, items)
-    assert len(items) == (3 if lora else 1)
+    assert len(items) == (2 if lora else 1)
+    assert "Clear LoRA" not in labels
     assert labels[0].startswith("LoRA")
     items[0].handler(state, items[0])
     assert asked["current_target"] == (lora.target if lora else None)
@@ -86,7 +87,7 @@ def test_lora_select_strength_and_clear(monkeypatch, tmp_path, lora):
     assert [args[3] for args in validated] == [ModelTarget.hf("new-lora")]
     if lora:
         assert labels[1].startswith("LoRA strength") and "0.50" in labels[1]
-        items[2].handler(state, items[2])
+        asked["on_clear"]()
         assert state.project.voice_references[0].loras == {}
         assert "loras" not in json.loads((tmp_path / "project.json").read_text())["voice_references"][0]
     else:

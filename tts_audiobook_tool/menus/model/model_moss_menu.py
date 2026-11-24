@@ -66,12 +66,15 @@ class ModelMossMenu:
 
 # ---
 
+def get_preset_targets() -> list[ModelTarget]:
+    return [config.value.target for config in MossConfigs]
+
 def target_submenu(state: State) -> None:
     configs = list(MossConfigs)
     ModelMenuShared.target_submenu(
         state=state,
         heading="Select MOSS-TTS model",
-        preset_targets=[config.value.target for config in configs],
+        preset_targets=get_preset_targets(),
         current_target=state.project.get_model_target('moss_local'),
         default_target=MossConfigs.get_default_target(),
         ask_custom_target=lambda: ask_target(state),
@@ -87,7 +90,11 @@ def ask_target(state: State) -> None:
         project=project,
         spec=TargetPromptSpec(subject=f"{model_name} model", hf_example="OpenMOSS-Team/MOSS-TTS-v1.5"),
         current_target=project.get_model_target('moss_local'),
-        callback=lambda _, target: apply_model_and_validate(state, target)
+        callback=lambda _, target: apply_model_and_validate(state, target),
+        on_clear=lambda: on_clear_model_target(state),
+        preset_targets=get_preset_targets(),
+        # The "Select ... model" menu just above already names it
+        show_subject=False,
     )
 
 def apply_model_and_validate(state: State, target: ModelTarget) -> None:
@@ -124,7 +131,7 @@ def apply_model_and_validate(state: State, target: ModelTarget) -> None:
     print_feedback("Model set:", target.value)
     ask.ask_enter_to_continue()
 
-def on_clear_model_target(state: State, __: MenuItem) -> None:
+def on_clear_model_target(state: State) -> None:
     state.project.set_model_target('moss_local', None)
     state.project.save()
     _ = ModelWorker.clear_models_if_running_blocking()

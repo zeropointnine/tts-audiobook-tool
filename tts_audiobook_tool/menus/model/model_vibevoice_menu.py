@@ -35,10 +35,6 @@ class ModelVibeVoiceMenu:
                     lambda _, __: target_submenu(state),
                 )
             )
-            if state.project.get_model_target('vibevoice_local'):
-                items.append(
-                    MenuItem("Clear custom model", lambda _, __: clear_custom_model(state))
-                )
 
             # Other config
             items.append(ModelCatalogMenu.make_local_parameter_item(state, "vibevoice_local", "cfg", "CFG"))
@@ -72,7 +68,11 @@ def ask_model_target(state: State) -> None:
         project=project,
         spec=TargetPromptSpec(subject=f"{model_name} model", hf_example="vibevoice/VibeVoice-7B"),
         current_target=project.get_model_target('vibevoice_local'),
-        callback=lambda _, target: apply_model_and_validate(state, target)
+        callback=lambda _, target: apply_model_and_validate(state, target),
+        on_clear=lambda: clear_custom_model(state),
+        preset_targets=VibeVoiceBaseModel.PRESET_TARGETS,
+        # The "Select ... model" menu just above already names it
+        show_subject=False,
     )
 
 def apply_model_and_validate(state: State, target: ModelTarget) -> None:
@@ -87,7 +87,7 @@ def apply_model_and_validate(state: State, target: ModelTarget) -> None:
     # targets are arbitrary repos/paths, so validate those by loading.
     if target in VibeVoiceBaseModel.PRESET_TARGETS:
         project.save()
-        print_feedback("\nCustom model set:", target.value)
+        print_feedback("\nModel set:", target.value)
         return
 
     printt(f"{COL_DIM_ITALICS}Initializing model...")
@@ -101,7 +101,7 @@ def apply_model_and_validate(state: State, target: ModelTarget) -> None:
         return
 
     project.save()
-    print_feedback("\nCustom model set:", target.value)
+    print_feedback("\nModel set:", target.value)
 
 def clear_custom_model(state: State) -> None:
     project = state.project

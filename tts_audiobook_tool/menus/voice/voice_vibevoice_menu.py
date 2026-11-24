@@ -15,7 +15,6 @@ def make_lora_spec() -> VoiceLoraMenuSpec:
         hf_example="vibevoice-community/klett",
         local_hint=("An adapter directory (eg output/checkpoint-900) contains adapter_config.json and "
                     "adapter_model.safetensors,\ndirectly or in its lora/ subdirectory."),
-        note="A LoRA trained on one speaker works without a voice sample.",
         local_file_markers=LOCAL_FILE_MARKERS,
     ))
 

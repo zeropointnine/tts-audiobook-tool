@@ -27,6 +27,8 @@ class RealTimePlaybackMenu:
             line_range = get_active_line_range(state)
             if line_range:
                 value = f"{line_range[0]}-{line_range[1]}"
+                if line_range[1] == len(state.project.phrase_groups):
+                    value += " end"
             else:
                 value = "all"
             return make_menu_label("Line range", value)
@@ -57,7 +59,7 @@ class RealTimePlaybackMenu:
         phrase_groups = state.project.phrase_groups
         length = len(phrase_groups)
 
-        s = f"Enter line range {COL_DIM}(eg, \"5-15\"; \"50\" for 50 to end; or \"all\")"
+        s = f"Enter starting line number or a line range {COL_DIM}(eg, \"50\" for 50 to end; \"5-15\"; or \"all\")"
         printt(s)
         line_range = get_active_line_range(state)
         prefill = f"{line_range[0]}-{line_range[1]}" if line_range else "all"

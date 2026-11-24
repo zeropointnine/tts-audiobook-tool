@@ -26,21 +26,12 @@ class ModelOmniVoiceMenu:
                 label = make_currently_string(value)
             return f"Custom model {label}"
 
-        def on_clear_model_target(s: State, __: MenuItem) -> None:
-            s.project.set_model_target('omnivoice_local', None)
-            s.project.save()
-            Tts.set_model_params_using_project(s.project)
-            _ = ModelWorker.clear_models_if_running_blocking()
-            print_feedback("Cleared, will use default model")
-
         def make_items(_: State) -> list[MenuItem]:
             items = []
 
             items.append(
                 MenuItem(make_target_label, lambda _, __: ask_target(state))
             )
-            if state.project.get_model_target('omnivoice_local'):
-                items.append(MenuItem("Clear custom model", on_clear_model_target))
 
             for name, label in (("num_step", "Steps"), ("speed", "Speed"), ("cfg", "CFG")):
                 items.append(ModelCatalogMenu.make_local_parameter_item(state, "omnivoice_local", name, label))
@@ -62,8 +53,17 @@ def ask_target(state: State) -> None:
         project=project,
         spec=TargetPromptSpec(subject=f"{model_name} model", hf_example=OmniVoiceBaseModel.DEFAULT_REPO_ID),
         current_target=project.get_model_target('omnivoice_local'),
-        callback=lambda _, target: apply_target(state, target)
+        callback=lambda _, target: apply_target(state, target),
+        on_clear=lambda: on_clear_model_target(state),
     )
+
+
+def on_clear_model_target(state: State) -> None:
+    state.project.set_model_target('omnivoice_local', None)
+    state.project.save()
+    Tts.set_model_params_using_project(state.project)
+    _ = ModelWorker.clear_models_if_running_blocking()
+    print_feedback("Cleared, will use default model")
 
 def apply_target(state: State, target: ModelTarget) -> None:
     project = state.project

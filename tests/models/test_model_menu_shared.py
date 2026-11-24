@@ -164,7 +164,9 @@ def test_rolling_continuation_subheading_preserves_paragraph_spacing(monkeypatch
     assert text == expected
 
 
-def test_target_submenu_only_applies_changed_preset(monkeypatch) -> None:
+@pytest.mark.parametrize("current", [ModelTarget.hf("repo/current"), None])
+def test_target_submenu_only_applies_changed_preset(monkeypatch, current) -> None:
+    # With no stored target the default is already what runs, so choosing it is no change
     state = cast(State, SimpleNamespace())
     captured_items = []
     applied_targets: list[ModelTarget] = []
@@ -178,7 +180,7 @@ def test_target_submenu_only_applies_changed_preset(monkeypatch) -> None:
         state=state,
         heading="Model",
         preset_targets=[ModelTarget.hf("repo/current"), ModelTarget.hf("repo/other")],
-        current_target=ModelTarget.hf("repo/current"),
+        current_target=current,
         default_target=ModelTarget.hf("repo/current"),
         ask_custom_target=lambda: None,
         apply_target=applied_targets.append,
@@ -190,21 +192,63 @@ def test_target_submenu_only_applies_changed_preset(monkeypatch) -> None:
     assert applied_targets == [ModelTarget.hf("repo/other")]
 
 
+@pytest.mark.parametrize("current, expected_selected", [
+    (None, "repo/default"),
+    (ModelTarget.hf("repo/other"), "repo/other"),
+    (ModelTarget.hf("owner/custom"), None),
+])
+def test_target_submenu_marks_effective_preset_selected(monkeypatch, current, expected_selected) -> None:
+    # With no stored target the default is what runs, so it is marked selected;
+    # a custom target marks no preset.
+    from tts_audiobook_tool.text_util import strip_ansi_codes
+
+    state = cast(State, SimpleNamespace())
+    captured_items = []
+    monkeypatch.setattr(model_menu_shared.MenuUtil, "menu",
+                        lambda **kwargs: captured_items.extend(kwargs["items"]))
+
+    ModelMenuShared.target_submenu(
+        state=state,
+        heading="Model",
+        preset_targets=[ModelTarget.hf("repo/default"), ModelTarget.hf("repo/other")],
+        current_target=current,
+        default_target=ModelTarget.hf("repo/default"),
+        ask_custom_target=lambda: None,
+        apply_target=lambda _target: None,
+    )
+
+    labels = [strip_ansi_codes(str(item.label)) for item in captured_items[:-1]]
+    selected = [label.split(" ")[0] for label in labels if "(selected)" in label]
+    assert selected == ([expected_selected] if expected_selected else [])
+    # The custom item's entry hint gives way to the current value once a custom target is set
+    custom_label = strip_ansi_codes(str(captured_items[-1].label))
+    if expected_selected is None:
+        assert custom_label == "Enter custom model (currently: owner/custom)"
+    else:
+        assert custom_label == "Enter custom model (local directory or Hugging Face repo)"
 
 
 # --- ask_target: the L/H kind step, then a directory or a repo id ---
 
 def run_ask_target(monkeypatch, *, hotkey, current=None, dir_path="", entered="", exist_error="",
-                   spec=None):
+                   spec=None, on_clear=None, prompts=None, presets=None, prefills=None,
+                   show_subject=True):
     """Runs `ask_target` with stubbed input; returns (callbacks, errors, feedback, dialog kwargs)."""
     from tts_audiobook_tool.app_types.model_target import ModelTarget
     from tts_audiobook_tool.menus.model.model_menu_shared import TargetPromptSpec
 
     callbacks, errors, feedback, dialogs = [], [], [], []
-    monkeypatch.setattr(model_menu_shared.ask, "ask_hotkey", lambda *_a, **_k: hotkey)
+    def ask_hotkey(prompt):
+        if prompts is not None:
+            prompts.append(prompt)
+        return hotkey
+
+    monkeypatch.setattr(model_menu_shared.ask, "ask_hotkey", ask_hotkey)
     monkeypatch.setattr(model_menu_shared.ask, "ask_dir_path",
                         lambda **kwargs: dialogs.append(kwargs) or dir_path)
-    monkeypatch.setattr(model_menu_shared.ask, "ask_input", lambda **_k: entered)
+    monkeypatch.setattr(model_menu_shared.ask, "ask_input",
+                        lambda **kwargs: (prefills.append(kwargs["prefill"]) if prefills is not None else None)
+                        or entered)
     monkeypatch.setattr(model_menu_shared.ask, "ask_error", errors.append)
     monkeypatch.setattr(model_menu_shared, "print_feedback", lambda *args, **_k: feedback.append(args))
     monkeypatch.setattr(ModelTarget, "exist_test", lambda self, markers=None: ("", exist_error))
@@ -213,8 +257,85 @@ def run_ask_target(monkeypatch, *, hotkey, current=None, dir_path="", entered=""
         spec=spec or TargetPromptSpec(subject="Test model", hf_example="owner/repo"),
         current_target=current,
         callback=lambda _project, target: callbacks.append(target),
+        on_clear=on_clear,
+        preset_targets=presets,
+        show_subject=show_subject,
     )
     return callbacks, errors, feedback, dialogs
+
+
+@pytest.mark.parametrize("current", [
+    None,
+    ModelTarget.local("/d/w/voice/_.breeze_loras/shamir/checkpoint-step-000500"),
+    ModelTarget.hf("owner/repo/sub/dir"),
+])
+def test_ask_target_shows_full_current_value_on_its_own_dim_line(monkeypatch, current):
+    # The shared model/LoRA picker keeps the heading separate and never truncates its current value.
+    lines = []
+    monkeypatch.setattr(model_menu_shared, "printt", lambda text="": lines.append(text))
+
+    run_ask_target(monkeypatch, hotkey="x", current=current)
+
+    expected = ["Test model"]
+    if current is not None:
+        expected.append(
+            f"{model_menu_shared.COL_DIM}Currently: {current.value} "
+            f"({current.kind.label}){model_menu_shared.COL_DEFAULT}"
+        )
+    assert lines == expected + [""]
+
+
+def test_ask_target_can_omit_subject_heading_named_by_the_callers_menu(monkeypatch):
+    # Preset-list callers already head the screen with "Select ... model"
+    lines = []
+    monkeypatch.setattr(model_menu_shared, "printt", lambda text="": lines.append(text))
+
+    run_ask_target(monkeypatch, hotkey="x", show_subject=False)
+
+    assert lines == [""]
+
+
+@pytest.mark.parametrize("current, supports_clear, hotkey, should_clear", [
+    (ModelTarget.local("/missing/checkpoint"), True, "c", True),
+    (ModelTarget.hf("owner/repo"), True, "c", True),
+    (None, True, "c", False),
+    (ModelTarget.hf("owner/repo"), False, "c", False),
+    (ModelTarget.hf("owner/repo"), True, "x", False),
+])
+def test_ask_target_clear_is_explicit_and_only_available_for_existing_targets(
+        monkeypatch, current, supports_clear, hotkey, should_clear):
+    # Clearing bypasses selection and existence validation, even for a missing target.
+    cleared, prompts = [], []
+    callbacks, errors, feedback, dialogs = run_ask_target(
+        monkeypatch, hotkey=hotkey, current=current, exist_error="target missing",
+        on_clear=(lambda: cleared.append(True)) if supports_clear else None, prompts=prompts,
+    )
+    assert cleared == ([True] if should_clear else [])
+    assert callbacks == errors == feedback == dialogs == []
+    assert (model_menu_shared.make_hotkey_string("C") in prompts[0]) == (
+        current is not None and supports_clear
+    )
+
+
+@pytest.mark.parametrize("is_preset", [True, False])
+def test_ask_target_treats_a_preset_current_target_as_no_custom_target(monkeypatch, is_preset):
+    # A selected preset isn't a custom model: no current line, no clear, no prefill.
+    # Re-entering its id is still caught as unchanged.
+    current = ModelTarget.hf("owner/preset")
+    presets = [current] if is_preset else [ModelTarget.hf("owner/other")]
+    lines, prompts, prefills = [], [], []
+    monkeypatch.setattr(model_menu_shared, "printt", lambda text="": lines.append(text))
+
+    callbacks, _, feedback, _ = run_ask_target(
+        monkeypatch, hotkey="h", current=current, entered="owner/preset", on_clear=lambda: None,
+        presets=presets, prompts=prompts, prefills=prefills,
+    )
+
+    assert any("Currently:" in line for line in lines) == (not is_preset)
+    assert (model_menu_shared.make_hotkey_string("C") in prompts[0]) == (not is_preset)
+    assert prefills == (["" if is_preset else "owner/preset"])
+    assert callbacks == []
+    assert feedback == [("Already set",)]
 
 
 def test_ask_target_local_uses_the_directory_request_and_types_the_result(monkeypatch, tmp_path):

@@ -37,7 +37,7 @@ def test_model_selection_refreshes_qwen_menu_model_type(monkeypatch) -> None:
     )
     rendered_labels: list[list[str]] = []
 
-    def fake_model_target_submenu(state: State, apply_target) -> None:
+    def fake_model_target_submenu(state: State, apply_target, on_clear=None) -> None:
         apply_target("Qwen/Qwen3-TTS-12Hz-1.7B-Base")
 
     def fake_apply_model_and_validate(

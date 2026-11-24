@@ -33,7 +33,6 @@ if TYPE_CHECKING:
 
 LABEL_LORA = "LoRA"
 LABEL_LORA_STRENGTH = "LoRA strength"
-LABEL_CLEAR_LORA = "Clear LoRA"
 
 
 @dataclass(frozen=True)
@@ -50,7 +49,7 @@ def format_lora_strength(strength: float) -> str:
 
 
 def make_voice_lora_items(state: State, spec: VoiceLoraMenuSpec, index: int) -> list[MenuItem]:
-    """The LoRA item, then (only with a LoRA set) its strength and Clear."""
+    """The LoRA picker (including clear), then its strength when a LoRA is set."""
     voices = state.project.voice_references
     if not 0 <= index < len(voices):
         return []
@@ -63,7 +62,6 @@ def make_voice_lora_items(state: State, spec: VoiceLoraMenuSpec, index: int) -> 
                             format_lora_strength(LORA_STRENGTH_DEFAULT)),
             lambda s, _: ask_voice_lora_strength(s, spec, index),
         ))
-        items.append(MenuItem(LABEL_CLEAR_LORA, lambda s, _: clear_voice_lora(s, spec, index)))
     return items
 
 
@@ -76,6 +74,7 @@ def ask_voice_lora_target(state: State, spec: VoiceLoraMenuSpec, index: int) -> 
         spec=spec.target_prompt,
         current_target=current.target if current else None,
         callback=lambda _, target: validate_and_set_voice_lora(state, spec, index, target),
+        on_clear=lambda: clear_voice_lora(state, spec, index),
     )
 
 
@@ -85,12 +84,12 @@ def validate_and_set_voice_lora(state: State, spec: VoiceLoraMenuSpec, index: in
     current = state.project.voice_references[index].lora_for(spec.model_id)
     lora = VoiceLora(target=target, strength=current.strength if current else LORA_STRENGTH_DEFAULT)
 
-    printt(f"{COL_DIM_ITALICS}Checking LoRA...")
-    printt()
     if spec.check is not None:
         result = spec.check(state.project, lora)
         reason, warnings = result.error, result.warnings
     else:
+        printt(f"{COL_DIM_ITALICS}Checking LoRA...")
+        printt()
         reason, error = _probe_loaded_model(state, lora)
         if error:
             ask.ask_error(error)
@@ -108,7 +107,7 @@ def validate_and_set_voice_lora(state: State, spec: VoiceLoraMenuSpec, index: in
             printt(f"{COL_ACCENT}Warning: {COL_DEFAULT}{warning}")
         printt()
         ask.ask_enter_to_continue()
-    print_feedback("LoRA set:", target)
+    print_feedback("LoRA set", long_pause=True)
 
 
 def _probe_loaded_model(state: State, lora: VoiceLora) -> tuple[str, str]:

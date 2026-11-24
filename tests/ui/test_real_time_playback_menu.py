@@ -55,6 +55,31 @@ def test_menu_omits_text_source_and_keeps_project_options(monkeypatch) -> None:
     assert items[1].superlabel == "Options"
 
 
+@pytest.mark.parametrize(
+    ("line_range", "expected"),
+    [
+        ((2, 3), "2-3 end"),
+        ((1, 3), "1-3 end"),
+        ((2, 2), "2-2"),
+        (None, "all"),
+        ((0, 0), "all"),
+    ],
+)
+def test_menu_line_range_marks_source_end(monkeypatch, line_range, expected) -> None:
+    # Only explicit ranges reaching the final source line get the end marker.
+    state = _make_state(realtime_line_range=line_range)
+    labels: list[str] = []
+
+    def capture_menu(_state, _heading, items, **_kwargs):
+        labels.append(strip_ansi_codes(items[1].label(state)))
+
+    monkeypatch.setattr(MenuUtil, "menu", capture_menu)
+
+    RealTimePlaybackMenu.menu(state)
+
+    assert labels == [f"Line range (currently: {expected})"]
+
+
 def test_line_range_uses_project_text_and_persists_selection(monkeypatch) -> None:
     save_calls: list[None] = []
     state = _make_state(phrase_groups=[object()] * 5, realtime_line_range=(2, 3))

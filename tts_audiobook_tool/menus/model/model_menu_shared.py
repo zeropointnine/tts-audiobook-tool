@@ -408,34 +408,53 @@ class ModelMenuShared:
             spec: TargetPromptSpec,
             current_target: ModelTarget | None,
             callback: Callable[[Project, ModelTarget], None],
+            on_clear: Callable[[], None] | None = None,
+            preset_targets: list[ModelTarget] | None = None,
+            show_subject: bool = True,
     ) -> None:
         """
         Asks the user for a so-called "target": first its kind (a hotkey: L for a local
-        directory, H for a Hugging Face repo; any other key aborts), then a directory
+        directory, H for a Hugging Face repo; C clears an existing target via `on_clear`
+        when supplied; any other key aborts), then a directory
         (the app's directory request) or a repo id. Aborts on an empty entry or a
         cancelled dialog. Calls back only with a target that differs from
         `current_target` and passes its existence check (`ModelTarget.exist_test`,
         with `spec.local_file_markers`).
+
+        A `current_target` among `preset_targets` isn't a custom one: the prompt then shows
+        no current value, offers no clear and prefills nothing.
+
+        `show_subject=False` omits the `spec.subject` heading, for callers whose menu
+        heading already names it.
         """
-        line = spec.subject
-        if current_target is not None:
-            value = ellipsize_path_for_menu(current_target.value)
-            line += f" {COL_DIM}(currently: {COL_ACCENT}{value}{COL_DIM}, {current_target.kind.label})"
-        printt(line)
-        hotkey = ask.ask_hotkey(
-            f"Press {make_hotkey_string('L')} to select a local directory, "
-            f"or {make_hotkey_string('H')} to enter a Hugging Face repo id: "
-        )
+        custom_target = ModelMenuShared.custom_target_of(current_target, preset_targets or [])
+        if show_subject:
+            printt(spec.subject)
+        if custom_target is not None:
+            printt(f"{COL_DIM}Currently: {custom_target.value} ({custom_target.kind.label}){COL_DEFAULT}")
+        can_clear = custom_target is not None and on_clear is not None
+        prompt = f"Press {make_hotkey_string('L')} to select a local directory, "
+        if can_clear:
+            prompt += (f"{make_hotkey_string('H')} to enter a Hugging Face repo id, "
+                       f"or {make_hotkey_string('C')} to clear: ")
+        else:
+            prompt += f"or {make_hotkey_string('H')} to enter a Hugging Face repo id: "
+        hotkey = ask.ask_hotkey(prompt)
         printt()
+        if hotkey == "c" and can_clear:
+            assert on_clear is not None
+            on_clear()
+            return
         if hotkey == "l":
-            new_target = ModelMenuShared._ask_local_target(spec, current_target)
+            new_target = ModelMenuShared._ask_local_target(spec, custom_target)
         elif hotkey == "h":
-            new_target = ModelMenuShared._ask_hf_target(spec, current_target)
+            new_target = ModelMenuShared._ask_hf_target(spec, custom_target)
         else:
             return
         if new_target is None:
             return
 
+        # Against the stored target, so re-entering a selected preset's id is still no change
         if new_target.is_same(current_target):
             print_feedback("Already set")
             return
@@ -446,6 +465,13 @@ class ModelMenuShared:
             return
 
         callback(project, new_target)
+
+    @staticmethod
+    def custom_target_of(current_target: ModelTarget | None, preset_targets: list[ModelTarget]) -> ModelTarget | None:
+        """`current_target`, unless it's one of `preset_targets` (then None)."""
+        if current_target is None or any(current_target.is_same(target) for target in preset_targets):
+            return None
+        return current_target
 
     @staticmethod
     def _ask_local_target(spec: TargetPromptSpec, current_target: ModelTarget | None) -> ModelTarget | None:
@@ -467,7 +493,8 @@ class ModelMenuShared:
 
     @staticmethod
     def _ask_hf_target(spec: TargetPromptSpec, current_target: ModelTarget | None) -> ModelTarget | None:
-        printt(f"Enter Hugging Face repo id of {spec.subject}")
+        # The subject is already named above (the `ask_target` heading, or the caller's menu)
+        printt("Enter Hugging Face repo id")
         if spec.hf_example:
             printt(f"{COL_DIM}Eg, \"{spec.hf_example}\"")
         printt(f"{COL_DIM}For a subdirectory within the repo, append its path: \"owner/repo/sub/dir\"")
@@ -514,33 +541,37 @@ class ModelMenuShared:
             ask_custom_target: Callable[[], None],
             apply_target: Callable[[ModelTarget], None],
             sublabels: list[str] | None = None,
-            custom_label: str = "Enter custom model (local directory or Hugging Face repo)",
+            custom_label: str = "Enter custom model",
+            custom_hint: str = "(local directory or Hugging Face repo)",
             breadcrumb: str | None = None,
     ) -> None:
         if sublabels and len(sublabels) != len(preset_targets):
             raise ValueError("sublabels and preset_targets lists must have same size")
 
+        # With no stored target, the default is what runs, so it shows as selected
+        effective_target = current_target or default_target
+
         def make_preset_label(target: ModelTarget) -> str:
             label = target.value
             if target == default_target:
                 label += f" {COL_DIM}(default)"
-            if target == current_target:
+            if target == effective_target:
                 label += f" {COL_ACCENT}(selected)"
             return label
 
         def make_custom_label() -> str:
             label = custom_label
-            is_custom = current_target is not None and not any(
-                current_target.is_same(target) for target in preset_targets
-            )
-            if is_custom:
-                assert current_target is not None
-                value = ellipsize_path_for_menu(current_target.value)
+            custom_target = ModelMenuShared.custom_target_of(current_target, preset_targets)
+            if custom_target is not None:
+                # The current value already shows what kind of entry is expected
+                value = ellipsize_path_for_menu(custom_target.value)
                 label += f" {COL_DIM}(currently: {COL_ACCENT}{value}{COL_DIM})"
+            elif custom_hint:
+                label += f" {custom_hint}"
             return label
 
         def apply_preset_if_changed(target: ModelTarget) -> None:
-            if target.is_same(current_target):
+            if target.is_same(effective_target):
                 return
             apply_target(target)
 

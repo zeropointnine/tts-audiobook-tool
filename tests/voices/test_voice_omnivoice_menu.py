@@ -42,7 +42,7 @@ def test_voices_menu_dispatches_to_the_omnivoice_menu(monkeypatch, tmp_path):
 
 def test_omnivoice_menu_wires_per_voice_lora_controls(monkeypatch, tmp_path):
     # The voice list has no global LoRA action. Voice 2's submenu uses its own
-    # LoRA/strength/clear controls, with Omni's adapter markers and speaker guidance.
+    # LoRA picker/strength controls, with Omni's adapter markers.
     state = make_state(tmp_path)
     captured, opened, asked, validated = {}, {}, {}, []
     monkeypatch.setattr(menu.VoiceMenuShared, "menu_wrapper", lambda state, items: captured.update(items=items))
@@ -62,22 +62,24 @@ def test_omnivoice_menu_wires_per_voice_lora_controls(monkeypatch, tmp_path):
     assert opened["index"] == 1
     extra = opened["voice_extra_items"](state, opened["index"])
     labels = labels_of(state, extra)
-    assert len(extra) == 3
+    assert len(extra) == 2
     assert labels[0].startswith("LoRA") and "second-speaker" in labels[0]
     assert labels[1].startswith("LoRA strength") and "0.50" in labels[1]
-    assert labels[2] == "Clear LoRA"
+    assert "Clear LoRA" not in labels
 
     extra[0].handler(state, extra[0])
     assert asked["current_target"] == ModelTarget.hf("owner/second-speaker")
     assert asked["spec"].local_file_markers == ["adapter_config.json", "adapter_model.safetensors"]
     assert "OmniVoice LoRA" in asked["spec"].subject
-    assert "without a voice sample" in asked["spec"].note
     asked["callback"](state.project, ModelTarget.hf("new-lora"))
     [(received_state, spec, index, target)] = validated
     assert received_state is state
     assert spec.model_id == MODEL_ID
     assert (index, target) == (1, ModelTarget.hf("new-lora"))
     assert not (tmp_path / "project.json").exists()
+    monkeypatch.setattr(lora_items, "print_feedback", lambda *_, **__: None)
+    asked["on_clear"]()
+    assert state.project.voice_references[1].lora_for(MODEL_ID) is None
 
 
 def test_replacing_an_omnivoice_lora_keeps_the_voices_strength(monkeypatch, tmp_path):
