@@ -120,7 +120,7 @@ def prepare_lora(model: torch.nn.Module, model_dir: str, target: ModelTarget, st
     # Rank/alpha live in JSON, not the tensor file; changing them must invalidate
     # an already merged adapter too. Strength is tracked separately in LoraKey.
     identity = f"{source.weights_sha256}:{source.rank}:{source.alpha!r}"
-    return PreparedLora(plan=plan, identity=identity, display=target.display_name())
+    return PreparedLora(plan=plan, identity=identity, display=target.value)
 
 
 def load_lora(

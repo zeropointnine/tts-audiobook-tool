@@ -334,6 +334,15 @@ class ProjectVoiceUtil:
         return value
 
     @staticmethod
+    def make_voice_lora_display_label(lora: VoiceLora) -> str:
+        """Standard menu path label; local adapters link to their full target directory."""
+        target = lora.target
+        value = ellipsize_path_for_menu(target.value)
+        if target.is_local:
+            value = text_util.make_terminal_hyperlink(target.value, value, is_file=True)
+        return value
+
+    @staticmethod
     def make_voice_file_name_tag(voice_file_name: str, file_tag: str) -> str:
         if not voice_file_name:
             return "none"
@@ -876,7 +885,7 @@ class ProjectVoiceUtil:
                 return VoiceSource("instructions", ProjectVoiceUtil.make_instructions_preview(instructions))
             lora = ProjectVoiceUtil.active_voice_lora(project, voice)
             if lora is not None and not requires_sample:
-                return VoiceSource("lora", f"LoRA {lora.target.display_name()}")
+                return VoiceSource("lora", f"LoRA {ProjectVoiceUtil.make_voice_lora_display_label(lora)}")
         if requires_preset or requires_sample:
             return VoiceSource("missing")
         return VoiceSource("builtin")

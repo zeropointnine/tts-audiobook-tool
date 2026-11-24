@@ -125,8 +125,49 @@ def test_a_voice_with_only_a_lora_has_a_value():
     # A sample-less, instruction-less voice is "builtin" unless its LoRA fixes the speaker
     project = Project(tts_model_type=BREEZE, voice_references=[Voice(loras={BREEZE: VoiceLora(TARGET)}), Voice()])
     with_lora, without = (ProjectVoiceUtil.resolve_voice_source(project, v) for v in project.voice_references)
-    assert with_lora.kind == "lora" and with_lora.has_value and "fw-leda-checkpoint" in with_lora.label
+    from tts_audiobook_tool.util import ellipsize_path_for_menu
+    assert with_lora.kind == "lora" and with_lora.has_value
+    from tts_audiobook_tool.text_util import strip_ansi_codes
+    assert strip_ansi_codes(with_lora.label) == f"LoRA {ellipsize_path_for_menu(TARGET.value)}"
     assert without.kind == "builtin"
     # A sample still takes precedence as the voice's source
     sampled = Voice("a.flac", "Hi.", loras={BREEZE: VoiceLora(TARGET)})
     assert ProjectVoiceUtil.resolve_voice_source(project, sampled).kind == "sample"
+
+
+@pytest.mark.parametrize("target", [
+    ModelTarget.local("/runs/alice/checkpoint-3000/lora"),
+    ModelTarget.local("/mnt/x/w/_loras/brina palencia - spice and wolf/vol 14/lora/checkpoint-1000"),
+    ModelTarget.hf("owner/alice"),
+    ModelTarget.hf("owner/long-repository-name/voices/alice/checkpoint-1000/lora"),
+])
+def test_lora_list_labels_use_menu_paths_but_filename_tags_stay_unchanged(monkeypatch, target):
+    # Both list branches use the same path ellipsizing as the picker, for local and HF targets.
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+    from tts_audiobook_tool.text_util import strip_ansi_codes
+    from tts_audiobook_tool.tts import Tts
+    from tts_audiobook_tool.util import ellipsize_path_for_menu
+
+    model_id = "vibevoice_local"
+    lora = VoiceLora(target)
+    project = Project(tts_model_type=model_id, voice_references=[
+        Voice(loras={model_id: lora}),
+        Voice("sample.wav", loras={model_id: lora}),
+    ])
+    monkeypatch.setattr(VoiceMenuShared, "get_voice_sample_duration", lambda *_: 13.3)
+    raw_labels = [VoiceMenuShared.make_voice_sample_item_label(
+        project, project.get_tts_model_type(), index)[0] for index in range(2)]
+    labels = [strip_ansi_codes(label) for label in raw_labels]
+    path_label = ellipsize_path_for_menu(target.value)
+    # Only the path text is linked, and the destination retains the full untruncated value.
+    from tts_audiobook_tool.text_util import make_terminal_hyperlink
+    for label in raw_labels:
+        if target.is_local:
+            assert f"LoRA {make_terminal_hyperlink(target.value, path_label, is_file=True)}" in label
+        else:
+            assert "\u001b]8;;" not in label
+    assert labels == [f"Voice 1: LoRA {path_label}",
+                      f"Voice 2: sample (13.3s); LoRA {path_label}"]
+    for index in range(2):
+        assert Tts.get_voice_tag_for_selection_index(project, index) == ProjectVoiceUtil.make_voice_tag(
+            target.display_name())

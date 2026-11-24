@@ -45,7 +45,7 @@ def prepare_lora(model: torch.nn.Module, target: ModelTarget, strength: float = 
     """Validates an adapter for per-voice switching, without changing the loaded weights."""
     adapter = resolve_adapter(target)
     plan = plan_merge(model, adapter, strength)
-    return PreparedLora(plan, peft_lora.make_identity(adapter.weights_path, plan), target.display_name())
+    return PreparedLora(plan, peft_lora.make_identity(adapter.weights_path, plan), target.value)
 
 
 def load_lora(model: torch.nn.Module, target: ModelTarget, strength: float = 1.0) -> LoraMergePlan:

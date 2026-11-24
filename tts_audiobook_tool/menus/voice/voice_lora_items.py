@@ -23,7 +23,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import (
-    COL_ACCENT, COL_DEFAULT, ellipsize_path_for_menu, make_menu_label, print_feedback, printt,
+    COL_ACCENT, COL_DEFAULT, make_menu_label, print_feedback, printt,
 )
 
 if TYPE_CHECKING:
@@ -53,7 +53,7 @@ def make_voice_lora_items(state: State, spec: VoiceLoraMenuSpec, index: int) -> 
     if not 0 <= index < len(voices):
         return []
     lora = voices[index].lora_for(spec.model_id)
-    value = ellipsize_path_for_menu(lora.target.value) if lora else "none"
+    value = ProjectVoiceUtil.make_voice_lora_display_label(lora) if lora else "none"
     items = [MenuItem(make_menu_label(LABEL_LORA, value), lambda s, _: ask_voice_lora_target(s, spec, index))]
     if lora:
         items.append(MenuItem(

@@ -66,7 +66,7 @@ def prepare_lora(model: torch.nn.Module, target: ModelTarget, strength: float = 
     directory = resolve_adapter_dir(target)
     plan = plan_merge(model, directory, strength)
     identity = peft_lora.make_identity(os.path.join(directory, ADAPTER_WEIGHTS_FILE_NAME), plan)
-    return PreparedLora(plan, identity, target.display_name())
+    return PreparedLora(plan, identity, target.value)
 
 
 def load_lora(model: torch.nn.Module, target: ModelTarget, strength: float = 1.0) -> LoraMergePlan:

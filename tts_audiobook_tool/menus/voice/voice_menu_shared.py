@@ -873,7 +873,7 @@ class VoiceMenuShared:
         # A per-voice LoRA, unless it's already the voice's value (a voice with only a LoRA)
         lora = ProjectVoiceUtil.active_voice_lora(project, voice)
         if lora is not None and source.kind != "lora":
-            parts.append(f"LoRA {lora.target.display_name()}")
+            parts.append(f"LoRA {ProjectVoiceUtil.make_voice_lora_display_label(lora)}")
         elif source.kind == "lora":
             parts.append(source.label)
         if not parts:

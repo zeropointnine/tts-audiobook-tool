@@ -112,7 +112,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 continue
             error = self._loras.prepare(lora)
             if error:
-                problems.append(f"Voice {index + 1} LoRA ({lora.target.display_name()}): {error}")
+                problems.append(f"Voice {index + 1} LoRA ({lora.target.value}): {error}")
         return problems
 
     def end_generation_run(self) -> None:

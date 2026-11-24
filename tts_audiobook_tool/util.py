@@ -351,9 +351,9 @@ def time_stamp(seconds: float, with_tenth: bool=True) -> str:
 def ellipsize(s: str, length: int, from_start:bool = False) -> str:
     if len(s) > length:
         if from_start:
-            s = "..." + s[-(length - 3):]
+            s = "..." + s[-(length - 3):].lstrip()
         else:
-            s = s[:length - 3] + "..."
+            s = s[:length - 3].rstrip() + "..."
     return s
 
 def get_package_dir() -> str | None:

@@ -241,6 +241,12 @@ def test_display_name(target, expected):
     assert target.display_name() == expected
 
 
+def test_display_name_keeps_legacy_tag_name():
+    # UI path formatting must not change the name used to derive generated filename tags.
+    target = ModelTarget.local("/runs/alice/checkpoint-3000/lora")
+    assert target.display_name() == "checkpoint-3000-lora"
+
+
 @pytest.mark.parametrize("value,expected", [
     ("/abs/dir", True),
     ("~/loras", True),
