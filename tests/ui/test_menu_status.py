@@ -571,11 +571,11 @@ def test_status_auto_selects_sole_model_and_defers_hint_until_menu(
         return
     old_name = (_display_name(TtsModelType.require_by_id("mira_local")) if saved == "mira_local" else
                 f"Unknown model: {saved}")
-    # The notice explains where the sole model came from: the server or this environment.
+    # Local selection and a usable remote binding use distinct environment wording.
     current = _display_name(model)
-    reason = (f"This environment has {current} installed, so it will use that."
+    reason = (f"The current environment uses {current}."
               if model.value.backend_kind is TtsBackendKind.LOCAL
-              else f"The server is serving {current}, so it will use that.")
+              else f"This environment currently uses {current}.")
     assert output == f"🔔 FYI\nThis project was last used with TTS model {old_name}.\n{reason}\n\n"
     assert state.pending_tts_model_change is None
 
@@ -591,16 +591,21 @@ def sole_remote_model(monkeypatch):
     return model
 
 
-def test_model_change_hint_reports_binding_failure(monkeypatch, capsys, sole_remote_model):
+@pytest.mark.parametrize("offline", [False, True])
+def test_model_change_hint_reports_binding_failure(monkeypatch, capsys, sole_remote_model, offline):
+    # A failed binding (including an outage before display) describes configuration, not use.
     state = make_state(TtsModelType.require_by_id("chatterbox_local"))
-    monkeypatch.setattr(Tts, "get_active_type", lambda: TtsModelType.require_by_id("none"))
     MenuStatus.prepare_tts(state)
+    if offline:
+        monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+            issue=RemoteTtsIssue("unavailable", "Server is offline")))
+    monkeypatch.setattr(Tts, "get_active_type", lambda: TtsModelType.require_by_id("none"))
     MenuStatus.show_pending_tts_model_hint(state)
 
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
     assert output == (
         "🔔 FYI\nThis project was last used with TTS model Chatterbox TTS (local).\n"
-        f"It has been switched to {_display_name(sole_remote_model)}, "
+        f"This environment is configured to use {_display_name(sole_remote_model)}, "
         "but that model can't be used yet (see Model settings).\n\n"
     )
     assert state.pending_tts_model_change is None
@@ -633,7 +638,7 @@ def test_model_change_hint_coalesces_to_first_old_and_latest_new(monkeypatch, ca
     MenuStatus.show_pending_tts_model_hint(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
     assert "last used with TTS model Chatterbox TTS" in output
-    assert f"The server is serving {_display_name(latest)}, so it will use that." in output
+    assert f"This environment currently uses {_display_name(latest)}." in output
     assert sole_remote_model.value.ui["proper_name"] not in output
 
 
@@ -687,7 +692,7 @@ def test_local_startup_notice_waits_for_first_main_menu(monkeypatch, capsys):
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
     assert output.count("FYI") == 1
     assert "last used with TTS model Echo-TTS" in output
-    assert "This environment has Chatterbox TTS (local) installed, so it will use that." in output
+    assert "The current environment uses Chatterbox TTS (local)." in output
     assert state.pending_tts_model_change is None
 
 
@@ -1110,20 +1115,20 @@ def test_remembered_audio_cpp_selection_notices(monkeypatch, capsys, case):
     sole = _display_name(chatterbox)
     unusable = "but that model can't be used yet (see Model settings)."
     expected = {
-        "restored": f"{old_line}.\nIt will switch back to its last-used audio.cpp model, {remembered}.",
-        "restored_from_none": f"This project will switch back to its last-used audio.cpp model, {remembered}.",
-        "restored_unbound": (f"{old_line}.\nIt has been switched back to its last-used audio.cpp model, "
-                             f"{remembered},\n{unusable}"),
-        "restored_unbound_from_none": (f"This project has been switched back to its last-used audio.cpp model, "
-                                       f"{remembered},\n{unusable}"),
+        "restored": f"{old_line}.\nThis environment currently uses {remembered}.",
+        "restored_from_none": f"This environment currently uses {remembered}.",
+        "restored_unbound": (f"{old_line}.\nThis environment is configured to use "
+                             f"{remembered}, {unusable}"),
+        "restored_unbound_from_none": (f"This environment is configured to use "
+                                       f"{remembered}, {unusable}"),
         "unavailable_multiple": (f"{old_line}.\nIts last-used audio.cpp model, {remembered},\n"
                                  "is currently unavailable.\nSelect a TTS model in Model settings > TTS model."),
         "unavailable_sole": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, is not on this server.\n"
-                             f"The server is serving {sole}, so it will use that."),
+                             f"This environment currently uses {sole}."),
         "unavailable_sole_from_none": (f"This project's last-used audio.cpp model, {remembered}, "
-                                       f"is not on this server.\nThe server is serving {sole}, so it will use that."),
+                                       f"is not on this server.\nThis environment currently uses {sole}."),
         "unavailable_sole_unbound": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, "
-                                     f"is not on this server.\nThis project has been switched to {sole}, {unusable}"),
+                                     f"is not on this server.\nThis environment is configured to use {sole}, {unusable}"),
     }[case]
     assert output == f"🔔 FYI\n{expected}\n\n"
 
@@ -1151,8 +1156,7 @@ def test_saved_entry_missing_from_new_server_announces_replacement(monkeypatch, 
     old_name = f"{fish.value.ui['proper_name']} (audio.cpp; fish-drama3)"
     if sole:
         assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name}.\n"
-                          f"The server is serving {chatterbox.value.ui['proper_name']} (audio.cpp; cb), "
-                          "so it will use that.\n\n")
+                          f"This environment currently uses {chatterbox.value.ui['proper_name']} (audio.cpp; cb).\n\n")
     else:
         assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name},\nwhich is currently "
                           "unavailable.\nSelect a TTS model in Model settings > TTS model.\n\n")

@@ -199,7 +199,7 @@ def test_deferred_tts_hint_follows_menu_and_on_shown_without_pausing(
     if is_submenu:
         assert first.index("to go back one level") < first.index("🔔 FYI")
     assert "last used with TTS model Chatterbox TTS" in first
-    assert f"The server is serving {model.value.ui['proper_name']}" in first
+    assert f"This environment currently uses {model.value.ui['proper_name']}" in first
     assert "Press enter:" not in first
     if with_long_sample:
         assert first.index("last used with") < first.index("recommended duration")
@@ -253,7 +253,7 @@ def test_local_fyi_skips_submenu_and_shows_once_at_first_main_menu(monkeypatch, 
     assert rendered[1].index("Quit") < rendered[1].index("Main menu on_shown output")
     assert rendered[1].index("Main menu on_shown output") < rendered[1].index("🔔 FYI")
     assert "last used with TTS model Echo-TTS" in rendered[1]
-    assert "This environment has Chatterbox TTS (local) installed" in rendered[1]
+    assert "The current environment uses Chatterbox TTS (local)." in rendered[1]
     assert "Press enter:" not in rendered[1]
     assert "FYI" not in rendered[2]
     assert state.project.tts_model_type == "chatterbox_local"
