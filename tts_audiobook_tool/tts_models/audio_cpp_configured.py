@@ -24,7 +24,6 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
     from collections.abc import Iterable
-    from tts_audiobook_tool.app_types.voice import VoiceLora
     from tts_audiobook_tool.tts_models.model_support import VoiceLoraMode
 
 # Request fields only the adapter decides; `AudioCppModelBehavior.adjust_payload`
@@ -290,9 +289,6 @@ class AudioCppBackendAdapter:
 
     def prepare_voice_loras(self, project: Project, voice_indices: Iterable[int]) -> list[str]:
         return []
-
-    def validate_voice_lora(self, lora: VoiceLora) -> str:
-        return "This model doesn't support per-voice LoRAs"
 
     def end_generation_run(self) -> None:
         pass

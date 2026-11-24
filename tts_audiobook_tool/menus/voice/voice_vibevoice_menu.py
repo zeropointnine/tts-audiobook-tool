@@ -1,16 +1,33 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from tts_audiobook_tool.app_types.voice import VoiceLora
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.menus.voice.voice_lora_items import VoiceLoraMenuSpec, make_voice_lora_items
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.menus.model.model_menu_shared import TargetPromptSpec
 
+if TYPE_CHECKING:
+    from tts_audiobook_tool.tts_models.lora_files import LoraCheck
+
 MODEL_ID = "vibevoice_local"
 
 
+def check_lora(project: Project, lora: VoiceLora) -> LoraCheck:
+    # Against the base model the project would load (only its config.json is read)
+    from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
+    from tts_audiobook_tool.tts_models.vibevoice_lora_check import check_adapter
+    base_target = project.get_model_target(MODEL_ID) or VibeVoiceBaseModel.DEFAULT_TARGET
+    return check_adapter(lora.target, base_target, lora.strength)
+
+
 def make_lora_spec() -> VoiceLoraMenuSpec:
-    from tts_audiobook_tool.tts_models.vibevoice_lora import LOCAL_FILE_MARKERS
-    return VoiceLoraMenuSpec(model_id=MODEL_ID, target_prompt=TargetPromptSpec(
+    from tts_audiobook_tool.tts_models.vibevoice_lora_check import LOCAL_FILE_MARKERS
+    return VoiceLoraMenuSpec(model_id=MODEL_ID, check=check_lora, target_prompt=TargetPromptSpec(
         subject="VibeVoice LoRA",
         hf_example="vibevoice-community/klett",
         local_hint=("An adapter directory (eg output/checkpoint-900) contains adapter_config.json and "

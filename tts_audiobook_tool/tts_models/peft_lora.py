@@ -16,7 +16,7 @@ Replacements are copied at strength 1, else blended from the base: `W + strength
 Only plain LoRA is supported; anything else (DoRA, per-module rank or alpha patterns,
 LoRA biases, embedding LoRA, other PEFT types) is rejected rather than merged
 approximately. Everything is validated before any weight changes. The config and key
-handling are torch-free (`peft_lora_config`), for the model-free menu check.
+handling are torch-free (`peft_lora_config`), for the model-free menu checks (`peft_lora_check`).
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ import os
 
 import torch
 
-from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan
+from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, check_finite
 from tts_audiobook_tool.tts_models.lora_files import check_strength, sha256_file
 # The torch-free config and key handling (file names re-exported for callers)
 from tts_audiobook_tool.tts_models.peft_lora_config import (
@@ -120,6 +120,16 @@ def _plan_merge(
     if not plan.pairs and not plan.replacements:
         raise LoraLoadError("Adapter has no tensors")
     return plan
+
+
+def check_plan_finite(plan: LoraMergePlan) -> None:
+    """Rejects a plan whose LoRA factors or replacements hold a NaN or infinity (`check_finite`),
+    as the model-free menu checks do, naming factors as `<module>.lora_A` / `.lora_B`."""
+    factors = {}
+    for name, (a, b) in plan.pairs.items():
+        module = name.removesuffix(".weight")
+        factors[f"{module}.lora_A"], factors[f"{module}.lora_B"] = a, b
+    check_finite({**factors, **plan.replacements})
 
 
 def make_identity(weights_path: str, plan: LoraMergePlan) -> str:

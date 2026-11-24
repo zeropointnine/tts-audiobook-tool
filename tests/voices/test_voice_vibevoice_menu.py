@@ -82,16 +82,20 @@ def test_vibevoice_menu_wires_per_voice_lora_controls(monkeypatch, tmp_path):
     assert state.project.voice_references[1].lora_for(MODEL_ID) is None
 
 
-def test_selecting_a_vibevoice_lora_probes_the_resident_model_without_reloading(monkeypatch, tmp_path):
-    # The adapter is validated against the loaded model (no reload: LoRAs aren't load
-    # parameters) and saved at the strength the voice already had.
+def test_selecting_a_vibevoice_lora_is_checked_without_the_model(monkeypatch, tmp_path):
+    # The new adapter is checked without loading (or reloading) the model, against the
+    # project's base (the default here), and saved at the strength the voice already had.
+    from tts_audiobook_tool.tts_models import vibevoice_lora_check
+    from tts_audiobook_tool.tts_models.lora_files import LoraCheck
     from tts_audiobook_tool.model_worker import ModelWorker
     state = make_state(tmp_path)
-    probes = []
+    checks = []
+    monkeypatch.setattr(vibevoice_lora_check, "check_adapter",
+                        lambda target, base, strength: checks.append((target, base, strength)) or LoraCheck())
+    monkeypatch.setattr(ModelWorker, "inspect_tts_blocking", lambda *_, **__: pytest.fail("model probed"))
     monkeypatch.setattr(ModelWorker, "clear_models_if_running_blocking",
                         lambda: pytest.fail("Changing a voice's LoRA must not reload the model"))
-    monkeypatch.setattr(ModelWorker, "inspect_tts_blocking", lambda _state, probe_lora: probes.append(probe_lora)
-                        or (SimpleNamespace(metadata={"lora_probe_error": ""}), ""))
+    monkeypatch.setattr(lora_items, "print_feedback", lambda *_, **__: None)
     lora_items.validate_and_set_voice_lora(state, menu.make_lora_spec(), 1, ModelTarget.hf("owner/new-speaker"))
-    assert probes == [VoiceLora(ModelTarget.hf("owner/new-speaker"), 0.5)]
+    assert checks == [(ModelTarget.hf("owner/new-speaker"), ModelTarget.hf("microsoft/VibeVoice-1.5b"), 0.5)]
     assert state.project.voice_references[1].lora_for(MODEL_ID) == VoiceLora(ModelTarget.hf("owner/new-speaker"), 0.5)

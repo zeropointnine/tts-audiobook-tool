@@ -1,5 +1,5 @@
 """Torch-free LoRA adapter file handling, shared by the merge loaders (`breeze_lora`, `peft_lora`)
-and the voice menu's model-free checks (`breeze_lora_check`, `omnivoice_lora_check`), which
+and the voice menu's model-free checks (`breeze_lora_check`, `peft_lora_check`), which
 run in the main process: no torch, safetensors or model library is imported here.
 
 A safetensors file is an 8-byte little-endian header length, a JSON header (tensor name ->

@@ -2,11 +2,10 @@
 `voice_lora_mode` isn't "none". Model-agnostic: a model's voice menu supplies a
 `VoiceLoraMenuSpec` (its target prompt, including which local files mark an adapter directory).
 
-Selecting a LoRA checks it before saving: with the spec's model-free `check` when it has one
-(eg `breeze_lora_check`; in this process, without loading the model), else against the loaded
-model (`ModelWorker.inspect_tts_blocking` with `probe_lora`, loading it if needed). A check's
-warnings are shown after saving. Strength and clear save directly. None of these reload the
-model: the LoRA is applied per call, and every run checks its LoRAs against the loaded model.
+Selecting a LoRA checks it before saving with the spec's model-free `check` (eg
+`breeze_lora_check`; in this process, without loading the model). A check's warnings are shown
+after saving. Strength and clear save directly. None of these reload the model: the LoRA is
+applied per call, and every run checks its LoRAs against the loaded model.
 """
 from __future__ import annotations
 
@@ -24,7 +23,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import (
-    COL_ACCENT, COL_DEFAULT, COL_DIM_ITALICS, ellipsize_path_for_menu, make_menu_label, print_feedback, printt,
+    COL_ACCENT, COL_DEFAULT, ellipsize_path_for_menu, make_menu_label, print_feedback, printt,
 )
 
 if TYPE_CHECKING:
@@ -40,8 +39,8 @@ class VoiceLoraMenuSpec:
     model_id: str
     # How the adapter is asked for (`ModelMenuShared.ask_target`)
     target_prompt: TargetPromptSpec
-    # Checks an adapter without the model (must be torch-free); None: probe the loaded model
-    check: Callable[[Project, VoiceLora], LoraCheck] | None = None
+    # Checks an adapter without the model (must be torch-free)
+    check: Callable[[Project, VoiceLora], LoraCheck]
 
 
 def format_lora_strength(strength: float) -> str:
@@ -84,43 +83,20 @@ def validate_and_set_voice_lora(state: State, spec: VoiceLoraMenuSpec, index: in
     current = state.project.voice_references[index].lora_for(spec.model_id)
     lora = VoiceLora(target=target, strength=current.strength if current else LORA_STRENGTH_DEFAULT)
 
-    if spec.check is not None:
-        result = spec.check(state.project, lora)
-        reason, warnings = result.error, result.warnings
-    else:
-        printt(f"{COL_DIM_ITALICS}Checking LoRA...")
-        printt()
-        reason, error = _probe_loaded_model(state, lora)
-        if error:
-            ask.ask_error(error)
-            return
-        warnings = ()
-    if reason:
-        ask.ask_error(f"Couldn't load LoRA: {reason}")
+    result = spec.check(state.project, lora)
+    if result.error:
+        ask.ask_error(f"Couldn't load LoRA: {result.error}")
         return
     error = ProjectVoiceUtil.set_voice_lora_at_index_and_save(state.project, index, spec.model_id, lora)
     if error:
         ask.ask_error(error)
         return
-    if warnings:
-        for warning in warnings:
+    if result.warnings:
+        for warning in result.warnings:
             printt(f"{COL_ACCENT}Warning: {COL_DEFAULT}{warning}")
         printt()
         ask.ask_enter_to_continue()
     print_feedback("LoRA set", long_pause=True)
-
-
-def _probe_loaded_model(state: State, lora: VoiceLora) -> tuple[str, str]:
-    """(the model's rejection reason or "", an error that prevented the check or "")."""
-    from tts_audiobook_tool.model_worker import ModelWorker
-
-    inspection, error = ModelWorker.inspect_tts_blocking(state, probe_lora=lora)
-    if error or inspection is None:
-        return "", f"{error}"
-    reason = (inspection.metadata or {}).get("lora_probe_error")
-    if reason is None:
-        return "", "Couldn't check LoRA (model didn't report a result)"
-    return str(reason), ""
 
 
 def ask_voice_lora_strength(state: State, spec: VoiceLoraMenuSpec, index: int) -> None:

@@ -8,82 +8,37 @@ generated frame (two language model passes per frame, CFG), while a merged adapt
 
 An adapter directory holds `adapter_config.json` plus `adapter_model.safetensors` (or an older
 `adapter_model.bin`), either directly or in a `lora/` subdirectory (the trainer's output and
-checkpoint directories). The trainer can also save a fine-tuned diffusion head and connectors
-next to the adapter (`diffusion_head/`, `acoustic_connector/`, `semantic_connector/`); like the
-app's earlier PEFT loading, those are not applied.
+checkpoint directories); that torch-free layout handling lives in `vibevoice_lora_check`, the
+voice menu's model-free check. The trainer can also save a fine-tuned diffusion head and
+connectors next to the adapter (`diffusion_head/`, `acoustic_connector/`, `semantic_connector/`);
+like the app's earlier PEFT loading, those are not applied.
 
-Per-voice adapters are switched by restoring clean base weights and remerging (`lora_switch`).
+Everything is validated before any weight changes, including that no adapter tensor holds a NaN
+or infinity. Per-voice adapters are switched by restoring clean base weights and remerging
+(`lora_switch`).
 """
 from __future__ import annotations
-
-import os
-from dataclasses import dataclass
 
 import torch
 
 from tts_audiobook_tool.app_types.model_target import ModelTarget
 from tts_audiobook_tool.tts_models import peft_lora
-from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, apply_merge
+from tts_audiobook_tool.tts_models.lora_merge import LoraMergePlan, apply_merge
 from tts_audiobook_tool.tts_models.lora_switch import PreparedLora
-from tts_audiobook_tool.tts_models.peft_lora import (
-    ADAPTER_CONFIG_FILE_NAME, ADAPTER_WEIGHTS_BIN_FILE_NAME, ADAPTER_WEIGHTS_FILE_NAME,
+# The torch-free adapter-directory handling, shared with the model-free menu check
+from tts_audiobook_tool.tts_models.vibevoice_lora_check import (
+    FOREIGN_KEY_HINT, LANGUAGE_MODEL_PREFIX, VibeVoiceAdapter, resolve_adapter,
 )
-
-# The trainer saves the adapter here, inside its output and checkpoint directories
-LORA_SUBDIR = "lora"
-# Where the adapter's keys (relative to the language model) live in the whole model
-LANGUAGE_MODEL_PREFIX = "model.language_model."
-
-_WEIGHTS_FILE_NAMES = [ADAPTER_WEIGHTS_FILE_NAME, ADAPTER_WEIGHTS_BIN_FILE_NAME]
-_FILE_NAMES = [ADAPTER_CONFIG_FILE_NAME, *_WEIGHTS_FILE_NAMES]
-# Files that make a local directory (or hf repo) acceptable (`ModelTarget.exist_test` markers)
-LOCAL_FILE_MARKERS = [ADAPTER_CONFIG_FILE_NAME, f"{LORA_SUBDIR}/{ADAPTER_CONFIG_FILE_NAME}"]
-
-_FOREIGN_KEY_HINT = ("expected a language model adapter, as written by VibeVoice-finetuning "
-                     "(voicepowered-ai/VibeVoice-finetuning)")
-
-
-@dataclass(frozen=True)
-class VibeVoiceAdapter:
-    directory: str
-    weights_file_name: str
-
-    @property
-    def weights_path(self) -> str:
-        return os.path.join(self.directory, self.weights_file_name)
-
-
-def find_adapter(directory: str) -> VibeVoiceAdapter | None:
-    """The adapter in `directory` itself, else in its `lora/` subdirectory; None if neither has one."""
-    for candidate in (directory, os.path.join(directory, LORA_SUBDIR)):
-        if not os.path.isfile(os.path.join(candidate, ADAPTER_CONFIG_FILE_NAME)):
-            continue
-        for name in _WEIGHTS_FILE_NAMES:
-            if os.path.isfile(os.path.join(candidate, name)):
-                return VibeVoiceAdapter(candidate, name)
-    return None
-
-
-def resolve_adapter(target: ModelTarget) -> VibeVoiceAdapter:
-    """A local directory, an hf repo, or a directory inside one; downloads only the adapter files."""
-    try:
-        names = [*_FILE_NAMES, *(f"{LORA_SUBDIR}/{name}" for name in _FILE_NAMES)]
-        directory = target.resolve_local_dir(names)
-    except Exception as e:
-        raise LoraLoadError(f"Couldn't get adapter files for {target.value}: {e}") from e
-    adapter = find_adapter(directory)
-    if adapter is None:
-        raise LoraLoadError(f"No {ADAPTER_CONFIG_FILE_NAME} with {ADAPTER_WEIGHTS_FILE_NAME} "
-                            f"in {target.value} (or its {LORA_SUBDIR}/ subdirectory)")
-    return adapter
 
 
 def plan_merge(model: torch.nn.Module, adapter: VibeVoiceAdapter, strength: float = 1.0) -> LoraMergePlan:
     """Reads and validates an adapter against the whole VibeVoice model without changing it."""
-    return peft_lora.plan_merge(
+    plan = peft_lora.plan_merge(
         model, adapter.directory, strength, weights_file_name=adapter.weights_file_name,
-        param_prefix=LANGUAGE_MODEL_PREFIX, foreign_key_hint=_FOREIGN_KEY_HINT,
+        param_prefix=LANGUAGE_MODEL_PREFIX, foreign_key_hint=FOREIGN_KEY_HINT,
     )
+    peft_lora.check_plan_finite(plan)
+    return plan
 
 
 def prepare_lora(model: torch.nn.Module, target: ModelTarget, strength: float = 1.0) -> PreparedLora:

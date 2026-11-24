@@ -17,7 +17,6 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
     from collections.abc import Iterable
-    from tts_audiobook_tool.app_types.voice import VoiceLora
     from tts_audiobook_tool.tts_models.model_support import VoiceLoraMode
 else:
     Project = object
@@ -245,11 +244,6 @@ class TtsBaseModel(ABC):
         problem. Default: no per-voice LoRAs, so nothing to check.
         """
         return []
-
-    def validate_voice_lora(self, lora: VoiceLora) -> str:
-        """Checks whether this loaded model can use `lora` (eg before the voice menu
-        saves it); returns an error message or ""."""
-        return "This model doesn't support per-voice LoRAs"
 
     def end_generation_run(self) -> None:
         """Called when a generation or realtime run ends (also on interrupt or error),

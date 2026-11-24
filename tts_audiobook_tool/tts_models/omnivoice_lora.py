@@ -46,7 +46,7 @@ import torch
 
 from tts_audiobook_tool.app_types.model_target import ModelTarget
 # Re-exported: callers and tests import these from here
-from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError as LoraLoadError, LoraMergePlan, apply_merge, check_finite
+from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError as LoraLoadError, LoraMergePlan, apply_merge
 from tts_audiobook_tool.tts_models.lora_switch import PreparedLora
 from tts_audiobook_tool.tts_models import peft_lora
 from tts_audiobook_tool.tts_models.peft_lora import ADAPTER_WEIGHTS_FILE_NAME
@@ -57,11 +57,7 @@ from tts_audiobook_tool.tts_models.omnivoice_lora_check import FOREIGN_KEY_HINT,
 def plan_merge(model: torch.nn.Module, adapter_dir: str, strength: float = 1.0) -> LoraMergePlan:
     """Reads and validates an adapter without changing `model`."""
     plan = peft_lora.plan_merge(model, adapter_dir, strength, foreign_key_hint=FOREIGN_KEY_HINT)
-    factors = {}
-    for name, (a, b) in plan.pairs.items():
-        module = name.removesuffix(".weight")
-        factors[f"{module}.lora_A"], factors[f"{module}.lora_B"] = a, b
-    check_finite({**factors, **plan.replacements})
+    peft_lora.check_plan_finite(plan)
     return plan
 
 

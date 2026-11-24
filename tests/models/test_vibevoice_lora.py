@@ -109,6 +109,19 @@ def test_whole_model_adapter_is_rejected_unchanged(tmp_path):
     assert all(torch.equal(state_of(model)[name], value) for name, value in before.items())
 
 
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf")])
+def test_nonfinite_adapter_is_rejected_unchanged(tmp_path, bad_value):
+    # Merged, a NaN/inf would silently corrupt the weights; the planner rejects it up front,
+    # as the menu's model-free check does
+    model = make_model()
+    before = state_of(model)
+    tensors = adapter_tensors()
+    tensors["base_model.model.layers.0.self_attn.q_proj.lora_B.weight"][0, 0] = bad_value
+    with pytest.raises(LoraLoadError, match="NaN or infinite"):
+        vibevoice_lora.load_lora(model, write_adapter(tmp_path, tensors))
+    assert all(torch.equal(state_of(model)[name], value) for name, value in before.items())
+
+
 def make_wrapper(base_dir):
     pytest.importorskip("vibevoice")
     from tts_audiobook_tool.app_types import DeviceType

@@ -1,7 +1,7 @@
 """Torch-free parts of reading a plain PEFT LoRA adapter (see `peft_lora`): the config
 (`adapter_config.json`, plain LoRA only) and the mapping of tensor keys onto model parameter
-names. Shared by the merge planner (`peft_lora`) and the model-free menu check
-(`omnivoice_lora_check`).
+names. Shared by the merge planner (`peft_lora`) and the model-free menu checks
+(`peft_lora_check`).
 """
 from __future__ import annotations
 
