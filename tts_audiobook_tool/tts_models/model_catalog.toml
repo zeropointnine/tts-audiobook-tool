@@ -2041,6 +2041,126 @@ parameter = "repetition_penalty"
 target_menu = "model"
 label = "Repetition penalty"
 
+# ------------------------------------------------------------------------
+# zonos3_mini_sglomni: the "mini" match keeps a possible future larger ZONOS3
+# unrecognized rather than silently treated as Mini.
+[[models]]
+id = "zonos3_mini_sglomni"
+settings = [
+    { name = "file_name", section = "voice_references", type = "list[str]", default = [] },
+    { name = "concurrent_requests", section = "orchestration", type = "int", default = 1 },
+    { name = "temperature", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_p", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "top_k", section = "parameters", type = "int", default = -1, sentinel = -1 },
+    { name = "repetition_penalty", section = "parameters", type = "float", default = -1.0, sentinel = -1 },
+    { name = "seed", section = "parameters", type = "int", default = -1, preserve_default = true },
+]
+backend_kind = "sgl_omni"
+
+[models.sgl_omni.match]
+model_id_substring = "zonos3-mini"
+
+[models.spec]
+file_tag = "zonos3_mini"
+default_output_sample_rate = 44100
+un_all_caps = false
+substitutions = []
+requirements_file_name = "requirements-remote.txt"
+
+[models.spec.ui]
+proper_name = "ZONOS3-Mini"
+short_name = "ZONOS3-Mini"
+voice_path_console = "Enter voice clone audio clip file path: "
+voice_path_requestor = "Select voice clone audio clip"
+project_links = [
+    "https://github.com/Zyphra/ZONOS3-Mini",
+    "https://huggingface.co/Zyphra/ZONOS3-Mini",
+    "https://sgl-project.github.io/sglang-omni/cookbook/zonos3.html",
+]
+
+[models.sgl_omni.behavior]
+orchestration = "concurrent_requests"
+# The server can stream; not supported by this integration yet.
+streaming = false
+# Request-scoped Philox seed in [0, 2**63). Repeats are byte-identical only
+# for requests that are not batched with others on the server.
+seed = "resolved"
+# Without a reference the model speaks an unconditioned voice.
+voice_required = false
+# The server ignores reference transcripts (they do not reach the prompt).
+transcript = "omitted"
+
+[models.sgl_omni.request_defaults]
+# Delay-pattern rows (15 frames/s; frames = rows - 9), about 68 s of audio.
+# 80 words take roughly 400-450 frames. Also fits a 2048-row server context
+# with a 60 s reference (about 940 prompt rows) plus text.
+max_new_tokens = 1024
+
+[models.sgl_omni.parameters]
+
+# Defaults match the server's built-in sampling defaults.
+[models.sgl_omni.parameters.temperature]
+type = "float"
+request_key = "temperature"
+default = 0.75
+default_sentinel = -1
+min = 0.0
+max = 2.0
+input_prompt_suffix = "(0 = greedy)"
+
+[models.sgl_omni.parameters.top_p]
+type = "float"
+request_key = "top_p"
+default = 0.69
+default_sentinel = -1
+min = 0.01
+max = 1.0
+
+[models.sgl_omni.parameters.top_k]
+type = "int"
+request_key = "top_k"
+default = 80
+default_sentinel = -1
+min = 1
+# 4096 codes plus end-of-audio and pad.
+max = 4098
+
+[models.sgl_omni.parameters.repetition_penalty]
+type = "float"
+request_key = "repetition_penalty"
+default = 2.4
+default_sentinel = -1
+min = 1.0
+max = 5.0
+input_prompt_suffix = "(1.0 = disabled, which can cause runaway generation)"
+
+[[models.sgl_omni.menu]]
+kind = "voice_samples"
+
+[[models.sgl_omni.menu]]
+parameter = "temperature"
+target_menu = "model"
+label = "Temperature"
+
+[[models.sgl_omni.menu]]
+parameter = "top_p"
+target_menu = "model"
+label = "Top-P"
+
+[[models.sgl_omni.menu]]
+parameter = "top_k"
+target_menu = "model"
+label = "Top-K"
+
+[[models.sgl_omni.menu]]
+parameter = "repetition_penalty"
+target_menu = "model"
+label = "Repetition penalty"
+
+[[models.sgl_omni.menu]]
+kind = "seed"
+target_menu = "model"
+
 
 # ------------------------------------------------------------------------
 # Audio.cpp

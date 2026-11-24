@@ -13,6 +13,7 @@ You may also need to perform additional per-model install steps as described in 
 - [**MOSS-TTS v1.5**](https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html) (>24GB VRAM required)
 - [**Qwen3TTS-Base**](https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html)
 - [**ZONOS2**](https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html) (16+GB VRAM recommended)
+- [**ZONOS3-Mini**](https://sgl-project.github.io/sglang-omni/cookbook/zonos3.html)
 
 Below are typical launch commands for starting SGL-Omni server with each of the models that tts-audiobook-tool currently supports. Model downloads should occur automatically on first run.
 
@@ -26,3 +27,4 @@ Below are typical launch commands for starting SGL-Omni server with each of the 
 - `sgl-omni serve --model-path Qwen/Qwen3-TTS-12Hz-1.7B-Base --config examples/configs/qwen3_tts_1_7b.yaml --port 8000`
 - `sgl-omni serve --model-path Qwen/Qwen3-TTS-12Hz-0.6B-Base --config examples/configs/qwen3_tts_0_6b.yaml --port 8000`
 - `sgl-omni serve --model-path Zyphra/zonos2 --port 8000`
+- `sgl-omni serve --model-path Zyphra/ZONOS3-Mini --port 8000`

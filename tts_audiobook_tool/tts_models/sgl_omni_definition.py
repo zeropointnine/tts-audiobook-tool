@@ -284,7 +284,9 @@ def load_definitions(path: Path = DEFINITION_PATH) -> SglOmniDefinitions:
             for key, value in source.items():
                 if not isinstance(key, str) or not key:
                     _fail(f"{where}.{field}", "keys must be non-empty strings")
-                if key in occupied or key in _RESERVED and not (key == "max_new_tokens" and field == "request_defaults" and id in ("moss_delay_sglomni", "moss_local_sglomni")):
+                # A fixed token budget may be pinned in ordinary request
+                # defaults; a prompt policy that computes it rejects it below.
+                if key in occupied or key in _RESERVED and not (key == "max_new_tokens" and field == "request_defaults"):
                     _fail(f"{where}.{field}.{key}", "reserved or duplicate request key")
                 if isinstance(value, bool) or not isinstance(value, (int, float, str)) or isinstance(value, (int, float)) and not math.isfinite(value):
                     _fail(f"{where}.{field}.{key}", "expected a finite number or string")

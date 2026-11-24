@@ -83,6 +83,21 @@ def test_zonos2_server_spec_and_registration():
     assert model.id == "zonos2_sglomni"
 
 
+def test_zonos3_mini_detection_requires_the_mini_qualifier():
+    # Released and staging Mini IDs match; ZONOS2 and a hypothetical larger
+    # ZONOS3 stay unmatched rather than inheriting Mini's settings.
+    zonos3_mini = TtsModelType.require_by_id("zonos3_mini_sglomni")
+    for served_id in ("Zyphra/ZONOS3-Mini", "Zyphra-staging/Zonos3-Mini-Staging-Release"):
+        assert detect_sgl_omni_models([{"id": served_id}]) == [(zonos3_mini, served_id)]
+    assert detect_sgl_omni_models([{"id": "Zyphra/ZONOS3"}]) == []
+    assert detect_sgl_omni_models([{"id": "Zyphra/ZONOS2"}]) == [
+        (TtsModelType.require_by_id("zonos2_sglomni"), "Zyphra/ZONOS2")]
+    info = zonos3_mini.value
+    assert REGISTRY.transcript_binding(info.id) is None
+    assert REGISTRY.orchestration_binding(info.id).name == "concurrent_requests"
+    assert not info.requires_voice and not info.can_stream
+
+
 def test_zonos2_project_fields_normalize_and_serialize():
     project = Project.model_validate({
         "zonos2_server_voice_file_name": "voice.flac",

@@ -35,6 +35,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) | ✅ | ✅ | ✅ |
 | [VibeVoice](https://github.com/microsoft/VibeVoice) | ✅ | | |
 | [ZONOS2](https://github.com/Zyphra/ZONOS2) | | ✅ | |
+| [ZONOS3-Mini](https://github.com/Zyphra/ZONOS3-Mini) | | ✅ | |
 
 By themselves, these models are unreliable at book scale. The app wraps them in the tooling needed for effective long-form generation:
 
@@ -770,6 +771,10 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Concurrent requests
 - Temperature, top_k, repetition_penalty
 
+**ZONOS3-Mini**
+- Concurrent requests
+- Temperature, top_p, top_k, repetition_penalty, seed
+
 
 ### audio.cpp
 
@@ -892,6 +897,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 
 # Update highlights
+
+**2026-11-24**
+
+- Added support for [**ZONOS3-Mini**](https://sgl-project.github.io/sglang-omni/cookbook/zonos3.html) using SGL-Omni.
 
 **2026-11-23**
 

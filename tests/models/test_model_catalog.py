@@ -329,7 +329,7 @@ def test_complete_catalog_order_and_backend_suffix_ids():
         # Alphabetize model names, not full IDs: AuK precedes AuK-Flash.
         "auk_sglomni", "auk_flash_sglomni", "cosyvoice3_sglomni",
         "fish_s2_sglomni", "higgs_v3_sglomni", "moss_delay_sglomni",
-        "moss_local_sglomni", "qwen3tts_sglomni", "zonos2_sglomni",
+        "moss_local_sglomni", "qwen3tts_sglomni", "zonos2_sglomni", "zonos3_mini_sglomni",
         "breeze_tts_2_audiocpp", "chatterbox_audiocpp", "cosyvoice3_audiocpp",
         "dots_audiocpp", "echo_tts_audiocpp", "fireredtts3_audiocpp", "fish_drama3_audiocpp", "fish_s2_audiocpp",
         "glm_tts_audiocpp",
@@ -356,8 +356,8 @@ def test_catalog_provides_canonical_lookup_handles_in_order():
     assert [spec.id for spec in specs] == ids
     assert list(TtsModelType._initial_specs) == ids
     assert [handle.id for handle in TtsModelType.all()] == ids
-    assert len(specs) == 39
-    assert len(servers) == 24  # nine SGL entries plus the fifteen audio.cpp entries
+    assert len(specs) == 40
+    assert len(servers) == 25  # ten SGL entries plus the fifteen audio.cpp entries
     assert len(fingerprint) == 64
     for spec in specs:
         handle = TtsModelType.require_by_id(spec.id)
@@ -506,7 +506,7 @@ def test_installing_data_only_spec_uses_lookup_without_attributes_and_reset_remo
 
 def test_catalog_is_available_at_import_before_model_classes(tmp_path):
     code = """from tts_audiobook_tool.tts_models.model_catalog import load_catalog
-assert len(load_catalog()[0]) == 39
+assert len(load_catalog()[0]) == 40
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 assert FishS2BaseModel.INFO is TtsModelType.require_by_id("fish_s2_local").value
@@ -698,7 +698,7 @@ def test_v5_backend_groups_and_audio_cpp_match_are_isolated():
     assert all("sgl_omni" in item and "audio_cpp" not in item and "match" not in item
                for item in raw["models"] if item.get("backend_kind") == "sgl_omni")
     definitions = load_definitions()
-    assert len(definitions.models) == 9
+    assert len(definitions.models) == 10
     assert chatterbox["id"] not in definitions.models and higgs["id"] not in definitions.models
     assert TtsModelType.require_by_id(chatterbox["id"]) is TtsModelType.require_by_id("chatterbox_audiocpp")
     assert TtsModelType.require_by_id(higgs["id"]) is TtsModelType.require_by_id("higgs_v3_audiocpp")

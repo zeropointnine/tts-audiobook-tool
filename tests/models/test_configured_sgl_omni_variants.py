@@ -29,7 +29,8 @@ from tts_audiobook_tool.tts_models.sgl_omni_definition import DEFINITION_PATH, l
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 IDS = ("auk_sglomni", "auk_flash_sglomni", "fish_s2_sglomni", "higgs_v3_sglomni",
-       "moss_delay_sglomni", "moss_local_sglomni", "qwen3tts_sglomni", "zonos2_sglomni")
+       "moss_delay_sglomni", "moss_local_sglomni", "qwen3tts_sglomni", "zonos2_sglomni",
+       "zonos3_mini_sglomni")
 
 # Nonstreaming expectations assume a 4s mocked reference (96000 zeros at
 # 24kHz), speed 1.25 for AuK, French language, the second voice sample
@@ -76,6 +77,13 @@ GOLDEN_NONSTREAMING = {
          "temperature": 1.15, "repetition_penalty": 1.2,
          "references": [{"audio_path": "data:{second}"}]}
         for prompt, tokens in (("One word", 280), ("Different words here", 320))
+    ],
+    # Not a legacy capture: the model was added after the configured route.
+    "zonos3_mini_sglomni": [
+        {"input": prompt, "stream": False, "max_new_tokens": 1024, "temperature": 0.75,
+         "top_p": 0.69, "top_k": 80, "repetition_penalty": 2.4, "seed": 12345,
+         "references": [{"audio_path": "data:{second}"}]}
+        for prompt in ("One word", "Different words here")
     ],
 }
 
@@ -222,7 +230,8 @@ def test_configured_payload_matches_recorded_legacy_payload(model_id, server_mod
     assert capture[0]["references"][0]["audio_path"].endswith("second.flac")
     assert project.get_model_setting(model_id, "file_name") == ["first.flac", "second.flac"]
     assert voice_binding.group == REGISTRY.get(model_id, "file_name").group
-    if model_id in ("auk_sglomni", "auk_flash_sglomni", "moss_delay_sglomni", "moss_local_sglomni", "qwen3tts_sglomni"):
+    if model_id in ("auk_sglomni", "auk_flash_sglomni", "moss_delay_sglomni", "moss_local_sglomni", "qwen3tts_sglomni",
+                    "zonos3_mini_sglomni"):
         assert capture[0]["seed"] == 12345
     else:
         assert "seed" not in capture[0]
@@ -549,6 +558,26 @@ def test_loader_rejects_policy_and_owner_collisions_atomically(tmp_path):
         with pytest.raises(ValueError, match=error):
             load_definitions(path)
         assert TtsModelType.require_by_id("auk_sglomni").value is before
+
+
+def test_fixed_max_new_tokens_allowed_unless_prompt_policy_computes_it(tmp_path):
+    # Any model may pin a fixed token budget in ordinary request defaults (not
+    # only MOSS); a prompt policy that computes it per prompt (Zonos2) conflicts,
+    # and stream defaults never accept it.
+    source = read_catalog(DEFINITION_PATH)
+    data = copy.deepcopy(source)
+    next(e for e in data["models"] if e["id"] == "higgs_v3_sglomni")["sgl_omni"]["request_defaults"]["max_new_tokens"] = 512
+    definition = load_definitions(write_catalog(tmp_path / "fixed.toml", data)).models["higgs_v3_sglomni"]
+    assert definition.request_defaults["max_new_tokens"] == 512
+    for model_id, field, error in (
+        ("zonos2_sglomni", "request_defaults", "request_defaults.max_new_tokens.*prompt policy"),
+        ("qwen3tts_sglomni", "request_stream_defaults", "request_stream_defaults.max_new_tokens"),
+    ):
+        data = copy.deepcopy(source)
+        entry = next(e for e in data["models"] if e["id"] == model_id)["sgl_omni"]
+        entry.setdefault(field, {})["max_new_tokens"] = 512
+        with pytest.raises(ValueError, match=error):
+            load_definitions(write_catalog(tmp_path / "bad.toml", data))
 
 
 def test_configured_backend_has_no_static_model_class(server_mode):
