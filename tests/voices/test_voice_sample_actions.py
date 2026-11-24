@@ -68,7 +68,7 @@ def test_move_reorders_pairs_and_saves(monkeypatch, index, position, order):
     assert state.project.voice_references == [original[i] for i in order]
     assert [group.voice_index for group in state.project.book.phrase_groups] == [-1, 0, 1, 2]
     assert prompts == [f"Enter new position {menu.COL_DIM}(1-3):"]
-    assert feedback == [f"Moved voice sample {index + 1} to position {position}"]
+    assert feedback == [f"Moved Voice {index + 1} to position {position}"]
     assert not errors
     saved.assert_called_once()
 
@@ -78,7 +78,7 @@ def test_move_reorders_pairs_and_saves(monkeypatch, index, position, order):
     (["x"], [("Bad value", {"is_error": True})]),
     (["0"], [("Out of range", {"is_error": True})]),
     (["4"], [("Out of range", {"is_error": True})]),
-    (["2"], ["Voice sample position unchanged"]),
+    (["2"], ["Position unchanged"]),
 ])
 def test_move_invalid_cancel_and_no_change(monkeypatch, inputs, expected_feedback):
     state = make_state()

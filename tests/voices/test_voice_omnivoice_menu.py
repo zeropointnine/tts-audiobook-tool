@@ -81,12 +81,16 @@ def test_omnivoice_menu_wires_per_voice_lora_controls(monkeypatch, tmp_path):
 
 
 def test_replacing_an_omnivoice_lora_keeps_the_voices_strength(monkeypatch, tmp_path):
-    # The new adapter is validated and saved at the strength the voice already had.
+    # The new adapter is checked without the model, against the project's base (the default
+    # here), and saved at the strength the voice already had.
+    from tts_audiobook_tool.tts_models import omnivoice_lora_check
+    from tts_audiobook_tool.tts_models.lora_files import LoraCheck
     from tts_audiobook_tool.model_worker import ModelWorker
     state = make_state(tmp_path)
-    probes = []
-    monkeypatch.setattr(ModelWorker, "inspect_tts_blocking", lambda _state, probe_lora: probes.append(probe_lora)
-                        or (SimpleNamespace(metadata={"lora_probe_error": ""}), ""))
+    checks = []
+    monkeypatch.setattr(omnivoice_lora_check, "check_adapter",
+                        lambda target, base, strength: checks.append((target, base, strength)) or LoraCheck())
+    monkeypatch.setattr(ModelWorker, "inspect_tts_blocking", lambda *_, **__: pytest.fail("model probed"))
     lora_items.validate_and_set_voice_lora(state, menu.make_lora_spec(), 1, ModelTarget.hf("owner/new-speaker"))
-    assert probes == [VoiceLora(ModelTarget.hf("owner/new-speaker"), 0.5)]
+    assert checks == [(ModelTarget.hf("owner/new-speaker"), ModelTarget.hf("k2-fsa/OmniVoice"), 0.5)]
     assert state.project.voice_references[1].lora_for(MODEL_ID) == VoiceLora(ModelTarget.hf("owner/new-speaker"), 0.5)

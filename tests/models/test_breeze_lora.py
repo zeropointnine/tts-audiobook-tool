@@ -149,6 +149,7 @@ def _with(key, value):
                 "backbone_model.norm.lora_B": torch.ones(4, RANK)}, "not a linear layer"),
     (lambda t: {**t, "tied_a.lora_A": torch.ones(RANK, 4), "tied_a.lora_B": torch.ones(4, RANK)},
      "shares its weight"),
+    (_with(f"{Q}.lora_A", torch.full((RANK, 4), float("inf")).bfloat16()), "NaN or infinite"),
     (lambda t: {}, "no tensors"),
 ])
 def test_rejected_tensors_leave_model_unchanged(tmp_path, edit, message):
@@ -328,37 +329,4 @@ def test_breeze_model_reports_each_voices_rejected_lora(tmp_path):
     ])
     problems = model.prepare_voice_loras(project, [0, 1, 2])
     assert len(problems) == 1 and problems[0].startswith("Voice 3 LoRA") and "Not a Breeze LoRA" in problems[0]
-    assert model.validate_voice_lora(VoiceLora(ModelTarget.local(good))) == ""
 
-
-def test_breeze_menu_validation_rechecks_a_repaired_or_changed_adapter(tmp_path):
-    # Repeated explicit menu checks must see on-disk repairs and later corruption,
-    # without applying any weights during validation.
-    pytest.importorskip("breeze_tts")
-    from pathlib import Path
-    from tts_audiobook_tool.app_types.voice import VoiceLora
-    from tts_audiobook_tool.tts_models.breeze_model import BreezeModel
-
-    base_dir = make_base_dir(tmp_path)
-    target = write_manifest_dir(tmp_path / "export", base_dir, adapter__sha256="0" * 64)
-    model = BreezeModel.__new__(BreezeModel)
-    model._model = make_model()  # type: ignore[assignment]
-    # The switcher only accepts adapters whose targets it can restore from the base checkpoint
-    save_file(state_of(model._model), os.path.join(base_dir, "model.safetensors"))
-    model._loras = BreezeModel._make_lora_switcher(model._model, Path(base_dir))
-    before = state_of(model._model)
-    lora = VoiceLora(ModelTarget.local(target))
-    assert "checksum" in model.validate_voice_lora(lora)
-
-    manifest_path = Path(target) / "adapter_config.json"
-    manifest = json.loads(manifest_path.read_text())
-    manifest["adapter"]["sha256"] = sha256(os.path.join(target, "adapter.safetensors"))
-    manifest_path.write_text(json.dumps(manifest))
-    assert model.validate_voice_lora(lora) == ""
-
-    manifest["adapter"]["sha256"] = "0" * 64
-    manifest_path.write_text(json.dumps(manifest))
-    # The successful probe must not seed a stale plan for subsequent generation either.
-    assert "checksum" in model._loras.prepare(lora)
-    assert "checksum" in model.validate_voice_lora(lora)
-    assert all(torch.equal(state_of(model._model)[name], value) for name, value in before.items())

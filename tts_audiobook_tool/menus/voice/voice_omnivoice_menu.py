@@ -1,16 +1,33 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from tts_audiobook_tool.app_types.voice import VoiceLora
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.menus.voice.voice_lora_items import VoiceLoraMenuSpec, make_voice_lora_items
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.menus.model.model_menu_shared import TargetPromptSpec
+from tts_audiobook_tool.project import Project
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.tts_models.lora_files import LoraCheck
 
 MODEL_ID = "omnivoice_local"
 
 
+def check_lora(project: Project, lora: VoiceLora) -> LoraCheck:
+    # Against the base model the project would load (only its config.json is read)
+    from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
+    from tts_audiobook_tool.tts_models.omnivoice_lora_check import check_adapter
+    base_target = project.get_model_target(MODEL_ID) or OmniVoiceBaseModel.DEFAULT_TARGET
+    return check_adapter(lora.target, base_target, lora.strength)
+
+
 def make_lora_spec() -> VoiceLoraMenuSpec:
-    from tts_audiobook_tool.tts_models.omnivoice_lora import ADAPTER_FILE_NAMES
-    return VoiceLoraMenuSpec(model_id=MODEL_ID, target_prompt=TargetPromptSpec(
+    from tts_audiobook_tool.tts_models.omnivoice_lora_check import ADAPTER_FILE_NAMES
+    return VoiceLoraMenuSpec(model_id=MODEL_ID, check=check_lora, target_prompt=TargetPromptSpec(
         subject="OmniVoice LoRA adapter",
         hf_example="My-Weird-Prompts/Herman-LoRA-V3",
         local_hint="An adapter directory (eg checkpoint-900) contains adapter_config.json and adapter_model.safetensors.",

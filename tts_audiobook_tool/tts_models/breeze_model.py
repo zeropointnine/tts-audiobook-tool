@@ -97,17 +97,6 @@ class BreezeModel(BreezeBaseModel):
                 problems.append(f"Voice {index + 1} LoRA ({lora.target.display_name()}): {error}")
         return problems
 
-    def validate_voice_lora(self, lora: VoiceLora) -> str:
-        if self._loras is None:
-            return "Logic error - model not initialized"
-        # Explicit menu probes are outside generation runs. Reread even a previously
-        # rejected adapter, and don't leave plans/errors cached for the next probe or run.
-        self._loras.end_run()
-        try:
-            return self._loras.prepare(lora)
-        finally:
-            self._loras.end_run()
-
     def end_generation_run(self) -> None:
         if self._loras is not None:
             self._loras.end_run()

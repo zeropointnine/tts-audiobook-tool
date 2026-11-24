@@ -46,31 +46,23 @@ import torch
 
 from tts_audiobook_tool.app_types.model_target import ModelTarget
 # Re-exported: callers and tests import these from here
-from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan, apply_merge
+from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError as LoraLoadError, LoraMergePlan, apply_merge, check_finite
 from tts_audiobook_tool.tts_models.lora_switch import PreparedLora
 from tts_audiobook_tool.tts_models import peft_lora
-from tts_audiobook_tool.tts_models.peft_lora import ADAPTER_CONFIG_FILE_NAME, ADAPTER_WEIGHTS_FILE_NAME
-
-ADAPTER_FILE_NAMES = [ADAPTER_CONFIG_FILE_NAME, ADAPTER_WEIGHTS_FILE_NAME]
-
-_FOREIGN_KEY_HINT = "expected an adapter for the whole OmniVoice model, as written by OmniVoice's LoRA training"
-
-
-def resolve_adapter_dir(target: ModelTarget) -> str:
-    """A local directory, an hf repo, or a directory inside one; downloads only the adapter files."""
-    try:
-        directory = target.resolve_local_dir(ADAPTER_FILE_NAMES)
-    except Exception as e:
-        raise LoraLoadError(f"Couldn't get adapter files for {target.value}: {e}") from e
-    for name in ADAPTER_FILE_NAMES:
-        if not os.path.isfile(os.path.join(directory, name)):
-            raise LoraLoadError(f"Missing {name} in {target.value}")
-    return directory
+from tts_audiobook_tool.tts_models.peft_lora import ADAPTER_WEIGHTS_FILE_NAME
+# The torch-free adapter-directory handling, shared with the model-free menu check
+from tts_audiobook_tool.tts_models.omnivoice_lora_check import FOREIGN_KEY_HINT, resolve_adapter_dir
 
 
 def plan_merge(model: torch.nn.Module, adapter_dir: str, strength: float = 1.0) -> LoraMergePlan:
     """Reads and validates an adapter without changing `model`."""
-    return peft_lora.plan_merge(model, adapter_dir, strength, foreign_key_hint=_FOREIGN_KEY_HINT)
+    plan = peft_lora.plan_merge(model, adapter_dir, strength, foreign_key_hint=FOREIGN_KEY_HINT)
+    factors = {}
+    for name, (a, b) in plan.pairs.items():
+        module = name.removesuffix(".weight")
+        factors[f"{module}.lora_A"], factors[f"{module}.lora_B"] = a, b
+    check_finite({**factors, **plan.replacements})
+    return plan
 
 
 def prepare_lora(model: torch.nn.Module, target: ModelTarget, strength: float = 1.0) -> PreparedLora:

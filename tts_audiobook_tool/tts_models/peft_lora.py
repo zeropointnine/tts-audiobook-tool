@@ -15,53 +15,23 @@ Replacements are copied at strength 1, else blended from the base: `W + strength
 
 Only plain LoRA is supported; anything else (DoRA, per-module rank or alpha patterns,
 LoRA biases, embedding LoRA, other PEFT types) is rejected rather than merged
-approximately. Everything is validated before any weight changes.
+approximately. Everything is validated before any weight changes. The config and key
+handling are torch-free (`peft_lora_config`), for the model-free menu check.
 """
 from __future__ import annotations
 
-import hashlib
-import json
-import math
 import os
 
 import torch
 
 from tts_audiobook_tool.tts_models.lora_merge import LoraLoadError, LoraMergePlan
-
-ADAPTER_CONFIG_FILE_NAME = "adapter_config.json"
-ADAPTER_WEIGHTS_FILE_NAME = "adapter_model.safetensors"
-# Older peft versions (and `save_pretrained(safe_serialization=False)`) write a pickle
-ADAPTER_WEIGHTS_BIN_FILE_NAME = "adapter_model.bin"
-
-KEY_PREFIX = "base_model.model."
-_PAIR_SUFFIXES = {
-    ".lora_A.weight": "A", ".lora_B.weight": "B",
-    ".lora_A.default.weight": "A", ".lora_B.default.weight": "B",
-}
-# Config fields that change what the adapter computes, with the value plain LoRA has
-_PLAIN_LORA_CONFIG = {
-    "use_dora": False,
-    "fan_in_fan_out": False,
-    "use_qalora": False,
-    "lora_bias": False,
-    "bias": "none",
-    "rank_pattern": {},
-    "alpha_pattern": {},
-    "layer_replication": None,
-    "target_parameters": None,
-    "trainable_token_indices": None,
-    "alora_invocation_tokens": None,
-    "use_bdlora": None,
-    "arrow_config": None,
-}
-
-
-def sha256_file(path: str) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+from tts_audiobook_tool.tts_models.lora_files import check_strength, sha256_file
+# The torch-free config and key handling (file names re-exported for callers)
+from tts_audiobook_tool.tts_models.peft_lora_config import (
+    ADAPTER_CONFIG_FILE_NAME as ADAPTER_CONFIG_FILE_NAME,
+    ADAPTER_WEIGHTS_BIN_FILE_NAME as ADAPTER_WEIGHTS_BIN_FILE_NAME,
+    ADAPTER_WEIGHTS_FILE_NAME, check_replacement_name, parameter_name, read_config, split_pair,
+)
 
 
 def load_adapter_tensors(weights_path: str) -> dict[str, torch.Tensor]:
@@ -102,45 +72,21 @@ def _plan_merge(
         param_prefix: str,
         foreign_key_hint: str,
 ) -> LoraMergePlan:
-    if (isinstance(strength, bool) or not isinstance(strength, (int, float))
-            or not math.isfinite(strength) or strength <= 0):
-        raise LoraLoadError(f"Invalid LoRA strength: {strength!r}")
-    strength = float(strength)
-
-    with open(os.path.join(adapter_dir, ADAPTER_CONFIG_FILE_NAME), encoding="utf-8") as f:
-        config = json.load(f)
-    if not isinstance(config, dict):
-        raise LoraLoadError("Adapter config is not a JSON object")
-    peft_type = config.get("peft_type", "LORA")
-    if peft_type != "LORA":
-        raise LoraLoadError(f"Unsupported adapter type: {peft_type} (only LoRA is supported)")
-    for name, plain in _PLAIN_LORA_CONFIG.items():
-        value = config.get(name, plain)
-        # Unset collections are written as null or empty depending on the peft version
-        if value != plain and not (plain in (None, {}) and not value):
-            raise LoraLoadError(f"Unsupported adapter feature: {name} = {value!r}")
-    rank, alpha = config.get("r"), config.get("lora_alpha")
-    if not isinstance(rank, int) or isinstance(rank, bool) or rank <= 0:
-        raise LoraLoadError(f"Invalid LoRA rank in adapter config: {rank!r}")
-    if not isinstance(alpha, (int, float)) or isinstance(alpha, bool) or not math.isfinite(alpha):
-        raise LoraLoadError(f"Invalid lora_alpha in adapter config: {alpha!r}")
-    alpha = float(alpha)
-    scale = strength * alpha / (math.sqrt(rank) if config.get("use_rslora") else rank)
+    strength = check_strength(strength)
+    config = read_config(adapter_dir)
+    rank, alpha = config.rank, config.alpha
+    scale = config.scale(strength)
 
     params = dict(model.named_parameters())
     plan = LoraMergePlan(rank=rank, alpha=alpha, scale=scale, replacement_strength=strength)
     halves: dict[str, dict[str, torch.Tensor]] = {}
     for key, value in load_adapter_tensors(os.path.join(adapter_dir, weights_file_name)).items():
-        if not key.startswith(KEY_PREFIX):
-            hint = f"; {foreign_key_hint}" if foreign_key_hint else ""
-            raise LoraLoadError(f"Unexpected tensor {key}{hint}")
-        name = param_prefix + key.removeprefix(KEY_PREFIX).replace(".modules_to_save.default", "")
-        suffix = next((s for s in _PAIR_SUFFIXES if name.endswith(s)), None)
-        if suffix:
-            halves.setdefault(name.removesuffix(suffix) + ".weight", {})[_PAIR_SUFFIXES[suffix]] = value
+        name = parameter_name(key, param_prefix, foreign_key_hint)
+        pair = split_pair(name)
+        if pair:
+            halves.setdefault(pair[0], {})[pair[1]] = value
             continue
-        if "lora_" in name or not name.endswith((".weight", ".bias")):
-            raise LoraLoadError(f"Unsupported adapter tensor: {key}")
+        check_replacement_name(key, name)
         target = params.get(name)
         if target is None:
             raise LoraLoadError(f"Adapter replaces {name}, which the model doesn't have")

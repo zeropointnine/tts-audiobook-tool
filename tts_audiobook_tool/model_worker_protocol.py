@@ -151,7 +151,8 @@ class InspectTtsCommand:
     # time (relayed to the chat UI) instead of on the first transcription.
     warm_stt: bool = False
     # A per-voice LoRA to validate against the loaded model (`validate_voice_lora`)
-    # before the voice menu saves it; the result is metadata["lora_probe_error"].
+    # before the voice menu saves it, for models whose menu has no model-free check
+    # (`VoiceLoraMenuSpec.check`; currently VibeVoice); the result is metadata["lora_probe_error"].
     probe_lora: VoiceLora | None = None
 
 

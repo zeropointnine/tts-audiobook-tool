@@ -49,7 +49,7 @@ LABEL_SET_VOICE_SAMPLE = "Voice sample"
 LABEL_CLEAR_VOICE_SAMPLE = "Clear voice sample"
 LABEL_REMOVE_VOICE_SAMPLE = "Remove"
 LABEL_RESET_VOICE_SAMPLE = "Remove (reset to default)"  # The only voice
-LABEL_MOVE_VOICE_SAMPLE = "Move voice sample position"
+LABEL_MOVE_VOICE_SAMPLE = "Move in list"
 LABEL_CROP_VOICE_SAMPLE = "Trim or play"
 LABEL_EDIT_VOICE_TRANSCRIPTION = "Transcription"
 LABEL_SET_INSTRUCTIONS = "Instructions"
@@ -1298,7 +1298,7 @@ class VoiceMenuShared:
 
     @staticmethod
     def move_voice_sample_from_menu(state: State, index: int) -> int:
-        """Asks for the new position of the sample at `index`. Returns its index afterward."""
+        """Asks for the new list position of the voice at `index`. Returns its index afterward."""
         count = len(state.project.voice_references)
         if count < 2 or not 0 <= index < count:
             return index
@@ -1306,13 +1306,14 @@ class VoiceMenuShared:
         if new_index is None:
             return index
         if index == new_index:
-            print_feedback("Voice sample position unchanged")
+            print_feedback("Position unchanged")
             return index
+        title = VoiceMenuShared.make_voice_title(state.project.voice_references[index], index)
         error = ProjectVoiceUtil.move_voice_at_index_and_save(state.project, index, new_index)
         if error:
             ask.ask_error(error)
             return index
-        print_feedback(f"Moved voice sample {index + 1} to position {new_index + 1}")
+        print_feedback(f"Moved {title} to position {new_index + 1}")
         return new_index
 
     @staticmethod

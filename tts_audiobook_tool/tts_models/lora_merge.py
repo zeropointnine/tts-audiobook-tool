@@ -17,9 +17,16 @@ from typing import Iterator, Literal
 
 import torch
 
+# Re-exported: defined torch-free, for the model-free checks
+from tts_audiobook_tool.tts_models.lora_files import LoraLoadError, nonfinite_message
 
-class LoraLoadError(Exception):
-    """The adapter could not be resolved or does not fit the model; the model is unchanged."""
+
+def check_finite(tensors: dict[str, torch.Tensor]) -> None:
+    """Rejects adapter tensors when any holds a NaN or infinity: merged, they would
+    silently corrupt the weights (eg silence or noise) rather than fail."""
+    for name, tensor in tensors.items():
+        if not bool(torch.isfinite(tensor).all()):
+            raise LoraLoadError(nonfinite_message(name))
 
 
 @dataclass

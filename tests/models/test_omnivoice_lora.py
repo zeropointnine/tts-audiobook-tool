@@ -106,6 +106,9 @@ def _with(key: str, value):
      "Unsupported adapter tensor"),
     ({}, _with("base_model.model.not_a_module.weight", torch.ones(2, 2)), "doesn't have"),
     ({}, _with("base_model.model.audio_heads.weight", torch.ones(4, 4)), "Shape mismatch"),
+    ({}, _with(_q("lora_B.weight"), torch.full((6, RANK), float("nan"))), "NaN or infinite"),
+    # A finite fp32 replacement that overflows the fp16 model when copied is caught as well
+    ({}, _with("base_model.model.audio_heads.weight", torch.full((5, 4), 1e6)), "NaN or infinite"),
 ])
 def test_rejected_adapter_leaves_model_unchanged(tmp_path, config, edit, message):
     # Validation happens before any weight is written, so an adapter is
@@ -269,9 +272,9 @@ def make_wrapper(base_dir):
     return model
 
 
-def test_omnivoice_preflight_and_menu_validation_have_distinct_cache_scopes(tmp_path):
-    # Only used LoRA voices are preflighted, and a menu retry rereads repaired
-    # files rather than reusing an earlier failure or seeding a stale run plan.
+def test_omnivoice_preflight_checks_used_voices_and_rereads_after_a_run(tmp_path):
+    # Only used LoRA voices are preflighted, and a later run rereads repaired files
+    # rather than reusing an earlier failure.
     from tts_audiobook_tool.app_types.voice import Voice, VoiceLora
     from tts_audiobook_tool.project import Project
 
@@ -286,12 +289,9 @@ def test_omnivoice_preflight_and_menu_validation_have_distinct_cache_scopes(tmp_
     assert model.prepare_voice_loras(project, [0]) == []
     problems = model.prepare_voice_loras(project, [1])
     assert len(problems) == 1 and problems[0].startswith("Voice 2 LoRA") and "use_dora" in problems[0]
-    assert "use_dora" in model.validate_voice_lora(lora)
     write_adapter(adapter_dir)
-    assert model.validate_voice_lora(lora) == ""
-    write_adapter(adapter_dir, use_dora=True)
-    assert "use_dora" in model._loras.prepare(lora)
-    assert "use_dora" in model.validate_voice_lora(lora)
+    model.end_generation_run()
+    assert model.prepare_voice_loras(project, [1]) == []
 
 
 def test_omnivoice_activates_each_selected_voices_lora_before_generation(tmp_path, monkeypatch):
@@ -349,11 +349,11 @@ def test_adapter_whose_targets_cant_be_restored_is_rejected_up_front(tmp_path):
     before = state_of(model._model)
     partial = {name: value.float() for name, value in before.items() if name != "audio_heads.weight"}
     save_file(partial, str(tmp_path / "base" / "model.safetensors"))
-    error = model.validate_voice_lora(lora)
+    error = model._loras.prepare(lora)
     assert "has changed since the model was loaded" in error
 
     model._loras = type(model)._make_lora_switcher(model._model, tmp_path / "base")
-    error = model.validate_voice_lora(lora)
+    error = model._loras.prepare(lora)
     assert "Can't restore" in error and "audio_heads.weight" in error
     assert all(torch.equal(state_of(model._model)[name], value) for name, value in before.items())
 

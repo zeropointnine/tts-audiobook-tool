@@ -1,5 +1,5 @@
 """Breeze TTS 2 (local) per-voice LoRA controls: each voice's submenu has LoRA / strength / clear
-items (`voice_lora_items`); selecting a LoRA validates it against the loaded model before saving."""
+items (`voice_lora_items`); selecting a LoRA checks it without the model (`breeze_lora_check`) before saving."""
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,7 +17,8 @@ from tts_audiobook_tool.menus.voice import voice_breeze_menu as menu
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_util import strip_ansi_codes
-from tts_audiobook_tool.tts_models.breeze_lora import LOCAL_FILE_MARKERS
+from tts_audiobook_tool.tts_models.breeze_lora_source import LOCAL_FILE_MARKERS
+from tts_audiobook_tool.tts_models.lora_files import LoraCheck
 
 MODEL_ID = "breeze_tts_2_local"
 LEDA = ModelTarget.local("/runs/fw-leda/lora/checkpoint-step-000500")
@@ -92,30 +93,32 @@ def test_lora_select_strength_and_clear(monkeypatch, tmp_path, lora):
         assert not (tmp_path / "project.json").exists()
 
 
-@pytest.mark.parametrize("inspection,error,expected_error", [
-    (SimpleNamespace(metadata={"lora_probe_error": ""}), "", None),
-    (SimpleNamespace(metadata={"lora_probe_error": "Adapter was trained on a different base"}),
-     "", "Couldn't load LoRA: Adapter was trained on a different base"),
-    (SimpleNamespace(metadata={}), "", "Couldn't check LoRA (model didn't report a result)"),
-    (None, "Failed to initialize", "Failed to initialize"),
+@pytest.mark.parametrize("result,expected_error,expected_warning", [
+    (LoraCheck(), None, None),
+    (LoraCheck(error="Adapter was trained on a different base"), "Couldn't load LoRA: Adapter was trained on a different base", None),
+    (LoraCheck(warnings=("All of the adapter's LoRA B factors are zero",)), None, "All of the adapter's LoRA B factors are zero"),
 ])
-def test_lora_is_saved_only_when_the_model_accepts_it(monkeypatch, tmp_path, inspection, error, expected_error):
-    # The unsaved LoRA is sent to the worker as a probe, keeping the voice's strength
+def test_lora_is_saved_only_when_the_check_accepts_it(monkeypatch, tmp_path, result, expected_error, expected_warning):
+    # The unsaved LoRA is checked without the model (never probing the worker), keeping the
+    # voice's strength; a warning doesn't block saving but is shown with a pause.
+    from tts_audiobook_tool.tts_models import breeze_lora_check
     state = make_state(tmp_path, VoiceLora(ModelTarget.hf("old-lora"), 0.5))
-    probes, errors = [], []
-
-    def inspect(_state, probe_lora=None):
-        probes.append(probe_lora)
-        return inspection, error
-
-    monkeypatch.setattr("tts_audiobook_tool.model_worker.ModelWorker.inspect_tts_blocking", inspect)
+    checks, errors, printed, pauses = [], [], [], []
+    monkeypatch.setattr(breeze_lora_check, "check_adapter",
+                        lambda target, strength: checks.append(VoiceLora(target, strength)) or result)
+    monkeypatch.setattr("tts_audiobook_tool.model_worker.ModelWorker.inspect_tts_blocking",
+                        lambda *_, **__: pytest.fail("model probed"))
     monkeypatch.setattr(lora_items.ask, "ask_error", errors.append)
+    monkeypatch.setattr(lora_items.ask, "ask_enter_to_continue", lambda *_: pauses.append(True))
+    monkeypatch.setattr(lora_items, "printt", lambda value="", *_, **__: printed.append(strip_ansi_codes(value)))
     monkeypatch.setattr(lora_items, "print_feedback", lambda *_, **__: None)
     lora_items.validate_and_set_voice_lora(state, menu.make_lora_spec(), 0, ModelTarget.hf("new-lora"))
-    assert probes == [VoiceLora(ModelTarget.hf("new-lora"), 0.5)]
+    assert checks == [VoiceLora(ModelTarget.hf("new-lora"), 0.5)]
     assert state.project.voice_references[0].lora_for(MODEL_ID) == VoiceLora(
         ModelTarget.hf("old-lora" if expected_error else "new-lora"), 0.5)
     assert errors == ([expected_error] if expected_error else [])
+    assert (f"Warning: {expected_warning}" in printed) == bool(expected_warning)
+    assert pauses == ([True] if expected_warning else [])
     stored_path = tmp_path / "project.json"
     if expected_error:
         assert not stored_path.exists()
