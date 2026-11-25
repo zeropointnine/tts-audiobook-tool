@@ -27,6 +27,7 @@ from tts_audiobook_tool.tts_models.audio_cpp_definition import (
 )
 
 if TYPE_CHECKING:
+    from tts_audiobook_tool.app_types.voice import Voice
     from tts_audiobook_tool.project import Project
 
 ParameterValues = dict[str, int | float | str]
@@ -40,6 +41,8 @@ class AudioCppModelBehavior:
     # declared choices). Checked at construction so a catalog rename fails
     # immediately rather than as a KeyError mid-generation.
     REQUIRED_PARAMETERS: ClassVar[dict[str, str]] = {}
+    # Nonzero enables a per-voice speaking-rate override, not a model setting.
+    speaking_rate_bucket_count: ClassVar[int] = 0
 
     def __init__(self, definition: AudioCppModelDefinition):
         self.definition = definition
@@ -99,6 +102,11 @@ class AudioCppModelBehavior:
         """
         return resolve_unverified(language)
 
+    def get_voice_request_options(self, voice: Voice | None) -> dict[str, int | float | str]:
+        """`options` entries derived from the selected voice (eg a per-voice
+        speaking-rate override); empty when unused."""
+        return {}
+
     def get_ignored_parameters(self, values: ParameterValues) -> frozenset[str]:
         """Catalog parameters the server does not read under these values;
         they are left out of the request (their stored values are kept)."""
@@ -133,6 +141,7 @@ def get_audio_cpp_behavior(definition: AudioCppModelDefinition) -> AudioCppModel
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_omnivoice import OmniVoiceBehavior
 
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_qwen3 import Qwen3Behavior
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_zonos3 import Zonos3Behavior
 
     registry: dict[str, type[AudioCppModelBehavior]] = {
         "chatterbox_audiocpp": ChatterboxBehavior,
@@ -140,5 +149,6 @@ def get_audio_cpp_behavior(definition: AudioCppModelDefinition) -> AudioCppModel
         "fireredtts3_audiocpp": FireRedTts3Behavior,
         "omnivoice_audiocpp": OmniVoiceBehavior,
         "qwen3tts_audiocpp": Qwen3Behavior,
+        "zonos3_mini_audiocpp": Zonos3Behavior,
     }
     return registry.get(definition.spec.id, AudioCppModelBehavior)(definition)

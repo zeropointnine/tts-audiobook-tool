@@ -43,8 +43,8 @@ def test_unselected_project_model_label_requires_selection_with_multiple_types(m
     [
         (0, "TTS model (currently: None (unselected))"),
         (1, "TTS model (currently: None (unselected))"),
-        (2, "Switch TTS model (2 available) (currently: requires selection)"),
-        (3, "Switch TTS model (3 available) (currently: requires selection)"),
+        (2, "TTS model (2 available) (currently: requires selection)"),
+        (3, "TTS model (3 available) (currently: requires selection)"),
     ],
 )
 def test_tts_model_menu_label_shows_available_count_only_when_choosing(
@@ -375,6 +375,6 @@ def test_same_type_audio_entries_count_as_multiple_picker_choices(monkeypatch, s
     assert ModelSelectMenu.is_selection_required(state)
     assert ModelSelectMenu.has_multiple_choices()
     label = strip_ansi_codes(ModelSelectMenu.make_menu_label(state))
-    assert "Switch TTS model (2 available)" in label
+    assert "TTS model (2 available)" in label
     if selected_id == "none":
         assert "currently: requires selection" in label

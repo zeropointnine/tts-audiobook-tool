@@ -114,7 +114,7 @@ def test_remote_model_menu_leads_with_model_picker(monkeypatch, model_id):
     monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: models)
     ModelMenuShared.menu(state)
     items = captured["items"](state)
-    assert get_string_from(state, items[0].label).startswith("Switch TTS model")
+    assert get_string_from(state, items[0].label).startswith("TTS model")
     assert not items[0].blank_line_before
     if model_id == "none":
         assert len(items) == 1
@@ -146,7 +146,7 @@ def test_remote_model_menu_omits_picker_without_multiple_choices(monkeypatch, mo
 
     assert captured["initial_hotkey"] == ""
     labels = [get_string_from(state, item.label) for item in items]
-    assert not any(label.startswith(("TTS model", "Switch TTS model")) for label in labels)
+    assert not any(label.startswith("TTS model") for label in labels)
     if model_id == "none":
         assert items == []
     else:
@@ -174,7 +174,7 @@ def test_remote_model_menu_picker_tracks_same_type_entry_choices_on_redraw(monke
     factory = captured["items"]
     items = factory(state)
     assert captured["initial_hotkey"] == "1"
-    assert get_string_from(state, items[0].label).startswith("Switch TTS model")
+    assert get_string_from(state, items[0].label).startswith("TTS model")
     assert items[1].blank_line_before
 
     snapshot = RemoteTtsSnapshot(backend_kind=TtsBackendKind.AUDIO_CPP, candidates=((model, "one"),))
@@ -207,7 +207,7 @@ def test_remote_model_menu_opens_picker_immediately_when_selection_required(
     assert captured["initial_hotkey"] == expected
     if expected:
         picker = captured["items"](state)[0]
-        assert get_string_from(state, picker.label).startswith("Switch TTS model")
+        assert get_string_from(state, picker.label).startswith("TTS model")
 
 
 @pytest.mark.parametrize("available_count", [0, 2])
@@ -237,7 +237,7 @@ def test_remote_saved_local_model_keeps_settings_shell_without_local_controls(mo
     assert captured["initial_hotkey"] == ""
     assert len(items) == (1 if available_count > 1 else 0)
     if items:
-        assert get_string_from(state, items[0].label).startswith("Switch TTS model")
+        assert get_string_from(state, items[0].label).startswith("TTS model")
     assert ModelMenuShared.make_local_items(state) == []
     assert project.model_dump(exclude={"reason_pauses"}) == before
 

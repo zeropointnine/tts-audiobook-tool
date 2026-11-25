@@ -99,7 +99,7 @@ class ToolsMenu:
         PlaySoundUtil.play_sound_async(sound)
 
         printt()
-        s ="Enter new speed as a percentage (range: 50-200) (50 = half as fast, 200 = twice as fast)"
+        s ="Enter new speed as a percentage (range: 50-200) (50 = half as fast, 200 = twice as fast):"
         printt(s)
         inp = ask.ask_input()
         if not inp:

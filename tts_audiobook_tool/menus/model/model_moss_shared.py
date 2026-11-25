@@ -47,7 +47,7 @@ class ModelMossShared:
             ask.ask_number_and_save(
                 saveable=current.project,
                 target=target,
-                prompt=f"Enter {arch_values.arch_name} temperature",
+                prompt=f"Enter {arch_values.arch_name} temperature:",
                 min_value=arch_values.temperature_min,
                 max_value=arch_values.temperature_max,
                 default_value=arch_values.temperature_default,
@@ -69,7 +69,7 @@ class ModelMossShared:
             default_value=arch_values.audio_top_p_default,
             is_minus_one_default=True,
             num_decimals=2,
-            prompt=f"Enter Audio top-p",
+            prompt="Enter Audio top-p:",
             min_value=arch_values.audio_top_p_min,
             max_value=arch_values.audio_top_p_max
         )
@@ -86,7 +86,7 @@ class ModelMossShared:
             default_value=arch_values.audio_top_k_default,
             is_minus_one_default=True,
             num_decimals=0,
-            prompt=f"Enter Audio top-k",
+            prompt="Enter Audio top-k:",
             min_value=arch_values.audio_top_k_min,
             max_value=arch_values.audio_top_k_max
         )

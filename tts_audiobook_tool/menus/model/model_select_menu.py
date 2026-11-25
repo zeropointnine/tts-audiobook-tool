@@ -53,7 +53,7 @@ class ModelSelectMenu:
         num_available = len(ModelSelectMenu._get_choices(Tts.get_available_tts_models()))
         label = "TTS model"
         if num_available > 1:
-            label = f"Switch TTS model {COL_DIM}({num_available} available)"
+            label = f"TTS model {COL_DIM}({num_available} available)"
         return make_menu_label(label, ModelSelectMenu.make_model_label(state))
 
     @staticmethod
@@ -67,7 +67,7 @@ class ModelSelectMenu:
             return "None (unselected)"
         label = model.value.ui["proper_name"]
         if model.value.backend_kind is TtsBackendKind.AUDIO_CPP and state.project.audio_cpp_model_id:
-            label += f" {COL_DIM}({state.project.audio_cpp_model_id}){COL_DEFAULT}"
+            label += f" {COL_DIM}{state.project.audio_cpp_model_id}{COL_DEFAULT}"
         return label
 
     @staticmethod

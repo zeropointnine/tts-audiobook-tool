@@ -89,7 +89,7 @@ class AudioCppModelDefinition:
     # Family-specific segment-size recommendation; None means the shared default.
     max_words_range_reco: tuple[int, int, str] | None = None
     # Constants pinned into every request's `options`; not project settings.
-    request_options: dict[str, int | float] = field(default_factory=dict)
+    request_options: dict[str, int | float | bool] = field(default_factory=dict)
     settings: tuple[dict[str, Any], ...] = ()
     # MOSS prompt templates use full language names; other families keep ISO codes.
     # "omit" sends no language at all (families that auto-detect, e.g. Fish S2-Pro).

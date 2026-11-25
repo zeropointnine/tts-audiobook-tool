@@ -218,24 +218,26 @@ def _parse_audio_cpp_menu(value: Any, parameters: dict[str, dict[str, Any]], whe
     return menu
 
 
-def _parse_audio_cpp_request_options(value: Any, where: str) -> dict[str, int | float]:
+def _parse_audio_cpp_request_options(value: Any, where: str) -> dict[str, int | float | bool]:
     """Validate values the adapter pins into every request's ``options`` object.
 
     These are constants, not project settings: no menu control, no persisted
     storage, and no way to change them from the app. A family uses one for a
     fixed knob it must always send, the way a local model hardcodes its own
     module constant. Declared user controls live in ``parameters`` instead.
+    Values are finite numbers or booleans (eg disabling a server-side text
+    transform); the server reads booleans as "true"/"false".
     """
     if value is None:
         return {}
     if not isinstance(value, dict):
         _fail(where, "expected an object")
-    options: dict[str, int | float] = {}
+    options: dict[str, int | float | bool] = {}
     for name, raw in value.items():
         if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_]*", name):
             _fail(where, f"invalid request option name {name!r}")
-        if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not math.isfinite(raw):
-            _fail(f"{where}.{name}", "expected a finite number")
+        if not isinstance(raw, bool) and (not isinstance(raw, (int, float)) or not math.isfinite(raw)):
+            _fail(f"{where}.{name}", "expected a finite number or a boolean")
         options[name] = raw
     return options
 

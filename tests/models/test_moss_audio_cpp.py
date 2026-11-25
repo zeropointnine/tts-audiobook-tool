@@ -342,7 +342,7 @@ def test_numeric_menu_uses_standard_prompt_validation_and_save(
     control = ModelCatalogMenu.make_parameter_item(state, parameter, "Temperature", catalog_menu_source(definition(model_id)))
     control.handler(state, control)
     assert text_util.strip_ansi_codes(printed[0]) == (
-        f"Enter Temperature (valid range: 0.8-3.0; default: {parameter.default})")
+        f"Enter Temperature: (valid range: 0.8-3.0; default: {parameter.default})")
     assert prefills == ["2.3"]
     assert errors == ([error] if error else [])
     assert saves == ([] if expected == 2.3 else [project])
@@ -439,7 +439,7 @@ def test_existing_families_keep_default_language_policy_and_postprocessing():
         expected_policy = {"fish_s2_audiocpp": "omit", "fish_drama3_audiocpp": "omit", "glm_tts_audiocpp": "omit",
                            "cosyvoice3_audiocpp": "omit",
                            "breeze_tts_2_audiocpp": "omit", "echo_tts_audiocpp": "omit",
-                           "higgs_v3_audiocpp": "omit",
+                           "higgs_v3_audiocpp": "omit", "zonos3_mini_audiocpp": "omit",
                            "omnivoice_audiocpp": "project_code"}.get(model_id, "normalized")
         # IndexTTS2.5 and FireRedTTS3 read their language from `options`, not the top level.
         expected_target = "options" if model_id in ("indextts2_audiocpp", "fireredtts3_audiocpp") else "top_level"

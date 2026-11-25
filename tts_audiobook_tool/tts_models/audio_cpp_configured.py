@@ -327,6 +327,7 @@ class AudioCppBackendAdapter:
             if seed == -1:
                 seed = random.randrange(get_random_seed_max(2**32 - 1, max_random_seed) + 1)
             selected_voice = ProjectVoiceUtil.current_voice(project, self.support.model_type, voice_selection_index)
+            voice_options = self.support.behavior.get_voice_request_options(selected_voice)
             instruction = (selected_voice.instructions.get(self.INFO.id, "")
                            if selected_voice is not None and self.support.behavior.uses_voice_instructions(values)
                            else "")
@@ -354,7 +355,7 @@ class AudioCppBackendAdapter:
         except (ValueError, OSError) as exc:
             return str(exc)
         payloads = [self._make_payload(prompt, values, voice_ref, seed, project.language_code,
-                                       transcript if uses_transcript else "", instruction, preset)
+                                       transcript if uses_transcript else "", instruction, preset, voice_options)
                     for prompt in prompts]
         # One request at a time: the audio.cpp server serializes requests per model,
         # so fanning out would only queue them behind its model lock.
@@ -368,7 +369,8 @@ class AudioCppBackendAdapter:
         return sounds
 
     def _make_payload(self, prompt: str, values: dict[str, int | float | str], voice_ref: dict[str, str] | None,
-                      seed: int, language: str, transcript: str, instruction: str = "", preset: str = "") -> dict:
+                      seed: int, language: str, transcript: str, instruction: str = "", preset: str = "",
+                      voice_options: dict[str, int | float | str] | None = None) -> dict:
         """Place each declared control where this family's server reads it.
 
         audio.cpp forwards a fixed set of top-level request fields
@@ -386,7 +388,7 @@ class AudioCppBackendAdapter:
             payload["voice_ref"] = voice_ref
         # Family-pinned constants first, then the user's declared controls; a
         # parameter targeting the same key wins over a pinned one.
-        options: dict[str, int | float | str] = dict(self.definition.request_options)
+        options: dict[str, int | float | bool | str] = dict(self.definition.request_options)
         request_language = self.support.resolve_language_code(language).value
         if request_language is not None:
             if self.definition.language_target == "options":
@@ -406,6 +408,9 @@ class AudioCppBackendAdapter:
             options["instruction"] = instruction
         if preset:
             options["voice_id"] = preset
+        if voice_options:
+            # Per-voice values (eg ZONOS3's speaking-rate override).
+            options.update(voice_options)
         if options:
             payload["options"] = options
         if transcript:

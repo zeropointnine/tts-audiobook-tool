@@ -106,7 +106,7 @@ class ModelCatalogMenu:
         ask.ask_number_and_save(
             saveable=state.project,
             target=SettingRef(parameter.model_id, parameter.name),
-            prompt=ModelMenuShared.with_prompt_suffix(f"Enter {label}", parameter.input_prompt_suffix),
+            prompt=ModelMenuShared.with_prompt_suffix(f"Enter {label}:", parameter.input_prompt_suffix),
             min_value=parameter.min,
             max_value=ModelCatalogMenu._ceiling(parameter, source),
             default_value=parameter.default,

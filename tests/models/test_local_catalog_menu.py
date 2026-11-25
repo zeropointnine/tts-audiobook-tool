@@ -79,7 +79,7 @@ def test_local_editor_saves_rejects_and_resets_to_sentinel(edit_ui):
     item.handler(state, item)
     assert project.get_model_setting("breeze_tts_2_local", "cfg") == 2.5
     assert strip_ansi_codes(prompts[0]) == (
-        "Enter CFG\n(used only by voices with instructions)\n(valid range: 1.0-10.0; default: 4.0)")
+        "Enter CFG:\n(used only by voices with instructions)\n(valid range: 1.0-10.0; default: 4.0)")
 
     responses.append("11")
     item.handler(state, item)

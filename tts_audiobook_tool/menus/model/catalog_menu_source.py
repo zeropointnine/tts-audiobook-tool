@@ -259,7 +259,14 @@ class AudioCppMenuSource:
         return None, False
 
     def voice_extra_items(self) -> VoiceExtraItems | None:
-        return None
+        from tts_audiobook_tool.tts_models.audio_cpp_behavior import get_audio_cpp_behavior
+
+        count = get_audio_cpp_behavior(self.definition).speaking_rate_bucket_count
+        if not count:
+            return None
+        from tts_audiobook_tool.menus.voice.voice_speaking_rate_items import make_speaking_rate_items
+
+        return lambda state, index: make_speaking_rate_items(state, index, self.model_id, count)
 
 
 @dataclass(frozen=True)

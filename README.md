@@ -35,7 +35,7 @@ Audio generation is performed locally (via dedicated virtual environments) or th
 | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) | ✅ | ✅ | ✅ |
 | [VibeVoice](https://github.com/microsoft/VibeVoice) | ✅ | | |
 | [ZONOS2](https://github.com/Zyphra/ZONOS2) | | ✅ | |
-| [ZONOS3-Mini](https://github.com/Zyphra/ZONOS3-Mini) | | ✅ | |
+| [ZONOS3-Mini](https://github.com/Zyphra/ZONOS3-Mini) | | ✅ | ✅ |
 
 By themselves, these models are unreliable at book scale. The app wraps them in the tooling needed for effective long-form generation:
 
@@ -833,7 +833,12 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 **Qwen3-TTS**
 - Base, CustomVoice and VoiceDesign model types
 - Temperature, top_p, top_k; repetition penalty, seed
-- See [Qwen3-TTS setup notes](<docs/tips-audio-cpp.md#qwen3-tts>)
+
+**ZONOS3-Mini**
+- Speaker modes: embedding or reference
+- Speaking-rate
+- Speaker guidance
+- temperature, top_p, top_k, repetition_penalty, seed
 
 
 # Usage notes
@@ -903,7 +908,8 @@ Listed below are some anecdotal TTS inference speeds (for locally hosted models 
 
 **2026-11-25**
 
-- Added support for [**ZONOS3-Mini**](https://sgl-project.github.io/sglang-omni/cookbook/zonos3.html) using SGL-Omni, which is exceptionally fast (even more with concurrent requests).
+- Added support for [**ZONOS3-Mini for SGL-Omni**](https://sgl-project.github.io/sglang-omni/cookbook/zonos3.html), which is exceptionally fast (even more with concurrent requests).
+- Added support for [**ZONOS3-Mini for audio.cpp**](https://github.com/0xShug0/audio.cpp/blob/main/docs/models/zonos3.md). Supports both of its voice cloning modes (embedding and reference).
 - Added Whisper CUDA config option `int8_float16`, which saves ~1GB of VRAM with minimal quality loss, and is now the default on supported GPUs. `Options > Whisper device > CUDA, int8`.
 
 **2026-11-23**

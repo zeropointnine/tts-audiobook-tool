@@ -58,7 +58,7 @@ def seed_voices_menu(state: State) -> None:
 
     subheading = SEED_VOICES_DESC + "\n\n" + "\n".join(make_numbered_columns(ids, counts))
     MenuUtil.print_screen_heading(state, "Prep voices list", subheading=subheading, breadcrumb="Prep voices list")
-    printt(f'Enter numbers {COL_DIM}(eg, "1-3, 5, 8" or "all")')
+    printt(f'Enter numbers {COL_DIM}(eg, "1-3, 5, 8" or "all"){COL_DEFAULT}:')
     inp = ask.ask_input()
     if not inp:
         return

@@ -28,7 +28,7 @@ def isolate_menu(monkeypatch):
 def make_state(model_id=MODEL_ID):
     project = Project(tts_model_type=model_id, voice_references=[
         Voice("sample.flac", "Keep transcript", instructions={"other_model": "Keep instructions"},
-              speaking_rate_buckets={MODEL_ID: 7, "other_model": 12}),
+              speaking_rate_buckets={model_id: 7, "other_model": 12}),
         Voice(),
     ])
     return cast(State, SimpleNamespace(project=project))
@@ -57,7 +57,9 @@ def open_submenu(monkeypatch, state, index=0):
     return outer, dict(captured)
 
 
-@pytest.mark.parametrize("model_id,shown", [(MODEL_ID, True), ("zonos2_sglomni", False), ("qwen3tts_audiocpp", False)])
+@pytest.mark.parametrize("model_id,shown", [
+    (MODEL_ID, True), ("zonos3_mini_audiocpp", True), ("zonos2_sglomni", False), ("qwen3tts_audiocpp", False),
+])
 def test_rate_control_is_per_voice_and_only_for_supported_model(monkeypatch, model_id, shown):
     # Enter via real catalog dispatch; retained data alone cannot enable a control.
     state = make_state(model_id)
@@ -67,7 +69,7 @@ def test_rate_control_is_per_voice_and_only_for_supported_model(monkeypatch, mod
     controls = [item for item in items(state, submenu) if label(state, item).startswith(rate_menu.LABEL_SPEAKING_RATE)]
     assert bool(controls) is shown
     if shown:
-        assert "Bucket 7" in label(state, controls[0])
+        assert " 7" in label(state, controls[0])
         _, second = open_submenu(monkeypatch, state, index=1)
         assert any("Disabled" in label(state, item) for item in items(state, second)
                    if label(state, item).startswith(rate_menu.LABEL_SPEAKING_RATE))
@@ -92,7 +94,7 @@ def test_rate_edit_changes_only_selected_voice_and_model(monkeypatch, answer, ex
     assert after.instructions == before.instructions
     assert state.project.voice_references[1] == Voice()
     assert len(saves) == 1
-    value = "Disabled" if expected is None else f"Bucket {expected}"
+    value = "Disabled" if expected is None else f"currently: {expected}"
     assert any(value in label(state, item) for item in items(state, submenu)
                if label(state, item).startswith(rate_menu.LABEL_SPEAKING_RATE))
 

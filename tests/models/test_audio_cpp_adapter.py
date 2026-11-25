@@ -263,7 +263,7 @@ def test_omnivoice_numeric_menu_prompt_shows_the_default(monkeypatch, tmp_path: 
         maximum = int(parameter.max) if parameter.type == "int" else parameter.max
         default = int(parameter.default) if parameter.type == "int" else parameter.default
         assert text_util.strip_ansi_codes(printed[-1]) == (
-            f"Enter {control.label} (valid range: {minimum}-{maximum}; default: {default})"
+            f"Enter {control.label}: (valid range: {minimum}-{maximum}; default: {default})"
         )
 
 
@@ -1353,9 +1353,10 @@ def test_models_default_to_catalog_driven_behavior():
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_fireredtts3 import FireRedTts3Behavior
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_omnivoice import OmniVoiceBehavior
     from tts_audiobook_tool.tts_models.audio_cpp_behavior_qwen3 import Qwen3Behavior
+    from tts_audiobook_tool.tts_models.audio_cpp_behavior_zonos3 import Zonos3Behavior
     registered = {COSYVOICE3_ID: CosyVoice3Behavior, FIREREDTTS3_ID: FireRedTts3Behavior,
                   "qwen3tts_audiocpp": Qwen3Behavior, "chatterbox_audiocpp": ChatterboxBehavior,
-                  OMNIVOICE_ID: OmniVoiceBehavior}
+                  OMNIVOICE_ID: OmniVoiceBehavior, "zonos3_mini_audiocpp": Zonos3Behavior}
     for model_id, item in load_audio_cpp_definitions().models.items():
         behavior = AudioCppModelSupport(item).behavior
         expected = registered.get(model_id, AudioCppModelBehavior)

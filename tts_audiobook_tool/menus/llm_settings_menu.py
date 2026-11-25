@@ -110,7 +110,7 @@ class LlmSettingsMenu:
 
     @staticmethod
     def api_key_menu(state: State) -> None:
-        printt("Enter the name of the environment variable which stores the value of your LLM API key")
+        printt("Enter the name of the environment variable which stores the value of your LLM API key:")
         printt(f'{COL_DIM}Default is "{PREFS_DEFAULT_LLM_API_KEY_ENV_VAR}" (enter "/clear" to reset to default)')
         printt(f"{COL_DIM}Required by most hosted providers;")
         printt(f"{COL_DIM}may not be needed for some self-hosted servers.")

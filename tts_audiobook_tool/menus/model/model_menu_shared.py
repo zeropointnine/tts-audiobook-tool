@@ -220,7 +220,7 @@ class ModelMenuShared:
             prompt_suffix: str = ""
     ) -> MenuItem:
 
-        prompt = ModelMenuShared.with_prompt_suffix("Enter temperature", prompt_suffix)
+        prompt = ModelMenuShared.with_prompt_suffix("Enter temperature:", prompt_suffix)
 
         def on_item(_: State, __: MenuItem) -> None:
             ModelMenuShared.ask_temperature(
@@ -261,7 +261,7 @@ class ModelMenuShared:
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=0,
-            prompt=ModelMenuShared.with_prompt_suffix("Enter Top-K", prompt_suffix),
+            prompt=ModelMenuShared.with_prompt_suffix("Enter Top-K:", prompt_suffix),
             min_value=min_value,
             max_value=max_value
         )
@@ -284,7 +284,7 @@ class ModelMenuShared:
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=2,
-            prompt=ModelMenuShared.with_prompt_suffix("Enter Top-P", prompt_suffix),
+            prompt=ModelMenuShared.with_prompt_suffix("Enter Top-P:", prompt_suffix),
             min_value=min_value,
             max_value=max_value
         )
@@ -305,7 +305,7 @@ class ModelMenuShared:
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=2,
-            prompt=f"Enter repetition penalty",
+            prompt="Enter repetition penalty:",
             min_value=min_value,
             max_value=max_value
         )
@@ -503,7 +503,7 @@ class ModelMenuShared:
     @staticmethod
     def _ask_hf_target(spec: TargetPromptSpec, current_target: ModelTarget | None) -> ModelTarget | None:
         # The subject is already named above (the `ask_target` heading, or the caller's menu)
-        printt("Enter Hugging Face repo id")
+        printt("Enter Hugging Face repo id:")
         if spec.hf_example:
             printt(f"{COL_DIM}Eg, \"{spec.hf_example}\"")
         printt(f"{COL_DIM}For a subdirectory within the repo, append its path: \"owner/repo/sub/dir\"")
@@ -627,7 +627,7 @@ class ModelMenuShared:
             subheading=subheading
         )
         ask.ask_number_and_save(
-            state.project, target, "Enter value",
+            state.project, target, "Enter value:",
             min_value=0, max_value=max_value, default_value=0,
             success_prefix="Rolling continuation num segments set to", is_int=True
         )

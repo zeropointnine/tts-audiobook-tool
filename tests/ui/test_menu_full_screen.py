@@ -99,7 +99,7 @@ def test_menu_initial_hotkey_activates_item_once_before_first_render(monkeypatch
 
     MenuUtil.menu(
         state, "Model settings",
-        lambda _: [MenuItem("Switch TTS model", on_picker), MenuItem("Other", lambda *_: None)],
+        lambda _: [MenuItem("TTS model", on_picker), MenuItem("Other", lambda *_: None)],
         breadcrumb="Model", initial_hotkey="1",
     )
 

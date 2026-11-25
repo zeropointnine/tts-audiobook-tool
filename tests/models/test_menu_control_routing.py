@@ -41,9 +41,9 @@ def test_mixed_destinations_preserve_order_and_exclusively_partition_controls(ba
     state = SimpleNamespace(project=Project(tts_model_type=definition.spec.id))
     sample_calls = []
 
-    def make_samples(current, model_type, *, preset_choices=None, allow_custom_preset=False):
+    def make_samples(current, model_type, *, preset_choices=None, allow_custom_preset=False, voice_extra_items=None):
         # Non-Qwen models pass the shared sample builder's default preset options.
-        assert preset_choices is None and not allow_custom_preset
+        assert preset_choices is None and not allow_custom_preset and voice_extra_items is None
         assert current is state and model_type.id == definition.spec.id
         sample_calls.append(model_type.id)
         return [MenuItem("Add sample", lambda *_: None), MenuItem("Select samples", lambda *_: None)]
