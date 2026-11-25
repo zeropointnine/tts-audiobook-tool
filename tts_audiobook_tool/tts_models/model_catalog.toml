@@ -2083,8 +2083,7 @@ project_links = [
 
 [models.sgl_omni.behavior]
 orchestration = "concurrent_requests"
-# The server can stream; not supported by this integration yet.
-streaming = false
+streaming = true
 # Request-scoped Philox seed in [0, 2**63). Repeats are byte-identical only
 # for requests that are not batched with others on the server.
 seed = "resolved"
@@ -2098,6 +2097,10 @@ transcript = "omitted"
 # 80 words take roughly 400-450 frames. Also fits a 2048-row server context
 # with a 60 s reference (about 940 prompt rows) plus text.
 max_new_tokens = 1024
+
+[models.sgl_omni.request_stream_defaults]
+# Raw 44.1 kHz, 16-bit mono audio; the shared PCM consumer uses the spec rate.
+response_format = "pcm"
 
 [models.sgl_omni.parameters]
 

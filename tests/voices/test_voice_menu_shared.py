@@ -702,17 +702,25 @@ def test_auto_assign_item_is_optional_until_speaker_assign_data_exists(tmp_path,
     assert get_string_from(state, item.label) == voice_menu_shared.LABEL_AUTO_ASSIGN_CHARACTER_VOICES
 
 
-@pytest.mark.parametrize("transcript", ["Transcribed sample text.", ""])
-def test_transcribed_text_uses_long_pause_feedback(monkeypatch, transcript):
+@pytest.mark.parametrize(("transcript", "variant"), [
+    ("Transcribed sample text.", voice_menu_shared.SttVariant.DISABLED),
+    ("", voice_menu_shared.SttVariant.LARGE_V3),
+])
+def test_transcribed_text_uses_long_pause_feedback(monkeypatch, transcript, variant):
+    # Disabled Whisper is overridden just for the sample, without changing prefs.
     from tts_audiobook_tool.app_types import Sound
     import numpy as np
 
     state = cast(State, SimpleNamespace(
         project=Project(tts_model_type="glm_local", language_code="en"),
-        prefs=SimpleNamespace(stt_variant=voice_menu_shared.SttVariant.LARGE_V3, stt_config={}),
+        prefs=SimpleNamespace(stt_variant=variant, stt_config={}),
     ))
     sound = Sound(np.ones(24000, dtype=np.float32), 24000)
-    monkeypatch.setattr(voice_menu_shared.Transcriber, "transcribe_to_words", lambda *_: ["words"])
+    calls = []
+    monkeypatch.setattr(
+        voice_menu_shared.Transcriber, "transcribe_to_words",
+        lambda *args: calls.append(args) or ["words"],
+    )
     monkeypatch.setattr(
         voice_menu_shared.Transcriber,
         "get_flat_text_filtered_by_probability",
@@ -721,6 +729,8 @@ def test_transcribed_text_uses_long_pause_feedback(monkeypatch, transcript):
     with patch.object(voice_menu_shared, "print_feedback") as feedback:
         assert VoiceMenuShared.transcribe_voice_sample_to_text(state, sound) == (transcript, "")
     feedback.assert_called_once_with(transcript, long_pause=True)
+    assert calls == [(sound, "en", voice_menu_shared.SttVariant.LARGE_V3, state.prefs.stt_config, state)]
+    assert state.prefs.stt_variant is variant
 
 
 # --- validate_voices pre-flight ---

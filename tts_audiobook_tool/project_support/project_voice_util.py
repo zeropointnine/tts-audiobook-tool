@@ -765,6 +765,32 @@ class ProjectVoiceUtil:
         return error
 
     @staticmethod
+    def set_voice_speaking_rate_bucket_at_index_and_save(
+            project: Project, index: int, model_id: str, bucket: int | None,
+    ) -> str:
+        """Set a 1-based per-model rate bucket; None disables only this override."""
+        if not 0 <= index < len(project.voice_references):
+            raise IndexError(f"Voice sample index out of range: {index}")
+        voice = project.voice_references[index]
+        buckets = dict(voice.speaking_rate_buckets)
+        if bucket is None:
+            buckets.pop(model_id, None)
+        else:
+            buckets[model_id] = bucket
+        # Construction validates before either assignment or saving.
+        updated = replace(voice, speaking_rate_buckets=buckets)
+        if updated == voice:
+            return ""
+        previous = project.voice_references
+        entries = list(previous)
+        entries[index] = updated
+        project.voice_references = entries
+        error = project.save()
+        if error:
+            project.voice_references = previous
+        return error
+
+    @staticmethod
     def set_voice_preset_at_index_and_save(
             project: Project, index: int, model_id: str, value: str,
     ) -> str:

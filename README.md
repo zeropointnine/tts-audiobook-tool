@@ -773,6 +773,8 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **ZONOS3-Mini**
 - Concurrent requests
+- Streaming support (for the stand-alone server and LLM chat mode)
+- Speaking-rate
 - Temperature, top_p, top_k, repetition_penalty, seed
 
 
@@ -901,7 +903,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 **2026-11-24**
 
-- Added support for [**ZONOS3-Mini**](https://sgl-project.github.io/sglang-omni/cookbook/zonos3.html) using SGL-Omni.
+- Added support for [**ZONOS3-Mini**](https://sgl-project.github.io/sglang-omni/cookbook/zonos3.html) using SGL-Omni. It is exceptionally fast, and even more so when using concurrent requests.
 
 **2026-11-23**
 
@@ -932,7 +934,7 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 **2026-10-30**
 
 - **Improved loudness leveling** in exports and realtime playback. Loudness is now normalized segment by segment. Removed the now-redundant, time-consuming whole-file loudness normalization pass.
-- Added **per-voice volume** setting. Useful for when a certain voice clone tends to overpower the mix, etc.
+- Added **per-voice volume** setting. Useful for when a voice tends to overpower the mix in relation to other voices, etc.
 
 **2026-10-25**
 

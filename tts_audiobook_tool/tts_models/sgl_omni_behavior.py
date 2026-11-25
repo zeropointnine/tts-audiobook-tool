@@ -16,9 +16,12 @@ so subclasses must stay lightweight (no heavy imports).
 """
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
 from tts_audiobook_tool.tts_models.sgl_omni_definition import SglOmniModelDefinition
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.app_types.voice import Voice
 
 ParameterValues = dict[str, int | float | str]
 
@@ -31,6 +34,8 @@ class SglOmniModelBehavior:
     # Checked at construction so a catalog rename fails immediately rather
     # than as a KeyError mid-generation.
     REQUIRED_PARAMETERS: ClassVar[dict[str, str]] = {}
+    # Nonzero enables a per-voice speaking-rate override, not a model setting.
+    speaking_rate_bucket_count: ClassVar[int] = 0
 
     def __init__(self, definition: SglOmniModelDefinition):
         self.definition = definition
@@ -69,16 +74,22 @@ class SglOmniModelBehavior:
         sample. False means instructions apply only to sample-less voices."""
         return True
 
+    def get_voice_condition_buckets(self, voice: Voice | None) -> dict[str, int]:
+        """Server-native condition IDs for the selected voice, empty when unused."""
+        return {}
+
 
 def get_sgl_omni_behavior(definition: SglOmniModelDefinition) -> SglOmniModelBehavior:
     """Return the behavior object for a catalog entry, keyed by catalog model ID."""
     # Imported here so subclasses can import this module's base class.
     from tts_audiobook_tool.tts_models.sgl_omni_behavior_auk import AukSglOmniBehavior
     from tts_audiobook_tool.tts_models.sgl_omni_behavior_cosyvoice3 import CosyVoice3SglOmniBehavior
+    from tts_audiobook_tool.tts_models.sgl_omni_behavior_zonos3 import Zonos3SglOmniBehavior
 
     registry: dict[str, type[SglOmniModelBehavior]] = {
         "auk_sglomni": AukSglOmniBehavior,
         "auk_flash_sglomni": AukSglOmniBehavior,
         "cosyvoice3_sglomni": CosyVoice3SglOmniBehavior,
+        "zonos3_mini_sglomni": Zonos3SglOmniBehavior,
     }
     return registry.get(definition.spec.id, SglOmniModelBehavior)(definition)

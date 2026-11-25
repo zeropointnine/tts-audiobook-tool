@@ -11,9 +11,9 @@ from tts_audiobook_tool.tts_models.model_catalog import CATALOG_PATH, ParameterC
 from tts_audiobook_tool.tts_models.catalog_settings import parse_model_settings
 
 DEFINITION_PATH = CATALOG_PATH
-# Request fields only the adapter writes. `instructions` carries the selected
-# voice's per-voice instructions when the model's behavior uses them.
-_RESERVED = {"input", "stream", "references", "seed", "language", "max_new_tokens", "stage_params", "instructions"}
+# Request fields only the adapter writes. Instructions and condition buckets
+# belong to the selected voice, not project-wide model settings/defaults.
+_RESERVED = {"input", "stream", "references", "seed", "language", "max_new_tokens", "stage_params", "instructions", "condition_buckets"}
 _VALUE_TYPES = {"int": int, "float": float}
 _SEED_POLICIES = {"unsupported", "resolved"}
 _TRANSCRIPT_POLICIES = {"required_when_voice_present", "optional", "omitted"}

@@ -526,3 +526,32 @@ def test_import_limit_silence_menu_toggles_and_asks_duration(monkeypatch):
     items[0].handler(state, items[0])
     assert prefs.import_limit_silence_enabled is False
     assert len(make_items(state)) == 1
+
+
+@pytest.mark.parametrize(("variant", "clear_error"), [
+    (SttVariant.DISABLED, ""),
+    (SttVariant.DISABLED, "Model worker is busy"),
+    (SttVariant.LARGE_V3, ""),
+])
+def test_whisper_selection_unloads_only_stt_when_disabled(monkeypatch, variant, clear_error):
+    # Disabling applies immediately to the worker; enabling remains lazy.
+    calls = []
+    prefs = SimpleNamespace(stt_variant=SttVariant.LARGE_V3, save=lambda: calls.append("save"))
+    state = cast(State, SimpleNamespace(prefs=prefs))
+    monkeypatch.setattr(MenuUtil, "options_menu", lambda **kw: kw["on_select"](variant))
+    monkeypatch.setattr(
+        options_menu.ModelWorker, "clear_models_if_running_blocking",
+        lambda **kw: calls.append(("clear", kw)) or clear_error,
+    )
+    monkeypatch.setattr(options_menu.ask, "ask_error", lambda error: calls.append(("error", error)))
+    monkeypatch.setattr(options_menu, "print_feedback", lambda *a, **kw: calls.append("feedback"))
+
+    OptionsMenu.stt_model_menu(state)
+
+    assert prefs.stt_variant is variant
+    expected = ["save"]
+    if variant is SttVariant.DISABLED:
+        expected.append(("clear", {"stt_only": True}))
+        if clear_error:
+            expected.append(("error", clear_error))
+    assert calls == expected + ["feedback"]

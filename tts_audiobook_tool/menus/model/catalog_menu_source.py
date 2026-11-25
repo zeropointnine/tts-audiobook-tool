@@ -29,6 +29,7 @@ from tts_audiobook_tool.tts_models.sgl_omni_definition import (
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+    from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceExtraItems
     from tts_audiobook_tool.state import State
     from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -116,6 +117,9 @@ class CatalogMenuSource(Protocol):
     def voice_preset_choices(self, model_type: TtsModelType) -> tuple[PresetChoices, bool]:
         """`(preset_choices, allow_custom_preset)` for the voice-sample items."""
         ...
+    def voice_extra_items(self) -> VoiceExtraItems | None:
+        """Optional per-voice controls, distinct from project-wide model settings."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -174,6 +178,16 @@ class SglOmniMenuSource:
 
     def voice_preset_choices(self, model_type: TtsModelType) -> tuple[PresetChoices, bool]:
         return None, False
+
+    def voice_extra_items(self) -> VoiceExtraItems | None:
+        from tts_audiobook_tool.tts_models.sgl_omni_behavior import get_sgl_omni_behavior
+
+        count = get_sgl_omni_behavior(self.definition).speaking_rate_bucket_count
+        if not count:
+            return None
+        from tts_audiobook_tool.menus.voice.voice_speaking_rate_items import make_speaking_rate_items
+
+        return lambda state, index: make_speaking_rate_items(state, index, self.model_id, count)
 
 
 # audio.cpp exposes no checkpoint speaker discovery. These are Qwen's official
@@ -244,6 +258,9 @@ class AudioCppMenuSource:
             return get_qwen_speaker_choices, True
         return None, False
 
+    def voice_extra_items(self) -> VoiceExtraItems | None:
+        return None
+
 
 @dataclass(frozen=True)
 class LocalMenuSource:
@@ -301,6 +318,9 @@ class LocalMenuSource:
     def voice_preset_choices(self, model_type: TtsModelType) -> tuple[PresetChoices, bool]:
         # Local voice menus are model-specific; they never render catalog voice controls.
         return None, False
+
+    def voice_extra_items(self) -> VoiceExtraItems | None:
+        return None
 
 
 CatalogDefinition = SglOmniModelDefinition | AudioCppModelDefinition | LocalModelDefinition

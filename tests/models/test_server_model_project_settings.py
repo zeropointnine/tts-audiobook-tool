@@ -95,7 +95,8 @@ def test_zonos3_mini_detection_requires_the_mini_qualifier():
     info = zonos3_mini.value
     assert REGISTRY.transcript_binding(info.id) is None
     assert REGISTRY.orchestration_binding(info.id).name == "concurrent_requests"
-    assert not info.requires_voice and not info.can_stream
+    assert not info.requires_voice
+    assert info.can_stream
 
 
 def test_zonos2_project_fields_normalize_and_serialize():

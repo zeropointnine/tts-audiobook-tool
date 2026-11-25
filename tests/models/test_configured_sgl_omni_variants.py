@@ -8,6 +8,7 @@ import copy
 import json
 from types import SimpleNamespace
 
+import httpx
 import numpy as np
 import pytest
 
@@ -99,6 +100,10 @@ GOLDEN_STREAMING = {
     "zonos2_sglomni": {"input": "hello", "stream": True, "max_new_tokens": 240, "top_k": 100,
                       "temperature": 1.15, "repetition_penalty": 1.2,
                       "references": [{"audio_path": "data:{sample}"}], "response_format": "pcm"},
+    "zonos3_mini_sglomni": {"input": "hello", "stream": True, "max_new_tokens": 1024,
+                           "temperature": 0.75, "top_p": 0.69, "top_k": 80,
+                           "repetition_penalty": 2.4, "seed": 12345,
+                           "references": [{"audio_path": "data:{sample}"}], "response_format": "pcm"},
 }
 
 
@@ -237,8 +242,8 @@ def test_configured_payload_matches_recorded_legacy_payload(model_id, server_mod
         assert "seed" not in capture[0]
 
 
-@pytest.mark.parametrize("model_id", ["fish_s2_sglomni", "higgs_v3_sglomni", "qwen3tts_sglomni", "zonos2_sglomni"])
-def test_streamed_payload_and_callbacks_match_legacy(model_id, server_mode, capture, tmp_path):
+@pytest.mark.parametrize("model_id", list(GOLDEN_STREAMING))
+def test_streamed_payload_and_callbacks_match_expected(model_id, server_mode, capture, tmp_path):
     sample = tmp_path / "sample.flac"
     sample.write_bytes(b"audio")
     instance = server_mode(model_id)
@@ -253,10 +258,99 @@ def test_streamed_payload_and_callbacks_match_legacy(model_id, server_mode, capt
     assert capture == [resolve_golden(GOLDEN_STREAMING[model_id], sample, sample, sample)]
     assert signals == ["chunk", "end"]
     assert capture[0]["stream"] is True
-    if model_id in ("qwen3tts_sglomni", "zonos2_sglomni"):
+    if model_id in ("qwen3tts_sglomni", "zonos2_sglomni", "zonos3_mini_sglomni"):
         assert capture[0]["response_format"] == "pcm"
     else:
         assert "response_format" not in capture[0]
+
+
+@pytest.mark.parametrize("index,streaming,expected", [(0, False, 0), (1, False, 29), (2, False, None), (1, True, 29)])
+def test_zonos3_mini_sends_only_selected_voice_rate_bucket(index, streaming, expected, server_mode, capture, tmp_path):
+    # Storage/UI are 1-based, but both wire routes send zero-based buckets;
+    # a sample-less voice can use an override, and Disabled never inherits one.
+    model_id = "zonos3_mini_sglomni"
+    (tmp_path / "sample.flac").write_bytes(b"audio")
+    instance = server_mode(model_id)
+    project = Project(dir_path=str(tmp_path), tts_model_type=model_id, voice_references=[
+        Voice(speaking_rate_buckets={model_id: 1}),
+        Voice("sample.flac", speaking_rate_buckets={model_id: 30, "other_model": 7}),
+        Voice(speaking_rate_buckets={"other_model": 4}),
+    ])
+    callbacks = {"on_stream_chunk": lambda _: None} if streaming else {}
+    prompts = ["hello"] if streaming else ["hello", "another sentence"]
+    result = instance.generate_using_project(project, prompts, voice_selection_index=index, **callbacks)
+    assert isinstance(result, list) and len(result) == len(prompts)
+    for payload in capture:
+        assert payload["stream"] is streaming
+        if expected is None:
+            assert "condition_buckets" not in payload
+        else:
+            assert payload["condition_buckets"] == {"speaking_rate": expected}
+        assert "condition_values" not in payload
+
+
+def test_other_sgl_models_ignore_retained_voice_rate_buckets(server_mode, capture):
+    # An inactive ZONOS3 override survives switching models without leaking onto the wire.
+    instance = server_mode("zonos2_sglomni")
+    project = Project(tts_model_type="zonos2_sglomni", voice_references=[
+        Voice(speaking_rate_buckets={"zonos3_mini_sglomni": 7, "zonos2_sglomni": 5}),
+    ])
+    instance.generate_using_project(project, ["hello"])
+    assert "condition_buckets" not in capture[0]
+    assert project.voice_references[0].speaking_rate_buckets["zonos3_mini_sglomni"] == 7
+
+
+def test_zonos3_mini_streams_pcm_through_http_client(server_mode, monkeypatch):
+    # Exercise catalog -> adapter -> PCM decoding without a clone or metadata
+    # headers. Callbacks must arrive before EOF, even across split int16 samples.
+    model_id = "zonos3_mini_sglomni"
+    instance = server_mode(model_id)
+    assert instance.INFO.can_stream
+    project = Project(tts_model_type=model_id)
+    project.set_model_setting(model_id, "seed", 42)
+    pcm = np.array([0, 8192, -8192, 32767, -32768], dtype="<i2")
+    raw = pcm.tobytes()
+    chunks = []
+    signals = []
+    payloads = []
+
+    class PcmStream(httpx.SyncByteStream):
+        def __iter__(self):
+            yield raw[:3]
+            assert signals == ["chunk"]
+            yield raw[3:]
+            assert signals == ["chunk", "chunk"]
+
+    def handler(request):
+        payloads.append(json.loads(request.content))
+        return httpx.Response(200, stream=PcmStream())
+
+    client_class = httpx.Client
+
+    def make_client(*args, **kwargs):
+        return client_class(*args, transport=httpx.MockTransport(handler), **kwargs)
+
+    def on_chunk(data):
+        chunks.append(data.copy())
+        signals.append("chunk")
+
+    monkeypatch.setattr(httpx, "Client", make_client)
+    monkeypatch.setattr(SglOmniUtil, "get_base_url", lambda: "http://example.test")
+    result = instance.generate_using_project(
+        project, ["hello"], on_stream_chunk=on_chunk,
+        on_stream_end=lambda: signals.append("end"))
+
+    assert isinstance(result, list) and len(result) == 1
+    assert payloads[0]["stream"] is True
+    assert payloads[0]["response_format"] == "pcm"
+    assert payloads[0]["seed"] == 42
+    assert payloads[0]["max_new_tokens"] == 1024
+    assert "references" not in payloads[0]
+    assert signals == ["chunk", "chunk", "end"]
+    assert result[0].sr == instance.INFO.default_output_sample_rate
+    expected = pcm.astype(np.float32) / 32768.0
+    np.testing.assert_array_equal(np.concatenate(chunks), expected)
+    np.testing.assert_array_equal(result[0].data, expected)
 
 
 def test_fish_server_cap_and_reset_are_private_to_server(server_mode, capture, monkeypatch):
@@ -550,6 +644,8 @@ def test_loader_rejects_policy_and_owner_collisions_atomically(tmp_path):
         ("zonos2_sglomni", lambda e: e["sgl_omni"]["behavior"].update(prompt_policy="eval"), "prompt_policy"),
         ("auk_sglomni", lambda e: e["sgl_omni"]["parameters"]["speed"].update(default_sentinel=-1), r"speed\.(?:default_sentinel|sentinel)"),
         ("qwen3tts_sglomni", lambda e: e["sgl_omni"]["request_stream_defaults"].update(input="bad"), "request_stream_defaults.input"),
+        ("zonos3_mini_sglomni", lambda e: e["sgl_omni"]["request_defaults"].update(condition_buckets=1), "request_defaults.condition_buckets"),
+        ("zonos3_mini_sglomni", lambda e: e["sgl_omni"]["parameters"]["top_k"].update(request_key="condition_buckets"), "top_k.request_key"),
     ):
         data = copy.deepcopy(source)
         mutate(next(e for e in data["models"] if e["id"] == model_id))
@@ -603,6 +699,8 @@ def test_catalog_controls_are_partitioned_without_changing_order(monkeypatch, mo
 
     def make_voice_items(current, model_type, **kwargs):
         assert current is state and model_type.id == model_id
+        extra_items = kwargs.pop("voice_extra_items")
+        assert callable(extra_items) is (model_id == "zonos3_mini_sglomni")
         assert kwargs == {"preset_choices": None, "allow_custom_preset": False}
         voice_calls.append(model_type)
         return voice_items

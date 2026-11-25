@@ -295,6 +295,7 @@ class SglOmniBackendAdapter:
             # instructions the server would refuse together are never combined.
             uses_transcript = behavior.uses_reference_transcript(values)
             selected_voice = ProjectVoiceUtil.current_voice(project, self.support.model_type, voice_selection_index)
+            condition_buckets = behavior.get_voice_condition_buckets(selected_voice)
             instructions = (selected_voice.instructions.get(self.INFO.id, "").strip()
                             if selected_voice is not None and behavior.uses_voice_instructions(values) else "")
             mapped: dict[str, int | float] = {}
@@ -353,6 +354,8 @@ class SglOmniBackendAdapter:
                 payload.update(self.definition.request_stream_defaults)
             if references:
                 payload["references"] = references
+            if condition_buckets:
+                payload["condition_buckets"] = condition_buckets
             if instructions:
                 payload["instructions"] = instructions
             if seed is not None:

@@ -22,6 +22,8 @@ On disk an entry is a flat JSON object:
                                             # written only when non-empty
         "instructions": {"<model id>": "..."},  # optional per-TTS-model voice instructions for
                                             # "instruct" models; written only when non-empty
+        "speaking_rate_buckets": {"<model id>": 15},  # optional per-model integer buckets, 1 to 30;
+                                            # absent means disabled; written only when non-empty
         "loras": {"<model id>": {"target": "...", "target_type": "hf", "strength": 0.8}}
                                             # optional per-TTS-model LoRA adapter (a `ModelTarget`:
                                             # target is a local dir or hf repo id, target_type "local"
@@ -54,6 +56,7 @@ PAN_FIELD = "pan"
 VOLUME_FIELD = "volume"
 PRESETS_FIELD = "presets"
 INSTRUCTIONS_FIELD = "instructions"
+SPEAKING_RATE_BUCKETS_FIELD = "speaking_rate_buckets"
 LORAS_FIELD = "loras"
 LORA_TARGET_FIELD = TARGET_FIELD
 LORA_TARGET_TYPE_FIELD = TARGET_TYPE_FIELD
@@ -89,6 +92,16 @@ def volume_label(volume: int) -> str:
 def volume_to_db(volume: int) -> float:
     """Gain in dB of a volume percent (100 -> 0 dB, 50 -> -6.0 dB)."""
     return 20 * math.log10(volume / 100)
+
+
+# Per-model speaking-rate buckets. A missing entry disables the override.
+SPEAKING_RATE_BUCKET_MIN = 1
+SPEAKING_RATE_BUCKET_MAX = 30
+
+
+def _is_speaking_rate_bucket(value: Any) -> bool:
+    return (isinstance(value, int) and not isinstance(value, bool)
+            and SPEAKING_RATE_BUCKET_MIN <= value <= SPEAKING_RATE_BUCKET_MAX)
 
 
 # Per-voice LoRA strength: a multiplier on the adapter's change to the weights
@@ -170,8 +183,10 @@ class Voice:
     built-in voices), voice `instructions` keyed by TTS model id (for
     "instruct" models), `loras` keyed by TTS model id (a per-voice LoRA adapter,
     for models with `voice_lora_mode` other than "none"), and `volume` (percent,
-    `VOLUME_MIN` to `VOLUME_MAX`, applied after loudness leveling). Empty strings
-    / empty maps mean unused;
+    `VOLUME_MIN` to `VOLUME_MAX`, applied after loudness leveling).
+    `speaking_rate_buckets` holds optional integer overrides keyed by exact model
+    id, from `SPEAKING_RATE_BUCKET_MIN` to `SPEAKING_RATE_BUCKET_MAX`; an absent
+    entry means disabled. Empty strings / empty maps mean unused;
     an empty `file_name` means the voice has no sample. `Voice()` is the
     default voice."""
 
@@ -188,6 +203,8 @@ class Voice:
     volume: int = VOLUME_DEFAULT
     # TTS model id -> LoRA adapter. Treat as read-only; excluded from hashing.
     loras: dict[str, VoiceLora] = field(default_factory=dict, hash=False)
+    # Exact TTS model id -> speaking-rate bucket. Treat as read-only; excluded from hashing.
+    speaking_rate_buckets: dict[str, int] = field(default_factory=dict, hash=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str):
@@ -210,6 +227,13 @@ class Voice:
                 isinstance(key, str) and isinstance(item, VoiceLora) for key, item in self.loras.items()):
             raise ValueError("loras must be a dict of model id to VoiceLora")
         object.__setattr__(self, "loras", dict(self.loras))
+        if not isinstance(self.speaking_rate_buckets, dict) or not all(
+                isinstance(key, str) and _is_speaking_rate_bucket(item)
+                for key, item in self.speaking_rate_buckets.items()):
+            raise ValueError(
+                "speaking_rate_buckets must be a dict of model id to int between "
+                f"{SPEAKING_RATE_BUCKET_MIN} and {SPEAKING_RATE_BUCKET_MAX}")
+        object.__setattr__(self, "speaking_rate_buckets", dict(self.speaking_rate_buckets))
 
     @property
     def has_sample(self) -> bool:
@@ -238,8 +262,8 @@ class Voice:
 
     def to_dict(self) -> dict[str, Any]:
         """The on-disk form. `room_reverb` is always written; `pan` only when nonzero;
-        `volume` only when not the default; `name`, `presets`, `instructions` and
-        `loras` only when non-empty."""
+        `volume` only when not the default; `name`, `presets`, `instructions`,
+        `loras` and `speaking_rate_buckets` only when non-empty."""
         result: dict[str, Any] = {}
         if self.name:
             result[NAME_FIELD] = self.name
@@ -261,6 +285,8 @@ class Voice:
             result[INSTRUCTIONS_FIELD] = dict(self.instructions)
         if self.loras:
             result[LORAS_FIELD] = {model_id: lora.to_dict() for model_id, lora in self.loras.items()}
+        if self.speaking_rate_buckets:
+            result[SPEAKING_RATE_BUCKETS_FIELD] = dict(self.speaking_rate_buckets)
         return result
 
     @staticmethod
@@ -284,8 +310,10 @@ class Voice:
         out-of-range one is clamped (a fractional one is rounded). A missing or
         non-object `presets` / `instructions` (including a legacy plain string)
         loads as an empty map. A missing or non-object `loras` loads as an empty
-        map; see `_parse_loras` for its entries. A missing or non-string `name`
-        loads as "".
+        map; see `_parse_loras` for its entries. A missing or non-object
+        `speaking_rate_buckets` loads as an empty map; invalid entries are dropped
+        with a warning, never clamped. Unknown model ids are retained. A missing
+        or non-string `name` loads as "".
         """
         from tts_audiobook_tool.app_support import path_norm
         from tts_audiobook_tool.l import L
@@ -318,6 +346,7 @@ class Voice:
             name=_parse_name(raw, where, index),
             volume=_parse_volume(raw, where, index),
             loras=_parse_loras(raw, where, index),
+            speaking_rate_buckets=_parse_speaking_rate_buckets(raw, where, index),
         )
 
 
@@ -337,6 +366,24 @@ def _parse_str_map(raw: dict, field: str, where: str, index: int) -> dict[str, s
         L.w(f"{where}[{index}]: invalid {field} ({value!r}); using empty")
         return {}
     return {key: item for key, item in value.items() if isinstance(key, str) and isinstance(item, str)}
+
+
+def _parse_speaking_rate_buckets(raw: dict, where: str, index: int) -> dict[str, int]:
+    """Keep valid buckets for exact model ids; drop malformed data, never clamp."""
+    from tts_audiobook_tool.l import L
+
+    value = raw.get(SPEAKING_RATE_BUCKETS_FIELD, {})
+    if not isinstance(value, dict):
+        L.w(f"{where}[{index}]: invalid {SPEAKING_RATE_BUCKETS_FIELD} ({value!r}); using empty")
+        return {}
+    result: dict[str, int] = {}
+    for model_id, bucket in value.items():
+        if not isinstance(model_id, str) or not _is_speaking_rate_bucket(bucket):
+            L.w(f"{where}[{index}]: invalid {SPEAKING_RATE_BUCKETS_FIELD} entry "
+                f"{model_id!r}: {bucket!r}; dropping")
+            continue
+        result[model_id] = bucket
+    return result
 
 
 def _parse_loras(raw: dict, where: str, index: int) -> dict[str, VoiceLora]:

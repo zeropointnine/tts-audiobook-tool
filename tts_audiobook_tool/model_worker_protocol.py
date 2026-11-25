@@ -98,6 +98,7 @@ class RealTimePlaybackCommand:
 @dataclass(frozen=True)
 class ClearModelsCommand:
     operation_id: str
+    stt_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,9 @@ class TranscribeAudioCommand:
     # a value derived from its own wait timeout so a dump never fires after it
     # has already given up on the operation.
     stack_dump_delay: float = STT_DIAGNOSTIC_THRESHOLD_SECONDS
+    # A reference sample may temporarily override the disabled preference.
+    # Release its model before reporting completion, including on failure.
+    unload_after: bool = False
 
 
 @dataclass(frozen=True)

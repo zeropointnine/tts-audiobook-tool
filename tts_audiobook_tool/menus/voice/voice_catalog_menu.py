@@ -23,6 +23,7 @@ class VoiceCatalogMenu:
                     state, model_type,
                     preset_choices=preset_choices,
                     allow_custom_preset=allow_custom_preset,
+                    voice_extra_items=source.voice_extra_items(),
                 ))
             elif control.target_menu == "voice":
                 # Voice-targeted settings reuse the Model menu's editors.

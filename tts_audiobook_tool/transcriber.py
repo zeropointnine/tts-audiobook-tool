@@ -66,6 +66,8 @@ class Transcriber:
                     sound.data,
                     language=None,
                     word_timestamps=True,
+                    stt_variant_id=stt_variant.id,
+                    stt_config_id=stt_config.id,
                     console_handler=console_handler,
                 )
                 if error or result is None:

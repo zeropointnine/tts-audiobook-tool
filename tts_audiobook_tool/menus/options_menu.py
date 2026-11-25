@@ -178,6 +178,10 @@ class OptionsMenu:
         def on_select(value: SttVariant) -> None:
             state.prefs.stt_variant = value
             state.prefs.save()
+            if value is SttVariant.DISABLED:
+                error = ModelWorker.clear_models_if_running_blocking(stt_only=True)
+                if error:
+                    ask.ask_error(error)
             print_feedback(f"Set to:", state.prefs.stt_variant.id)
 
         MenuUtil.options_menu(

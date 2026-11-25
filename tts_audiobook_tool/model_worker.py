@@ -1002,12 +1002,15 @@ def _model_worker_main(
                 f"({since_previous}; audio samples={getattr(command.audio, 'size', 'unknown')}, "
                 f"word_timestamps={command.word_timestamps})"
             )
+            from tts_audiobook_tool.app_types import SttVariant
+
+            whisper = None
+            raw_segments = None
             try:
                 from tts_audiobook_tool.app_types import (
                     ConcreteSegment,
                     ConcreteWord,
                     SttConfig,
-                    SttVariant,
                 )
                 from tts_audiobook_tool.stt import Stt
 
@@ -1034,10 +1037,10 @@ def _model_worker_main(
                     # the inference it no longer wants lets the worker go idle
                     # now instead of being reaped for a command nobody awaits.
                     L.i(f"[stt] {command.operation_id} cancelled before inference")
-                    event_queue.put(WorkerCommandCancelled(command.operation_id))
+                    transcription_result = WorkerCommandCancelled(command.operation_id)
                 elif not language_supported:
                     L.w(f"[stt] {command.operation_id} unsupported language: {command.language}")
-                    event_queue.put(AudioTranscribed(command.operation_id, (), False))
+                    transcription_result = AudioTranscribed(command.operation_id, (), False)
                 else:
                     inference_started_at = time.monotonic()
                     transcription_cancelled = False
@@ -1085,9 +1088,7 @@ def _model_worker_main(
                             f"{time.monotonic() - inference_started_at:.1f}s "
                             f"({len(raw_segments)} partial segments discarded)"
                         )
-                        event_queue.put(
-                            WorkerCommandCancelled(command.operation_id)
-                        )
+                        transcription_result = WorkerCommandCancelled(command.operation_id)
                     else:
                         L.i(
                             f"[stt] {command.operation_id} inference finished in "
@@ -1111,9 +1112,7 @@ def _model_worker_main(
                             )
                             for segment in raw_segments
                         )
-                        event_queue.put(
-                            AudioTranscribed(command.operation_id, segments, True)
-                        )
+                        transcription_result = AudioTranscribed(command.operation_id, segments, True)
             except Exception as exception:
                 L.e(
                     f"[stt] {command.operation_id} failed after "
@@ -1121,12 +1120,21 @@ def _model_worker_main(
                     f"{type(exception).__name__}: {exception}"
                 )
                 traceback.print_exc()
-                event_queue.put(
-                    WorkerCommandFailed(
-                        command.operation_id,
-                        f"{type(exception).__name__}: {exception}",
-                    )
+                transcription_result = WorkerCommandFailed(
+                    command.operation_id,
+                    f"{type(exception).__name__}: {exception}",
                 )
+            finally:
+                # The command loop stays alive: discard its local backend and
+                # generator references before clearing the resident model.
+                whisper = None
+                raw_segments = None
+                if command.unload_after:
+                    from tts_audiobook_tool.stt import Stt
+
+                    Stt.set_variant(SttVariant.DISABLED)
+                    Stt.clear_stt_model()
+            event_queue.put(transcription_result)
             tracker.set("")
             continue
         if isinstance(command, InspectTtsCommand):
@@ -1196,7 +1204,14 @@ def _model_worker_main(
             try:
                 from tts_audiobook_tool.model_manager import ModelManager
 
-                ModelManager.clear_all_models()
+                if command.stt_only:
+                    from tts_audiobook_tool.app_types import SttVariant
+                    from tts_audiobook_tool.stt import Stt
+
+                    Stt.set_variant(SttVariant.DISABLED)
+                    Stt.clear_stt_model()
+                else:
+                    ModelManager.clear_all_models()
                 event_queue.put(ModelsCleared(command.operation_id))
             except Exception as exception:
                 traceback.print_exc()
@@ -1670,14 +1685,14 @@ class ModelWorker:
         return cls._clear_models_on_running_worker_blocking()
 
     @classmethod
-    def clear_models_if_running_blocking(cls) -> str:
-        """Clear worker-owned models without creating a new worker."""
+    def clear_models_if_running_blocking(cls, *, stt_only: bool = False) -> str:
+        """Clear worker-owned models (optionally just STT) without spawning."""
         if not cls.is_alive():
             return ""
-        return cls._clear_models_on_running_worker_blocking()
+        return cls._clear_models_on_running_worker_blocking(stt_only=stt_only)
 
     @classmethod
-    def _clear_models_on_running_worker_blocking(cls) -> str:
+    def _clear_models_on_running_worker_blocking(cls, *, stt_only: bool = False) -> str:
         with cls._lock:
             if cls._active_operation_id is not None:
                 return "Model worker is busy"
@@ -1686,7 +1701,7 @@ class ModelWorker:
             if cls._command_queue is None:
                 cls._active_operation_id = None
                 return "Model worker is unavailable"
-            cls._command_queue.put(ClearModelsCommand(operation_id))
+            cls._command_queue.put(ClearModelsCommand(operation_id, stt_only=stt_only))
         result = cls._wait_for_blocking_result(operation_id, ModelsCleared)
         return result if isinstance(result, str) else ""
 
@@ -1822,6 +1837,8 @@ class ModelWorker:
         error = cls._start_with_console_handler(console_handler)
         if error:
             return None, error
+        from tts_audiobook_tool.app_types import SttVariant
+
         prefs = getattr(state, "prefs", state)
         with cls._lock:
             if cls._active_operation_id is not None:
@@ -1849,6 +1866,7 @@ class ModelWorker:
                     language,
                     word_timestamps,
                     stack_dump_delay,
+                    unload_after=prefs.stt_variant == SttVariant.DISABLED,
                 )
             )
         if cancel_check is not None or timeout_seconds is not None:
