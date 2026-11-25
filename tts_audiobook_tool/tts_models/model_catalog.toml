@@ -2136,9 +2136,9 @@ type = "float"
 request_key = "repetition_penalty"
 default = 2.4
 default_sentinel = -1
-min = 1.0
+min = 1.5
 max = 5.0
-input_prompt_suffix = "(1.0 = disabled, which can cause runaway generation)"
+input_prompt_suffix = "\n(low values may prevent generation from terminating correctly)"
 
 [[models.sgl_omni.menu]]
 kind = "voice_samples"

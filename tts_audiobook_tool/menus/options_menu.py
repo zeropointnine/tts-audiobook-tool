@@ -219,7 +219,8 @@ class OptionsMenu:
             labels=labels,
             values=[item for item in list(SttConfig)],
             current_value=state.prefs.stt_config,
-            default_value=None,
+            # Hardware-dependent: CUDA int8 where supported, else float16 or CPU
+            default_value=SttConfig.get_default(),
             on_select=on_select,
             breadcrumb="Whisper device",
         )

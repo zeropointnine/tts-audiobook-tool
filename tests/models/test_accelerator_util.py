@@ -1,6 +1,8 @@
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 from tts_audiobook_tool.app_types import SttConfig
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
@@ -88,16 +90,18 @@ def test_rejects_missing_ctranslate2_gpu(monkeypatch):
     assert not GpuCapsUtil.has_ctranslate2_float16_gpu()
 
 
-def test_stt_config_defaults_to_ctranslate2_gpu_when_float16_is_supported(monkeypatch):
-    monkeypatch.setattr(GpuCapsUtil, "has_ctranslate2_float16_gpu", lambda: True)
+@pytest.mark.parametrize(("gpu_compute_types", "expected"), [
+    ({"float16", "int8_float16"}, SttConfig.CUDA_INT8FLOAT16),
+    ({"float16"}, SttConfig.CUDA_FLOAT16),
+    (set(), SttConfig.CPU_INT8FLOAT32),
+])
+def test_stt_config_default_prefers_cuda_int8_then_float16_then_cpu(monkeypatch, gpu_compute_types, expected):
+    # int8 CUDA is the default for its VRAM savings; a GPU lacking int8 support
+    # still gets float16 CUDA rather than dropping to CPU.
+    monkeypatch.setattr(GpuCapsUtil, "has_ctranslate2_gpu_compute_type",
+                        lambda compute_type: compute_type in gpu_compute_types)
 
-    assert SttConfig.get_default() == SttConfig.CUDA_FLOAT16
-
-
-def test_stt_config_defaults_to_cpu_without_ctranslate2_float16_gpu(monkeypatch):
-    monkeypatch.setattr(GpuCapsUtil, "has_ctranslate2_float16_gpu", lambda: False)
-
-    assert SttConfig.get_default() == SttConfig.CPU_INT8FLOAT32
+    assert SttConfig.get_default() == expected
 
 
 def test_stt_description_uses_effective_ctranslate2_device(monkeypatch):

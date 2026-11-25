@@ -555,3 +555,28 @@ def test_whisper_selection_unloads_only_stt_when_disabled(monkeypatch, variant, 
         if clear_error:
             expected.append(("error", clear_error))
     assert calls == expected + ["feedback"]
+
+
+@pytest.mark.parametrize(("gpu_compute_types", "default_index"), [
+    ({"float16", "int8_float16"}, 1),
+    ({"float16"}, 2),
+    (set(), 0),
+])
+def test_whisper_device_menu_orders_by_precision_and_marks_hardware_default(
+        monkeypatch, gpu_compute_types, default_index):
+    # CPU first, then CUDA by increasing precision; the "(default)" marker
+    # follows the hardware-dependent default rather than a fixed config.
+    from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
+
+    monkeypatch.setattr(GpuCapsUtil, "has_ctranslate2_gpu_compute_type",
+                        lambda compute_type: compute_type in gpu_compute_types)
+    state = cast(State, SimpleNamespace(prefs=SimpleNamespace(stt_config=SttConfig.CPU_INT8FLOAT32)))
+    captured = {}
+    monkeypatch.setattr(MenuUtil, "menu", lambda **kw: captured.update(kw))
+
+    OptionsMenu.whisper_device_menu(state)
+
+    labels = [strip_ansi_codes(item.label) for item in captured["items"]]
+    assert [label.split(" (")[0] for label in labels] == ["CPU, int8", "CUDA, int8", "CUDA, float16"]
+    assert "(full precision)" in labels[2]
+    assert [i for i, label in enumerate(labels) if "(default)" in label] == [default_index]

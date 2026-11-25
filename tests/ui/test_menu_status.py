@@ -1363,15 +1363,19 @@ def test_stt_status_does_not_repeat_disabled(monkeypatch):
     assert text == f"faster-whisper {COL_DIM}(disabled)"
 
 
-def test_stt_status_spells_out_int8_cuda(monkeypatch):
-    # Both CUDA configs share the "cuda" device; the status names the int8 one.
+@pytest.mark.parametrize(("config", "label"), [
+    (SttConfig.CUDA_INT8FLOAT16, "cuda int8"),
+    (SttConfig.CUDA_FLOAT16, "cuda float16"),
+])
+def test_stt_status_spells_out_cuda_precision(monkeypatch, config, label):
+    # Both CUDA configs share the "cuda" device; the status names each precision.
     state = cast(State, SimpleNamespace(
         prefs=SimpleNamespace(
             stt_variant=SttVariant.LARGE_V3_TURBO,
-            stt_config=SttConfig.CUDA_INT8FLOAT16,
+            stt_config=config,
         ),
     ))
     monkeypatch.setattr(Stt, "should_use_mlx_whisper", lambda: False)
     monkeypatch.setattr(Stt, "get_variant", lambda: SttVariant.LARGE_V3_TURBO)
 
-    assert _make_stt_text(state) == f"faster-whisper {COL_DIM}(large-v3-turbo, cuda int8)"
+    assert _make_stt_text(state) == f"faster-whisper {COL_DIM}(large-v3-turbo, {label})"

@@ -853,17 +853,17 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare a fe
 
 ### VRAM considerations
 
-The app ideally wants to use ~2-4 GB extra VRAM for the Whisper speech-to-text model, which needs to runs concurrently with the currently active TTS model to validate its output. If you are getting out of memory errors, try one of the following:
+The app needs some extra VRAM for the Whisper speech-to-text model, which runs concurrently with the active TTS model to validate its output. The defaults (`large-v3-turbo` on `CUDA, int8`) keep this to ~1.5 GB. If, for any reason, you're using `large-v3` or `CUDA, float16`, switching back is the first thing to try.
 
-- Use large-v3-turbo instead of large-v3 (saves a gig or two of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
-- Run Whisper on the GPU with 8-bit weights (roughly halves its VRAM, with near-identical accuracy) (`Options` > `Whisper device` > `CUDA, int8`)
+If you still need to reclaim more VRAM:
+
 - Force Whisper to use system memory instead of running on the GPU (runs much slower, ofc) (`Options` > `Whisper device` > `CPU`)
-- Disable Whisper altogether (last resort) (`Options` > `Whisper model` > `Disabled`)
+- Disable Whisper and lose the output validation functionality (last resort) (`Options` > `Whisper model` > `Disabled`)
 
 
 ### Inference speeds, expectations
 
-Listed below are some anecdotal TTS inference speeds (locally hosted models only). The app adopts each respective model's reference implementation logic as much as possible. Note how CUDA inference speeds on Linux are typically faster than on Windows, sometimes dramatically so.
+Listed below are some anecdotal TTS inference speeds (for locally hosted models only). The app adopts each respective model's reference implementation logic as much as possible. Note how CUDA inference speeds on Linux are typically faster than on Windows, sometimes dramatically so.
 
 | TTS Model               | Setup                | Speed           | Notes                       |
 | ----------------------- | -------------------- | --------------- | --------------------------- |
@@ -901,9 +901,10 @@ Listed below are some anecdotal TTS inference speeds (locally hosted models only
 
 # Update highlights
 
-**2026-11-24**
+**2026-11-25**
 
-- Added support for [**ZONOS3-Mini**](https://sgl-project.github.io/sglang-omni/cookbook/zonos3.html) using SGL-Omni. It is exceptionally fast, and even more so when using concurrent requests.
+- Added support for [**ZONOS3-Mini**](https://sgl-project.github.io/sglang-omni/cookbook/zonos3.html) using SGL-Omni, which is exceptionally fast (even more with concurrent requests).
+- Added Whisper CUDA config option `int8_float16`, which saves ~1GB of VRAM with minimal quality loss, and is now the default on supported GPUs. `Options > Whisper device > CUDA, int8`.
 
 **2026-11-23**
 

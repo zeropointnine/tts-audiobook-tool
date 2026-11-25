@@ -357,8 +357,8 @@ class RoomReverbStereo(tuple[str, float, bool, str], Enum):
 class SttVariant(tuple[str, str], Enum):
     """ Applies to both whisper implementations (faster-whisper and mlx-whisper) """
 
-    LARGE_V3 = ("large-v3", "Reference accuracy") # default
-    LARGE_V3_TURBO = ("large-v3-turbo", "Less memory, faster")
+    LARGE_V3 = ("large-v3", "Reference accuracy")
+    LARGE_V3_TURBO = ("large-v3-turbo", "Less memory, faster") # default
     DISABLED = ("disabled", "Skips validation step when generating audio, adds no extra memory")
 
     @staticmethod
@@ -393,10 +393,18 @@ class SttConfig(tuple[str, str, str], Enum):
 
     # Descriptions name int8 configs by their weight precision only; the
     # activation half of the compute type (_float32/_float16) shows in load logs.
-    CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU, int8") # default
-    CUDA_FLOAT16 = ("cuda", "float16", f"CUDA, float16")
+    # Declaration order is the menu order (CPU, then CUDA by increasing precision).
+    # Default preference (see `get_default`): CUDA int8, then CUDA float16, then CPU.
+
+    # FYI: No CUDA int8_float32 config: it is the only CUDA type CTranslate2 supports on
+    # compute capability 6.1 (Pascal, eg GTX 10xx), so those GPUs fall back to CPU.
+    # Both offered CUDA types need compute capability >= 7.0.
+    CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU, int8")
+
     # int8 weights: ~1.3 GB VRAM vs >2.3 GB float16 for large-v3-turbo, with near-identical accuracy
-    CUDA_INT8FLOAT16 = ("cuda", "int8_float16", "CUDA, int8 (less VRAM)")
+    CUDA_INT8FLOAT16 = ("cuda", "int8_float16", "CUDA, int8")
+
+    CUDA_FLOAT16 = ("cuda", "float16", "CUDA, float16 (full precision)")
 
     @property
     def device(self) -> str:
@@ -404,8 +412,12 @@ class SttConfig(tuple[str, str, str], Enum):
 
     @property
     def status_label(self) -> str:
-        """Short device label for status text; only the non-default CUDA precision is spelled out."""
-        return "cuda int8" if self == SttConfig.CUDA_INT8FLOAT16 else self.device
+        """Short device label for status text; both CUDA precisions are spelled out."""
+        if self == SttConfig.CUDA_INT8FLOAT16:
+            return "cuda int8"
+        if self == SttConfig.CUDA_FLOAT16:
+            return "cuda float16"
+        return self.device
 
     def is_available(self) -> bool:
         """Whether this config can run here; CUDA configs need CTranslate2 GPU support for their compute type."""
@@ -439,10 +451,11 @@ class SttConfig(tuple[str, str, str], Enum):
 
     @staticmethod
     def get_default() -> SttConfig:
-        from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
-
-        if GpuCapsUtil.has_ctranslate2_float16_gpu():
-            return SttConfig.CUDA_FLOAT16
+        """The best available config: int8 CUDA saves VRAM for the concurrently
+        running TTS model, float16 CUDA covers GPUs without int8 support."""
+        for config in (SttConfig.CUDA_INT8FLOAT16, SttConfig.CUDA_FLOAT16):
+            if config.is_available():
+                return config
         return SttConfig.CPU_INT8FLOAT32
 
 class Strictness(tuple[str, int, str], Enum):
