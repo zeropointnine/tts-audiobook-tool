@@ -62,6 +62,7 @@ def test_tts_model_menu_label_shows_available_count_only_when_choosing(
     label = ModelSelectMenu.make_menu_label(state)
 
     assert strip_ansi_codes(label) == expected
+    assert ModelSelectMenu.has_multiple_choices() is (available_count > 1)
     if available_count > 1:
         assert f"{COL_DIM}({available_count} available)" in label
     else:
@@ -372,6 +373,7 @@ def test_same_type_audio_entries_count_as_multiple_picker_choices(monkeypatch, s
     state = cast(State, SimpleNamespace(project=Project(tts_model_type=selected_id)))
 
     assert ModelSelectMenu.is_selection_required(state)
+    assert ModelSelectMenu.has_multiple_choices()
     label = strip_ansi_codes(ModelSelectMenu.make_menu_label(state))
     assert "Switch TTS model (2 available)" in label
     if selected_id == "none":

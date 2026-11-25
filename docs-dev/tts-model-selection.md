@@ -1,13 +1,14 @@
 # TTS model selection rules
 
-This is the canonical reference for choosing `Project.tts_model_type`, reconciling it with available models, and displaying TTS status. It describes the current implementation. The edge-case policies identified below include implementation assumptions from the selection-rule discussion; documenting them does not imply they were all explicitly requested.
+This is the canonical reference for choosing `Project.tts_model_type`, reconciling it with available models, and displaying TTS status. It describes the current implementation, including active-runtime status and simplified model-selection FYIs. The edge-case policies identified below include implementation assumptions from the selection-rule discussion; documenting them does not imply they were all explicitly requested.
 
 ## Separate concepts
 
 - **Process mode:** local generation or server generation (`TtsRuntimeMode.LOCAL` / `REMOTE_CLIENT`). Fixed for the app's lifetime.
 - **Available models:** the distinct supported catalog types discovered in that process mode, independent of the project's selection.
 - **Project selection:** `Project.tts_model_type`, a persisted string catalog ID. The placeholder ID is the string `"none"`, not Python `None`.
-- **Active runtime:** the model successfully bound for generation. It can be the `"none"` placeholder even while the project retains a real model ID.
+- **Active runtime:** the model successfully bound for generation. It can be the `"none"` placeholder even while the project retains a real model ID. Binding is distinct from loading weights and from job-specific readiness (voices, text, etc.); a bound model need not be loaded yet.
+- **Remembered remote selection:** historical remote configuration used for restoration and relevant one-time remote selection notices, not a menu-status row. It is not evidence of connectivity, availability, successful binding, or successful generation. The uniform FYI uses **last used** to describe saved configuration; these selection fields do not separately record successful inference.
 - **Exact server entry:** `Project.audio_cpp_model_id`, a persisted opaque audio.cpp inference ID (default `""` for legacy/unselected projects). Together with `tts_model_type` it selects one configured entry. Other backends leave it empty. IDs are scoped to the currently configured server, not checkpoint fingerprints or persisted endpoint identities.
 - **Remembered audio.cpp entry:** `Project.last_audio_cpp_model_type` / `last_audio_cpp_model_id`, the most recent complete audio.cpp pair (catalog type + server ID). It survives switching to a local or SGL-Omni model. Invariant: whenever the current pair is a complete audio.cpp selection, the remembered pair equals it. Selection writes go through `Project.set_tts_selection()`, and construction/load seeds it from the current pair (covering projects saved before the fields existed).
 
@@ -39,9 +40,9 @@ The availability API is a deduplicated list of catalog types, but the audio.cpp 
 
 ## 2. Reconcile the project selection
 
-Before building interactive menu items and when printing the status block, reconcile the selection. **In server mode a nonempty saved server ID is kept while the server offers that exact pair, and while discovery fails (offline, no supported models):** an outage is not evidence against it. When a reachable server lacks the pair (missing, or the ID now serves another catalog type — eg, after changing the server URL), the saved entry is replaced as if the project were unselected: the sole available type is selected (with its entry, if unique), otherwise `"none"`. Another entry of the saved type is never preferred while other models are on offer. The replaced pair stays remembered (below) unless the new selection is itself a complete audio.cpp pair, so returning to the old server restores it when the project ended up `"none"` or on a non-audio.cpp model. The change always queues the model-change notice below, naming exact entries (`Fish Audio Drama 3 (audio.cpp; fish-drama3)`), including a same-type entry change. Binding alone (workers, run starts) never substitutes.
+Before building interactive menu items and when printing the status block, reconcile the selection. **In server mode a nonempty saved server ID is kept while the server offers that exact pair, and while discovery fails (offline, no supported models):** an outage is not evidence against it. When a reachable server lacks the pair (missing, or the ID now serves another catalog type — eg, after changing the server URL), the saved entry is replaced as if the project were unselected: the sole available type is selected (with its entry, if unique), otherwise `"none"`. Another entry of the saved type is never preferred while other models are on offer. The replaced pair stays remembered (below) unless the new selection is itself a complete audio.cpp pair, so returning to the old server restores it when the project ended up `"none"` or on a non-audio.cpp model. The change queues the single saved-model FYI below, including for a same-type entry change; exact entry IDs affect selection/coalescing but are not included in that FYI. Binding alone (workers, run starts) never substitutes.
 
-**Restoring the remembered audio.cpp entry** applies otherwise. When the server is audio.cpp, there is no saved server ID, and the selected type is not an audio.cpp type (a local, SGL-Omni, unknown, or `"none"` selection), reconciliation reselects the remembered pair if that exact `(type, server ID)` pair is among the discovered candidates. This takes precedence over the table below. A remembered ID now serving a different catalog type is not adopted. If the remembered pair is absent, the table applies, and the resulting change carries a "remembered entry unavailable" reason for the notice. Local mode and SGL-Omni servers never restore; local reconciliation leaves the remembered pair intact.
+**Restoring the remembered audio.cpp entry** applies otherwise. When the server is audio.cpp, there is no saved server ID, and the selected type is not an audio.cpp type (a local, SGL-Omni, unknown, or `"none"` selection), reconciliation reselects the remembered pair if that exact `(type, server ID)` pair is among the discovered candidates. This takes precedence over the table below. A remembered ID now serving a different catalog type is not adopted. If the remembered pair is absent, the table applies, and the resulting change retains its "remembered entry unavailable" reason internally but uses the same single-sentence FYI. Local mode and SGL-Omni servers never restore; local reconciliation leaves the remembered pair intact.
 
 For projects without a saved server ID (and no restore), compare the raw saved catalog ID with available model IDs:
 
@@ -53,71 +54,33 @@ For projects without a saved server ID (and no restore), compare the raw saved c
 | One (local mode) | Does not match, including `"none"`, another model, or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking FYI at startup or when another project is loaded; other later changes are silent. |
 | One (server mode) | Does not match, including `"none"` or an unknown ID | Immediately assign the sole available type's ID. If the previous ID was not `"none"`, queue a nonblocking FYI for the end of the next complete menu. |
 | More than one | Matches one of the available types | Keep it; do not prompt or choose a different type. |
-| More than one | Does not match any available type | Immediately assign `"none"`; require selection from **Model settings > TTS model**. If the previous selection was an audio.cpp model, queue a nonblocking unavailable-model FYI for the end of the next complete menu; other previous types stay silent. |
+| More than one | Does not match any available type | Immediately assign `"none"`; require selection from **Model settings > TTS model**. If the previous selection was an audio.cpp model, queue a nonblocking saved-model FYI for the end of the next complete menu; other previous types stay silent. |
 
 After resolving the catalog type, a unique matching audio.cpp entry is assigned to `audio_cpp_model_id` and saved, including on startup/load of an older project. Multiple matching entries retain the catalog type but leave the server ID empty: binding is blocked until the user selects an entry. Filling in only the server ID does not trigger a model-change FYI. Local reconciliation clears any server ID.
 
-A sole-model mismatch queues this notice using the standard hint formatting only when replacing a saved ID other than `"none"`: in server mode whenever reconciliation changes that selection, and in local mode before the first main menu or while checks for a newly loaded project are pending. A matching saved selection or an initially unselected project does not trigger a model-change notice in either mode.
+### Model-selection FYIs
 
-The second line describes the current environment's selected model without implying that installation alone determines use. Local mode:
-
-```text
-🔔 FYI
-This project was last used with TTS model {old_model_name}.
-The current environment uses {current_name}.
-```
-
-Server mode (SGL-Omni, or audio.cpp offering a single model):
+All ordinary model-selection FYIs use exactly one sentence, regardless of process mode, replacement/restoration reason, server connectivity, or binding success:
 
 ```text
 🔔 FYI
-This project was last used with TTS model {old_model_name}.
-This environment currently uses {current_name}.
+This project was last used with TTS model {old_model} ({backend}).
 ```
 
-In local mode the old model may be another local model (a different environment) or a server model (the project was last used in server mode).
+- `{old_model}` is the catalog's `ui.proper_name` for the previous saved model. `{backend}` is exactly `local`, `sgl-omni`, or `audio.cpp` (lowercase). Do not append an exact server entry ID.
+- This includes a saved local model in an offline remote process. It uses the same sentence, not a separate mismatch/relaunch explanation.
+- When an audio.cpp restoration/unavailable-entry transition starts from `"none"`, use the known remembered audio.cpp model as the historical model. Otherwise use the previous saved selection, including local selections in remote mode.
+- If that historical model is unknown or unselected, omit the FYI instead of inventing a model/backend or announcing `None`.
+- No follow-up sentence describes the current environment, replacement model, restoration, availability, configuration, or relaunch advice. Status and generation blockers retain current-state/error details separately.
+- Ordinary model-history FYIs are shown **at most once per project load**, shared across model-change and binding notices. `State.has_shown_tts_model_hint` is set only when a known-model sentence is actually displayed and is reset on project assignment/load/reset (including reloading the same project), never by URL changes, reconnection, automatic reconciliation, or re-armed voice/segmentation checks. The flag is process-local, not persisted.
+- Existing initial queue eligibility, coalescing before display, startup timing, and explicit-selection suppression remain unchanged. A sole-model mismatch can queue a notice for a previous real selection; matching or initially unselected projects do not gain a new notice merely because they were loaded.
+- A model-change FYI suppresses an additional ordinary binding FYI for that menu. The sole model-selection wording exception is the ambiguous server-entry notice (section 5.4).
 
-The names are the models' UI `proper_name` values, each qualified by its backend kind (`Chatterbox TTS (local)`, `Breeze TTS 2 (audio.cpp)`). The old name describes the previous saved selection, not necessarily a loaded runtime. Unknown IDs display as `Unknown model: {raw_id}`; `"none"` is not a previous model and never queues this notice. The current name is the selected catalog model, not the exact server inference ID, except when a saved entry was replaced (both names then include their server IDs).
-
-If runtime binding is unavailable in local mode, the second line instead reads `It has been switched to {current_name}, but that model can't be used yet (see Model settings).` In server mode, it reads `This environment is configured to use {current_name}, but that model can't be used yet (see Model settings).` This includes an offline server: configuration does not imply availability. The `currently uses` wording is reserved for a successfully bound remote model. The selection notification does not imply successful persistence; existing status errors and save-error reporting remain in effect.
-
-When multiple types are available but the saved audio.cpp model is unavailable, clearing the selection to `"none"` queues this notice instead. Previous local, SGL-Omni, unknown, or unselected types do not trigger it:
-
-```text
-🔔 FYI
-This project was last used with TTS model {old_model_name},
-which is currently unavailable.
-Select a TTS model in Model settings > TTS model.
-```
-
-Changes involving the remembered audio.cpp entry are announced whenever the selection changed, including from `"none"` (then the first line is omitted). Restoring an entry uses the same environment wording as other remote selections; unavailable-entry notices use `This project's` instead of `Its` when the first line is omitted. The remembered entry is named with its server ID:
-
-```text
-🔔 FYI
-This project was last used with TTS model Breeze TTS 2 (local).
-This environment currently uses Fish Audio Drama 3 (audio.cpp; fish-drama-q8).
-```
-
-```text
-🔔 FYI
-This project was last used with TTS model Breeze TTS 2 (local).
-Its last-used audio.cpp model, Fish Audio Drama 3 (audio.cpp; fish-drama-q8),
-is currently unavailable.
-Select a TTS model in Model settings > TTS model.
-```
-
-```text
-🔔 FYI
-This project was last used with TTS model Breeze TTS 2 (local).
-Its last-used audio.cpp model, Fish Audio Drama 3 (audio.cpp; fish-drama-q8), is not on this server.
-This environment currently uses Chatterbox TTS (audio.cpp).
-```
-
-When runtime binding fails, both the restore and sole-model variants use the same `This environment is configured to use` wording as above, with the same warning. The change reason and the remembered pair (captured before reconciliation) travel on `PendingTtsModelChange`.
+The sentence's `last used` wording refers to saved model configuration, not a newly recorded successful generation. Save-error reporting remains separate.
 
 Reconciliation and status printing do not display or consume the FYI. In server mode it is printed once at the bottom of the next complete menu. In local mode it is printed once at the bottom of the first main menu, or the next complete menu after a runtime project load; earlier startup submenus leave it pending, and other subsequent local changes do not queue a notice. Rendering happens through the shared `MenuStatus.show_pending_project_hints()` function after the existing `on_shown` callback and before normal menu input. The menu loop captures whether this is the first main menu before `on_shown` marks startup complete. The notices use `hints.print_hint()` directly: no Enter prompt, animation, or persisted hint preference. Heading-only prompt screens leave them pending.
 
-The shared function also checks voice-clone sample durations once per project load (startup or runtime) and once per explicit **Model settings > TTS model** selection, independently of whether the model changed. This check waits for the first main menu at startup, or the next complete menu after a runtime load or model selection. It uses the reconciled selection's optional `ui.voice_sample_max_duration_s` recommendation and the model-supported shared voice list, resolving files through `ProjectVoiceUtil.resolve_voice_file_path()`. Only known, unrounded durations strictly above the recommendation count; unreadable/missing samples and models without a recommendation do not trigger this FYI. It follows any model-change notice:
+The shared function also checks voice-clone sample durations once per project load (startup or runtime) and once per explicit **Model settings > TTS model** selection, independently of whether the model changed. In remote mode with an incompatible saved local selection, both the duration and segmentation recommendations are skipped; local recommendations cannot make this remote process runnable. This check waits for the first main menu at startup, or the next complete menu after a runtime load or model selection. It uses the reconciled selection's optional `ui.voice_sample_max_duration_s` recommendation and the model-supported shared voice list, resolving files through `ProjectVoiceUtil.resolve_voice_file_path()`. Only known, unrounded durations strictly above the recommendation count; unreadable/missing samples and models without a recommendation do not trigger this FYI. It follows any model-change notice:
 
 ```text
 🔔 FYI
@@ -136,7 +99,7 @@ exceeding the current model's recommended maximum of 60.
 Output accuracy on longer prompts may be degraded.
 ```
 
-Pending old/new IDs live on `State`, not in global or persisted storage. Repeated checks preserve the pending notice. Multiple automatic changes before display coalesce to the first old ID and latest new ID; a net return to the original selection cancels it. Project replacement/reset, explicit model selection, and local reconciliation clearing selection to `"none"` clear the pending notice. Rendering also discards a notice whose new ID no longer matches the selection. Remote reconciliation clearing an unavailable audio.cpp selection to `"none"` queues the unavailable-model notice above; clearing other previous types discards the pending notice.
+Pending old/new IDs live on `State`, not in global or persisted storage. Repeated checks preserve the pending notice. Multiple automatic changes before display coalesce to the first old ID and latest new ID; a net return to the original selection cancels it. Project replacement/reset, explicit model selection, and local reconciliation clearing selection to `"none"` clear the pending notice. Rendering also discards a notice whose new ID no longer matches the selection. Remote reconciliation clearing an unavailable audio.cpp selection to `"none"` queues the same single-sentence saved-model notice; clearing other previous types discards the pending notice.
 
 Automatic changes are saved when the project has a directory, then the project is bound to the runtime. Save errors are reported. A directory-less placeholder project is updated in memory without writing a project file.
 
@@ -165,43 +128,98 @@ Server IDs are configuration names: renaming one makes the saved selection unava
 
 Run-start validation forces a fresh remote check. It validates binding rather than silently switching the project model immediately before generation.
 
-## 5. TTS status line
+## 5. TTS status and messaging
 
-The row label is **TTS model**:
+### 5.1 Status describes the current runtime, not remembered configuration
+
+The **TTS model** row describes the active runtime, not merely `Project.tts_model_type`. A model name is current only when binding succeeds in the launched process mode. Binding does not imply that weights are loaded or that all job-specific readiness checks pass.
+
+Process mode comes from the launched environment and remains fixed. Neither a saved selection, a model's backend qualifier, nor server connectivity changes it. Never silently fall back from remote generation to local generation.
+
+| Situation | Primary status example |
+| --- | --- |
+| Local mode, valid local binding | `Breeze TTS 2 (local)` |
+| Local mode, no supported local model | `None active (local mode; no supported model installed)` |
+| Remote mode, valid remote binding | `FireRedTTS3 (audio.cpp)` or `AuK (SGL-Omni)` |
+| Remote server unreachable or timed out | `None active (remote mode; server unreachable)` |
+| Remote server reachable, model/entry choice required | `None active (remote mode; requires selection)` |
+| Remote server reachable, selected entry unavailable | `None active (remote mode; selected entry unavailable)` |
+| Remote server reachable, no supported models | `None active (remote mode; no supported models)` |
+| Remote mode, local-only saved selection still blocks binding after reconciliation | `None active (remote mode; local model unavailable)` |
+
+Normal interactive reconciliation still runs before rendering. Some failure states are therefore replaced by a valid sole-model binding before the status is shown. The table does not introduce new selection rules or disable that reconciliation.
+
+Other discovery/configuration errors retain their specific explanation with `None active (remote mode; ...)`; do not label HTTP errors, unsupported protocols, or invalid responses as unreachable. Unknown saved IDs never appear as active models. Local binding errors other than a missing installation also retain their actual explanation with an explicit local-mode context.
+
+Use the same active-versus-remembered distinction in the main-menu heading and other generation-facing summaries. A backend qualifier on a valid binding identifies how that model runs; when no model binds, explicitly identify the process mode instead of attaching an error to an incompatible model's name.
+
+### 5.2 Saved local selections are not remote runtime status
+
+In remote mode:
+
+- Never display a saved local model as the current model or a last-used fallback.
+- Retained local model settings, voice samples, or LoRAs do not imply that local generation is available. For a saved local selection, the **Voices** summary shows only `1 saved voice` / `N saved voices`, not local-only LoRA/preset details.
+- Do not expose local model settings as controls for the current remote runtime merely because the saved ID is local. Preserve those settings for a later local launch.
+- The primary row identifies remote mode and any outage; the generic saved-model FYI names the saved local model. Generation blockers, not additional FYI paragraphs, explain the environment mismatch.
+
+This misleading presentation must no longer occur:
 
 ```text
-TTS model: Model name (local)
-TTS model: Model name (SGL-Omni)
-TTS model: Model name (audio.cpp)
+TTS model: Breeze TTS 2 (local) (server unreachable)
 ```
 
-The parenthesized backend qualifier is gray. Local model-specific text and device/loaded/force-CPU qualifiers may also appear. A local worker's loaded status is shown only when its model ID matches the project selection.
+Regardless of remembered remote history, the replacement is simply:
 
-- A valid audio.cpp binding shows **`(audio.cpp, loaded)`** when the exact bound server entry has boolean `loaded: true` in cached discovery metadata. Formatting adds no network request; the qualifier may lag residency changes until normal discovery refreshes. Missing/unknown residency and other backends omit `loaded`.
-- In server mode, connection failures and timeouts append red **`(server unreachable)`**, even if no model is selected.
-- When discovery finds no supported catalog variants, append red **`(server mode; audio.cpp has no supported models)`** (using the discovered server backend). Other discovery errors append their actual message in red. A selected model's server-entry binding error is shown as a terse red qualifier when discovery itself succeeded: `(unavailable)`, `(requires entry selection)`, or `(not on server)` (`TtsBindingIssue.status`); the main-menu heading uses the same text. The full explanation is a one-time FYI instead (below). Other binding issues without a status keep their message.
+```text
+TTS model: None active (remote mode; server unreachable)
+```
 
-**One-time binding FYI:** when such a binding issue first appears in server mode, `prepare_tts` queues a notice printed once at the end of the next complete menu (after any model-change notice; no Enter prompt). It is keyed on selection, server URL and issue, so redraws do not repeat it; it re-arms when the issue clears or a project is loaded. Examples:
+### 5.3 No remembered-model row in menu status
+
+Do not display a **Last-selected remote model** row, in any process mode or connectivity state. The status block describes the current runtime only; neither a saved remote selection nor the remembered audio.cpp pair adds a historical row.
+
+Remembered remote configuration remains available for restoration and the single-sentence saved-model FYI. That FYI includes only the catalog model name and lowercase backend, not a server entry ID or a claim about current availability. Saved server IDs remain configuration, not endpoint identities or checkpoint fingerprints.
+
+An outage must not erase saved selections to make the display simpler. Reconnection revalidates the saved entry and applies the existing restoration/reconciliation rules. Local reconciliation continues to select the installed local model without deleting the remembered audio.cpp pair. No new general remote-history persistence is implied by this display adjustment.
+
+### 5.4 Sole model-selection FYI exception: ambiguous server entries
+
+Ordinary model changes and binding failures use only the single sentence in section 2. Remove the former environment/replacement/restoration/unavailable/relaunch FYI paragraphs. The ambiguous server-entry notice alone retains its existing wording and entry list:
 
 ```text
 🔔 FYI
-Several server entries match this project's TTS model, Chatterbox TTS (audio.cpp):
-one, two.
+Several server entries match this project's TTS model, {model}:
+{server_ids}.
 Select one in Model settings > TTS model.
 ```
 
-```text
-🔔 FYI
-This project's TTS model, Fish Audio Drama 3 (audio.cpp; fish-drama3), is not available on this server.
-Select a TTS model in Model settings > TTS model.
-``` A saved local-only selection instead shows **`(unavailable in server mode)`** when discovery succeeded.
-- A known selected model's gray backend qualifier always identifies that model, even when it differs from the connected server. For example, a preserved `moss_local` selection shows **`MOSS-TTS (local) (server mode; audio.cpp has no supported models)`**. None/unknown selections fall back to the discovered backend, or gray **`(server)`** when unidentified. Backend links to the server's model list are omitted when the selected backend differs from the discovered server backend. All of this remains on the single **TTS model** row.
+Notices remain nonblocking and deferred to the end of a complete menu. Ordinary model-history notices share the once-per-project-load guard in section 2, regardless of which path queued them. In particular, displaying the saved Breeze/local sentence while offline consumes that load's ordinary FYI; fixing the server URL and successfully selecting a remote model updates status without repeating the sentence. Only ambiguous-entry notices are keyed on selection, server URL, and issue and re-arm when the issue clears or a project is loaded. Showing ordinary history neither consumes nor disables ambiguity notices, which can still appear or reappear independently.
+
+Persistent status and generation blockers retain current-state/error details. Independent voice-duration and segmentation FYIs are unaffected by this model-selection wording simplification.
+
+### 5.5 Generation blockers and model controls agree with status
+
+- Offline remote mode explains that the server is unreachable, even with an unselected or unknown saved ID; a saved local selection additionally explains the environment mismatch where relevant. Cached model/binding/discovery messages are deduplicated. Run starts force discovery even when binding would reject the selection before checking the server.
+- A reachable server requiring a model/entry choice directs the user to **Model settings > TTS model**.
+- A local-only selection in remote mode directs the user to relaunch in the appropriate local environment if local generation is intended. Do not imply that loading local weights in the remote process will fix it.
+- Metadata-only settings access may retain the saved selection, but generation-facing controls and summaries must not represent an incompatible selection as the active model.
+- Continue validating at run start. These rules do not authorize model substitution immediately before generation.
+
+### 5.6 Retained qualifiers and scope
+
+Backend qualifiers remain gray and failure explanations red. Local model-specific text and device/loaded/force-CPU qualifiers may appear only for the corresponding valid local binding. A local worker's loaded status must match the selected and bound model.
+
+A valid audio.cpp binding may show `(audio.cpp, loaded)` when the exact bound server entry has boolean `loaded: true` in cached discovery metadata, plus the existing checkpoint filename qualifier when available. Formatting adds no network request; residency may lag until normal discovery refresh. Missing/unknown residency and other remote backends omit `loaded`. Links to a server model list must refer to that server/backend, not to an incompatible saved local model.
+
+This adjustment concerns presentation and explanation. It does not discard project settings or LoRAs, change process mode, change the selection/binding boundary, introduce local fallback, or establish generation success. Existing selection, persistence, exact-entry restoration, and menu-picker behavior remain in force.
+
+### 5.7 Model picker behavior (existing implementation)
 
 The main menu's **Model settings** label appends red **`(requires: TTS model selection)`** when a project directory is set and the shared selection-required policy is true: an unselected project with multiple choices, a legacy selected audio.cpp type with multiple entries and no saved ID, or a saved exact entry absent from successful discovery. Offline discovery does not prompt replacement.
 
-In server mode, the picker is the first item of **Model settings**, followed by the selected model's controls; the menu opens even when no model is selected (local mode still requires one). Its label, **TTS model**, shows `(currently: requires selection)` when an unselected project has multiple choices. A legacy audio.cpp type with several matching entries retains its model name; the shared policy still opens the picker automatically. Only `requires selection` is red; the surrounding qualifier retains its normal color. Otherwise an unselected project remains `None (unselected)`. Known audio.cpp selections include their saved server ID, even when unavailable.
+In server mode, the picker is the first item of **Model settings** only when multiple selectable entries are available, followed by the selected model's controls; the menu opens even when no model is selected (local mode still requires one). Multiple audio.cpp entries of the same catalog type count as separate choices. With zero or one choice (including SGL-Omni's sole served model), the picker and its separating blank line are omitted; the existing TTS status line still identifies the model. Its label, **Switch TTS model (N available)**, shows `(currently: requires selection)` when an unselected project has multiple choices. A legacy audio.cpp type with several matching entries retains its model name; the shared policy still opens the picker automatically. Only `requires selection` is red; the surrounding qualifier retains its normal color. Otherwise an unselected project remains `None (unselected)`. Known audio.cpp selections include their saved server ID, even when unavailable.
 
-When that shared selection-required condition holds on entry (`ModelSelectMenu.is_selection_required`), **Model settings** opens the picker immediately via `MenuUtil.menu(initial_hotkey="1")`. The picker is activated before Model settings first renders, so its breadcrumb is `Main > Model >`. After a choice is made, or the user backs out, Model settings renders normally.
+When multiple selectable entries exist and that shared selection-required condition holds on entry (`ModelSelectMenu.is_selection_required`), **Model settings** opens the picker immediately via `MenuUtil.menu(initial_hotkey="1")`. The picker is activated before Model settings first renders, so its breadcrumb is `Main > Model >`. After a choice is made, or the user backs out, Model settings renders normally.
 
 ## 6. Edge-case policies and their provenance
 
@@ -215,10 +233,12 @@ These distinguish explicit selection requirements from choices made for previous
 | Multiple audio.cpp model entries map to one type | Expose separate choices and persist the exact ID; legacy ambiguous projects require selection. | Stable entry selection must not depend on response order or loaded state. |
 | Saved audio.cpp entry disappears or changes type on a reachable server | Replace it as if unselected (sole type, else `"none"`) with a model-change FYI; the old pair stays remembered for a later restore unless replaced by a new audio.cpp pair. Binding alone never substitutes. | Explicit requirement. |
 | Server goes offline with a saved entry | Preserve both saved fields and block binding. | Offline discovery is not evidence against the selection. |
-| Reconnecting to audio.cpp after a local/SGL-Omni model was used | Restore the remembered exact pair if offered; otherwise apply the ordinary rules with an unavailable-remembered-entry notice. | Explicit requirement. |
-| Server backend not yet identifiable | Use gray `(server)`. | Added display fallback beyond the three explicitly requested qualifiers; do not pretend to know the protocol. |
+| Reconnecting to audio.cpp after a local/SGL-Omni model was used | Restore the remembered exact pair if offered; otherwise apply the ordinary rules with the same single-sentence saved-model FYI. | Explicit requirement. |
+| Server backend not yet identifiable | Use explicit `remote mode` when no model binds, without guessing the server protocol. | Explicit adjusted UX requirement. |
+| Remote mode retains a local selection while the server is offline | Preserve configuration, but show `None active (remote mode; server unreachable)` and use the ordinary single-sentence saved-model FYI; never present the local model as current. | Explicit adjusted UX requirement. |
+| No active remote binding, but a remote selection is remembered | Keep remembered configuration for restoration/notices, but do not add a history row to the menu-status block. | Explicit adjusted UX requirement. |
 
-The one-model and multiple-model mismatch rules, startup/project-load local model-change FYI, gray known-backend qualifiers, red selection hint, and red unreachable hint were explicit requirements. Apart from the explicitly requested audio.cpp exact-entry policy, the policies in this table are current behavior, not independently confirmed product decisions.
+The one-model and multiple-model mismatch rules, startup/project-load local model-change FYI, gray known-backend qualifiers, red selection hint, and red unreachable hint were explicit requirements. Section 5's adjusted presentation rules are also explicit requirements. Other selection-policy assumptions retain the provenance above; this UX adjustment does not change their behavior.
 
 ## Implementation and focused tests
 
@@ -227,4 +247,6 @@ The one-model and multiple-model mismatch rules, startup/project-load local mode
 - [Menu loop](<../tts_audiobook_tool/menus/menu_util.py>): reconciliation before menu items are built and FYI delivery after `on_shown`.
 - [State](<../tts_audiobook_tool/state.py>) and [model picker](<../tts_audiobook_tool/menus/model/model_select_menu.py>): project initialization and explicit selection.
 - [Remote discovery](<../tts_audiobook_tool/app_support/remote_tts_discovery.py>): cached observations, backend identification, and discovery errors.
-- [Selection tests](<../tests/models/test_project_tts_selection.py>), [status tests](<../tests/ui/test_menu_status.py>), and [remote integration tests](<../tests/models/test_remote_tts_integration.py>): executable references for the rules and binding boundary.
+- [Selection tests](<../tests/models/test_project_tts_selection.py>), [status tests](<../tests/ui/test_menu_status.py>), and [remote integration tests](<../tests/models/test_remote_tts_integration.py>): executable references for selection, status, and the binding boundary.
+- [Runtime-status lifecycle tests](<../tests/ui/test_tts_runtime_status.py>): offline remote mode with saved Breeze/LoRA settings, absence of historical status rows, one-time/rearmed saved-model notices, reconnection, and local relaunch without remote discovery or deletion of remembered state. These use real selection/binding logic with fake discovery/worker observations, not live inference.
+- [Readiness tests](<../tests/ui/test_readiness.py>), [model-menu tests](<../tests/models/test_model_menu_shared.py>), and [voice-menu tests](<../tests/voices/test_voice_menu_shared.py>): incompatible-control suppression and cached/forced discovery blockers, including unselected/unknown IDs and deduplication. No fabricated successful-use history is used to justify a `last good` label.

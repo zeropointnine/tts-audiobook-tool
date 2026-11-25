@@ -7,7 +7,8 @@ from tts_audiobook_tool.constants_hints import (
     HINT_CHATTERBOX_MULTILINGUAL_V3,
     HINT_SGL_OMNI_URL,
 )
-from tts_audiobook_tool.menus.main_menu import MainMenu, get_heading_tts_text, make_model_label
+from tts_audiobook_tool.menus.main_menu import MainMenu, make_model_label
+from tts_audiobook_tool.menus.menu_status import MenuStatus
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from project_settings_test_support import set_setting
@@ -201,9 +202,9 @@ def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
     monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
         backend_kind=TtsBackendKind.SGL_OMNI))
 
-    result = get_heading_tts_text(make_state(TtsModelType.require_by_id("higgs_v3_sglomni")))
+    result = MenuStatus.make_tts_text(make_state(TtsModelType.require_by_id("higgs_v3_sglomni")), include_server_id=True)
 
-    assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 SGL-Omni server model id: bosonai/higgs-audio-v3"
+    assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 (SGL-Omni) server model id: bosonai/higgs-audio-v3"
 
 
 def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(monkeypatch):
@@ -216,9 +217,9 @@ def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(mon
         backend_kind=TtsBackendKind.SGL_OMNI,
         issue=RemoteTtsIssue("unavailable", "Remote server unavailable")))
 
-    result = get_heading_tts_text(make_state(TtsModelType.require_by_id("higgs_v3_sglomni")))
+    result = MenuStatus.make_tts_text(make_state(TtsModelType.require_by_id("higgs_v3_sglomni")), include_server_id=True)
 
-    assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 SGL-Omni: Remote server unavailable"
+    assert text_util.strip_ansi_codes(result) == "None active (remote mode; server unreachable)"
     assert COL_ERROR in result
 
 
@@ -236,9 +237,9 @@ def test_tts_model_heading_shows_terse_binding_issue_status(monkeypatch):
     monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
         backend_kind=TtsBackendKind.AUDIO_CPP))
 
-    result = text_util.strip_ansi_codes(get_heading_tts_text(make_state(model)))
+    result = text_util.strip_ansi_codes(MenuStatus.make_tts_text(make_state(model), include_server_id=True))
 
-    assert result.endswith("audio.cpp: unavailable")
+    assert result == "None active (remote mode; selected entry unavailable)"
     assert "Saved audio.cpp model ID" not in result
 
 
@@ -248,9 +249,11 @@ def test_tts_model_heading_detail_keeps_local_model_unchanged():
     Tts._selected_server_model_id = "bosonai/higgs-audio-v3"
     state = make_state(TtsModelType.require_by_id("chatterbox_local"))
 
-    result = get_heading_tts_text(state)
+    result = MenuStatus.make_tts_text(state, include_server_id=True)
 
-    assert result == Tts.get_model_support(state.project).get_menu_text(state.project, None)
+    assert text_util.strip_ansi_codes(result) == (
+        Tts.get_model_support(state.project).get_menu_text(state.project, None) + " (local)"
+    )
     assert "bosonai/higgs-audio-v3" not in text_util.strip_ansi_codes(result)
 
 
@@ -264,6 +267,6 @@ def test_tts_model_heading_reads_cached_selection_without_polling(monkeypatch):
     monkeypatch.setattr(RemoteTtsDiscovery, "refresh", lambda **kwargs: (_ for _ in ()).throw(
         AssertionError("heading must not perform network discovery")))
 
-    result = get_heading_tts_text(make_state(TtsModelType.require_by_id("moss_delay_sglomni")))
+    result = MenuStatus.make_tts_text(make_state(TtsModelType.require_by_id("moss_delay_sglomni")), include_server_id=True)
 
-    assert text_util.strip_ansi_codes(result) == "MOSS-TTS Delay SGL-Omni server model id: served/moss-delay"
+    assert text_util.strip_ansi_codes(result) == "MOSS-TTS Delay (SGL-Omni) server model id: served/moss-delay"

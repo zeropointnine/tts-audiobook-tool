@@ -125,6 +125,11 @@ class VoiceMenuShared:
         items, callbacks or preset choices) in a `voice_*_menu.py` module.
         """
         model_type = state.project.get_tts_model_type()
+        if Tts.is_remote_mode() and model_type.value.backend_kind is TtsBackendKind.LOCAL:
+            # Saved local settings/LoRAs are not controls for a remote runtime.
+            # Keep a redrawable shell so reconciliation can supply remote items.
+            VoiceMenuShared.menu_wrapper(state, VoiceMenuShared.make_remote_items)
+            return
         if (Tts.get_audio_cpp_definition(model_type) is not None
                 or Tts.get_configured_definition(model_type) is not None):
             from tts_audiobook_tool.menus.voice.voice_catalog_menu import VoiceCatalogMenu
@@ -162,7 +167,9 @@ class VoiceMenuShared:
 
     @staticmethod
     def make_local_items(state: State) -> list[MenuItem]:
-        """The shared voice-sample items, for a local model without its own voice menu."""
+        """The shared voice-sample items, for a compatible local model."""
+        if Tts.is_remote_mode():
+            return []
         return VoiceMenuShared.make_voice_sample_items(state, state.project.get_tts_model_type())
 
     @staticmethod
@@ -185,6 +192,8 @@ class VoiceMenuShared:
         """Item maker for a Voices menu: `items`, then the selection controls.
         An empty menu (eg an unresolved remote model) stays empty."""
         def make(state: State) -> list[MenuItem]:
+            if Tts.is_remote_mode() and state.project.get_tts_model_type().value.backend_kind is TtsBackendKind.LOCAL:
+                return []
             base = items(state) if callable(items) else items
             if not base:
                 return []

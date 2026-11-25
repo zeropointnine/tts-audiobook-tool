@@ -17,19 +17,19 @@ from tts_audiobook_tool.textual.editor_view_anchor import EditorViewAnchors
 class PendingTtsModelChange:
     old_model_id: str
     new_model_id: str
-    # A `TtsSelectionChangeReason` value; selects the notice wording.
+    # A `TtsSelectionChangeReason` value; identifies a remembered-selection fallback.
     reason: str = "automatic"
-    # The remembered audio.cpp pair, for restore/unavailable notices.
+    # The remembered audio.cpp pair, used when the previous selection was none.
     last_audio_cpp_model_type: str = ""
     last_audio_cpp_model_id: str = ""
-    # Exact entries, named only when the saved entry itself was replaced.
+    # Exact entries retained for coalescing automatic changes; not named in the FYI.
     old_audio_cpp_model_id: str = ""
     new_audio_cpp_model_id: str = ""
 
 
 @dataclass(frozen=True)
 class PendingBindingNotice:
-    """A one-time FYI explaining a server-entry binding failure."""
+    """A one-time saved-model FYI, or the detailed server-entry ambiguity notice."""
     model_id: str
     audio_cpp_model_id: str
     kind: str
@@ -48,6 +48,8 @@ class State:
     _prefs: Prefs
     _project: Project
     pending_tts_model_change: PendingTtsModelChange | None
+    # Ordinary model-history FYIs are shown at most once per project assignment/load.
+    has_shown_tts_model_hint: bool
     pending_project_load_checks: bool
     pending_binding_notice: PendingBindingNotice | None
     # Identifies the binding issue last announced, so it is shown only once.
@@ -66,6 +68,7 @@ class State:
         # Remember successful Pocket clone access for this app run only.
         self.pocket_voice_clone_access_validated = False
         self.pending_tts_model_change = None
+        self.has_shown_tts_model_hint = False
         self.pending_project_load_checks = False
         self.pending_binding_notice = None
         self.binding_notice_key = None
@@ -103,6 +106,7 @@ class State:
         state.has_shown_main_menu = False
         state.pocket_voice_clone_access_validated = False
         state.pending_tts_model_change = None
+        state.has_shown_tts_model_hint = False
         state.pending_project_load_checks = False
         state.pending_binding_notice = None
         state.binding_notice_key = None
@@ -122,6 +126,7 @@ class State:
             self._project.kill()
 
         self.pending_tts_model_change = None
+        self.has_shown_tts_model_hint = False
         self.pending_binding_notice = None
         self.binding_notice_key = None
         self.editor_view_anchors = {}

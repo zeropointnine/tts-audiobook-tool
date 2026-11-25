@@ -5,6 +5,13 @@ from typing import TYPE_CHECKING
 from tts_audiobook_tool.app_types import ReadinessIssue, SttVariant
 from tts_audiobook_tool.conversation.chat_config import is_microphone_input_mode
 from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDeviceInfo
+from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
+
+
+REMOTE_LOCAL_SELECTION_MESSAGE = (
+    "This app is running in remote mode. The project's saved local model cannot run "
+    "in this environment. To generate locally, relaunch using that model's environment."
+)
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.state import State
@@ -31,20 +38,38 @@ def refresh_remote_model_state(project: Project) -> None:
     """Bind the project's model with a forced remote check at run start."""
     from tts_audiobook_tool.tts import Tts
 
+    # Binding rejects local-only, unselected, and unknown selections before
+    # discovery. Run starts still need a fresh server observation independently.
+    selected = project.get_tts_model_type()
+    if Tts.is_remote_mode() and (selected.id == "none" or selected.value.backend_kind is TtsBackendKind.LOCAL):
+        Tts.get_available_tts_models(refresh=True)
     Tts.bind_project(project, refresh=True)
 
 
 def get_tts_blockers(project: Project, instance: object | None = None) -> list[ReadinessIssue]:
-    """Project-selected model/voice checks plus its cached binding failure."""
+    """Compatible model checks plus cached server/binding failures; no discovery I/O."""
     from tts_audiobook_tool.tts import Tts
 
-    issues = Tts.get_model_support(project).get_blocking_issues(project, instance)
-    binding_issue = (Tts._binding_issue if (
-        Tts._bound_project_type_id == project.tts_model_type
-        and Tts._bound_project_audio_cpp_model_id == project.audio_cpp_model_id
-    ) else None)
-    if binding_issue is not None and all(issue.verbose != binding_issue.verbose for issue in issues):
-        issues.append(binding_issue)
+    remote_mode = Tts.is_remote_mode()
+    if remote_mode and project.get_tts_model_type().value.backend_kind is TtsBackendKind.LOCAL:
+        # Local sample/LoRA/checkpoint requirements cannot make this remote
+        # process runnable; do not present them as generation prerequisites.
+        issues = [ReadinessIssue("local TTS environment", REMOTE_LOCAL_SELECTION_MESSAGE)]
+    else:
+        issues = Tts.get_model_support(project).get_blocking_issues(project, instance)
+        binding_issue = (Tts._binding_issue if (
+            Tts._bound_project_type_id == project.tts_model_type
+            and Tts._bound_project_audio_cpp_model_id == project.audio_cpp_model_id
+        ) else None)
+        if binding_issue is not None and all(issue.verbose != binding_issue.verbose for issue in issues):
+            issues.append(binding_issue)
+
+    if remote_mode:
+        from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
+
+        remote_issue = RemoteTtsDiscovery.get_snapshot().issue
+        if remote_issue is not None and all(issue.verbose != remote_issue.message for issue in issues):
+            issues.insert(0, ReadinessIssue("Remote TTS server", remote_issue.message))
     return issues
 
 

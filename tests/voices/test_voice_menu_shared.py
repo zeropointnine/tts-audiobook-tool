@@ -37,6 +37,45 @@ def find_item(state, items, label) -> MenuItem:
     return next(item for item in items if get_string_from(state, item.label) == label)
 
 
+def test_remote_saved_breeze_selection_does_not_open_local_voice_lora_controls(monkeypatch):
+    # The saved local model must not route remote mode into Breeze's LoRA menu;
+    # retained voices/settings survive and the shell follows later reconciliation.
+    from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+
+    project = Project(tts_model_type="breeze_tts_2_local", voice_references=[{
+        "file_name": "retained.flac", "transcript": "Retained reference text",
+        "loras": {"breeze_tts_2_local": {"target": "/retained/lora", "target_type": "local"}},
+    }])
+    state = cast(State, SimpleNamespace(project=project))
+    before = project.model_dump(exclude={"reason_pauses"})
+    menus = capture_menus(monkeypatch)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(voice_menu_shared.AudioMetaUtil, "get_audio_duration", lambda _: None)
+
+    VoiceMenuShared.menu(state)
+    factory = menus[0]["items"]
+
+    assert menus[0]["heading"] == "Voices"
+    assert menus[0]["subheading"] is None
+    assert factory(state) == []
+    assert VoiceMenuShared.make_local_items(state) == []
+    assert project.model_dump(exclude={"reason_pauses"}) == before
+    project.set_tts_selection("omnivoice_audiocpp", "remote-entry")
+    assert factory(state)
+
+
+def test_voice_wrapper_does_not_render_stale_local_factories_in_remote_mode(monkeypatch):
+    # A previously captured model-specific factory cannot leak its LoRA controls
+    # on a remote/local mismatch, even if entered through a direct wrapper.
+    from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type="breeze_tts_2_local")))
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    wrapped = VoiceMenuShared.with_voice_selection_items(
+        lambda _: pytest.fail("Incompatible local factory must not execute"))
+    assert wrapped(state) == []
+
+
 @pytest.mark.parametrize("model_id", ["none", "unknown-model"])
 def test_remote_voice_menu_removes_controls_when_selection_is_unresolved(monkeypatch, model_id):
     state = cast(State, SimpleNamespace(project=Project(

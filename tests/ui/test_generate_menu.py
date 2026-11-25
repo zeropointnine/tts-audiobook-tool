@@ -19,7 +19,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
 )
 from tts_audiobook_tool.textual.generation_app import GenerationModalResult
 from tts_audiobook_tool.model_worker_protocol import GenerationTerminalStatus
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
@@ -107,6 +107,17 @@ def test_generate_menu_keeps_concurrency_for_batchable_server(monkeypatch) -> No
         strip_ansi_codes(item.label(state)) for item in items if callable(item.label)
     ]
     assert any("Concurrent requests" in text for text in rendered)
+
+
+@pytest.mark.parametrize("mode", [TtsRuntimeMode.LOCAL, TtsRuntimeMode.REMOTE_CLIENT])
+def test_generate_menu_local_batch_controls_require_local_mode(monkeypatch, mode):
+    # Retained local orchestration settings must not masquerade as remote controls.
+    monkeypatch.setattr(Tts, "_backend_mode", mode)
+    project = Project(tts_model_type="mira_local")
+    assert project.get_tts_model_type().can_batch()
+    state, items = _capture_menu_for_project(monkeypatch, project)
+    rendered = [strip_ansi_codes(item.label(state)) for item in items if callable(item.label)]
+    assert any("Batch size" in text for text in rendered) == (mode is TtsRuntimeMode.LOCAL)
 
 
 def test_generate_menu_replaces_legacy_generation_entries(monkeypatch):

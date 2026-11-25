@@ -17,6 +17,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.menus.model.catalog_menu_source import ChoiceSetting
 from tts_audiobook_tool.tts_models.local_definition import get_local_definition
+from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 from tts_audiobook_tool.util import *
 
 
@@ -53,7 +54,7 @@ class ModelMenuShared:
             initial_hotkey = ""
             if Tts.is_remote_mode():
                 from tts_audiobook_tool.menus.model.model_select_menu import ModelSelectMenu
-                if ModelSelectMenu.is_selection_required(state):
+                if ModelSelectMenu.has_multiple_choices() and ModelSelectMenu.is_selection_required(state):
                     # Nothing else to do here until a model is chosen, so go
                     # straight to the picker (always item "1"; see make_remote_items).
                     initial_hotkey = "1"
@@ -116,13 +117,17 @@ class ModelMenuShared:
         Menu reconciliation (or the picker) can change the selection while this
         menu is open. Only the controls for this render retain a definition,
         never the menu factory itself. An unselected/unknown model offers no
-        stale controls. In remote mode, the TTS model picker comes first.
+        stale controls. In remote mode, the TTS model picker comes first only
+        when multiple selectable entries are available.
         """
         items: list[MenuItem] = []
         if Tts.is_remote_mode():
             from tts_audiobook_tool.menus.model.model_select_menu import ModelSelectMenu
-            items.append(ModelSelectMenu.make_item(state))
+            if ModelSelectMenu.has_multiple_choices():
+                items.append(ModelSelectMenu.make_item(state))
         model_type = state.project.get_tts_model_type()
+        if Tts.is_remote_mode() and model_type.value.backend_kind is TtsBackendKind.LOCAL:
+            return items
         definition = Tts.get_audio_cpp_definition(model_type) or Tts.get_configured_definition(model_type)
         if definition is not None:
             from tts_audiobook_tool.menus.model.model_catalog_menu import ModelCatalogMenu
@@ -135,7 +140,9 @@ class ModelMenuShared:
 
     @staticmethod
     def make_local_items(state: State) -> list[MenuItem]:
-        """Catalog-declared controls for the selected local model, resolved per redraw."""
+        """Catalog-declared controls for a compatible local model, resolved per redraw."""
+        if Tts.is_remote_mode():
+            return []
         definition = get_local_definition(state.project.get_tts_model_type().id)
         if definition is None or not definition.has_menu:
             return []
@@ -155,8 +162,10 @@ class ModelMenuShared:
         :param initial_hotkey: Item to activate on entry (see `MenuUtil.menu`)
         """
         def make_subheading(current: State) -> str:
-            note = current.project.get_tts_model_type().value.ui.get("settings_note", "").strip()
-            existing = get_string_from(current, subheading) if subheading else ""
+            model_type = current.project.get_tts_model_type()
+            incompatible = Tts.is_remote_mode() and model_type.value.backend_kind is TtsBackendKind.LOCAL
+            note = "" if incompatible else model_type.value.ui.get("settings_note", "").strip()
+            existing = get_string_from(current, subheading) if subheading and not incompatible else ""
             return "\n\n".join(part for part in (note, existing) if part)
 
         MenuUtil.menu(

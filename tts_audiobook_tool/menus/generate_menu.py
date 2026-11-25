@@ -100,8 +100,9 @@ class GenerateMenu:
             # declare itself non-batchable while keeping its storage binding.
             # The effective value is clamped in ProjectVoiceUtil.get_batch_size(),
             # so a hand-edited project file cannot re-enable concurrency here.
-            show_batch_item = state.project.get_tts_model_type().can_batch() and Tts.can_batch(
-                state.project.get_tts_model_type())
+            model_type = state.project.get_tts_model_type()
+            incompatible = Tts.is_remote_mode() and model_type.value.backend_kind is TtsBackendKind.LOCAL
+            show_batch_item = not incompatible and model_type.can_batch() and Tts.can_batch(model_type)
 
             # Batch size
             if show_batch_item:

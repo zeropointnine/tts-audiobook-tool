@@ -69,6 +69,8 @@ def test_unselected_support_uses_this_project_not_other_runtime_failure(monkeypa
     from tts_audiobook_tool.readiness import get_tts_blockers
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     monkeypatch.setattr(Tts, "_remote_issue", "Other project's server is offline")
+    # Healthy discovery isolates this project's selection error from stale runtime errors.
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot())
     project = Project(tts_model_type=raw)
     issues = Tts.get_model_support(project).get_blocking_issues(project, None)
     assert len(issues) == 1

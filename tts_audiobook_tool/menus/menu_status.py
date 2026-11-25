@@ -43,7 +43,7 @@ class MenuStatus:
             not Tts.is_remote_mode() and getattr(state, "has_shown_main_menu", False)
             and not getattr(state, "pending_project_load_checks", False)
         )
-        if local_startup_finished or (
+        if getattr(state, "has_shown_tts_model_hint", False) or local_startup_finished or (
             changed is not None and changed.id == "none" and not Tts.is_remote_mode()
         ):
             state.pending_tts_model_change = None
@@ -82,19 +82,23 @@ class MenuStatus:
 
     @staticmethod
     def _queue_binding_notice(state: State, issue: object) -> None:
-        """Queue a one-time FYI when a server-entry binding issue first appears.
+        """Queue a one-time FYI for an entry failure or incompatible process mode.
 
-        Shown once per (selection, server URL, issue); it re-arms when the
-        issue clears or a project is loaded. The status row keeps only a terse
-        qualifier while the issue persists.
+        Ordinary history is once per project load, shared with model-change
+        notices. Only ambiguity re-arms per (selection, server URL, issue).
+        The status row keeps current-state details while an issue persists.
         """
         from tts_audiobook_tool.tts import Tts, TtsBindingIssue
 
-        if not isinstance(issue, TtsBindingIssue) or not Tts.is_remote_mode():
+        project = state.project
+        if Tts.is_remote_mode() and project.get_tts_model_type().value.backend_kind is TtsBackendKind.LOCAL:
+            # Keep the saved-model FYI eligible while discovery is offline.
+            issue = TtsBindingIssue("TTS model", _make_last_model_notice(project.tts_model_type), kind="local_in_remote")
+        if (not isinstance(issue, TtsBindingIssue) or not Tts.is_remote_mode()
+                or (issue.kind != "ambiguous_entry" and getattr(state, "has_shown_tts_model_hint", False))):
             state.binding_notice_key = None
             state.pending_binding_notice = None
             return
-        project = state.project
         key = (project.tts_model_type, project.audio_cpp_model_id, RemoteTtsDiscovery.get_base_url(), issue.verbose)
         if key == getattr(state, "binding_notice_key", None):
             return
@@ -108,19 +112,22 @@ class MenuStatus:
         if pending is None:
             return
         state.pending_binding_notice = None
-        if (state.project.tts_model_type, state.project.audio_cpp_model_id) != (
+        from tts_audiobook_tool.tts import Tts
+        if not Tts.is_remote_mode() or (state.project.tts_model_type, state.project.audio_cpp_model_id) != (
                 pending.model_id, pending.audio_cpp_model_id):
             return
-        name = _make_model_name(pending.model_id, pending.audio_cpp_model_id)
         if pending.kind == "ambiguous_entry":
+            name = _make_model_name(pending.model_id, pending.audio_cpp_model_id)
             text = (f"Several server entries match this project's TTS model, {name}:\n"
                     f"{', '.join(pending.server_ids)}.\nSelect one in Model settings > TTS model.")
-        elif pending.kind in ("entry_unavailable", "no_match"):
-            text = (f"This project's TTS model, {name}, is not available on this server.\n"
-                    "Select a TTS model in Model settings > TTS model.")
         else:
-            text = pending.verbose
-        hints.print_hint(Hint("", "FYI", text))
+            if getattr(state, "has_shown_tts_model_hint", False):
+                return
+            text = _make_last_model_notice(pending.model_id)
+        if text:
+            hints.print_hint(Hint("", "FYI", text))
+            if pending.kind != "ambiguous_entry":
+                state.has_shown_tts_model_hint = True
 
     @staticmethod
     def show_pending_project_hints(state: State, *, is_first_main_menu: bool = False) -> None:
@@ -136,6 +143,9 @@ class MenuStatus:
         from tts_audiobook_tool.tts import Tts
 
         model = state.project.get_tts_model_type()
+        if Tts.is_remote_mode() and model.value.backend_kind is TtsBackendKind.LOCAL:
+            # Saved local settings are not recommendations for this runtime.
+            return
         max_duration = model.value.ui.get("voice_sample_max_duration_s")
         if max_duration is not None:
             count = 0
@@ -177,7 +187,7 @@ class MenuStatus:
         pending = getattr(state, "pending_tts_model_change", None)
         if pending is None:
             return
-        if state.project.tts_model_type != pending.new_model_id:
+        if getattr(state, "has_shown_tts_model_hint", False) or state.project.tts_model_type != pending.new_model_id:
             state.pending_tts_model_change = None
             return
         runtime_project_load = (
@@ -190,31 +200,34 @@ class MenuStatus:
             return
         state.pending_tts_model_change = None
 
-        old_name = _make_model_name(pending.old_model_id, pending.old_audio_cpp_model_id)
-        if pending.reason in ("restored_audio_cpp", "last_audio_cpp_unavailable"):
-            hints.print_hint(Hint("", "FYI", _make_remembered_audio_cpp_notice(pending, old_name)))
-            return
-        if pending.new_model_id == "none":
-            hints.print_hint(Hint("", "FYI", (
-                f"This project was last used with TTS model {old_name},\nwhich is currently unavailable.\n"
-                "Select a TTS model in Model settings > TTS model."
-            )))
-            return
-        current_name = _make_model_name(pending.new_model_id, pending.new_audio_cpp_model_id)
-        text = f"This project was last used with TTS model {old_name}.\n"
-        is_bound = Tts.get_active_type().id == pending.new_model_id
+        old_id = pending.old_model_id
+        if old_id == "none" and pending.reason in ("restored_audio_cpp", "last_audio_cpp_unavailable"):
+            old_id = pending.last_audio_cpp_model_type
+        text = _make_last_model_notice(old_id)
+        if text:
+            # One saved-model FYI is enough; only entry ambiguity adds another notice.
+            binding = getattr(state, "pending_binding_notice", None)
+            if binding is not None and binding.kind != "ambiguous_entry":
+                state.pending_binding_notice = None
+            hints.print_hint(Hint("", "FYI", text))
+            state.has_shown_tts_model_hint = True
+
+    @staticmethod
+    def make_tts_text(
+        state: State, worker_models: ModelStateSnapshot | None = None, *, include_server_id: bool = False,
+    ) -> str:
+        """Format the cached runtime consistently for status rows and headings."""
+        from tts_audiobook_tool.tts import Tts
+
         if Tts.is_remote_mode():
-            text += _make_server_model_text(current_name, is_bound=is_bound)
-        elif not is_bound:
-            text += f"It has been switched to {current_name}, {_UNUSABLE_MODEL_TEXT}"
-        else:
-            text += f"The current environment uses {current_name}."
-        hints.print_hint(Hint("", "FYI", text))
+            text = _make_server_tts_text(state)
+            if include_server_id and _has_bound_model(state):
+                text += f" {QUALIFIER_COLOR}server model id: {Tts._selected_server_model_id}"
+            return text
+        return _make_local_tts_text(state, worker_models)
 
     @staticmethod
     def print_block(state: State) -> None:
-        from tts_audiobook_tool.tts import Tts
-
         MenuStatus.prepare_tts(state)
         lines = []
         worker_models, _ = ModelWorker.get_model_state_blocking()
@@ -225,12 +238,7 @@ class MenuStatus:
         text_text = _make_text_text(state)
         lines.append(("Text", text_text))
 
-        if Tts.is_remote_mode():
-            server_tts_text = _make_server_tts_text(state)
-            lines.append(("TTS model", server_tts_text))
-        else:
-            local_tts_text = _make_local_tts_text(state, worker_models)
-            lines.append(("TTS model", local_tts_text))
+        lines.append(("TTS model", MenuStatus.make_tts_text(state, worker_models)))
 
         lines.append(("Voices", _make_voices_text(state)))
 
@@ -259,11 +267,6 @@ _BACKEND_KIND_LABELS: dict[TtsBackendKind | None, str] = {
 }
 
 
-def binding_issue_status(issue: object) -> str:
-    """Terse pinned qualifier for a binding issue; full text for other issues."""
-    return getattr(issue, "status", "") or getattr(issue, "verbose", "")
-
-
 def _make_model_name(raw_id: str, server_id: str = "") -> str:
     """Eg: "Chatterbox TTS (local)"; the backend qualifies identically-named models.
 
@@ -277,35 +280,13 @@ def _make_model_name(raw_id: str, server_id: str = "") -> str:
     return f"{proper_name} ({'; '.join(qualifiers)})" if qualifiers else proper_name
 
 
-def _make_remembered_audio_cpp_notice(pending: PendingTtsModelChange, old_name: str) -> str:
-    """Notice text for restoring (or failing to restore) the remembered audio.cpp entry."""
-    from tts_audiobook_tool.tts import Tts
-
-    remembered = _make_model_name(pending.last_audio_cpp_model_type, pending.last_audio_cpp_model_id)
-    has_old = pending.old_model_id != "none"
-    is_bound = Tts.get_active_type().id == pending.new_model_id
-    # Without the "last used" line there is no antecedent for "It"/"Its".
-    text = f"This project was last used with TTS model {old_name}.\n" if has_old else ""
-    if pending.reason == "restored_audio_cpp":
-        return text + _make_server_model_text(remembered, is_bound=is_bound)
-    subject = "Its" if has_old else "This project's"
-    if pending.new_model_id == "none":
-        return text + (f"{subject} last-used audio.cpp model, {remembered},\nis currently unavailable.\n"
-                       "Select a TTS model in Model settings > TTS model.")
-    current_name = _make_model_name(pending.new_model_id)
-    text += f"{subject} last-used audio.cpp model, {remembered}, is not on this server.\n"
-    return text + _make_server_model_text(current_name, is_bound=is_bound)
-
-
-def _make_server_model_text(current_name: str, *, is_bound: bool = True) -> str:
-    """Distinguish a usable remote selection from configuration alone."""
-    if not is_bound:
-        return f"This environment is configured to use {current_name}, {_UNUSABLE_MODEL_TEXT}"
-    return f"This environment currently uses {current_name}."
-
-
-# Completes a "switched to" sentence for a selection that failed to bind.
-_UNUSABLE_MODEL_TEXT = "but that model can't be used yet (see Model settings)."
+def _make_last_model_notice(raw_id: str) -> str:
+    """One saved-model sentence, independent of runtime availability or change reason."""
+    model = TtsModelType.get_by_id(raw_id)
+    if model.id == "none":
+        return ""
+    backend = _BACKEND_KIND_LABELS[model.value.backend_kind].lower()
+    return f"This project was last used with TTS model {model.value.ui['proper_name']} ({backend})."
 
 
 def _make_project_text(state: State) -> str:
@@ -324,9 +305,11 @@ def _make_local_tts_text(
 
     from tts_audiobook_tool.tts import Tts
 
+    if not _has_bound_model(state):
+        reason = ("no supported model installed" if Tts.get_local_model_type().id == "none" else
+                  Tts._binding_issue.verbose if Tts._binding_issue is not None else "model unavailable")
+        return _make_inactive_tts_text("local", reason)
     text = Tts.get_model_support(state.project).get_menu_text(state.project, None)
-    if text == NONE_MODEL_NAME:
-        text = COL_ERROR + text
     text += f" {QUALIFIER_COLOR}(local)"
 
     extras = []
@@ -346,40 +329,63 @@ def _make_local_tts_text(
         text += f" {QUALIFIER_COLOR}({', '.join(extras)})"
     return text
 
+def _has_bound_model(state: State) -> bool:
+    """Check cached binding, including exact entry identity, without discovering/loading."""
+    from tts_audiobook_tool.tts import Tts
+
+    selected = state.project.get_tts_model_type()
+    if selected.id == "none" or Tts._binding_issue is not None or Tts.get_active_type() != selected:
+        return False
+    if not Tts.is_remote_mode():
+        return selected.value.backend_kind is TtsBackendKind.LOCAL
+    snapshot = RemoteTtsDiscovery.get_snapshot()
+    return (
+        selected.value.backend_kind in (TtsBackendKind.AUDIO_CPP, TtsBackendKind.SGL_OMNI)
+        and snapshot.issue is None
+        and snapshot.backend_kind is selected.value.backend_kind
+        and bool(Tts._selected_server_model_id)
+        and (not state.project.audio_cpp_model_id
+             or state.project.audio_cpp_model_id == Tts._selected_server_model_id)
+    )
+
+
+def _make_inactive_tts_text(mode: str, reason: str) -> str:
+    return f"{COL_ERROR}None active {QUALIFIER_COLOR}({mode} mode; {COL_ERROR}{reason}{QUALIFIER_COLOR})"
+
+
 def _make_server_tts_text(state: State) -> str:
     from tts_audiobook_tool.tts import Tts
 
     snapshot = RemoteTtsDiscovery.get_snapshot()
     selected = state.project.get_tts_model_type()
-    # The qualifier identifies the saved model, not the connected server.
-    # Only an unselected/unknown model falls back to the discovered backend.
-    backend_kind = (selected.value.backend_kind if selected.id != "none"
-                    else snapshot.backend_kind)
-    backend = _BACKEND_KIND_LABELS.get(backend_kind, "server")
+    if not _has_bound_model(state):
+        if snapshot.issue is not None:
+            reason = ("server unreachable" if snapshot.issue.code in {"unavailable", "timeout"} else
+                      "no supported models" if snapshot.issue.code == "no_supported_models" else
+                      snapshot.issue.message)
+        elif selected.value.backend_kind is TtsBackendKind.LOCAL:
+            reason = "local model unavailable"
+        elif selected.id == "none":
+            reason = (f"Unknown TTS model: {state.project.tts_model_type}"
+                      if state.project.tts_model_type != "none" else "requires selection")
+        elif Tts._binding_issue is not None:
+            kind = getattr(Tts._binding_issue, "kind", "")
+            reason = ("requires selection" if kind == "ambiguous_entry" else
+                      "selected entry unavailable" if kind in ("entry_unavailable", "no_match") else
+                      Tts._binding_issue.verbose)
+        else:
+            reason = "selected entry unavailable"
+        return _make_inactive_tts_text("remote", reason)
+
+    backend_kind = selected.value.backend_kind
+    backend = _BACKEND_KIND_LABELS[backend_kind]
     base_url = RemoteTtsDiscovery.get_base_url()
-    server_matches_backend = snapshot.backend_kind in (None, backend_kind)
-    if backend_kind is TtsBackendKind.AUDIO_CPP and base_url and server_matches_backend:
-        backend = text_util.make_terminal_hyperlink(
-            f"{base_url}/v1/models?include_session_options=true", backend
-        )
-    elif backend_kind is TtsBackendKind.SGL_OMNI and base_url and server_matches_backend:
-        backend = text_util.make_terminal_hyperlink(f"{base_url}/v1/models", backend)
-    model = selected.value.ui["proper_name"]
-    if selected.id == "none":
-        model = (COL_ERROR + NONE_MODEL_NAME if state.project.tts_model_type == selected.id else
-                 f"Unknown model: {state.project.tts_model_type}")
-    server_unreachable = snapshot.issue is not None and snapshot.issue.code in {"unavailable", "timeout"}
-    qualifiers = [] if backend == "server" and server_unreachable else [backend]
-    # Use server residency from cached metadata, not the worker's adapter state.
-    if (
-        snapshot.backend_kind is TtsBackendKind.AUDIO_CPP
-        and backend_kind is TtsBackendKind.AUDIO_CPP
-        and snapshot.issue is None
-        and Tts._binding_issue is None
-        and selected.id != "none"
-        and Tts.get_active_type() == selected
-        and Tts._selected_server_model_id
-    ):
+    if base_url:
+        path = "/v1/models?include_session_options=true" if backend_kind is TtsBackendKind.AUDIO_CPP else "/v1/models"
+        backend = text_util.make_terminal_hyperlink(f"{base_url}{path}", backend)
+    qualifiers = [backend]
+    # Residency is cached and separate from binding; formatting adds no request.
+    if backend_kind is TtsBackendKind.AUDIO_CPP:
         loaded_entry = next((entry for entry in snapshot.models
                              if entry.get("id") == Tts._selected_server_model_id
                              and entry.get("loaded") is True), None)
@@ -391,23 +397,7 @@ def _make_server_tts_text(state: State) -> str:
                 filename = ntpath.basename(path.strip())
                 if filename and filename not in (".", ".."):
                     qualifiers.append(ellipsize(filename, 30))
-    text = model
-    if qualifiers:
-        text += f" {QUALIFIER_COLOR}({', '.join(qualifiers)})"
-    if snapshot.issue is not None:
-        if server_unreachable:
-            text += f" {COL_ERROR}(server unreachable)"
-        elif snapshot.issue.code == "no_supported_models":
-            server_backend = _BACKEND_KIND_LABELS.get(snapshot.backend_kind, "server")
-            text += f" {COL_ERROR}(server mode; {server_backend} has no supported models)"
-        else:
-            text += f" {COL_ERROR}({snapshot.issue.message})"
-    elif selected.id != "none" and backend_kind is TtsBackendKind.LOCAL:
-        text += f" {COL_ERROR}(unavailable in server mode)"
-    elif selected.id != "none" and Tts._binding_issue is not None:
-        # Terse pinned qualifier; the full explanation is a one-time FYI.
-        text += f" {COL_ERROR}({binding_issue_status(Tts._binding_issue)})"
-    return text
+    return f"{selected.value.ui['proper_name']} {QUALIFIER_COLOR}({', '.join(qualifiers)})"
 
 def _make_voices_text(state: State) -> str:
     """The first voice that has a value (preset, sample, instructions, or LoRA; see
@@ -418,6 +408,10 @@ def _make_voices_text(state: State) -> str:
     With per-voice LoRAs (Breeze TTS 2, OmniVoice, VibeVoice), ", +LoRA" is appended
     when any voice has one; a voice with only a LoRA shows as "LoRA <name>"."""
     project = state.project
+    from tts_audiobook_tool.tts import Tts
+    if Tts.is_remote_mode() and project.get_tts_model_type().value.backend_kind is TtsBackendKind.LOCAL:
+        count = len(project.voice_references)
+        return f"{count} saved {'voice' if count == 1 else 'voices'}"
     lora_suffix = ", +LoRA" if ProjectVoiceUtil.has_any_active_voice_lora(project) else ""
     voices = project.voice_references
     sources = [ProjectVoiceUtil.resolve_voice_source(project, voice) for voice in voices]
@@ -487,6 +481,3 @@ def _make_memory_text() -> str:
 LABEL_COLOR = COL_DIM
 VALUE_COLOR = COL_MEDIUM
 QUALIFIER_COLOR = COL_DIM
-
-# Displayed name of the "no TTS model selected" placeholder
-NONE_MODEL_NAME = TtsModelType.require_by_id("none").value.ui["proper_name"]

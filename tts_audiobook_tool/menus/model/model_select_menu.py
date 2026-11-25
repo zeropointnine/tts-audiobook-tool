@@ -43,6 +43,11 @@ class ModelSelectMenu:
         ))
 
     @staticmethod
+    def has_multiple_choices() -> bool:
+        """Only offer a picker when distinct selectable server entries exist."""
+        return len(ModelSelectMenu._get_choices(Tts.get_available_tts_models())) > 1
+
+    @staticmethod
     def make_menu_label(state: State) -> str:
         """Show the number of selectable entries, not just catalog types."""
         num_available = len(ModelSelectMenu._get_choices(Tts.get_available_tts_models()))

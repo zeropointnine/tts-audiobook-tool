@@ -17,7 +17,6 @@ from tts_audiobook_tool.constants_hints import (
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.menus.text_menu import TextMenu
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
-from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
@@ -133,28 +132,6 @@ class MainMenu:
             breadcrumb="Main",
             on_shown=on_shown,
         )
-
-# ---
-
-def get_heading_tts_text(state: State) -> str:
-
-    s = Tts.get_model_support(state.project).get_menu_text(state.project, None)
-    if not Tts.is_remote_mode():
-        return s
-    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery
-    snapshot = RemoteTtsDiscovery.get_snapshot()
-    backend = ("audio.cpp" if snapshot.backend_kind == TtsBackendKind.AUDIO_CPP else
-               "SGL-Omni" if snapshot.backend_kind == TtsBackendKind.SGL_OMNI else "Remote TTS")
-    if Tts.get_active_type() == state.project.get_tts_model_type() and Tts._selected_server_model_id:
-        s += f" {COL_DIM}{backend} server model id: {Tts._selected_server_model_id}{COL_ACCENT}"
-    else:
-        from tts_audiobook_tool.menus.menu_status import binding_issue_status
-        issue = Tts._binding_issue
-        # Binding failures get their terse status; server failures keep their message.
-        detail = (binding_issue_status(issue) if issue is not None and getattr(issue, "status", "")
-                  else Tts._remote_issue or (snapshot.issue.message if snapshot.issue else 'select a server model'))
-        s += f" {COL_ERROR}{backend}: {detail}{COL_ACCENT}"
-    return s
 
 # ---
 

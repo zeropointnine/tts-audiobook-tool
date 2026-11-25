@@ -102,23 +102,86 @@ def test_remote_model_menu_removes_controls_when_selection_is_unresolved(monkeyp
 
 @pytest.mark.parametrize("model_id", ["none", "omnivoice_audiocpp", "higgs_v3_sglomni"])
 def test_remote_model_menu_leads_with_model_picker(monkeypatch, model_id):
-    # In remote mode, the TTS model picker is the first Model settings item and
-    # the menu opens even with no model selected; model controls follow it.
+    # Multiple available entries put the picker first, even without a selection;
+    # model controls follow it with a separating blank line.
     from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
 
     state = cast(State, SimpleNamespace(project=Project(tts_model_type=model_id)))
     captured = {}
     monkeypatch.setattr(model_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
-    monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [])
+    models = [TtsModelType.require_by_id("omnivoice_audiocpp"), TtsModelType.require_by_id("higgs_v3_audiocpp")]
+    monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: models)
     ModelMenuShared.menu(state)
     items = captured["items"](state)
-    assert get_string_from(state, items[0].label).startswith("TTS model")
+    assert get_string_from(state, items[0].label).startswith("Switch TTS model")
     assert not items[0].blank_line_before
     if model_id == "none":
         assert len(items) == 1
     else:
         assert len(items) > 1 and items[1].blank_line_before
+
+
+@pytest.mark.parametrize("model_id, available_count", [
+    ("none", 0),
+    ("higgs_v3_sglomni", 0),
+    ("zonos3_mini_sglomni", 1),
+    ("omnivoice_audiocpp", 1),
+])
+def test_remote_model_menu_omits_picker_without_multiple_choices(monkeypatch, model_id, available_count):
+    # Single-model servers and failed/empty discovery offer no meaningful choice.
+    from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type=model_id)))
+    captured = {}
+    model = state.project.get_tts_model_type()
+    monkeypatch.setattr(model_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [model] * available_count)
+    # A stale missing-entry condition must not activate the first setting as a picker.
+    monkeypatch.setattr(Tts, "is_project_model_selection_required", lambda project: True)
+
+    ModelMenuShared.menu(state)
+    items = captured["items"](state)
+
+    assert captured["initial_hotkey"] == ""
+    labels = [get_string_from(state, item.label) for item in items]
+    assert not any(label.startswith(("TTS model", "Switch TTS model")) for label in labels)
+    if model_id == "none":
+        assert items == []
+    else:
+        assert items and not items[0].blank_line_before
+
+
+def test_remote_model_menu_picker_tracks_same_type_entry_choices_on_redraw(monkeypatch):
+    # Two audio.cpp entries of one catalog type still require an exact choice;
+    # dropping to one entry removes the picker and its separating blank line.
+    from tts_audiobook_tool.app_support.remote_tts_discovery import RemoteTtsDiscovery, RemoteTtsSnapshot
+    from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+    from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
+
+    model = TtsModelType.require_by_id("omnivoice_audiocpp")
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type=model.id)))
+    snapshot = RemoteTtsSnapshot(backend_kind=TtsBackendKind.AUDIO_CPP,
+                                 candidates=((model, "one"), (model, "two")))
+    captured = {}
+    monkeypatch.setattr(model_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [model])
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: snapshot)
+
+    ModelMenuShared.menu(state)
+    factory = captured["items"]
+    items = factory(state)
+    assert captured["initial_hotkey"] == "1"
+    assert get_string_from(state, items[0].label).startswith("Switch TTS model")
+    assert items[1].blank_line_before
+
+    snapshot = RemoteTtsSnapshot(backend_kind=TtsBackendKind.AUDIO_CPP, candidates=((model, "one"),))
+    settings = factory(state)
+    assert len(settings) == len(items) - 1
+    assert not settings[0].blank_line_before
+    assert get_string_from(state, settings[0].label) == get_string_from(state, items[1].label)
 
 
 @pytest.mark.parametrize(("remote", "model_id", "available_count", "expected"), [
@@ -145,6 +208,55 @@ def test_remote_model_menu_opens_picker_immediately_when_selection_required(
     if expected:
         picker = captured["items"](state)[0]
         assert get_string_from(state, picker.label).startswith("Switch TTS model")
+
+
+@pytest.mark.parametrize("available_count", [0, 2])
+def test_remote_saved_local_model_keeps_settings_shell_without_local_controls(monkeypatch, available_count):
+    # An offline saved Breeze selection is metadata, not a usable local runtime;
+    # a multi-model server can still expose its existing remote picker.
+    from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+
+    project = Project(tts_model_type="breeze_tts_2_local",
+                      last_audio_cpp_model_type="fireredtts3_audiocpp",
+                      last_audio_cpp_model_id="fireredtts3-base")
+    state = cast(State, SimpleNamespace(project=project))
+    before = project.model_dump(exclude={"reason_pauses"})
+    captured = {}
+    models = [TtsModelType.require_by_id("omnivoice_audiocpp"),
+              TtsModelType.require_by_id("higgs_v3_audiocpp")]
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: models[:available_count])
+    monkeypatch.setattr(model_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(model_menu_shared, "get_local_definition",
+                        lambda *_: pytest.fail("Remote menu must not construct local controls"))
+
+    ModelMenuShared.menu(state)
+    items = captured["items"](state)
+
+    assert captured["heading"] == "Model settings"
+    assert captured["initial_hotkey"] == ""
+    assert len(items) == (1 if available_count > 1 else 0)
+    if items:
+        assert get_string_from(state, items[0].label).startswith("Switch TTS model")
+    assert ModelMenuShared.make_local_items(state) == []
+    assert project.model_dump(exclude={"reason_pauses"}) == before
+
+
+def test_remote_saved_local_model_suppresses_local_settings_guidance(monkeypatch):
+    # A stale local wrapper/factory must not suggest loading a local checkpoint
+    # or editing its parameters in a remote process, including on redraw.
+    from tts_audiobook_tool.tts import Tts, TtsRuntimeMode
+
+    state = cast(State, SimpleNamespace(project=Project(tts_model_type="mira_local")))
+    captured = {}
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.LOCAL)
+    monkeypatch.setattr(model_menu_shared.MenuUtil, "menu", lambda **kwargs: captured.update(kwargs))
+    ModelMenuShared.menu_wrapper(state, ModelMenuShared.make_local_items, subheading="Local checkpoint guidance")
+    assert get_string_from(state, captured["subheading"])
+
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    assert captured["items"](state) == []
+    assert get_string_from(state, captured["subheading"]) == ""
 
 
 @pytest.mark.parametrize("qualifier", ["", "Requires batch size 1."])

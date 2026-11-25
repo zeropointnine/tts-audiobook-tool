@@ -46,17 +46,26 @@ def _display_name(model: TtsModelType) -> str:
     return f"{model.value.ui['proper_name']} ({label})" if label else model.value.ui["proper_name"]
 
 
+def _model_change_notice(raw_id: str) -> str:
+    """Selection FYIs name only the known previous model, independent of binding."""
+    model = TtsModelType.get_by_id(raw_id)
+    if model.id == "none":
+        return ""
+    backend = _BACKEND_LABELS[model.value.backend_kind].lower()
+    return f"🔔 FYI\nThis project was last used with TTS model {model.value.ui['proper_name']} ({backend}).\n\n"
+
+
 @pytest.fixture(autouse=True)
 def clean_remote_state(monkeypatch):
     monkeypatch.setattr(RemoteTtsDiscovery, "_base_url", "")
     monkeypatch.setattr(RemoteTtsDiscovery, "_snapshots", {})
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.LOCAL)
+    monkeypatch.setattr(Tts, "_type", TtsModelType.require_by_id("none"))
     monkeypatch.setattr(Tts, "_remote_issue", "")
     monkeypatch.setattr(Tts, "_binding_issue", None)
     monkeypatch.setattr(Tts, "_available_local_models", ())
     monkeypatch.setattr(RemoteTtsDiscovery, "refresh", lambda force=False: RemoteTtsDiscovery.get_snapshot())
     monkeypatch.setattr(Tts, "_selected_server_model_id", "")
-    monkeypatch.setattr(Tts, "bind_project", lambda project, **kwargs: None)
     from tts_audiobook_tool.model_worker import ModelWorker
     from tts_audiobook_tool.tts_models.audio_cpp_definition import load_audio_cpp_definitions
     monkeypatch.setattr(ModelWorker, "get_model_state_blocking", lambda: (None, ""))
@@ -280,14 +289,18 @@ def test_status_block_remote_failure_preserves_project_model(capsys, monkeypatch
 
     MenuStatus.print_block(state)
 
-    tts_lines = [line for line in capsys.readouterr().out.splitlines() if "TTS model:" in line]
+    lines = capsys.readouterr().out.splitlines()
+    tts_lines = [line for line in lines if "TTS model:" in line]
     assert len(tts_lines) == 1
-    assert "Chatterbox" in tts_lines[0]
-    assert f"{COL_DIM}(audio.cpp)" in tts_lines[0]
+    assert "None active" in tts_lines[0]
+    assert "remote mode" in tts_lines[0]
+    assert "Chatterbox" not in tts_lines[0]
+    assert "audio.cpp" not in tts_lines[0]
+    assert not any("Last-selected remote model:" in line for line in lines)
     if issue_code in {"unavailable", "timeout"}:
-        assert f"{COL_ERROR}(server unreachable)" in tts_lines[0]
+        assert f"{COL_ERROR}server unreachable" in tts_lines[0]
     else:
-        assert f"{COL_ERROR}(Remote server unavailable)" in tts_lines[0]
+        assert f"{COL_ERROR}Remote server unavailable" in tts_lines[0]
         assert "server unreachable" not in tts_lines[0]
     assert COL_ERROR in tts_lines[0]
     assert state.project.tts_model_type == "chatterbox_audiocpp"
@@ -304,7 +317,7 @@ def test_status_block_unreachable_unknown_server_omits_server_qualifier(capsys, 
     lines = [text_util.strip_ansi_codes(line) for line in capsys.readouterr().out.splitlines()]
     tts_lines = [line for line in lines if "TTS model:" in line]
     assert len(tts_lines) == 1
-    assert tts_lines[0].split(":", 1)[1].strip() == "None (server unreachable)"
+    assert tts_lines[0].split(":", 1)[1].strip() == "None active (remote mode; server unreachable)"
 
 
 def test_status_block_remote_selected_model_uses_gray_backend(capsys, monkeypatch):
@@ -338,13 +351,12 @@ def test_status_block_local_selection_with_unsupported_server(capsys, monkeypatc
     lines = capsys.readouterr().out.splitlines()
     tts_lines = [line for line in lines if "TTS model:" in line]
     assert len(tts_lines) == 1
-    backend = _BACKEND_LABELS[server_backend]
-    expected_status = f"(server mode; {backend} has no supported models)"
+    expected_status = "None active (remote mode; no supported models)"
     assert text_util.strip_ansi_codes(tts_lines[0]).split(":", 1)[1].strip() == (
-        f"MOSS-TTS (local) {expected_status}"
+        expected_status
     )
-    assert f"{COL_DIM}(local)" in tts_lines[0]
-    assert f"{COL_ERROR}{expected_status}" in tts_lines[0]
+    assert "MOSS" not in tts_lines[0] and "(local)" not in tts_lines[0]
+    assert f"{COL_ERROR}no supported models" in tts_lines[0]
     assert not any("TTS server:" in line for line in lines)
     assert state.project.tts_model_type == "moss_local"
 
@@ -353,15 +365,16 @@ def test_status_block_local_selection_with_unsupported_server(capsys, monkeypatc
 def test_server_status_local_selection_is_unavailable(monkeypatch, server_backend):
     from tts_audiobook_tool.menus.menu_status import _make_server_tts_text
 
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     RemoteTtsDiscovery.set_base_url("http://example.test")
     monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
         backend_kind=server_backend))
 
     output = _make_server_tts_text(make_state(TtsModelType.require_by_id("moss_local")))
 
-    assert text_util.strip_ansi_codes(output) == "MOSS-TTS (local) (unavailable in server mode)"
-    assert f"{COL_DIM}(local)" in output
-    assert f"{COL_ERROR}(unavailable in server mode)" in output
+    assert text_util.strip_ansi_codes(output) == "None active (remote mode; local model unavailable)"
+    assert "MOSS" not in output and "(local)" not in output
+    assert f"{COL_ERROR}local model unavailable" in output
     assert "\x1b]8;;" not in output
 
 
@@ -369,10 +382,11 @@ def test_server_status_local_selection_is_unavailable(monkeypatch, server_backen
     ("auk_sglomni", TtsBackendKind.AUDIO_CPP),
     ("chatterbox_audiocpp", TtsBackendKind.SGL_OMNI),
 ])
-def test_server_status_mismatched_remote_backend_preserves_model_identity(monkeypatch, model_id, server_backend):
+def test_server_status_mismatched_remote_backend_never_appears_active(monkeypatch, model_id, server_backend):
     from tts_audiobook_tool.menus.menu_status import _make_server_tts_text
 
     model = TtsModelType.require_by_id(model_id)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     RemoteTtsDiscovery.set_base_url("http://example.test")
     monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
         backend_kind=server_backend,
@@ -381,7 +395,7 @@ def test_server_status_mismatched_remote_backend_preserves_model_identity(monkey
     output = _make_server_tts_text(make_state(model))
 
     assert text_util.strip_ansi_codes(output) == (
-        f"{_display_name(model)} (server mode; {_BACKEND_LABELS[server_backend]} has no supported models)"
+        "None active (remote mode; no supported models)"
     )
     # Do not link the selected backend to a different server's model list.
     assert "\x1b]8;;" not in output
@@ -396,6 +410,10 @@ def test_server_status_links_backend(monkeypatch, model_id, models_path, base_ur
     from tts_audiobook_tool.menus.menu_status import _make_server_tts_text
 
     model = TtsModelType.require_by_id(model_id)
+    # Direct formatting needs a valid cached binding, not just a saved model.
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    monkeypatch.setattr(Tts, "_type", model)
+    monkeypatch.setattr(Tts, "_selected_server_model_id", "bound-server")
     RemoteTtsDiscovery.set_base_url(base_url)
     monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
         backend_kind=model.value.backend_kind))
@@ -424,6 +442,7 @@ def test_audio_cpp_status_uses_exact_cached_model_residency(monkeypatch, models,
     from tts_audiobook_tool.menus.menu_status import _make_server_tts_text
 
     selected = TtsModelType.require_by_id("breeze_tts_2_audiocpp")
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     monkeypatch.setattr(Tts, "_type", selected)
     monkeypatch.setattr(Tts, "_selected_server_model_id", "bound-server")
     RemoteTtsDiscovery.set_base_url("http://example.test")
@@ -455,6 +474,7 @@ def test_audio_cpp_status_shows_loaded_model_filename(monkeypatch, path, expecte
     from tts_audiobook_tool.menus.menu_status import _make_server_tts_text
 
     selected = TtsModelType.require_by_id("qwen3tts_audiocpp")
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     monkeypatch.setattr(Tts, "_type", selected)
     monkeypatch.setattr(Tts, "_selected_server_model_id", "bound-server")
     entry = {"id": "bound-server", "loaded": True}
@@ -471,7 +491,8 @@ def test_audio_cpp_status_shows_loaded_model_filename(monkeypatch, path, expecte
 
 @pytest.mark.parametrize("failure", [
     "snapshot_issue", "binding_issue", "different_active_model", "unselected",
-    "unknown_selection", "missing_server_id", "unknown_backend", "sgl_omni",
+    "unknown_selection", "missing_server_id", "unknown_backend", "different_backend",
+    "different_saved_server_id", "sgl_omni",
 ])
 def test_server_status_hides_loaded_when_binding_or_snapshot_is_unsuitable(monkeypatch, failure):
     from tts_audiobook_tool.app_types import ReadinessIssue
@@ -479,6 +500,7 @@ def test_server_status_hides_loaded_when_binding_or_snapshot_is_unsuitable(monke
 
     selected = TtsModelType.require_by_id("breeze_tts_2_audiocpp")
     state = make_state(selected)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     monkeypatch.setattr(Tts, "_type", selected)
     monkeypatch.setattr(Tts, "_selected_server_model_id", "bound-server")
     backend_kind = TtsBackendKind.AUDIO_CPP
@@ -497,6 +519,11 @@ def test_server_status_hides_loaded_when_binding_or_snapshot_is_unsuitable(monke
         monkeypatch.setattr(Tts, "_selected_server_model_id", "")
     elif failure == "unknown_backend":
         backend_kind = None
+    elif failure == "different_backend":
+        backend_kind = TtsBackendKind.SGL_OMNI
+    elif failure == "different_saved_server_id":
+        # A valid cached runtime for another exact entry must not look current.
+        state.project.set_tts_selection(selected.id, "different-entry")
     elif failure == "sgl_omni":
         selected = TtsModelType.require_by_id("auk_sglomni")
         state.project.tts_model_type = selected.id
@@ -508,9 +535,15 @@ def test_server_status_hides_loaded_when_binding_or_snapshot_is_unsuitable(monke
 
     output = _make_server_tts_text(state)
 
-    assert ", loaded" not in text_util.strip_ansi_codes(output)
+    plain = text_util.strip_ansi_codes(output)
+    assert ", loaded" not in plain
+    if failure != "sgl_omni":
+        assert plain.startswith("None active (remote mode; ")
+        assert selected.value.ui["proper_name"] not in plain
+    else:
+        assert plain == f"{selected.value.ui['proper_name']} (SGL-Omni)"
     if failure == "snapshot_issue":
-        assert "(server unreachable)" in output
+        assert "None active (remote mode; server unreachable)" == text_util.strip_ansi_codes(output)
     elif failure == "binding_issue":
         assert "Ambiguous binding" in output
 
@@ -543,10 +576,14 @@ def test_status_auto_selects_sole_model_and_defers_hint_until_menu(
             model.value.backend_kind, candidates=((model, "served-model"),)))
     events = []
     monkeypatch.setattr(Project, "save", lambda project: events.append(("save", project.tts_model_type)) or "")
-    monkeypatch.setattr(Tts, "bind_project", lambda project: events.append(("bind", project.tts_model_type)))
+    # Record ordering without bypassing the binding that makes a model current.
+    real_bind = Tts.bind_project
+    def bind(project):
+        events.append(("bind", project.tts_model_type))
+        return real_bind(project)
+    monkeypatch.setattr(Tts, "bind_project", bind)
     monkeypatch.setattr("tts_audiobook_tool.ask.ask_enter_to_continue",
                         lambda *_: pytest.fail("Model-change notices must not pause"))
-    monkeypatch.setattr(Tts, "get_active_type", lambda: model)
 
     MenuStatus.print_block(state)
     MenuStatus.print_block(state)
@@ -565,18 +602,8 @@ def test_status_auto_selects_sole_model_and_defers_hint_until_menu(
     MenuStatus.show_pending_tts_model_hint(state, is_first_main_menu=True)
     MenuStatus.show_pending_tts_model_hint(state, is_first_main_menu=True)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    if saved == "none":
-        assert output == ""
-        assert state.pending_tts_model_change is None
-        return
-    old_name = (_display_name(TtsModelType.require_by_id("mira_local")) if saved == "mira_local" else
-                f"Unknown model: {saved}")
-    # Local selection and a usable remote binding use distinct environment wording.
-    current = _display_name(model)
-    reason = (f"The current environment uses {current}."
-              if model.value.backend_kind is TtsBackendKind.LOCAL
-              else f"This environment currently uses {current}.")
-    assert output == f"🔔 FYI\nThis project was last used with TTS model {old_name}.\n{reason}\n\n"
+    # Known previous selections share one sentence; unknown/unselected IDs stay silent.
+    assert output == _model_change_notice(saved)
     assert state.pending_tts_model_change is None
 
 
@@ -585,7 +612,11 @@ def sole_remote_model(monkeypatch):
     model = TtsModelType.require_by_id("echo_tts_audiocpp")
     monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
     monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [model])
-    monkeypatch.setattr(Tts, "get_active_type", lambda: model)
+    # Successful-notice tests need a coherent cached binding; prepare_tts still binds for real.
+    monkeypatch.setattr(Tts, "_type", model)
+    monkeypatch.setattr(Tts, "_selected_server_model_id", "served-model")
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+        model.value.backend_kind, candidates=((model, "served-model"),)))
     monkeypatch.setattr("tts_audiobook_tool.ask.ask_enter_to_continue",
                         lambda *_: pytest.fail("Model-change notices must not pause"))
     return model
@@ -593,7 +624,7 @@ def sole_remote_model(monkeypatch):
 
 @pytest.mark.parametrize("offline", [False, True])
 def test_model_change_hint_reports_binding_failure(monkeypatch, capsys, sole_remote_model, offline):
-    # A failed binding (including an outage before display) describes configuration, not use.
+    # Binding success or a later outage must not change the one-line previous-model FYI.
     state = make_state(TtsModelType.require_by_id("chatterbox_local"))
     MenuStatus.prepare_tts(state)
     if offline:
@@ -603,11 +634,7 @@ def test_model_change_hint_reports_binding_failure(monkeypatch, capsys, sole_rem
     MenuStatus.show_pending_tts_model_hint(state)
 
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    assert output == (
-        "🔔 FYI\nThis project was last used with TTS model Chatterbox TTS (local).\n"
-        f"This environment is configured to use {_display_name(sole_remote_model)}, "
-        "but that model can't be used yet (see Model settings).\n\n"
-    )
+    assert output == _model_change_notice("chatterbox_local")
     assert state.pending_tts_model_change is None
 
 
@@ -630,15 +657,19 @@ def test_model_change_hint_coalesces_to_first_old_and_latest_new(monkeypatch, ca
     MenuStatus.prepare_tts(state)
     latest = TtsModelType.require_by_id("auk_sglomni")
     monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [latest])
-    monkeypatch.setattr(Tts, "get_active_type", lambda: latest)
+    monkeypatch.setattr(Tts, "_type", latest)
+    monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+        latest.value.backend_kind, candidates=((latest, "served-model"),)))
     MenuStatus.prepare_tts(state)
     MenuStatus.prepare_tts(state)
 
-    assert state.pending_tts_model_change == PendingTtsModelChange("chatterbox_local", latest.id)
+    # The intermediate audio.cpp entry disappears when the server backend changes.
+    assert state.pending_tts_model_change == PendingTtsModelChange(
+        "chatterbox_local", latest.id, reason="saved_entry_unavailable",
+    )
     MenuStatus.show_pending_tts_model_hint(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    assert "last used with TTS model Chatterbox TTS" in output
-    assert f"This environment currently uses {_display_name(latest)}." in output
+    assert output == _model_change_notice("chatterbox_local")
     assert sole_remote_model.value.ui["proper_name"] not in output
 
 
@@ -649,7 +680,11 @@ def test_model_change_hint_discards_cancelled_or_stale_notice(
     state = make_state(TtsModelType.require_by_id("auk_sglomni"))
     MenuStatus.prepare_tts(state)
     if reason == "reverted":
-        monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [TtsModelType.require_by_id("auk_sglomni")])
+        original = TtsModelType.require_by_id("auk_sglomni")
+        # Availability and the cached discovery must describe the same server.
+        monkeypatch.setattr(Tts, "get_available_tts_models", lambda **kwargs: [original])
+        monkeypatch.setattr(RemoteTtsDiscovery, "get_snapshot", lambda: RemoteTtsSnapshot(
+            original.value.backend_kind, candidates=((original, "served-model"),)))
         MenuStatus.prepare_tts(state)
     elif reason == "cleared":
         monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.LOCAL)
@@ -690,9 +725,7 @@ def test_local_startup_notice_waits_for_first_main_menu(monkeypatch, capsys):
     MenuStatus.show_pending_tts_model_hint(state, is_first_main_menu=True)
     MenuStatus.show_pending_tts_model_hint(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    assert output.count("FYI") == 1
-    assert "last used with TTS model Echo-TTS" in output
-    assert "The current environment uses Chatterbox TTS (local)." in output
+    assert output == _model_change_notice("echo_tts_audiocpp")
     assert state.pending_tts_model_change is None
 
 
@@ -938,7 +971,8 @@ def test_project_load_max_words_uses_reconciled_model(monkeypatch, capsys):
     assert output.count("FYI") == 2
     assert "maximum of 60 words per segment" in output
     assert "recommended maximum of 50." in output
-    assert output.index("last used with") < output.index("text was segmented")
+    assert output.index("last used with TTS model") < output.index("text was segmented")
+    assert "GLM-TTS (local)." in output
 
 
 def test_project_replacement_rearms_load_checks_and_reset_clears_them(monkeypatch, capsys):
@@ -1058,12 +1092,7 @@ def test_status_clears_unavailable_selection_with_multiple_models(monkeypatch, c
     MenuStatus.show_pending_project_hints(state, is_first_main_menu=not runtime_load)
     MenuStatus.show_pending_project_hints(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
-    old_name = (f"Unknown model: {saved}" if saved == "future_catalog_id" else
-                _display_name(TtsModelType.get_by_id(saved)))
-    assert output == ("" if not should_notify else (
-        f"🔔 FYI\nThis project was last used with TTS model {old_name},\nwhich is currently unavailable.\n"
-        "Select a TTS model in Model settings > TTS model.\n\n"
-    ))
+    assert output == (_model_change_notice(saved) if should_notify else "")
     assert state.pending_tts_model_change is None
 
 
@@ -1072,11 +1101,8 @@ def test_status_clears_unavailable_selection_with_multiple_models(monkeypatch, c
     "unavailable_multiple", "unavailable_sole", "unavailable_sole_from_none", "unavailable_sole_unbound",
 ])
 def test_remembered_audio_cpp_selection_notices(monkeypatch, capsys, case):
-    # Reconnecting to audio.cpp after using a local model restores (or reports
-    # failing to restore) the project's last-used audio.cpp entry, deferred to
-    # the end of the next complete menu like other model-change notices.
-    # From an unselected project the "last used" line is omitted, so the next
-    # sentence must name the project rather than start with "It"/"Its".
+    # Selection/restoration behavior stays unchanged. The notice names the saved
+    # local model, or the remembered remote type when the old selection was none.
     fish = TtsModelType.require_by_id("fish_s2_audiocpp")
     chatterbox = TtsModelType.require_by_id("chatterbox_audiocpp")
     higgs = TtsModelType.require_by_id("higgs_v3_audiocpp")
@@ -1104,39 +1130,20 @@ def test_remembered_audio_cpp_selection_notices(monkeypatch, capsys, case):
     MenuStatus.show_pending_project_hints(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
 
-    old_line = "This project was last used with TTS model Chatterbox TTS (local)"
-    remembered = f"{fish.value.ui['proper_name']} (audio.cpp; fish-q8)"
     is_sole = case.startswith("unavailable_sole")
     expected_selection = (("none", "") if case == "unavailable_multiple" else
                           (chatterbox.id, "cb") if is_sole else (fish.id, "fish-q8"))
     assert (state.project.tts_model_type, state.project.audio_cpp_model_id) == expected_selection
     assert (state.project.last_audio_cpp_model_type, state.project.last_audio_cpp_model_id) == (
         (chatterbox.id, "cb") if is_sole else (fish.id, "fish-q8"))
-    sole = _display_name(chatterbox)
-    unusable = "but that model can't be used yet (see Model settings)."
-    expected = {
-        "restored": f"{old_line}.\nThis environment currently uses {remembered}.",
-        "restored_from_none": f"This environment currently uses {remembered}.",
-        "restored_unbound": (f"{old_line}.\nThis environment is configured to use "
-                             f"{remembered}, {unusable}"),
-        "restored_unbound_from_none": (f"This environment is configured to use "
-                                       f"{remembered}, {unusable}"),
-        "unavailable_multiple": (f"{old_line}.\nIts last-used audio.cpp model, {remembered},\n"
-                                 "is currently unavailable.\nSelect a TTS model in Model settings > TTS model."),
-        "unavailable_sole": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, is not on this server.\n"
-                             f"This environment currently uses {sole}."),
-        "unavailable_sole_from_none": (f"This project's last-used audio.cpp model, {remembered}, "
-                                       f"is not on this server.\nThis environment currently uses {sole}."),
-        "unavailable_sole_unbound": (f"{old_line}.\nIts last-used audio.cpp model, {remembered}, "
-                                     f"is not on this server.\nThis environment is configured to use {sole}, {unusable}"),
-    }[case]
-    assert output == f"🔔 FYI\n{expected}\n\n"
+    old_model_id = fish.id if case.endswith("_from_none") else "chatterbox_local"
+    assert output == _model_change_notice(old_model_id)
+    assert "fish-q8" not in output and "currently uses" not in output
 
 
 @pytest.mark.parametrize("sole", [True, False])
 def test_saved_entry_missing_from_new_server_announces_replacement(monkeypatch, capsys, sole):
-    # Eg, after changing the server URL: the saved entry is replaced (sole
-    # entry, else unselected) with the usual model-change FYI, naming entries.
+    # Entry replacement keeps its selection rules, but the FYI names only the old type.
     fish = TtsModelType.require_by_id("fish_drama3_audiocpp")
     chatterbox = TtsModelType.require_by_id("chatterbox_audiocpp")
     higgs = TtsModelType.require_by_id("higgs_v3_audiocpp")
@@ -1153,13 +1160,8 @@ def test_saved_entry_missing_from_new_server_announces_replacement(monkeypatch, 
     MenuStatus.show_pending_project_hints(state)
     output = text_util.strip_ansi_codes(capsys.readouterr().out)
 
-    old_name = f"{fish.value.ui['proper_name']} (audio.cpp; fish-drama3)"
-    if sole:
-        assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name}.\n"
-                          f"This environment currently uses {chatterbox.value.ui['proper_name']} (audio.cpp; cb).\n\n")
-    else:
-        assert output == (f"🔔 FYI\nThis project was last used with TTS model {old_name},\nwhich is currently "
-                          "unavailable.\nSelect a TTS model in Model settings > TTS model.\n\n")
+    assert output == _model_change_notice(fish.id)
+    assert "fish-drama3" not in output and "cb" not in output
     assert state.project.last_audio_cpp_model_id == ("cb" if sole else "fish-drama3")
 
 
@@ -1191,13 +1193,54 @@ def test_binding_issue_is_a_terse_status_plus_one_time_fyi(monkeypatch, capsys):
         return status, text_util.strip_ansi_codes(capsys.readouterr().out)
 
     status, hint = draw()
-    assert "(requires entry selection)" in status and "Multiple server entries" not in status
+    assert "None active (remote mode; requires selection)" in status and "Multiple server entries" not in status
     assert hint == notice
     assert draw()[1] == ""
     current["issue"] = None
     assert draw()[1] == ""
     current["issue"] = issue
     assert draw()[1] == notice
+
+
+@pytest.mark.parametrize("binding_kind", ["entry_unavailable", "ambiguous_entry"])
+def test_selection_notice_suppresses_generic_binding_but_keeps_ambiguity(monkeypatch, capsys, binding_kind):
+    # A single menu names the previous model once; only ambiguity adds its own FYI.
+    from tts_audiobook_tool.state import PendingBindingNotice
+
+    model = TtsModelType.require_by_id("chatterbox_audiocpp")
+    state = make_state(model)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    state.pending_tts_model_change = PendingTtsModelChange("mira_local", model.id)
+    state.pending_binding_notice = PendingBindingNotice(model.id, "", binding_kind,
+                                                        "Generic binding diagnostic", ("one", "two"))
+    MenuStatus.show_pending_project_hints(state)
+    output = text_util.strip_ansi_codes(capsys.readouterr().out)
+    assert output.startswith(_model_change_notice("mira_local"))
+    assert output.count("This project was last used with TTS model") == 1
+    ambiguous = binding_kind == "ambiguous_entry"
+    assert output.count("FYI") == (2 if ambiguous else 1)
+    assert ("Several server entries match" in output) == ambiguous
+    assert ("one, two" in output) == ambiguous
+    assert "Generic binding diagnostic" not in output
+    assert state.pending_tts_model_change is None and state.pending_binding_notice is None
+
+
+def test_generic_binding_fyi_uses_only_saved_model_sentence(monkeypatch, capsys):
+    # Even a binding explanation uses the shared sentence, with lowercase backend
+    # and no exact IDs or repair advice; only ambiguity has a longer FYI.
+    from tts_audiobook_tool.tts import TtsBindingIssue
+
+    model = TtsModelType.require_by_id("auk_sglomni")
+    state = make_state(model)
+    monkeypatch.setattr(Tts, "_backend_mode", TtsRuntimeMode.REMOTE_CLIENT)
+    issue = TtsBindingIssue("TTS model", "Entry secret-id is unavailable; select another entry",
+                            kind="entry_unavailable", status="unavailable")
+    MenuStatus._queue_binding_notice(state, issue)
+    MenuStatus.show_pending_binding_hint(state)
+    assert text_util.strip_ansi_codes(capsys.readouterr().out) == _model_change_notice(model.id)
+    MenuStatus._queue_binding_notice(state, issue)
+    MenuStatus.show_pending_binding_hint(state)
+    assert capsys.readouterr().out == ""
 
 
 def test_remote_unselected_project_still_reports_connection_failure(monkeypatch, capsys):
@@ -1207,14 +1250,18 @@ def test_remote_unselected_project_still_reports_connection_failure(monkeypatch,
 
     MenuStatus.print_block(make_state())
 
-    assert f"{COL_ERROR}(server unreachable)" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "None active (remote mode; server unreachable)" in text_util.strip_ansi_codes(output)
+    assert f"{COL_ERROR}server unreachable" in output
 
 
-def test_loaded_status_requires_worker_model_to_match_project():
+def test_loaded_status_requires_worker_model_to_match_project(monkeypatch):
     from tts_audiobook_tool.menus.menu_status import _make_local_tts_text
     from tts_audiobook_tool.model_worker_protocol import ModelStateSnapshot
 
     state = make_state(TtsModelType.require_by_id("omnivoice_local"))
+    # Loaded worker metadata augments a valid local binding, never substitutes for it.
+    monkeypatch.setattr(Tts, "_type", state.project.get_tts_model_type())
     wrong = ModelStateSnapshot(tts_loaded=True, tts_type_id="mira_local", tts_device="cuda")
     matching = ModelStateSnapshot(tts_loaded=True, tts_type_id="omnivoice_local", tts_device="cpu")
 
