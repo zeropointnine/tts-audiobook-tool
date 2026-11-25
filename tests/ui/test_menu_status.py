@@ -1314,3 +1314,17 @@ def test_stt_status_does_not_repeat_disabled(monkeypatch):
     text = _make_stt_text(state)
 
     assert text == f"faster-whisper {COL_DIM}(disabled)"
+
+
+def test_stt_status_spells_out_int8_cuda(monkeypatch):
+    # Both CUDA configs share the "cuda" device; the status names the int8 one.
+    state = cast(State, SimpleNamespace(
+        prefs=SimpleNamespace(
+            stt_variant=SttVariant.LARGE_V3_TURBO,
+            stt_config=SttConfig.CUDA_INT8FLOAT16,
+        ),
+    ))
+    monkeypatch.setattr(Stt, "should_use_mlx_whisper", lambda: False)
+    monkeypatch.setattr(Stt, "get_variant", lambda: SttVariant.LARGE_V3_TURBO)
+
+    assert _make_stt_text(state) == f"faster-whisper {COL_DIM}(large-v3-turbo, cuda int8)"

@@ -457,7 +457,9 @@ class WorkerSessionMixin(Generic[ResultT], _SessionHostBase):
         self.reset_outcome = None
         self.phase = "Hard-resetting model worker"
         # The reason is shown once, in the terminal summary beside the outcome.
-        lines = ["", f"{COL_ERROR}Terminating and hard-resetting models...", ""]
+        # In remote mode only the app's own worker (eg Whisper) is reset, never the TTS server.
+        models = "local models" if Tts.is_remote_mode() else "models"
+        lines = ["", f"{COL_ERROR}Terminating and hard-resetting {models}...", ""]
         self._append_application_lines(lines)
         self._update_header()
         # Captured here on the UI thread: the reset runs on a worker thread and

@@ -103,7 +103,7 @@ def test_stt_config_defaults_to_cpu_without_ctranslate2_float16_gpu(monkeypatch)
 def test_stt_description_uses_effective_ctranslate2_device(monkeypatch):
     monkeypatch.setattr(Stt, "should_use_mlx_whisper", lambda: False)
     monkeypatch.setattr(Stt, "_config", SttConfig.CUDA_FLOAT16)
-    monkeypatch.setattr(GpuCapsUtil, "has_ctranslate2_float16_gpu", lambda: False)
+    monkeypatch.setattr(GpuCapsUtil, "has_ctranslate2_gpu_compute_type", lambda compute_type: False)
 
     assert Stt.short_description().endswith(", cpu")
 
@@ -123,10 +123,47 @@ def test_stt_runtime_falls_back_without_ctranslate2_float16_gpu(monkeypatch):
     monkeypatch.setattr(Stt, "should_use_mlx_whisper", lambda: False)
     monkeypatch.setattr(Stt, "_whisper", None)
     monkeypatch.setattr(Stt, "_config", SttConfig.CUDA_FLOAT16)
-    monkeypatch.setattr(GpuCapsUtil, "has_ctranslate2_float16_gpu", lambda: False)
+    monkeypatch.setattr(GpuCapsUtil, "has_ctranslate2_gpu_compute_type", lambda compute_type: False)
     monkeypatch.setattr("tts_audiobook_tool.stt.FasterWhisperAdapter", FakeFasterWhisperAdapter)
 
     Stt.get_whisper()
 
     assert init_args["device"] == "cpu"
     assert init_args["compute_type"] == "int8_float32"
+
+
+def test_ctranslate2_gpu_compute_type_checks_the_requested_type(monkeypatch):
+    # Each CUDA STT config is gated on its own compute type, not just float16.
+    ctranslate2 = SimpleNamespace(
+        get_cuda_device_count=lambda: 1,
+        get_supported_compute_types=lambda device, device_index: {"float16", "float32"},
+    )
+    monkeypatch.setitem(sys.modules, "ctranslate2", ctranslate2)
+
+    assert GpuCapsUtil.has_ctranslate2_gpu_compute_type("float16")
+    assert not GpuCapsUtil.has_ctranslate2_gpu_compute_type("int8_float16")
+    assert SttConfig.CUDA_FLOAT16.is_available()
+    assert not SttConfig.CUDA_INT8FLOAT16.is_available()
+    assert SttConfig.CUDA_INT8FLOAT16.resolve_runtime() is SttConfig.CPU_INT8FLOAT32
+
+
+def test_stt_runtime_uses_cuda_int8_when_supported(monkeypatch):
+    # The int8 CUDA config reaches faster-whisper unchanged, and the status
+    # text distinguishes it from float16 CUDA.
+    init_args = {}
+
+    class FakeFasterWhisperAdapter:
+        def __init__(self, model, device, compute_type, cpu_threads):
+            init_args.update(device=device, compute_type=compute_type)
+
+    monkeypatch.setattr(Stt, "should_use_mlx_whisper", lambda: False)
+    monkeypatch.setattr(Stt, "_whisper", None)
+    monkeypatch.setattr(Stt, "_config", SttConfig.CUDA_INT8FLOAT16)
+    monkeypatch.setattr(GpuCapsUtil, "has_ctranslate2_gpu_compute_type", lambda compute_type: True)
+    monkeypatch.setattr("tts_audiobook_tool.stt.FasterWhisperAdapter", FakeFasterWhisperAdapter)
+
+    Stt.get_whisper()
+
+    assert init_args == {"device": "cuda", "compute_type": "int8_float16"}
+    assert Stt.short_description().endswith(", cuda int8")
+    assert SttConfig.from_id("cuda_int8_float16") is SttConfig.CUDA_INT8FLOAT16

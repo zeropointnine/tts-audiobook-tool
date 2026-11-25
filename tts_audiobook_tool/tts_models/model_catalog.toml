@@ -2064,7 +2064,10 @@ model_id_substring = "zonos3-mini"
 file_tag = "zonos3_mini"
 default_output_sample_rate = 44100
 un_all_caps = false
-substitutions = []
+# Words inside [square brackets] are almost never spoken (likely learned from
+# caption-style "[Music]" annotations): they become a pause or end the take early.
+# Other punctuation (dashes, ellipses, semicolons, parens, quotes) reads well as is.
+substitutions = [["[", ""], ["]", ""]]
 requirements_file_name = "requirements-remote.txt"
 
 [models.spec.ui]

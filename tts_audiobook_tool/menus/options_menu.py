@@ -8,7 +8,6 @@ from tts_audiobook_tool.menus.llm_settings_menu import LlmSettingsMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.model_spec import TtsBackendKind
 from tts_audiobook_tool.util import *
@@ -206,7 +205,7 @@ class OptionsMenu:
         labels = []
         for item in list(SttConfig):
             s = item.description
-            if item == SttConfig.CUDA_FLOAT16 and not GpuCapsUtil.has_ctranslate2_float16_gpu():
+            if not item.is_available():
                 s += f" {COL_DIM}(unavailable)"
             labels.append(s)
 

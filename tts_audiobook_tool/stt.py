@@ -10,7 +10,6 @@ from tts_audiobook_tool.model_runtime import (
     current_role,
     require_model_owner,
 )
-from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
 from tts_audiobook_tool.util import *
 
 
@@ -204,9 +203,7 @@ class Stt:
                 return cast(WhisperBackend, Stt._whisper)
 
             # Linux/Windows uses Faster Whisper (either cuda or cpu)
-            dq = Stt._config
-            if dq.device == "cuda" and not GpuCapsUtil.has_ctranslate2_float16_gpu():
-                dq = SttConfig.CPU_INT8FLOAT32 # fallback
+            dq = Stt._config.resolve_runtime() # unsupported CUDA compute type falls back to CPU
             device = dq.device
             compute_type = dq.compute_type
 
@@ -264,10 +261,7 @@ class Stt:
         if Stt.should_use_mlx_whisper():
             return f"{Stt._variant.id}, mlx"
 
-        config = Stt._config
-        if config.device == "cuda" and not GpuCapsUtil.has_ctranslate2_float16_gpu():
-            config = SttConfig.CPU_INT8FLOAT32
-        return f"{Stt._variant.id}, {config.device}"
+        return f"{Stt._variant.id}, {Stt._config.resolve_runtime().status_label}"
 
     @staticmethod
     def has_instance() -> bool:

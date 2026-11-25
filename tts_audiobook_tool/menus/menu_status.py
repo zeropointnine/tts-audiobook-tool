@@ -468,7 +468,7 @@ def _make_stt_text(
     if not Stt.should_use_mlx_whisper():
         qualifiers.append(Stt.get_variant().id) # eg, "large-v3"
         if Stt.get_variant() != SttVariant.DISABLED:
-            qualifiers.append(state.prefs.stt_config.device) # eg, "cuda"
+            qualifiers.append(state.prefs.stt_config.status_label) # eg, "cuda", "cuda int8"
     if worker_models and worker_models.stt_loaded:
         qualifiers.append("loaded")
     if qualifiers:

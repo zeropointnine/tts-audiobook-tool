@@ -391,12 +391,32 @@ class SttConfig(tuple[str, str, str], Enum):
     is active on Apple Silicon.
     """
 
-    CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU, int8_float32") # default
+    # Descriptions name int8 configs by their weight precision only; the
+    # activation half of the compute type (_float32/_float16) shows in load logs.
+    CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU, int8") # default
     CUDA_FLOAT16 = ("cuda", "float16", f"CUDA, float16")
+    # int8 weights: ~1.3 GB VRAM vs >2.3 GB float16 for large-v3-turbo, with near-identical accuracy
+    CUDA_INT8FLOAT16 = ("cuda", "int8_float16", "CUDA, int8 (less VRAM)")
 
     @property
     def device(self) -> str:
         return self.value[0]
+
+    @property
+    def status_label(self) -> str:
+        """Short device label for status text; only the non-default CUDA precision is spelled out."""
+        return "cuda int8" if self == SttConfig.CUDA_INT8FLOAT16 else self.device
+
+    def is_available(self) -> bool:
+        """Whether this config can run here; CUDA configs need CTranslate2 GPU support for their compute type."""
+        if self.device != "cuda":
+            return True
+        from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
+        return GpuCapsUtil.has_ctranslate2_gpu_compute_type(self.compute_type)
+
+    def resolve_runtime(self) -> SttConfig:
+        """The config faster-whisper actually runs: an unavailable CUDA config falls back to CPU."""
+        return self if self.is_available() else SttConfig.CPU_INT8FLOAT32
 
     @property
     def compute_type(self) -> str:

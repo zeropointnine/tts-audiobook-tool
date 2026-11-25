@@ -43,13 +43,18 @@ class GpuCapsUtil:
     @staticmethod
     def has_ctranslate2_float16_gpu() -> bool:
         """Return whether CTranslate2 exposes a GPU with float16 support."""
+        return GpuCapsUtil.has_ctranslate2_gpu_compute_type("float16")
+
+    @staticmethod
+    def has_ctranslate2_gpu_compute_type(compute_type: str) -> bool:
+        """Return whether CTranslate2 exposes a GPU supporting `compute_type` (eg "int8_float16")."""
         try:
             import ctranslate2
 
             if ctranslate2.get_cuda_device_count() < 1:
                 return False
             compute_types = ctranslate2.get_supported_compute_types("cuda", 0)
-            return "float16" in compute_types
+            return compute_type in compute_types
         except (ImportError, OSError, RuntimeError):
             return False
 

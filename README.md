@@ -854,6 +854,7 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare a fe
 The app ideally wants to use ~2-4 GB extra VRAM for the Whisper speech-to-text model, which needs to runs concurrently with the currently active TTS model to validate its output. If you are getting out of memory errors, try one of the following:
 
 - Use large-v3-turbo instead of large-v3 (saves a gig or two of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
+- Run Whisper on the GPU with 8-bit weights (roughly halves its VRAM, with near-identical accuracy) (`Options` > `Whisper device` > `CUDA, int8`)
 - Force Whisper to use system memory instead of running on the GPU (runs much slower, ofc) (`Options` > `Whisper device` > `CPU`)
 - Disable Whisper altogether (last resort) (`Options` > `Whisper model` > `Disabled`)
 

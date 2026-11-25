@@ -231,3 +231,24 @@ def test_escape_without_an_operation_does_not_exit_or_cancel(session) -> None:
             assert app.is_running
 
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(("mode", "expected"), [
+    (TtsRuntimeMode.LOCAL, "hard-resetting models..."),
+    (TtsRuntimeMode.REMOTE_CLIENT, "hard-resetting local models..."),
+])
+def test_hard_reset_message_says_local_in_remote_mode(monkeypatch, mode, expected):
+    # In remote mode the reset only restarts the app's own worker, so the
+    # message must not suggest that the remote TTS server is being reset.
+    from tts_audiobook_tool.worker_reset import HardResetRequest
+    monkeypatch.setattr(Tts, "_backend_mode", mode)
+    lines: list[str] = []
+    host = SimpleNamespace(
+        _append_application_lines=lines.extend, _update_header=lambda: None,
+        run_worker=lambda *_, **__: None, app=None,
+    )
+    worker_session.WorkerSessionMixin._begin_hard_reset(
+        cast(worker_session.WorkerSessionMixin, host), HardResetRequest(HardResetCause.USER_ESCALATION))
+    message = " ".join(lines)
+    assert expected in message
+    assert ("local models" in message) is (mode is TtsRuntimeMode.REMOTE_CLIENT)
