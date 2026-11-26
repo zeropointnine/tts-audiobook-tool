@@ -54,6 +54,15 @@ from tts_audiobook_tool.tts_models.voice_variation_warning import get_run_warnin
 class TtsModelError:
     message: str
 
+
+@dataclass(frozen=True)
+class TranscriptionError:
+    message: str
+
+
+GenerationResult = ValidationResult | str | TtsModelError | TranscriptionError
+
+
 @dataclass(frozen=True)
 class SubBatch:
     """
@@ -85,11 +94,6 @@ def make_consecutive_model_errors_reset_message(max_consecutive_model_errors: in
     return (
         f"Too many consecutive TTS model errors ({max_consecutive_model_errors})"
     )
-
-
-def make_oom_reset_message() -> str:
-    """Single source of the reason text for an OOM abort."""
-    return "TTS model ran out of memory"
 
 
 class GenerateUtil:
@@ -335,11 +339,15 @@ class GenerateUtil:
             batch_gen_val_time = time.time() - gen_start_time
             gen_val_sum_time += batch_gen_val_time
 
-            # Check for OOM in results and break early if detected
-            if any(GenerateUtil.is_error_result_oom(r) for r in results):
-                # The per-segment error line already printed the raw error, and the
-                # reset reason below is shown by the hard-reset UI; print nothing more.
-                GenerationEvents.emit(ModelUnhealthy(reason=make_oom_reset_message()))
+            # Include diagnostics in the event: the parent may kill the worker
+            # before the normal per-line logging path can run.
+            oom = None
+            for index, result in zip(indices, results):
+                oom = GenerateUtil.make_oom_reset_event(result, index)
+                if oom is not None:
+                    break
+            if oom is not None:
+                GenerationEvents.emit(oom)
                 Tts.clear_continuation()
                 did_interrupt = True
                 break
@@ -362,6 +370,9 @@ class GenerateUtil:
                 is_model_error = isinstance(result, TtsModelError)
                 if isinstance(result, TtsModelError):
                     error_string = result.message
+                    validation_result = None
+                elif isinstance(result, TranscriptionError):
+                    error_string = f"Whisper transcription failed: {result.message}"
                     validation_result = None
                 elif isinstance(result, str):
                     error_string = result
@@ -650,11 +661,10 @@ class GenerateUtil:
         is_realtime: bool,
         is_skip_reason_buffer: bool=False,
         voice_selection_index: int | None=None
-    ) -> list[ValidationResult | str | TtsModelError]:
+    ) -> list[GenerationResult]:
         """
         Generates and validates a batch of prompts from the Project text.
-        Prints updates.
-        Returns a list of results (ValidationResult or error string).
+        Prints updates and returns a validation result or error for each prompt.
 
         :param indices:
             When length is 1, batch mode is disabled
@@ -690,14 +700,13 @@ class GenerateUtil:
 
         # Should skip or not
         skip_reason = Stt.should_skip(state, is_skip_reason_buffer)
-        if not skip_reason:
-            GenerationEvents.emit(GenerationPhase("Transcribing and validating"))
-            printt(f"{COL_DEFAULT}Transcribing audio...", end="") # gets overwritten
-        else:
+        if skip_reason:
             GenerationEvents.emit(GenerationPhase("Processing generated audio"))
 
-        val_start_time = time.time()
-        results: list[ValidationResult | str | TtsModelError] = []
+        num_transcribed = 0
+        num_transcription_failures = 0
+        transcription_seconds = 0.0
+        results: list[GenerationResult] = []
 
         for i, gen_result in enumerate(gen_results):
 
@@ -728,19 +737,23 @@ class GenerateUtil:
                 continue
 
             # Transcribe
-            gen_result = Transcriber.transcribe_to_words(
+            if not (num_transcribed or num_transcription_failures):
+                GenerationEvents.emit(GenerationPhase("Transcribing and validating"))
+            transcription_start = time.monotonic()
+            transcription = Transcriber.transcribe_to_words(
                 sound, project.language_code, stt_variant, stt_config
             )
-            if isinstance(gen_result, str):
-                err = gen_result
-                results.append(err)
+            transcription_seconds += time.monotonic() - transcription_start
+            if isinstance(transcription, str):
+                num_transcription_failures += 1
+                results.append(TranscriptionError(transcription))
                 continue
-            transcribed_words = gen_result
+            num_transcribed += 1
 
             # Validate
             text = phrase_groups[ indices[i] ].spoken_text(project.language_code)
             validation_result = Validator.validate(
-                sound, text, transcribed_words, project.language_code, strictness=project.strictness
+                sound, text, transcription, project.language_code, strictness=project.strictness
             )
             validation_result.generated_start_trim_time = start_trim_time
             validation_result.generated_end_trim_time = end_trim_time
@@ -758,9 +771,11 @@ class GenerateUtil:
                     is_realtime=is_realtime
                 )
 
-        if not skip_reason:
-            message = f"{COL_DEFAULT}Transcribed audio in {(time.time() - val_start_time):.1f}s"
-            printt(f"{Ansi.LINE_HOME}{message}")
+        if num_transcribed or num_transcription_failures:
+            printt(
+                f"{COL_DEFAULT}Transcription took {transcription_seconds:.1f}s "
+                f"({num_transcribed} succeeded, {num_transcription_failures} failed)"
+            )
 
         printt()
 
@@ -898,16 +913,22 @@ class GenerateUtil:
         return results
 
     @staticmethod
-    def get_error_result_message(result: ValidationResult | str | TtsModelError) -> str:
-        if isinstance(result, TtsModelError):
-            return result.message
-        if isinstance(result, str):
-            return result
-        return ""
+    def make_oom_reset_event(result: GenerationResult, index: int) -> ModelUnhealthy | None:
+        if isinstance(result, TranscriptionError):
+            message = result.message
+            reason = f"Whisper ran out of memory while validating line {index + 1}"
+        elif isinstance(result, TtsModelError):
+            message = result.message
+            reason = f"TTS model ran out of memory while generating line {index + 1}"
+        elif isinstance(result, str):
+            message = result
+            reason = f"Ran out of memory while processing line {index + 1}"
+        else:
+            return None
 
-    @staticmethod
-    def is_error_result_oom(result: ValidationResult | str | TtsModelError) -> bool:
-        return is_oom_error_message(GenerateUtil.get_error_result_message(result))
+        if not is_oom_error_message(message):
+            return None
+        return ModelUnhealthy(reason=f"{reason}: {message}")
 
     @staticmethod
     def print_consecutive_model_errors_message(max_consecutive_model_errors: int) -> None:

@@ -1,6 +1,7 @@
 import unittest
 
 from tts_audiobook_tool import text_util
+from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
@@ -51,6 +52,13 @@ class TestTranscribeGranular(unittest.TestCase):
             failure_codes = Validator.get_word_errors(a, b, language_code="en", verbose=True)
             num_fail_words = len(failure_codes)
             self.assertTrue(num_fail_words == answer)
+
+    def test_quoted_number_matches_transcript_at_zero_tolerance(self):
+        # The source's closing quote used to turn the same spoken word into a retry.
+        self.assertEqual(
+            Validator.get_word_error_fail("Two,”", "Two.", Strictness.HIGH, "en"),
+            (False, [], 1, 0),
+        )
 
     def test_spanish_supported_whitelist(self):
         Whitelist().set_language_code("es")

@@ -68,11 +68,10 @@ class GenerationTimedOut:
 
 @dataclass(frozen=True)
 class ModelUnhealthy:
-    """The generation loop aborted because the TTS model appears unhealthy
-    (too many consecutive model errors, or an OOM error).
+    """Generation stopped after consecutive TTS model errors or an OOM.
 
-    Emitted at a loop boundary just before the run aborts; the recipient
-    should hard-reset the model worker.
+    The recipient should hard-reset the model worker. The reason is displayed
+    and logged by the parent, so it should retain any OOM diagnostics.
     """
 
     reason: str

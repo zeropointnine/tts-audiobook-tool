@@ -70,7 +70,7 @@ The sidecar's `source` field now records the spoken text (`Eleven`), and `normal
 
 For the source `Eleven` and a Whisper transcript `Eleven.` to compare equal, the comparison normalizer must treat them the same way. It did not: `whisper_normalizer`'s `EnglishNumberNormalizer` converts `Eleven` to `11` but leaves `Eleven.` as `eleven.` (and turns `forty-two.` into `40 two.`), because punctuation attached to a number word defeats it.
 
-`normalize_common_en_specific()` in `text_ops/text_normalizer.py` now runs the number normalizer **per clause**: the text is split after a letter followed by clause punctuation (`. , ; : ! ?`) and whitespace or end of text, and each piece is normalized separately. Decimals and currency (`5.50`, `$5`) are not split, since the punctuation there follows a digit. This improves number handling for all English text, not just headings: `I have forty-two.` -> `i have 42`, `Chapter twenty-one: Home` -> `chapter 21 home`.
+`normalize_common_en_specific()` in `text_ops/text_normalizer.py` runs the number normalizer on separate spans: it splits at quotes and at clause punctuation (`. , ; : ! ?`) after a letter when followed by whitespace, a quote, or the end of the text. Numeric punctuation such as the decimal point in `$5.50` is not split. This improves number handling for all English text, not just headings: `I have forty-two.` -> `i have 42`, `Chapter twenty-one: Home` -> `chapter 21 home`, `Two,”` -> `2`.
 
 Spanish already normalized `Once.` and `Once` identically, so it needed no change.
 

@@ -116,7 +116,7 @@ Examples of prompt-side transformations include:
 - collapsing repeated ellipses,
 - removing punctuation-only tokens except a small pause-related whitelist,
 - optionally converting an all-caps opening span to lowercase,
-- converting smaller digit strings (values up to 999) to words using `num2words`,
+- removing grouping commas from bare English integers (e.g. `3,200` → `3200`) and spelling out digit runs up to 999 using `num2words`,
 - and applying model-specific punctuation substitutions (e.g., em-dash or semicolon replacements) defined per model in `TtsModelSpec.substitutions` and applied by `massage_for_inference()`.
 
 This is related to the comparison flow only in the broad sense that both start from the same `PhraseGroup` text. Architecturally, they are different pipelines with different goals:
@@ -180,7 +180,7 @@ gen_result = Transcriber.transcribe_to_words(
 - materializes the returned segment generator,
 - and flattens segments into a single list of timestamped `Word` objects.
 
-On failure it returns an error string instead of a word list, which the generate loop treats as a per-segment error.
+On failure it returns an error string instead of a word list. The batch wraps that string in `TranscriptionError` so generation and realtime playback can distinguish Whisper failures from TTS model failures. An OOM stops the run and requests a worker reset with the failing stage, line number, and original error in the reason; other transcription errors follow the per-segment retry path.
 
 Relevant call:
 
@@ -258,7 +258,7 @@ Main transformations:
 2. `casefold()` lowercases aggressively for international text.
 3. Apostrophes adjacent to word boundaries are stripped.
 4. Language-specific transformations are applied via dispatch functions:
-   - **English** (`normalize_common_en_specific()`): dashes replaced with spaces, then text-number normalization via `whisper_normalizer.english.EnglishNumberNormalizer` so forms like `ninety-nine` normalize reliably. The number normalizer is run per clause (split after a letter plus clause punctuation) because attached punctuation otherwise defeats it (`Eleven.` vs `Eleven`); see `docs-dev/roman-numeral-headings.md`.
+   - **English** (`normalize_common_en_specific()`): dashes replaced with spaces, then text-number normalization via `whisper_normalizer.english.EnglishNumberNormalizer` so forms like `ninety-nine` normalize reliably. The number normalizer runs on spans split at quotes and clause boundaries, because attached punctuation otherwise defeats it (`Two,”` vs `Two.`). Decimal and currency punctuation is kept intact for the number parser; see `docs-dev/roman-numeral-headings.md`.
    - **Spanish** (`normalize_common_es_specific()`): first converts spelled-out integer cardinals (0-9999) to digits via `SpanishNumberNormalizer.normalize()` (`tts_audiobook_tool/text_ops/spanish_number_normalizer.py`) — this happens **before** diacritic stripping because the number normalizer expects accented forms (e.g. `veintidós`) — then calls `strip_spanish_diacritics_keep_enye()` which removes accented characters (e->e, etc.) while preserving ñ/Ñ via sentinel-based protect-decompose-restore.
 5. Punctuation (ASCII punctuation plus em-dash, en-dash, box-drawing dash `─`, and ellipsis) and the degree sign are replaced with spaces so adjacent words or numbers don't merge.
 6. Remaining non-word/non-space characters are stripped.

@@ -60,6 +60,36 @@ def test_normalize_prompt_en(source: str, expected: str) -> None:
 
 
 @pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # Grouping commas don't change whether a number is spelled out.
+        ("It is 3,200 miles away", "It is 3200 miles away"),
+        ("It is 3200 miles away", "It is 3200 miles away"),
+        ("Total: 1,200,000.", "Total: 1200000."),
+        ("It was 3,200, give or take.", "It was 3200, give or take."),
+        # Keep list punctuation and the 999 cutoff for spelling out numbers.
+        ("3, 200", "three, two hundred"),
+        ("999 and 1,000", "nine hundred and ninety-nine and 1000"),
+        # Don't speak only part of a compound number, malformed grouping, or ID.
+        ("3,200.50", "3,200.50"),
+        ("1,234,56", "1,234,56"),
+        ("$3,200 and € 3,200", "$3,200 and € 3,200"),
+        ("$ 3,200 or 3,200 $", "$3,200 or 3,200$"),
+        ("3,200% or 3,200 %", "3,200% or 3,200%"),
+        ("ID-3,200 and -3,200", "ID-3,200 and -3,200"),
+    ],
+)
+def test_grouped_english_integers_in_prompt(source: str, expected: str) -> None:
+    assert PromptNormalizer.normalize_prompt(source, language_code="en") == expected
+
+
+def test_grouped_integer_rule_uses_english_language_aliases() -> None:
+    # A comma need not be a thousands separator in another language.
+    assert PromptNormalizer.normalize_prompt("3,200", language_code="en-US") == "3200"
+    assert PromptNormalizer.normalize_prompt("3,200", language_code="es") == "tres,doscientos"
+
+
+@pytest.mark.parametrize(
     ("source", "language_code", "un_all_caps", "expected"),
     [
         # Only a standalone ampersand is verbalized; keep names and query strings intact.

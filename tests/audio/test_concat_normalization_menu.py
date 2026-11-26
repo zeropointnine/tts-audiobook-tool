@@ -8,7 +8,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 
 
-def test_normalization_menu_uses_simple_options_and_saves_selection() -> None:
+def test_normalization_menu_describes_louder_and_saves_selection() -> None:
     project = Project.model_validate({})
     state = cast(State, SimpleNamespace(project=project))
 
@@ -24,8 +24,8 @@ def test_normalization_menu_uses_simple_options_and_saves_selection() -> None:
     assert kwargs["values"] == list(NormalizationType)
     assert kwargs["current_value"] is NormalizationType.DEFAULT
     assert kwargs["default_value"] is NormalizationType.DEFAULT
-    # Loudness is a simple preset choice, without explanatory menu copy.
-    assert "sublabels" not in kwargs
+    # Only Louder has a description in the export menu.
+    assert kwargs["sublabels"] == ["", NormalizationType.STRONGER.value.description]
     assert "subheading" not in kwargs
     assert project.normalization_type is NormalizationType.STRONGER
     save.assert_called_once_with()

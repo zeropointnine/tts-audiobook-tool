@@ -92,7 +92,7 @@ class TextNormalizer:
 
 # ---
 
-_CLAUSE_PUNCTUATION_SPLIT_RE = re.compile(r"((?<=[^\W\d_])[.,;:!?]+(?:\s+|$))")
+_EN_NUMBER_BOUNDARY_RE = re.compile(r"""((?<=[^\W\d_])[.,;:!?]+(?:\s+|(?=["']|$))|["']+)""")
 
 def normalize_common_en_specific(text: str) -> str:
     
@@ -102,13 +102,11 @@ def normalize_common_en_specific(text: str) -> str:
     text = re.sub(r'-', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     
-    # Text-to-numbers
-    # Whisper's normalizer is not reliable when clause punctuation is attached
-    # to a number word ("Eleven." stays "eleven." but "Eleven" becomes "11";
-    # "forty-two." becomes "40 two."). So run it on each clause separately,
-    # splitting after a letter followed by clause punctuation and whitespace
-    # or end of text. Decimals ("5.50"), currency, etc, are not split.
-    parts = _CLAUSE_PUNCTUATION_SPLIT_RE.split(text)
+    # Whisper's number parser misses words with attached punctuation (e.g.
+    # `two,"`). Split at quotes and at clause punctuation after a letter
+    # before whitespace, a quote, or end of text. Keep decimal and currency
+    # punctuation intact for the number parser.
+    parts = _EN_NUMBER_BOUNDARY_RE.split(text)
     result = "".join(
         part if i % 2 else TextNormalizer._whisper_number_normalizer_en(part)
         for i, part in enumerate(parts)

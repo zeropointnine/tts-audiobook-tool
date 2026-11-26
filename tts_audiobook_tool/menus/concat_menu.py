@@ -285,6 +285,7 @@ class ConcatMenu:
             current_value=state.project.normalization_type,
             default_value=list(NormalizationType)[0],
             on_select=on_select,
+            sublabels=[item.value.description if item is NormalizationType.STRONGER else "" for item in NormalizationType],
         )
 
     @staticmethod

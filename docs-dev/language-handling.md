@@ -178,9 +178,12 @@ language into their text chunking:
 Before text goes to a TTS model it passes through `PromptNormalizer`
 (`text_ops/prompt_normalizer.py`), which is language-aware in two places:
 
-- **Number expansion** — integers up to 999 are expanded to words via `num2words(...,
-  lang=normalize_language_code(code))` so models don't verbalize digit strings
-  naively. The base code matters for aliases: num2words' own fallback truncates to
+- **Number expansion** — ungrouped integers up to 999 are expanded to words via
+  `num2words` with the normalized base code so models don't verbalize digits naively.
+  For bare comma-grouped English integers, grouping commas are removed before the same
+  cutoff is applied, so `3,200` and `3200` both stay numeric. This rule does not
+  change comma-bearing decimals, currency amounts, or percentages into words.
+  The base code matters for aliases: num2words' own fallback truncates to
   two letters, which turns `spa` into the unknown `sp`. (Region variants such as
   num2words' `es_CO` are not reachable anyway, since its keys are case-sensitive and
   project codes are lowercased.) Unsupported locales fail silently (digits pass

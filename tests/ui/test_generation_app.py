@@ -21,6 +21,7 @@ from tts_audiobook_tool.generation_events import (
     GenerationRunEnded,
     GenerationStarted,
     GenerationTimedOut,
+    ModelUnhealthy,
 )
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import generation_app as generation_app_module
@@ -852,12 +853,14 @@ def test_escape_snaps_scrolled_log_to_bottom(monkeypatch, fake_worker, tmp_path)
         transcript.close()
 
 
-def _install_gen_timeout_worker_stubs(monkeypatch) -> dict:
-    """Stub ModelWorker so a timeout event can be delivered on demand."""
+def _install_reset_worker_stubs(
+    monkeypatch, update: GenerationTimedOut | ModelUnhealthy = GenerationTimedOut(180.0)
+) -> dict:
+    """Stub ModelWorker so a reset event can be delivered on demand."""
     reset_calls: list[int] = []
     cancel_calls: list[str] = []
     latch = {"deliver": False}
-    events = [GenerationUpdate("job", GenerationTimedOut(180.0))]
+    events = [GenerationUpdate("job", update)]
 
     def fake_drain_events() -> list:
         if latch["deliver"] and events:
@@ -885,7 +888,7 @@ def _install_gen_timeout_worker_stubs(monkeypatch) -> dict:
 
 
 def test_gen_timeout_event_hard_resets_worker(monkeypatch, tmp_path) -> None:
-    stubs = _install_gen_timeout_worker_stubs(monkeypatch)
+    stubs = _install_reset_worker_stubs(monkeypatch)
 
     transcript = GenerationTranscript(str(tmp_path / "generation.log"))
     app = GenerationApp(make_state(), {0}, 1, transcript)
@@ -910,9 +913,35 @@ def test_gen_timeout_event_hard_resets_worker(monkeypatch, tmp_path) -> None:
         transcript.close()
 
 
+def test_oom_reset_reason_is_saved_to_generation_log(monkeypatch, tmp_path) -> None:
+    # The reset event alone must preserve the diagnostic, even with no worker console output.
+    reason = "Whisper ran out of memory while validating line 42: CUDA failed to allocate 128 MiB"
+    stubs = _install_reset_worker_stubs(monkeypatch, ModelUnhealthy(reason))
+    path = tmp_path / "generation.log"
+    transcript = GenerationTranscript(str(path))
+    app = GenerationApp(make_state(), {41}, 1, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            stubs["latch"]["deliver"] = True
+            await wait_until(pilot, lambda: app.terminal_result is not None)
+            assert app.terminal_result is not None
+            assert app.terminal_result.hard_reset_cause is HardResetCause.MODEL_UNHEALTHY
+            assert reason in app.terminal_result.message
+            await pilot.press("enter")
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+    assert stubs["reset_calls"] == [1]
+    assert reason in path.read_text(encoding="utf-8")
+
+
 def test_gen_timeout_still_resets_worker_after_single_escape(monkeypatch, tmp_path) -> None:
     """A pending single-ESC cancel must not suppress the gen timeout."""
-    stubs = _install_gen_timeout_worker_stubs(monkeypatch)
+    stubs = _install_reset_worker_stubs(monkeypatch)
 
     transcript = GenerationTranscript(str(tmp_path / "generation.log"))
     app = GenerationApp(make_state(), {0}, 1, transcript)

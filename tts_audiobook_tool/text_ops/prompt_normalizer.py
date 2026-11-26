@@ -1,8 +1,66 @@
 import re
+import unicodedata
+
 from num2words import num2words
 
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.text_ops import language_util
+
+
+_DIGIT_RUN_RE = re.compile(r"\d+")
+_ENGLISH_NUMBER_RUN_RE = re.compile(r"\d+(?:[,.]\d+)*")
+_ENGLISH_GROUPED_INTEGER_RE = re.compile(r"[1-9][0-9]{0,2}(?:,[0-9]{3})+")
+_ENGLISH_SPACED_NUMBER_AFFIX_RE = re.compile(
+    r"(?<=\$) (?=\d+,\d)|(\d+,\d+(?:[,.]\d+)*) (?=[%$])"
+)
+
+
+def _expand_prompt_numbers(text: str, language_code: str) -> str:
+    def expand_digits(digits: str) -> str:
+        try:
+            value = int(digits)
+        except ValueError:
+            return digits  # The digit run can exceed Python's integer parsing limit.
+        return digits if value > 999 else num2words(value, lang=language_code)
+
+    def expand_small(match: re.Match[str]) -> str:
+        return expand_digits(match.group())
+
+    def expand_english(match: re.Match[str]) -> str:
+        number = match.group()
+        if "," not in number:
+            return _DIGIT_RUN_RE.sub(expand_small, number)
+        # Consume the whole run first: never expand a substring of a comma-bearing decimal
+        # or an ambiguous list/malformed grouping such as 1,234,56.
+        if not _ENGLISH_GROUPED_INTEGER_RE.fullmatch(number):
+            return number
+
+        start, end = match.span()
+        before = text[start - 1] if start else ""
+        after = text[end:end + 1]
+        if (before and (before.isalnum() or before in "_.#/+=-−")) or (
+            after and (after.isalnum() or after in "_/+=-−")
+        ):
+            return number
+
+        # Leave grouped currency and percentages to a rule that can speak the whole amount.
+        prefix = text[:start].rstrip()[-1:]
+        suffix = text[end:].lstrip()[:1]
+        if suffix in ("%", "‰", "‱", "٪") or any(
+            ch and unicodedata.category(ch) == "Sc" for ch in (prefix, suffix)
+        ):
+            return number
+
+        # Grouping is formatting; apply the same expansion cutoff as for plain digits.
+        return expand_digits(number.replace(",", ""))
+
+    try:
+        if language_code == "en":
+            return _ENGLISH_NUMBER_RUN_RE.sub(expand_english, text)
+        return _DIGIT_RUN_RE.sub(expand_small, text)
+    except NotImplementedError:
+        return text
+
 
 class PromptNormalizer:
     """
@@ -35,6 +93,12 @@ class PromptNormalizer:
         # Replace " . . . " with triple-dot
         text = text.replace(" . . . ", " ... ")
 
+        # Use the base code so aliases reach num2words (e.g. "spa" -> "es", not "sp").
+        num2words_lang = language_util.normalize_language_code(language_code)
+        if num2words_lang == "en":
+            # Attach spaced $/% to comma-bearing numbers before punctuation-only tokens are dropped.
+            text = _ENGLISH_SPACED_NUMBER_AFFIX_RE.sub(r"\1", text)
+
         # Keep pause marks and standalone ampersands when filtering punctuation-only words.
         retained_tokens = {"...", "…", "-", "&", *app_text.NON_ASCII_DASHES}
         text = " ".join(
@@ -48,20 +112,8 @@ class PromptNormalizer:
         # Expand after the all-caps check so an inserted lowercase word can't interrupt it.
         text = app_text.expand_standalone_ampersands(text, language_code)
 
-        # Base code, so alias forms reach num2words (eg "spa" -> "es";
-        # num2words' own fallback would truncate it to the unknown "sp")
-        num2words_lang = language_util.normalize_language_code(language_code)
         if num2words_lang:
-            # Expand relatively small "int words" to prevent TTS model from "naively" verbalizing a string of digits
-            MAX_VALUE = 999
-            try:
-                text = re.sub(
-                    r'\d+', 
-                    lambda x: x.group() if int(x.group()) > MAX_VALUE else num2words(int(x.group()), lang=num2words_lang), 
-                    text
-                )        
-            except NotImplementedError:
-                pass # Fail silently
+            text = _expand_prompt_numbers(text, num2words_lang)
 
         text = app_text.massage_post_normalize(text)
 

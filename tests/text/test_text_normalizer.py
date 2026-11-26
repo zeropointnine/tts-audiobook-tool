@@ -69,6 +69,25 @@ def test_normalize_common_numbers_en(source: str, expected: str) -> None:
     assert TextNormalizer.normalize_common(source, language_code="en") == expected
 
 
+@pytest.mark.parametrize(
+    ("source", "transcript", "expected"),
+    [
+        ("Two,”", "Two.", "2"),
+        ("Two,’", "Two.", "2"),
+        ("“Forty-two!”", "Forty-two!", "42"),
+        ("“Twenty”“Two”", "Twenty. Two.", "20 2"),
+        ("“$5.50”", "Five dollars and fifty cents.", "5 50"),
+    ],
+)
+def test_english_number_normalization_treats_quotes_as_boundaries(
+    source: str, transcript: str, expected: str
+) -> None:
+    # Quotation marks must neither block a number word nor join separate numbers.
+    assert TextNormalizer.normalize_source_and_transcript(
+        source, transcript, language_code="en"
+    ) == (expected, expected)
+
+
 # Word-number forms the Spanish normalizer converts to digits.
 SPANISH_NUMBER_CONVERSIONS = [
     ("veintidós", "22"),

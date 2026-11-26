@@ -19,11 +19,11 @@ from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import (
     GenerateUtil,
+    TranscriptionError,
     TtsModelError,
     end_generation_run_safely,
     get_voice_lora_blocker_text,
     make_consecutive_model_errors_reset_message,
-    make_oom_reset_message,
 )
 from tts_audiobook_tool.gen_timeout_util import (
     GenTimeoutTracker,
@@ -593,9 +593,19 @@ def generate_full_flow(
         result = results[0]
         if isinstance(result, TtsModelError):
             consecutive_model_errors += 1
-            gen_result = result.message
         else:
             consecutive_model_errors = 0
+
+        if oom := GenerateUtil.make_oom_reset_event(result, index):
+            GenerationEvents.emit(oom)
+            gen_result = oom.reason
+            Tts.clear_continuation()
+            did_interrupt = True
+            break
+
+        if isinstance(result, (TtsModelError, TranscriptionError)):
+            gen_result = result.message
+        else:
             gen_result = result
 
         if consecutive_model_errors >= max_consecutive_model_errors:
@@ -609,17 +619,10 @@ def generate_full_flow(
             did_interrupt = True
             break
 
-        # Check for OOM in results and break early to avoid wasting time
-        if isinstance(gen_result, str) and is_oom_error_message(gen_result):
-            GenerationEvents.emit(ModelUnhealthy(reason=make_oom_reset_message()))
-            Tts.clear_continuation()
-            did_interrupt = True
-            break
-
         # Print result info
         if isinstance(gen_result, str):
-            err = gen_result
-            printt(f"{COL_ERROR}Model fail: {err}")
+            label = "Whisper transcription failed" if isinstance(result, TranscriptionError) else "Model fail"
+            printt(f"{COL_ERROR}{label}: {gen_result}")
             printt()
             Tts.clear_continuation()
         else:
