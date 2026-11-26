@@ -23,6 +23,13 @@ from tts_audiobook_tool.text_ops.prompt_normalizer import PromptNormalizer
          "Fancy apost: I think it's ... unseemly."),
         # German quotes: low-9 opening quotes like the other fancy quotes
         ("„Fred?“ Er sagte: ‚Ja.‘", "\"Fred?\" Er sagte: 'Ja.'"),
+        # Unicode classifies the ornamental forms as symbols, even inside dialogue.
+        ("❝Don❜t say ❛never❜.❞", '"Don\'t say \'never\'."'),
+        ("❠He said ❟yes❜.❞", '"He said \'yes\'."'),
+        ("\U0001f676Yes\U0001f677. \U0001f678No\U0001f677.", '"Yes". "No".'),
+        # NFKC also expands ℃ to °C. Keep both the degree and the digit boundaries.
+        ("30°C or 30℃", "thirty°C or thirty°C"),
+        ("12°30′", "twelve°thirty′"),
         ("Multiple dots...........", "Multiple dots..."),
         ("Multiple dots with space ...........", "Multiple dots with space ..."),
         ("Multiple ellipsis characters…………", "Multiple ellipsis characters..."),
@@ -35,9 +42,13 @@ from tts_audiobook_tool.text_ops.prompt_normalizer import PromptNormalizer
         ("Em-dash\u2014okay?", "Em-dash\u2014okay?"),
         ("Em-dash bounded by spaces \u2014 okay?",
          "Em-dash bounded by spaces \u2014 okay?"),
-        ("En-dash\u2014here", "En-dash\u2014here"),
-        ("En-dash bounded by spaces \u2014 here",
-         "En-dash bounded by spaces \u2014 here"),
+        ("En-dash\u2013here", "En-dash\u2013here"),
+        ("En-dash bounded by spaces \u2013 here",
+         "En-dash bounded by spaces \u2013 here"),
+        # U+2500 is a Unicode symbol, but can be used as a dash in prose.
+        ("Waited─then", "Waited─then"),
+        ("Waited ─ then", "Waited ─ then"),
+        ("Waited ─── then", "Waited then"),
         ("Dash bounded by spaces - here", "Dash bounded by spaces - here"),
         ("Garbage punctuation: ,.,.,---... ", "Garbage punctuation:"),
         ("Garbage punctuation in two consecutive 'words': ,.,.,-- -... ",
@@ -46,6 +57,26 @@ from tts_audiobook_tool.text_ops.prompt_normalizer import PromptNormalizer
 )
 def test_normalize_prompt_en(source: str, expected: str) -> None:
     assert PromptNormalizer.normalize_prompt(source, language_code="en") == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "language_code", "un_all_caps", "expected"),
+    [
+        # Only a standalone ampersand is verbalized; keep names and query strings intact.
+        ("Smith & Sons, AT&T, R&D, https://example.com/?a=x&b=y", "en", False,
+         "Smith and Sons, AT&T, R&D, https://example.com/?a=x&b=y"),
+        ("Smith ＆ Sons", "en-US", False, "Smith and Sons"),
+        ("A && B", "en", False, "A B"),
+        ("Smith & Sons", "fr", False, "Smith & Sons"),
+        ("Smith & Sons", "", False, "Smith & Sons"),
+        # The inserted lowercase "and" must not interrupt the all-caps rewrite.
+        ("OLIVER SMITH & SONS", "en", True, "oliver smith and sons"),
+    ],
+)
+def test_standalone_ampersand_in_prompt(
+    source: str, language_code: str, un_all_caps: bool, expected: str
+) -> None:
+    assert PromptNormalizer.normalize_prompt(source, language_code, un_all_caps) == expected
 
 
 PROMPT_WORD_SUBSTITUTIONS = {"Ariekei": "AriaKay", "kilohour": "kilo hour"}

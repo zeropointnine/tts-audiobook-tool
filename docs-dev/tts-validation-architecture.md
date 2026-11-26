@@ -254,13 +254,13 @@ Both source and transcript pass through `TextNormalizer.normalize_common()`.
 
 Main transformations:
 
-1. `app_text.normalize_text_general(text)` runs first (module function in `tts_audiobook_tool/app_support/app_text.py`).
+1. `app_text.normalize_text_general(text)` runs first. It applies NFKC, straightens curly and ornamental comma-shaped quotes, and preserves `─` and `°` despite their Unicode symbol category. After that, standalone `&` is expanded to `and` for English, matching the TTS prompt rule.
 2. `casefold()` lowercases aggressively for international text.
 3. Apostrophes adjacent to word boundaries are stripped.
 4. Language-specific transformations are applied via dispatch functions:
    - **English** (`normalize_common_en_specific()`): dashes replaced with spaces, then text-number normalization via `whisper_normalizer.english.EnglishNumberNormalizer` so forms like `ninety-nine` normalize reliably. The number normalizer is run per clause (split after a letter plus clause punctuation) because attached punctuation otherwise defeats it (`Eleven.` vs `Eleven`); see `docs-dev/roman-numeral-headings.md`.
    - **Spanish** (`normalize_common_es_specific()`): first converts spelled-out integer cardinals (0-9999) to digits via `SpanishNumberNormalizer.normalize()` (`tts_audiobook_tool/text_ops/spanish_number_normalizer.py`) — this happens **before** diacritic stripping because the number normalizer expects accented forms (e.g. `veintidós`) — then calls `strip_spanish_diacritics_keep_enye()` which removes accented characters (e->e, etc.) while preserving ñ/Ñ via sentinel-based protect-decompose-restore.
-5. Punctuation (ASCII punctuation plus em-dash, en-dash, and ellipsis) is replaced with spaces.
+5. Punctuation (ASCII punctuation plus em-dash, en-dash, box-drawing dash `─`, and ellipsis) and the degree sign are replaced with spaces so adjacent words or numbers don't merge.
 6. Remaining non-word/non-space characters are stripped.
 7. `app_text.massage_post_normalize()` performs final cleanup.
 
@@ -268,6 +268,7 @@ Relevant implementation skeleton:
 
 ```python
 text = app_text.normalize_text_general(text)
+text = app_text.expand_standalone_ampersands(text, language_code)
 text = text.casefold().strip()
 text = re.sub(r"\b'|'\b", "", text)
 
@@ -277,7 +278,7 @@ if language_code == "en":
 elif language_code == "es":
     text = normalize_common_es_specific(text)
 
-punc = string.punctuation + "\u2014" + "\u2013" + "…"
+punc = string.punctuation + app_text.NON_ASCII_DASHES + "…" + app_text.DEGREE_SIGN
 text = re.sub(f"[{re.escape(punc)}]", " ", text)
 text = re.sub(r'[^\w\s]', '', text)
 text = app_text.massage_post_normalize(text)

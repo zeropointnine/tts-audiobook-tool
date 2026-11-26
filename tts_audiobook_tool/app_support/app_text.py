@@ -5,15 +5,27 @@ import string
 import unicodedata
 from typing import TYPE_CHECKING
 
+from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 
 
+_BOX_DRAWING_DASH = "\u2500"  # Box Drawings Light Horizontal, sometimes used as a dash.
+NON_ASCII_DASHES = "\u2013\u2014" + _BOX_DRAWING_DASH
+DEGREE_SIGN = "°"
+_PRESERVED_SYMBOLS = frozenset({_BOX_DRAWING_DASH, DEGREE_SIGN})
+
+# Curly (including low-9) quotes and comma-shaped quotation mark ornaments.
+_STRAIGHT_QUOTES = str.maketrans({
+    **dict.fromkeys("‘’‚❛❜❟", "'"),
+    **dict.fromkeys("“”„❝❞❠\U0001f676\U0001f677\U0001f678", '"'),
+})
+
 ws_punc_chars: set[str] = set(
-    string.whitespace + string.punctuation
-    + "\u2026\u2013\u2014"  # ellipsis, em-dash, en-dash
+    string.whitespace + string.punctuation + NON_ASCII_DASHES
+    + "\u2026"  # ellipsis
     + "\u201C\u201D\u2018\u2019"  # open/closed fancy doublequote, open/closed fancy singlequote
 )
 
@@ -96,13 +108,8 @@ def normalize_text_general(text: str) -> str:
     # Normalize Unicode (fixes 'é' vs 'e'+'´' mismatches)
     text = unicodedata.normalize("NFKC", text)
 
-    # Replace fancy apost, fancy double-quotes (incl. the low-9 quotes opening German quotes)
-    text = text.replace("’", "'")
-    text = text.replace("‘", "'")
-    text = text.replace("‚", "'")
-    text = text.replace("“", '"')
-    text = text.replace("”", '"')
-    text = text.replace("„", '"')
+    # Straighten quote ornaments before filtering, since Unicode classifies them as symbols.
+    text = text.translate(_STRAIGHT_QUOTES)
 
     # Strip "bad" characters based on unicode category
     bad_categories = {
@@ -113,12 +120,23 @@ def normalize_text_general(text: str) -> str:
         "Co",  # Surrogate / Private Use - technical artifacts or custom icons that have no phonetic value
         "Cn",  # Other, Not Assigned
     }
-    clean_chars = [char for char in text if unicodedata.category(char) not in bad_categories]
+    # Keep symbols with a meaning in prose or measurements despite their So category.
+    clean_chars = [
+        char for char in text
+        if char in _PRESERVED_SYMBOLS or unicodedata.category(char) not in bad_categories
+    ]
     text = "".join(clean_chars)
 
     text = massage_post_normalize(text)
 
     return text
+
+
+def expand_standalone_ampersands(text: str, language_code: str) -> str:
+    """Spell out a standalone `&` in English without touching names or URLs."""
+    if "&" not in text or not language_util.is_english(language_code):
+        return text
+    return re.sub(r"(?<!\S)&(?!\S)", "and", text)
 
 
 def massage_post_normalize(text: str) -> str:

@@ -35,22 +35,18 @@ class PromptNormalizer:
         # Replace " . . . " with triple-dot
         text = text.replace(" . . . ", " ... ")
 
-        # Strip "punctuation only" words unless ellipsis, dash variants
-        words = text.split(" ")
-        new_words = []
-        for word in words:
-            if not app_text.is_ws_punc(word):
-                new_words.append(word)
-            else:
-                whitelist = ["...", "…", "\u2014", "\u2013", "-"]
-                for item in whitelist:
-                    if word == item:
-                        new_words.append(word)
-                        break
-        text = " ".join(new_words)
- 
+        # Keep pause marks and standalone ampersands when filtering punctuation-only words.
+        retained_tokens = {"...", "…", "-", "&", *app_text.NON_ASCII_DASHES}
+        text = " ".join(
+            word for word in text.split(" ")
+            if word in retained_tokens or not app_text.is_ws_punc(word)
+        )
+
         if un_all_caps:
-            text = PromptNormalizer.un_all_caps_prompt(text) 
+            text = PromptNormalizer.un_all_caps_prompt(text)
+
+        # Expand after the all-caps check so an inserted lowercase word can't interrupt it.
+        text = app_text.expand_standalone_ampersands(text, language_code)
 
         # Base code, so alias forms reach num2words (eg "spa" -> "es";
         # num2words' own fallback would truncate it to the unknown "sp")

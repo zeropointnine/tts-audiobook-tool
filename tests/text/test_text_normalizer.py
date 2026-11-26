@@ -23,6 +23,8 @@ from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer, normaliz
         ("“This is too much, my love!”", "this is too much my love"),
         ("Random emojis: 😉 in the Read😉Me😉? Well... 🙂‍↔️, why not?",
          "random emojis in the readme well why not"),
+        # Keep the two parts of an angle separate even when dropping the units.
+        ("12°30′", "12 30"),
         ("Café au lait", "café au lait"),
         # ensure non-roman characters don't get stripped
         ("Регулярные выражения", "регулярные выражения"),
@@ -30,6 +32,24 @@ from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer, normaliz
 )
 def test_normalize_common(source: str, expected: str) -> None:
     assert TextNormalizer.normalize_common(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "transcript"),
+    [("Smith & Sons", "Smith and Sons"), ("Smith and Sons", "Smith & Sons")],
+)
+def test_standalone_ampersand_equals_and_in_english_comparison(source: str, transcript: str) -> None:
+    # STT may return either spelling, regardless of the one used in the source.
+    assert TextNormalizer.normalize_source_and_transcript(
+        source, transcript, language_code="en"
+    ) == ("smith and sons", "smith and sons")
+
+
+def test_box_drawing_dash_preserves_word_boundary_in_comparison() -> None:
+    # In source text this symbol can stand in for a pause not transcribed as punctuation.
+    assert TextNormalizer.normalize_source_and_transcript(
+        "Waited─then.", "Waited, then.", language_code="en"
+    ) == ("waited then", "waited then")
 
 
 @pytest.mark.parametrize(

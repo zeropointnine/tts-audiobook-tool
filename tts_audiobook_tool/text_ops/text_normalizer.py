@@ -26,7 +26,8 @@ class TextNormalizer:
         """
         
         text = app_text.normalize_text_general(text)
-        
+        text = app_text.expand_standalone_ampersands(text, language_code)
+
         # Use casefold for aggressive lowercase (better for Intl text)
         text = text.casefold().strip()
 
@@ -39,8 +40,8 @@ class TextNormalizer:
         elif language_util.is_spanish(language_code):
             text = normalize_common_es_specific(text)
 
-        # Replace punctuation (including em-dash and en-dash) with space
-        punc = string.punctuation + "\u2014" + "\u2013" + "…"
+        # Treat punctuation and the degree sign as boundaries, not deletions (12°30′ → 12 30).
+        punc = string.punctuation + app_text.NON_ASCII_DASHES + "…" + app_text.DEGREE_SIGN
         text = re.sub(f"[{re.escape(punc)}]", " ", text) # re.escape is necessary because punc contains special regex chars like [ ] - ^
 
         # Strip non-word characters except space (rem, non-word characters are not just limited to ascii)

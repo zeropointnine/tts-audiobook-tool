@@ -73,6 +73,15 @@ def test_server_prompt_is_prepared_exactly_once_and_can_bypass_substitutions(
     assert captured_payloads[0]["input"] == expected_prompt
 
 
+def test_box_drawing_dash_reaches_catalog_substitution() -> None:
+    # CosyVoice3 substitutes the box-drawing dash after shared prompt normalization.
+    model_id = "cosyvoice3_sglomni"
+    project = Project(tts_model_type=model_id, language_code="en")
+    support = ConfiguredModelSupport(load_definitions().models[model_id])
+    raw_prompt = "waited─then"
+    assert support.prepare_text_for_inference(project, raw_prompt) == support.massage_for_inference(raw_prompt)
+
+
 CATALOG_CAP = "catalog cap"  # stands for the model's declared max_random_seed
 
 
